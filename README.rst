@@ -44,6 +44,17 @@ Processes
 Searching
 ---------
 
-The SoulSeekQt client sends 2 search request over the server connection:
+FileSearch is weird in the SoulSeekQt client, it seems to send 2 requests in one packet:
 
--
+- Length of packet
+- Message ID=26 (FileSearch)
+- Ticket number
+- Query string
+
+Which is expected but then it is followed by:
+
+- Length of packet
+- Message ID=153 (?)
+- Query string
+
+The server completely repeats the last part of the search query + 4 bytes containing 0x00

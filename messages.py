@@ -20,7 +20,7 @@ def parse_int(pos, data):
     return parse_basic(pos, data, '<I')
 
 
-def parse_int64():
+def parse_int64(pos, data):
     # off_t, signed or unsigned?
     return parse_basic(pos, data, '<Q')
 
@@ -226,7 +226,7 @@ class FileSearch(Message):
 
     @classmethod
     def create(cls, ticket, query):
-        message_body = pack_int(ticket) + pack_string()
+        message_body = pack_int(ticket) + pack_string(query)
         return pack_message(cls.MESSAGE_ID, message_body)
 
     def parse(self):
@@ -376,9 +376,25 @@ class BranchRoot(Message):
         return pack_message(cls.MESSAGE_ID, message_body)
 
 
+class CantConnect(Message):
+    MESSAGE_ID = 0x3E9
+
+    @classmethod
+    def create(cls, token, username):
+        message_body = pack_int(token) + pack_string(username)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+    def parse(self):
+        super(CantConnect, self).parse()
+        token = self.parse_int()
+        username = self.parse_string()
+        return token, username
+
+
 ### Peer messages
 
 class PeerMessage(Message):
+
     pass
 
 
@@ -390,7 +406,9 @@ class PeerPierceFirewall(PeerMessage):
         return pack_message(cls.MESSAGE_ID, pack_int(token))
 
     def parse(self):
-        super(PeerPierceFirewall, self).parse()
+        length = self.parse_int()
+        message_id = self.parse_uchar()
+        # super(PeerPierceFirewall, self).parse()
         return self.parse_int() # Token
 
 
@@ -403,7 +421,9 @@ class PeerInit(PeerMessage):
         return pack_message(cls.MESSAGE_ID, message_body)
 
     def parse(self):
-        super(PeerInit, self).parse()
+        # super(PeerInit, self).parse()
+        length = self.parse_int()
+        message_id = self.parse_uchar()
         user = self.parse_string()
         typ = self.parse_string()
         token = self.parse_int()
@@ -445,7 +465,9 @@ class PeerSearchReply(PeerMessage):
 
     def parse(self):
         super(PeerSearchReply, self).parse()
+        # Set message and reset _pos
         self.message = zlib.decompress(self.message[self._pos:])
+        self._pos = 0
         user = self.parse_string()
         token = self.parse_int()
         results = self.parse_result_list()
@@ -465,7 +487,16 @@ def parse_message(message):
     for msg_class in Message.__subclasses__():
         if msg_class.MESSAGE_ID == message_id:
             return msg_class(message)
-    print("Unknown message ID {}".format(message_id))
+    print("Unknown message ID {}. Message={!r}".format(message_id, message))
+
+
+def parse_peer_message(message):
+    pos, length = parse_int(0, message)
+    pos, message_id = parse_uchar(pos, message)
+    for msg_class in PeerMessage.__subclasses__():
+        if msg_class.MESSAGE_ID == message_id:
+            return msg_class(message)
+    print("Unknown peer message ID {}. Message={!r}".format(message_id, message))
 
 
 def attempt_unpack(data):

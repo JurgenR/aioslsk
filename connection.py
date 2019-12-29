@@ -43,7 +43,9 @@ class ServerConnection(Connection):
         msg_len_with_len = struct.calcsize('I') + msg_len
         if len(self._buffer) >= msg_len_with_len:
             message = self._buffer[:msg_len_with_len]
-            logger.info("End of message={}".format(len(self._buffer.hex())))
+            print(
+                "End of message from {}:{} : {!r}"
+                .format(self.hostname, self.port, self._buffer.hex()[:8 * 2]))
             # Remove message from buffer
             self._buffer = self._buffer[msg_len_with_len:]
             self.handle_message(message)
@@ -67,6 +69,7 @@ class ListeningConnection(Connection):
         self.hostname = hostname
         self.port = port
         self.obfuscated = obfuscated
+        self.listener = None
 
     def connect(self, selector):
         """Open connection and register on the given L{selector}"""
@@ -76,13 +79,15 @@ class ListeningConnection(Connection):
         self.connection.bind((self.hostname, self.port, ))
         self.connection.listen()
         self.connection.setblocking(False)
-        selector.register(conn, selectors.EVENT_READ, data=self)
+        selector.register(self.connection, selectors.EVENT_READ, data=self)
 
     def accept(self, sock, selector):
         conn, addr = sock.accept()
         conn.setblocking(False)
+        logger.info(f"Accepted incoming connection from {addr}")
         peer_connection = PeerConnection(hostname=addr, obfuscated=self.obfuscated)
         peer_connection.connection = conn
+        peer_connection.listener = self.listener
         selector.register(
             conn, selectors.EVENT_READ | selectors.EVENT_WRITE, data=peer_connection)
         return peer_connection
@@ -97,6 +102,17 @@ class PeerConnection(Connection):
         self.hostname = hostname
         self.port = port
         self.obfuscated = obfuscated
+        self.listener = None
+
+    def connect(self, selector):
+        """Open connection and register on the given L{selector}"""
+        logger.info(
+            f"Opening peer connection on {self.hostname}:{self.port}")
+        self.connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.connection.setblocking(False)
+        self.connection.connect_ex((self.hostname, self.port, ))
+        selector.register(
+            self.connection, selectors.EVENT_READ | selectors.EVENT_WRITE, data=self)
 
     def buffer(self, data):
         self._buffer += data
@@ -104,8 +120,16 @@ class PeerConnection(Connection):
         msg_len_with_len = struct.calcsize('I') + msg_len
         if len(self._buffer) >= msg_len_with_len:
             message = self._buffer[:msg_len_with_len]
-            print("End of message={}".format(self._buffer.hex()))
+            print(
+                "End of peer message from {}:{} : {!r}"
+                .format(self.hostname, self.port, self._buffer.hex()[:8 * 2]))
             self._buffer = self._buffer[msg_len_with_len:]
+            self.handle_message(message)
+
+    def handle_message(self, message_data):
+        message = messages.parse_peer_message(message_data)
+        # print(f"Handle message {message_data}")
+        self.listener.on_peer_message(message)
 
 
 class NetworkLoop(threading.Thread):
@@ -122,15 +146,21 @@ class NetworkLoop(threading.Thread):
                 if mask & selectors.EVENT_READ:
                     if isinstance(key.data, ListeningConnection):
                         # The listening socket
-                        key.data.accept(key.fileobj, self.selector)
+                        peer_connection = key.data.accept(
+                            key.fileobj, self.selector)
                     else:
                         # Server socket or peer socket
-                        recv_data = key.fileobj.recv(4)
-                        if recv_data:
-                            key.data.buffer(recv_data)
-                        if not recv_data:
-                            print('closing connection')
-                            self.selector.unregister(key.fileobj)
+                        try:
+                            recv_data = key.fileobj.recv(4)
+                        except OSError as exc:
+                            logger.exception(
+                                f"Exception receiving data on connection {key.fileobj}")
+                        else:
+                            if recv_data:
+                                key.data.buffer(recv_data)
+                            if not recv_data:
+                                logger.warning(f"Closing connection to {key.fileobj}")
+                                self.selector.unregister(key.fileobj)
                 if mask & selectors.EVENT_WRITE:
                     try:
                         message = key.data.messages.get(block=False)

@@ -1,5 +1,8 @@
+import connection
 import messages
 import state
+from search import SearchQuery, SearchResult
+from utils import ticket_generator
 
 import logging
 import time
@@ -9,12 +12,18 @@ logger = logging.getLogger()
 
 class SoulSeek:
 
-    def __init__(self, server_connection, settings):
+    def __init__(self, network, server_connection, settings):
+        self.network = network
         self.server_connection = server_connection
         self.settings = settings
         self.state = state.State()
+        self.ticket_generator = ticket_generator()
+        self.search_queries = {}
 
     def login(self):
+        logger.info(
+            f"Logging on with username: {self.settings.username} and password: "
+            f"{self.settings.password}")
         self.server_connection.messages.put(
             messages.Login.create(
                 self.settings.username, self.settings.password, 168))
@@ -22,11 +31,25 @@ class SoulSeek:
             time.sleep(1)
 
     def search(self, query):
-        pass
+        logger.info(f"Starting search for query: {query}")
+        ticket = next(self.ticket_generator, query)
+        self.server_connection.messages.put(
+            messages.FileSearch.create(ticket, query))
+        self.search_queries[ticket] = SearchQuery(ticket, query)
+
+    def on_peer_message(self, message):
+        message_map = {
+            messages.PeerInit.MESSAGE_ID: self.on_peer_init,
+            messages.PeerSearchReply.MESSAGE_ID: self.on_peer_search_reply
+        }
+        message_func = message_map.get(
+            message.MESSAGE_ID, self.on_unknown_message)
+        message_func(message)
 
     def on_message(self, message):
         message_map = {
             messages.CheckPrivileges.MESSAGE_ID: self.on_check_privileges,
+            messages.ConnectToPeer.MESSAGE_ID: self.on_connect_to_peer,
             messages.Login.MESSAGE_ID: self.on_login,
             messages.NetInfo.MESSAGE_ID: self.on_net_info,
             messages.ParentMinSpeed.MESSAGE_ID: self.on_parent_min_speed,
@@ -41,7 +64,6 @@ class SoulSeek:
 
     def on_login(self, message):
         """
-
         @param message: Message object
         """
         login_values = message.parse()
@@ -60,6 +82,10 @@ class SoulSeek:
         #     messages.SetListenPort.create(
         #         self.settings.listening_port,
         #         self.settings.listening_port + 1))
+        # Currently not advertising obfuscated port
+        self.server_connection.messages.put(
+            messages.SetListenPort.create(
+                self.settings.listening_port))
         self.server_connection.messages.put(
             messages.HaveNoParents.create(True))
         self.server_connection.messages.put(
@@ -71,6 +97,22 @@ class SoulSeek:
         # GetUserStats on self? 36
         self.server_connection.messages.put(
             messages.AcceptChildren.create(True))
+
+    def on_connect_to_peer(self, message):
+        logger.debug(f"Handling ConnectToPeer message: {message!r}")
+        contents = message.parse()
+        logger.debug("Message contents: {!r}".format(contents))
+        username, typ, ip, port, token, privileged = contents
+        if b'Khyle' in username:
+            logger.warning("LINK, HEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEY")
+        try:
+            peer_connection = connection.PeerConnection(hostname=ip, port=port)
+            peer_connection.listener = self
+            peer_connection.connect(self.network.selector)
+            # peer_connection.messages.put(
+            #     messages.PeerPierceFirewall.create(token))
+        except Exception as exc:
+            logger.error(f"Failed to connect to {ip}:{port}")
 
     def on_check_privileges(self, message):
         logger.debug(f"Handling CheckPrivileges message: {message!r}")
@@ -101,6 +143,21 @@ class SoulSeek:
     def on_wish_list_interval(self, message):
         logger.debug(f"Handling WishlistInterval message: {message!r}")
         self.state.wishlist_interval = message.parse()
+
+    # Peer messages
+    def on_peer_init(self, message):
+        logger.debug(f"Handling PeerInit message: {message!r}")
+        username, typ, token = message.parse()
+        logger.debug(f"PeerInit from {username}, {typ}, {token}")
+
+    def on_peer_search_reply(self, message):
+        logger.debug(f"Handling PeerSearchReply message: {message!r}")
+        contents = message.parse()
+        user, token, results, free_slots, avg_speed, queue_len, locked_results = contents
+        search_result = SearchResult(
+            user, token, results, free_slots, avg_speed, queue_len, locked_results)
+        self.search_queries[token].results.append(search_result)
+        # logger.debug(f"Query Results: {contents}")
 
     def on_unknown_message(self, message):
         """Method called for messages that have no handler"""
