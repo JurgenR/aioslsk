@@ -1,6 +1,12 @@
 class SearchQuery:
 
     def __init__(self, ticket, query):
+        """
+
+        @ivar ticket: Ticket number
+        @ivar query: The query string
+        @ivar results: List of L{SearchResult} objects
+        """
         self.ticket = ticket
         self.query = query
         self.results = []
