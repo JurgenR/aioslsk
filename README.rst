@@ -13,9 +13,6 @@ Messages
 
 The message descriptions can be found here: https://www.museek-plus.org/wiki/SoulseekProtocol
 
-Basic
------
-
 The length indicators indicate the length in bytes. The length indicators do not include the length bytes themselves.
 
 For non-obfuscated messages the first 4 bytes will contain the length of the message, this length does not include the 4 length bytes themselves.
@@ -29,19 +26,52 @@ There are 3 types of messages:
 
 The second 4 bytes will contain the message ID, message ID
 
-Login (message ID = 1)
-----------------------
+Processes
+=========
+
+Server connection
+-----------------
+
+The first message sent to the server is a Login (message ID = 1) with the username and password.
 
 This message will return more than just a response to the login request, it will return the following:
 
-- RoomList
-- ParentMinSpeed
-- ParentSpeedRatio
-- WishlistInterval
+- RoomList: List of chatrooms
+- ParentMinSpeed: No idea yet
+- ParentSpeedRatio: No idea yet
+- WishlistInterval: No idea yet
 - PrivilegedUsers
 
-Processes
-=========
+After the response we send the following requests back to the server with some information about us:
+
+- CheckPrivileges: Check if we have privileges
+- SetListenPort: The listening port(s), obfuscated and non-obfuscated
+- SetStatus: Our status (offline, away, available)
+- HaveNoParents: No idea yet, seems like we have no parents
+- BranchRoot: No idea yet, seems to be our own username
+- BranchLevel: No idea yet, should be 0
+- SharedFoldersFiles: Number of directories and files we are sharing
+- AddUser: Using our own username as parameter, this might be useful for checking if everything arrived on the server side
+- AcceptChildren: No idea yet,
+
+The listening socket
+--------------------
+
+Two listening sockets are set up, one where the messages are sent to as cleartext and the other where the messages are sent to obfuscated. The obfuscated port will be the unobfuscated port + 1
+
+Upon accepting a connection the following process is followed:
+
+Distributed connections
+-----------------------
+
+Once every 60 seconds the server will send us a NetInfo message, this message contains 10 users and their IP addresses.
+
+Upon connecting to a user the following are sent:
+
+#. Send PeerInit: With connection type D
+#. Recv Branch Level:
+#. Recv Branch Root:
+#. Recv: SearchRequest
 
 Searching
 ---------
