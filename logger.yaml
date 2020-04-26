@@ -1,18 +1,26 @@
 version: 1
 formatters:
   simple:
-    format: '[%(asctime)s][%(levelname)-8s][%(name)s]: %(message)s'
+    format: '[%(asctime)s][%(levelname)-8s][%(name)s][%(thread)d]: %(message)s'
 handlers:
   console:
     class: logging.StreamHandler
     level: DEBUG
     formatter: simple
     stream: ext://sys.stderr
+  debug_file_handler:
+    class: logging.handlers.RotatingFileHandler
+    level: DEBUG
+    formatter: simple
+    filename: H:\Projects\py-slsk\logs\slsk.log
+    maxBytes: 10485760 # 10MB
+    backupCount: 20
+    encoding: utf8
 loggers:
   simpleExample:
     level: DEBUG
-    handlers: [console]
+    handlers: [console,debug_file_handler]
     propagate: no
 root:
   level: DEBUG
-  handlers: [console]
+  handlers: [debug_file_handler]
