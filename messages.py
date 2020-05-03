@@ -80,8 +80,12 @@ def pack_uchar(value):
 
 def pack_string(value):
     length = len(value)
-    return (
-        pack_int(length) + struct.pack('{}s'.format(length), value.encode('ascii')))
+    if isinstance(value, bytes):
+        return (
+            pack_int(length) + value)
+    else:
+        return (
+            pack_int(length) + struct.pack('{}s'.format(length), value.encode('utf-8')))
 
 
 def pack_bool(value):
@@ -449,6 +453,19 @@ class DistributedMessage(Message):
     pass
 
 
+class DistributedPing(DistributedMessage):
+    MESSAGE_ID = 0x00
+
+    def parse(self):
+        length = self.parse_int()
+        message_id = self.parse_uchar()
+        if len(self.message[self._pos:]) > 0:
+            unknown = self.parse_int()
+        else:
+            unknown = 0
+        return unknown
+
+
 class DistributedSearchRequest(DistributedMessage):
     MESSAGE_ID = 0x03
 
@@ -599,7 +616,7 @@ class PeerSearchReply(PeerMessage):
         # Set message and reset _pos
         self.message = zlib.decompress(self.message[self._pos:])
         self._pos = 0
-        user = self.parse_string()
+        username = self.parse_string()
         token = self.parse_int()
         results = self.parse_result_list()
         free_slots = self.parse_uchar()
@@ -609,7 +626,7 @@ class PeerSearchReply(PeerMessage):
             locked_results = self.parse_result_list()
         else:
             locked_results = []
-        return user, token, results, free_slots, avg_speed, queue_len, locked_results
+        return username, token, results, free_slots, avg_speed, queue_len, locked_results
 
 
 class PeerTransferRequest(PeerMessage):
@@ -701,7 +718,18 @@ class PeerTransferQueue(PeerMessage):
         return filename
 
 
+def parse_distributed_message(message):
+    """Attempts to parse a distributed message"""
+    pos, length = parse_int(0, message)
+    pos, message_id = parse_uchar(pos, message)
+    for msg_class in DistributedMessage.__subclasses__():
+        if msg_class.MESSAGE_ID == message_id:
+            return msg_class(message)
+    print("Unknown distributed message ID {}. Message={!r}".format(message_id, message))
+
+
 def parse_message(message):
+    """Attempts to parse a server message"""
     pos, length = parse_int(0, message)
     pos, message_id = parse_int(pos, message)
     for msg_class in Message.__subclasses__():
@@ -711,6 +739,7 @@ def parse_message(message):
 
 
 def parse_peer_message(message):
+    """Attempts to parse a peer message"""
     pos, length = parse_int(0, message)
     pos, message_id = parse_uchar(pos, message)
     for msg_class in PeerMessage.__subclasses__():
