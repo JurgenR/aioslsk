@@ -9,6 +9,7 @@ def calc_md5(value):
     enc.update(value.encode('ascii'))
     return enc.hexdigest()
 
+
 # Parsing functions
 def parse_basic(pos, data, data_type):
     size = struct.calcsize(data_type)
@@ -123,6 +124,15 @@ class Message(object):
         else:
             self.message = message
 
+    def reset(self):
+        self._pos = 0
+
+    def has_unparsed_bytes(self):
+        return len(self.message[self._pos:]) > 0
+
+    def get_unparsed_bytes(self):
+        return self.message[self._pos:]
+
     def parse_string(self):
         self._pos, value = parse_string(self._pos, self.message)
         return value
@@ -160,6 +170,10 @@ class Message(object):
     @classmethod
     def create(cls):
         return pack_message(cls.MESSAGE_ID, b'')
+
+
+class ServerMessage(Message):
+    pass
 
 
 class Login(Message):
@@ -459,11 +473,15 @@ class DistributedPing(DistributedMessage):
     def parse(self):
         length = self.parse_int()
         message_id = self.parse_uchar()
+        # This field is described as 'unknown' in the MuSeek wiki, however it
+        # seems to be the ticket number we used when sending our ConnectToPeer
+        # message during instantiation of the connection
         if len(self.message[self._pos:]) > 0:
-            unknown = self.parse_int()
+            ticket = self.parse_int()
         else:
-            unknown = 0
-        return unknown
+            # Perhaps None would be better as 0 would be a valid ticket number
+            ticket = 0
+        return ticket
 
 
 class DistributedSearchRequest(DistributedMessage):
@@ -728,6 +746,28 @@ def parse_distributed_message(message):
     print("Unknown distributed message ID {}. Message={!r}".format(message_id, message))
 
 
+def parse_distributed_messages(message):
+    """Parses multiple messages from a single message"""
+    current_message = message
+    message_objects = []
+    while len(current_message) > 0:
+        message_object = parse_distributed_message(current_message)
+        # Call parse to get unparsed bytes, remove the unparsed bytes from the
+        # current message object
+        message_object.parse()
+        unparsed_bytes = message_object.get_unparsed_bytes()
+        if message_object.has_unparsed_bytes():
+            message_object.message = message_object.message[:-len(unparsed_bytes)]
+
+        # Call reset and append to the list
+        message_object.reset()
+        message_objects.append(message_object)
+
+        # Set current message to the unparsed bytes
+        current_message = unparsed_bytes
+    return message_objects
+
+
 def parse_message(message):
     """Attempts to parse a server message"""
     pos, length = parse_int(0, message)
@@ -738,6 +778,28 @@ def parse_message(message):
     print("Unknown message ID {}. Message={!r}".format(message_id, message))
 
 
+def parse_server_messages(message):
+    """Parses multiple messages from a single message"""
+    current_message = message
+    message_objects = []
+    while len(current_message) > 0:
+        message_object = parse_message(current_message)
+        # Call parse to get unparsed bytes, remove the unparsed bytes from the
+        # current message object
+        message_object.parse()
+        unparsed_bytes = message_object.get_unparsed_bytes()
+        if message_object.has_unparsed_bytes():
+            message_object.message = message_object.message[:-len(unparsed_bytes)]
+
+        # Call reset and append to the list
+        message_object.reset()
+        message_objects.append(message_object)
+
+        # Set current message to the unparsed bytes
+        current_message = unparsed_bytes
+    return message_objects
+
+
 def parse_peer_message(message):
     """Attempts to parse a peer message"""
     pos, length = parse_int(0, message)
@@ -746,6 +808,28 @@ def parse_peer_message(message):
         if msg_class.MESSAGE_ID == message_id:
             return msg_class(message)
     print("Unknown peer message ID {}. Message={!r}".format(message_id, message))
+
+
+def parse_peer_messages(message):
+    """Parses multiple messages from a single message"""
+    current_message = message
+    message_objects = []
+    while len(current_message) > 0:
+        message_object = parse_peer_message(current_message)
+        # Call parse to get unparsed bytes, remove the unparsed bytes from the
+        # current message object
+        message_object.parse()
+        unparsed_bytes = message_object.get_unparsed_bytes()
+        if message_object.has_unparsed_bytes():
+            message_object.message = message_object.message[:-len(unparsed_bytes)]
+
+        # Call reset and append to the list
+        message_object.reset()
+        message_objects.append(message_object)
+
+        # Set current message to the unparsed bytes
+        current_message = unparsed_bytes
+    return message_objects
 
 
 def attempt_unpack(data):
