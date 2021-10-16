@@ -20,8 +20,36 @@ class SoulSeek:
         self.server_connection = server_connection
         self.settings = settings
         self.state = state.State()
+        self.peers = []
         self.ticket_generator = ticket_generator()
         self.search_queries = {}
+
+        self._create_message_mappings()
+
+    def _create_message_mappings(self):
+        self._server_message_map = {
+            messages.AddUser.MESSAGE_ID: self.on_add_user,
+            messages.CheckPrivileges.MESSAGE_ID: self.on_check_privileges,
+            messages.ConnectToPeer.MESSAGE_ID: self.on_connect_to_peer,
+            messages.Login.MESSAGE_ID: self.on_login,
+            messages.NetInfo.MESSAGE_ID: self.on_net_info,
+            messages.ParentMinSpeed.MESSAGE_ID: self.on_parent_min_speed,
+            messages.ParentSpeedRatio.MESSAGE_ID: self.on_parent_speed_ratio,
+            messages.PrivilegedUsers.MESSAGE_ID: self.on_privileged_users,
+            messages.RoomList.MESSAGE_ID: self.on_room_list,
+            messages.WishlistInterval.MESSAGE_ID: self.on_wish_list_interval,
+        }
+        self._peer_message_map = {
+            messages.PeerInit.MESSAGE_ID: self.on_peer_init,
+            messages.PeerPierceFirewall.MESSAGE_ID: self.on_peer_pierce_firewall,
+            messages.PeerSearchReply.MESSAGE_ID: self.on_peer_search_reply
+        }
+        self._distributed_message_map = {
+            messages.DistributedPing.MESSAGE_ID: self.on_distributed_ping,
+            messages.DistributedBranchLevel.MESSAGE_ID: self.on_distributed_branch_level,
+            messages.DistributedBranchRoot.MESSAGE_ID: self.on_distributed_branch_root,
+            messages.DistributedSearchRequest.MESSAGE_ID: self.on_distributed_search_request
+        }
 
     def get_file_sharing_stats(self):
         """Returns the amount of files and directories shared"""
@@ -55,42 +83,29 @@ class SoulSeek:
     def on_peer_message(self, message, connection=None):
         """Method called upon receiving a message from a peer/distributed socket"""
         if connection.connection_type == PeerConnectionType.PEER:
-            message_map = {
-                messages.PeerInit.MESSAGE_ID: self.on_peer_init,
-                messages.PeerPierceFirewall.MESSAGE_ID: self.on_peer_pierce_firewall,
-                messages.PeerSearchReply.MESSAGE_ID: self.on_peer_search_reply
-            }
-        else: # Distributed
-            message_map = {
-                messages.DistributedPing.MESSAGE_ID: self.on_distributed_ping,
-                messages.DistributedSearchRequest.MESSAGE_ID: self.on_distributed_search_request
-            }
-        message_func = message_map.get(
-            message.MESSAGE_ID, self.on_unknown_message)
+            message_map = self._peer_message_map
+        else:
+            # Distributed
+            message_map = self._distributed_message_map
+
+        message_func = message_map.get(message.MESSAGE_ID, self.on_unknown_message)
+
         logger.debug(f"Handling peer message {message!r}")
         message_func(message, connection=connection)
 
     def on_message(self, message):
-        """Method called upon receiving a message from the server socket"""
-        message_map = {
-            messages.AddUser.MESSAGE_ID: self.on_add_user,
-            messages.CheckPrivileges.MESSAGE_ID: self.on_check_privileges,
-            messages.ConnectToPeer.MESSAGE_ID: self.on_connect_to_peer,
-            messages.Login.MESSAGE_ID: self.on_login,
-            messages.NetInfo.MESSAGE_ID: self.on_net_info,
-            messages.ParentMinSpeed.MESSAGE_ID: self.on_parent_min_speed,
-            messages.ParentSpeedRatio.MESSAGE_ID: self.on_parent_speed_ratio,
-            messages.PrivilegedUsers.MESSAGE_ID: self.on_privileged_users,
-            messages.RoomList.MESSAGE_ID: self.on_room_list,
-            messages.WishlistInterval.MESSAGE_ID: self.on_wish_list_interval,
-        }
-        message_func = message_map.get(
-            message.MESSAGE_ID, self.on_unknown_message)
+        """Method called upon receiving a message from the server socket
+
+        This method will call L{on_unknown_message} if the message has no
+        handler method
+        """
+        message_func = self._server_message_map.get(smessage.MESSAGE_ID, self.on_unknown_message)
         logger.debug(f"Handling message {message!r}")
         message_func(message)
 
     def on_login(self, message):
-        """
+        """Called when a response is received to a logon call
+
         @param message: L{Message} object
         """
         login_values = message.parse()
@@ -103,6 +118,7 @@ class SoulSeek:
         else:
             result, reason = login_values
             logger.error("Failed to login, reason: {reason!r}")
+
         # Make setup calls
         dir_count, file_count = self.get_file_sharing_stats()
         self.server_connection.messages.put(
@@ -111,11 +127,15 @@ class SoulSeek:
         self.server_connection.messages.put(
             messages.SetListenPort.create(
                 self.settings.listening_port,
-                self.settings.listening_port + 1))
+                self.settings.listening_port + 1
+            )
+        )
         # Advertise listening port excluding obfuscated
         # self.server_connection.messages.put(
         #     messages.SetListenPort.create(
-        #         self.settings.listening_port))
+        #         self.settings.listening_port
+        #     )
+        # )
         self.server_connection.messages.put(
             messages.SetStatus.create(2)) # Available
         self.server_connection.messages.put(
@@ -140,11 +160,13 @@ class SoulSeek:
         contents = message.parse()
         logger.info("ConnectToPeer message contents: {!r}".format(contents))
         username, typ, ip, port, token, privileged = contents
+
         if self.network._is_already_connected(ip):
             logger.debug(
                 f"ConnectToPeer: IP address {ip} already connected, not opening "
                 "a new connection")
             return
+
         peer_connection = PeerConnection(hostname=ip, port=port, listener=self)
         peer_connection.listener = self
         peer_connection.connect(self.network.selector)
@@ -159,6 +181,7 @@ class SoulSeek:
 
     def on_net_info(self, message):
         net_info_list = message.parse()
+
         idx = 1
         for username, ip, port in net_info_list:
             logger.info(f"NetInfo user {idx}: {username!r} : {ip}:{port}")
@@ -167,11 +190,16 @@ class SoulSeek:
             peer_connection = PeerConnection(
                 hostname=ip, port=port,
                 listener=self,
-                connection_type=PeerConnectionType.DISTRIBUTED)
-            peer_connection.connect(self.network.selector)
-            self.server_connection.messages.put(
-                messages.ConnectToPeer.create(
-                    next(self.ticket_generator), username, PeerConnectionType.DISTRIBUTED))
+                connection_type=PeerConnectionType.DISTRIBUTED
+            )
+            # peer_connection.connect(self.network.selector)
+            # self.server_connection.messages.put(
+            #     messages.ConnectToPeer.create(
+            #         next(self.ticket_generator),
+            #         username,
+            #         PeerConnectionType.DISTRIBUTED
+            #     )
+            # )
 
     # State related messages
     def on_check_privileges(self, message):
@@ -223,10 +251,12 @@ class SoulSeek:
         logger.info(f"Search request from {username!r}, query: {query!r}")
 
     def on_distributed_branch_level(self, message, connection=None):
-        pass
+        level = message.parse()
+        logger.info(f"Branch level {level!r}")
 
     def on_distributed_branch_root(self, message, connection=None):
-        pass
+        root = message.parse()
+        logger.info(f"Branch root {root!r}")
 
     def on_unknown_message(self, message, connection=None):
         """Method called for messages that have no handler"""
