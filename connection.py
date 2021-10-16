@@ -65,6 +65,17 @@ class ServerConnection(Connection):
             self.fileobj, selectors.EVENT_READ | selectors.EVENT_WRITE, data=self)
 
     def buffer(self, data):
+        """Adds data to the internal L{_buffer} and tries to detects whether a
+        message is complete. If a message is complete the L{handle_message}
+        method is called and L{_buffer} is cleared.
+
+        Detection is done by parsing the message length and comparing if the
+        current L{_buffer} object has the desired length.
+
+        If the length of the buffer is greater than the detected length then
+        the extra bytes are kept in the L{_buffer} and only the message is
+        removed
+        """
         self._buffer += data
         _, msg_len = messages.parse_int(0, self._buffer)
         msg_len_with_len = struct.calcsize('I') + msg_len
@@ -112,6 +123,17 @@ class ListeningConnection(Connection):
         selector.register(self.fileobj, selectors.EVENT_READ, data=self)
 
     def accept(self, sock, selector):
+        """Accept the incoming connection (L{sock}) and registers it with the
+        given L{selector}.
+
+        If a connection with the same IP exists in the L{selector} the existing
+        connection will be killed and replaced by the incoming connection. This
+        means the L{fileobj} instance variable will be swapped with L{sock}.
+
+        This happens because most SoulSeek clients appear to attempt to open a
+        connection to the peer as well as send a request to the server to ask
+        the peer to open a connection to us.
+        """
         inc_socket, addr = sock.accept()
         try:
             existing_conn = get_connection_by_ip(selector, addr[0])
@@ -218,10 +240,13 @@ class PeerConnection(Connection):
     def buffer_obfuscated(self, data):
         # Require at least 8 bytes (4 bytes key, 4 bytes length)
         if len(self._buffer) < (KEY_SIZE + 4):
-            return
-        # NOTE: We might a check here if we have a multiple of 4
+            raise Exception("Invalid buffer size for obfuscated message")
+
+        # NOTE: We might need a check here if we have a multiple of 4
         decoded_buffer = obfuscation.decode(self._buffer)
 
+        # TODO: there should be common code between this and buffer_unobfuscated
+        # merge them if possible
         _, msg_len = messages.parse_int(0, decoded_buffer)
         # Calculate total message length (message length + length indicator)
         total_msg_len = struct.calcsize('I') + msg_len
@@ -247,8 +272,10 @@ class PeerConnection(Connection):
                 logger.error(
                     f"Failed to handle peer ({self.connection_type}) message data {message_data}",
                     exc_info=True)
+
         elif self.connection_type == PeerConnectionType.FILE:
             raise NotImplementedError("File connections not yet implemented")
+
         else:
             raise Exception(
                 f"Unknown connection type assigned to this peer connection {self.connection_type!r}")
@@ -276,9 +303,15 @@ class NetworkLoop(threading.Thread):
             open_connections = [
                 repr(open_conn.fileobj)
                 for open_conn in self.selector.get_map().values()]
-            # logger.debug("Connections open: {}".format(open_connections))
             logger.debug(
-                "Currently {} connections".format(len(self.selector.get_map())))
+                "Currently {} open connections".format(len(self.selector.get_map())))
+
+    def get_connections(self):
+        """Returns a list of currently registered L{Connection} objects"""
+        return [
+            selector_key.data
+            for selector_key in self.selector.get_map().values()
+        ]
 
     def run(self):
         """Start the network loop, and run until L{stop_event} is set. This is
@@ -318,6 +351,7 @@ class NetworkLoop(threading.Thread):
                                 logger.warning(
                                     f"close {key.data.hostname}:{key.data.port} : no data received")
                                 key.data.close(self.selector)
+
                 if mask & selectors.EVENT_WRITE and not key.data.is_closed:
                     # More hacky stuff: when we swap the connection it's
                     # possible we still got a write event in the event list for
@@ -328,6 +362,7 @@ class NetworkLoop(threading.Thread):
                         work_socket = key.fileobj
                     else:
                         work_socket = key.data.fileobj
+
                     # Sockets will go into write even if an error occurred on
                     # them. Clean them up and move on if this happens
                     socket_err = work_socket.getsockopt(
@@ -338,6 +373,7 @@ class NetworkLoop(threading.Thread):
                             .format(key.data.hostname, key.data.port, socket_err, errno.errorcode[socket_err]))
                         key.data.close(self.selector)
                         continue
+
                     try:
                         # Attempt to get the message from the Queue and send it
                         # over the socket it belongs to
@@ -353,4 +389,5 @@ class NetworkLoop(threading.Thread):
                             logger.exception(
                                 f"close {key.data.hostname}:{key.data.port} : exception while sending")
                             key.data.close(self.selector)
+
         self.selector.close()
