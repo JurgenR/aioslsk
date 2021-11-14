@@ -52,7 +52,7 @@ After the response we send the following requests back to the server with some i
 - BranchLevel: No idea yet, should be 0
 - SharedFoldersFiles: Number of directories and files we are sharing
 - AddUser: Using our own username as parameter, this might be useful for checking if everything arrived on the server side
-- AcceptChildren: No idea yet,
+- AcceptChildren: No idea yet
 
 The listening socket
 --------------------
@@ -94,3 +94,32 @@ The server completely repeats the last part of the search query + 4 bytes contai
 After this the clients start reporting the results. However there is a problem, most clients seem to send a request to the server which is then relayed to our client that requests that we connect to them (this is supposed to be the procedure when the clients fail to connect to us) but they also attempt to connect themselves. When we respond to the request from the server by connecting to the peers we will receive nothing on this connection if the connection the peer opened to us succeeded. These connections remain open indefinitely. When there are many results this many connections will be opened to your machine, thus we are runnning against a limit in the Selector module.
 
 Looking at code from other projects I can see that all other connections from that peer are closed when we the peer tries to establish a connection himself. I also noticed when search results are received that the timeout for these connections is set to a very low value. Eg.: 2 seconds, otherwise it takes 60+ seconds to disconnect by timeout. There is no possible built-in way to set the timeout for a connection (using selector module) so this might have to implemented manually.
+
+Distributed Connections
+-----------------------
+
+Every minute the client will receive a message from the server with the NetInfo command (server code 102) containing a list of
+
+
+
+Code Structure
+==============
+
+Modules
+-------
+
+- `connection`: everything related to opening and closing connections, it also contains the network loop.
+- `messages`: everything related to parsing and creating of SoulSeek messages
+
+Connection Management
+---------------------
+
+The `connection` module is based on the Python built-in `socket` and `selector` modules. By default there are 3 types of connections all inheriting from the `Connection` class:
+
+- ServerConnection: Represents the connection to the SoulSeek server
+- ListeningConnection: Listens for incoming sockets and creates PeerConnection objects
+- PeerConnection: Connections made by peers and to peers
+
+The `NetworkLoop` class contains the `selector` and a `run` for the main network loop.
+
+All sockets are configured to be non-blocking sockets.

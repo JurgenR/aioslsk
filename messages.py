@@ -557,6 +557,8 @@ class DistributedBranchChildDepth(DistributedMessage):
 
 
 ### Peer messages
+# PeerPierceFirewall and PeerInit are the only messages that use a uchar for
+# the message_id. Remainder of the message types use int.
 
 class PeerMessage(Message):
 
@@ -630,18 +632,24 @@ class PeerSearchReply(PeerMessage):
         return results
 
     def parse(self):
-        super().parse()
-        # Set message and reset _pos
-        self.message = zlib.decompress(self.message[self._pos:])
-        self._pos = 0
-        username = self.parse_string()
-        token = self.parse_int()
-        results = self.parse_result_list()
-        free_slots = self.parse_uchar()
-        avg_speed = self.parse_int()
-        queue_len = self.parse_int64()
-        if len(self.message[self._pos:]) > 0:
-            locked_results = self.parse_result_list()
+        length, _ = super().parse()
+
+        # Decompress the contents and treat it as a new message
+        # The length of the message contained in the message excludes the length
+        # itself. Thus we need to add 4 bytes (the length indicator) as we are
+        # getting data from the entire message
+        message = PeerSearchReply(zlib.decompress(self.message[self._pos:length + 4]))
+        # Upon success store the new _pos
+        self._pos += length + 4
+
+        username = message.parse_string()
+        token = message.parse_int()
+        results = message.parse_result_list()
+        free_slots = message.parse_uchar()
+        avg_speed = message.parse_int()
+        queue_len = message.parse_int64()
+        if len(message.message[message._pos:]) > 0:
+            locked_results = message.parse_result_list()
         else:
             locked_results = []
         return username, token, results, free_slots, avg_speed, queue_len, locked_results

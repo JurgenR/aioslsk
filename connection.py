@@ -330,18 +330,15 @@ class NetworkLoop(threading.Thread):
                 if mask & selectors.EVENT_READ and not key.data.is_closed:
                     if isinstance(key.data, ListeningConnection):
                         # Accept incoming connections on the listening socket
-                        peer_connection = key.data.accept(
-                            key.fileobj, self.selector)
+                        peer_connection = key.data.accept(key.fileobj, self.selector)
                     else:
                         # Server socket or peer socket
                         try:
                             recv_data = key.fileobj.recv(4)
                         except OSError as exc:
-                            logger.exception(
-                                f"Exception receiving data on connection {key.fileobj}")
+                            logger.exception(f"Exception receiving data on connection {key.fileobj}")
                             # Only remove the peer connections?
-                            logger.info(
-                                f"close {key.data.hostname}:{key.data.port} : exception while reading")
+                            logger.info(f"close {key.data.hostname}:{key.data.port} : exception while reading")
                             key.data.close(self.selector)
                         else:
                             if recv_data:
@@ -365,8 +362,7 @@ class NetworkLoop(threading.Thread):
 
                     # Sockets will go into write even if an error occurred on
                     # them. Clean them up and move on if this happens
-                    socket_err = work_socket.getsockopt(
-                        socket.SOL_SOCKET, socket.SO_ERROR)
+                    socket_err = work_socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
                     if socket_err != 0:
                         logger.debug(
                             "error {}:{} : {} [{}] : cleaning up"

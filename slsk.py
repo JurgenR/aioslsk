@@ -63,12 +63,12 @@ class SoulSeek:
         """Perform a login request with the username and password found in
         L{self.settings} and waits until L{self.state.logged_in} is set.
         """
-        logger.info(
-            f"Logging on with username: {self.settings.username} and password: "
-            f"{self.settings.password}")
+        username = self.settings.username
+        password = self.settings.password
+        logger.info(f"Logging on with credentials: {username}:{password}")
         self.server_connection.messages.put(
-            messages.Login.create(
-                self.settings.username, self.settings.password, 157))
+            messages.Login.create(username, password, 157)
+        )
         while not self.state.logged_in:
             time.sleep(1)
 
@@ -155,7 +155,6 @@ class SoulSeek:
         self.server_connection.messages.put(
             messages.AcceptChildren.create(True))
 
-    # Following all connect to a peer
     def on_connect_to_peer(self, message):
         contents = message.parse()
         logger.info("ConnectToPeer message contents: {!r}".format(contents))

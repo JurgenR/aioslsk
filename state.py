@@ -8,3 +8,5 @@ class State:
         self.parent_min_speed = 0
         self.parent_speed_ratio = 0
         self.wishlist_interval = 0
+        self.branch_level = None
+        self.branch_root = None

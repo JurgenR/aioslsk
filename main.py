@@ -80,20 +80,21 @@ if __name__ == '__main__':
     parser.add_argument('--listening-port', default=64823, type=int)
     parser.add_argument('--directories', nargs='*', default=['share', ])
     args = parser.parse_args()
+
     # Init connections
     print(f"Sharing directories: {args.directories}")
     stop_event = threading.Event()
     network = connection.NetworkLoop(stop_event)
     server_connection = connection.ServerConnection()
-    listening_connection = connection.ListeningConnection(
-        port=args.listening_port)
-    listening_connection_obfs = connection.ListeningConnection(
-        port=args.listening_port + 1)
+    listening_connection = connection.ListeningConnection(port=args.listening_port)
+    listening_connection_obfs = connection.ListeningConnection(port=args.listening_port + 1)
+
     # Perform the socket connections and start the network loop
     server_connection.connect(network.selector)
     listening_connection.connect(network.selector)
     listening_connection_obfs.connect(network.selector)
     network.start()
+
     # Set the SoulSeek object as listener
     client = slsk.SoulSeek(network, server_connection, args)
     server_connection.listener = client

@@ -36,6 +36,14 @@ def rotate_key(key, rot_bits=31):
 
 
 def decode(data, const=31):
+    """De-obfuscate given L{data}
+
+    @type data: bytes like object
+    @param data: Data to be de-obfuscated
+
+    @rtype: bytes like object
+    @return: De-obfuscated data
+    """
     key = data[:KEY_SIZE]
     enc_message = data[KEY_SIZE:]
     dec_message = bytearray()
