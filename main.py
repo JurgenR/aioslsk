@@ -1,12 +1,12 @@
 import connection
 import messages
+import upnp
 import slsk
 
 import argparse
 import cmd
 import logging
 import logging.config
-import threading
 import yaml
 
 
@@ -14,11 +14,8 @@ class SoulSeekCmd(cmd.Cmd):
     intro = 'Test SoulSeek client'
     prompt = '(py-slsk) '
 
-    def __init__(self, stop_event, network, server_connection, client):
+    def __init__(self, client):
         super().__init__()
-        self.stop_event = stop_event
-        self.network = network
-        self.server_connection = server_connection
         self.client = client
 
     def do_results(self, query):
@@ -45,6 +42,11 @@ class SoulSeekCmd(cmd.Cmd):
                 print(f"\t{idx}\t{result['filename']}\t{result['extension']}\t{result['filesize']}")
                 idx += 1
 
+    def do_connections(self, _):
+        connections = self.network.get_connections()
+        for connection in connections:
+            print(f"* {connection.hostname}:{connection.port}")
+
     def do_state(self, _):
         print("State: {}".format(self.client.state.__dict__))
 
@@ -61,8 +63,7 @@ class SoulSeekCmd(cmd.Cmd):
 
     def do_exit(self, arg):
         print("Exiting")
-        self.stop_event.set()
-        self.network.join()
+        self.client.stop_network()
         return True
 
 
@@ -74,33 +75,12 @@ if __name__ == '__main__':
         log_cfg = yaml.safe_load(f.read())
     logging.config.dictConfig(log_cfg)
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--username', default='Khyle999')
-    parser.add_argument('--password', default='Test1234')
-    parser.add_argument('--listening-port', default=64823, type=int)
-    parser.add_argument('--directories', nargs='*', default=['share', ])
-    args = parser.parse_args()
+    with open('settings.yaml', 'r') as f:
+        settings = yaml.safe_load(f.read())
 
-    # Init connections
-    print(f"Sharing directories: {args.directories}")
-    stop_event = threading.Event()
-    network = connection.NetworkLoop(stop_event)
-    server_connection = connection.ServerConnection()
-    listening_connection = connection.ListeningConnection(port=args.listening_port)
-    listening_connection_obfs = connection.ListeningConnection(port=args.listening_port + 1)
-
-    # Perform the socket connections and start the network loop
-    server_connection.connect(network.selector)
-    listening_connection.connect(network.selector)
-    listening_connection_obfs.connect(network.selector)
-    network.start()
-
-    # Set the SoulSeek object as listener
-    client = slsk.SoulSeek(network, server_connection, args)
-    server_connection.listener = client
-    listening_connection.listener = client
-    listening_connection_obfs.listener = client
+    client = slsk.SoulSeek(settings)
+    client.start_network()
 
     # Login and start the command loop
     client.login()
-    SoulSeekCmd(stop_event, network, server_connection, client).cmdloop()
+    SoulSeekCmd(client).cmdloop()

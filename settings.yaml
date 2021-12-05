@@ -1,0 +1,14 @@
+---
+network:
+  server_hostname: server.slsknet.org
+  server_port: 2416
+  listening_port: 64823
+  use_upnp: true
+
+credentials:
+  username: Khyle999
+  password: Test1234
+
+sharing:
+  directories:
+    - share

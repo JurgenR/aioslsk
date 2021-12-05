@@ -1,36 +1,37 @@
 import hashlib
 import socket
 import struct
+from typing import Callable
 import zlib
 
 
-def calc_md5(value):
+def calc_md5(value: bytes):
     enc = hashlib.md5()
     enc.update(value.encode('ascii'))
     return enc.hexdigest()
 
 
 # Parsing functions
-def parse_basic(pos, data, data_type):
+def parse_basic(pos: int, data, data_type: str):
     size = struct.calcsize(data_type)
     value = data[pos:pos + size]
     return pos + size, struct.unpack(data_type, value)[0]
 
 
-def parse_int(pos, data):
+def parse_int(pos: int, data):
     return parse_basic(pos, data, '<I')
 
 
-def parse_int64(pos, data):
+def parse_int64(pos: int, data) -> int:
     # off_t, signed or unsigned?
     return parse_basic(pos, data, '<Q')
 
 
-def parse_uchar(pos, data):
+def parse_uchar(pos: int, data) -> str:
     return parse_basic(pos, data, '<B')
 
 
-def parse_string(pos, data):
+def parse_string(pos: int, data) -> str:
     # Length of a string is in nibbles
     pos_after_len, length = parse_int(pos, data)
     data_type = '<{}s'.format(length)
@@ -39,7 +40,7 @@ def parse_string(pos, data):
     return pos_after_len + length, value
 
 
-def parse_ip(pos, data):
+def parse_ip(pos: int, data) -> str:
     length = 4
     data_type = '<{}s'.format(length)
     value = struct.unpack(data_type, data[pos:pos + length])[0]
@@ -47,7 +48,7 @@ def parse_ip(pos, data):
     return pos + length, ip_addr
 
 
-def parse_list(pos, data, item_parser=parse_string):
+def parse_list(pos: int, data, item_parser: Callable=parse_string) -> list:
     items = []
     pos_after_list_len, list_len = parse_int(pos, data)
     current_item_pos = pos_after_list_len
@@ -57,13 +58,13 @@ def parse_list(pos, data, item_parser=parse_string):
     return current_item_pos, items
 
 
-def parse_room_list(pos, data):
+def parse_room_list(pos: int, data):
     pos, room_names = parse_list(pos, data, item_parser=parse_string)
     pos, room_user_counts = parse_list(pos, data, item_parser=parse_int)
     return pos, dict(list(zip(room_names, room_user_counts)))
 
 
-def parse_net_info_entry(pos, message):
+def parse_net_info_entry(pos: int, message):
     pos, user = parse_string(pos, message)
     pos, ip = parse_ip(pos, message)
     pos, port = parse_int(pos, message)
@@ -71,15 +72,15 @@ def parse_net_info_entry(pos, message):
 
 
 # Packing functions
-def pack_int(value):
+def pack_int(value: int) -> bytes:
     return struct.pack('<I', value)
 
 
-def pack_uchar(value):
+def pack_uchar(value: str) -> bytes:
     return struct.pack('<B', value)
 
 
-def pack_string(value):
+def pack_string(value: str) -> bytes:
     length = len(value)
     if isinstance(value, bytes):
         return (
@@ -89,16 +90,16 @@ def pack_string(value):
             pack_int(length) + struct.pack('{}s'.format(length), value.encode('utf-8')))
 
 
-def pack_bool(value):
+def pack_bool(value: bool) -> bytes:
     return struct.pack('>?', value)
 
 
-def pack_ip(value):
+def pack_ip(value: str) -> bytes:
     ip_b = socket.inet_aton(value)
     return struct.pack('<4s', bytes(reversed(ip_b)))
 
 
-def pack_message(message_id, value, id_as_uchar=False):
+def pack_message(message_id: int, value: bytes, id_as_uchar=False) -> bytes:
     """Adds the header (length + message ID) to a message body
 
     @param id_as_uchar: Packs the L{message_id} as uchar instead of int, used
@@ -114,15 +115,14 @@ def pack_message(message_id, value, id_as_uchar=False):
 
 
 # Messages
-class Message(object):
+class Message:
     MESSAGE_ID = 0x0
 
     def __init__(self, message):
-        self._pos = 0
-        if not isinstance(message, bytes):
-            self.message = bytes.fromhex(message)
-        else:
-            self.message = message
+        self._pos: int = 0
+        self.message: bytes = message
+        if not isinstance(self.message, bytes):
+            self.message = bytes.fromhex(self.message)
 
     def reset(self):
         self._pos = 0
@@ -153,9 +153,9 @@ class Message(object):
         self._pos, value = parse_ip(self._pos, self.message)
         return value
 
-    def parse_list(self, item_parser):
-        self._pos, value = parse_list(self._pos, self.message,
-            item_parser=item_parser)
+    def parse_list(self, item_parser: Callable):
+        self._pos, value = parse_list(
+            self._pos, self.message, item_parser=item_parser)
         return value
 
     def parse_room_list(self):
@@ -223,7 +223,7 @@ class GetPeerAddress(Message):
         return username, ip_addr, port
 
     @classmethod
-    def create(cls, username):
+    def create(cls, username: str) -> bytes:
         return pack_message(cls.MESSAGE_ID, pack_string(username))
 
 
@@ -231,7 +231,7 @@ class AddUser(Message):
     MESSAGE_ID = 0x05
 
     @classmethod
-    def create(cls, username):
+    def create(cls, username: str) -> bytes:
         return pack_message(cls.MESSAGE_ID, pack_string(username))
 
     def parse(self):
@@ -264,9 +264,8 @@ class ConnectToPeer(Message):
     MESSAGE_ID = 0x12
 
     @classmethod
-    def create(cls, token, username, typ):
-        message_body = (
-            pack_int(token) + pack_string(username) + pack_string(typ))
+    def create(cls, token: int, username: str, typ: str) -> bytes:
+        message_body = pack_int(token) + pack_string(username) + pack_string(typ)
         return pack_message(cls.MESSAGE_ID, message_body)
 
     def parse(self):
@@ -284,7 +283,7 @@ class FileSearch(Message):
     MESSAGE_ID = 0x1A
 
     @classmethod
-    def create(cls, ticket, query):
+    def create(cls, ticket: int, query: str):
         message_body = pack_int(ticket) + pack_string(query)
         return pack_message(cls.MESSAGE_ID, message_body)
 
@@ -301,7 +300,7 @@ class SetStatus(Message):
     MESSAGE_ID = 0x1C
 
     @classmethod
-    def create(cls, status):
+    def create(cls, status: int):
         """1 for away, 2 for online"""
         message_body = pack_int(status)
         return pack_message(cls.MESSAGE_ID, message_body)
@@ -315,7 +314,7 @@ class SharedFoldersFiles(Message):
     MESSAGE_ID = 0x23
 
     @classmethod
-    def create(cls, dir_count, file_count):
+    def create(cls, dir_count: int, file_count: int) -> bytes:
         message_body = pack_int(dir_count) + pack_int(file_count)
         return pack_message(cls.MESSAGE_ID, message_body)
 
@@ -324,7 +323,7 @@ class GetUserStats(Message):
     MESSAGE_ID = 0x24
 
     @classmethod
-    def create(cls, username):
+    def create(cls, username: str) -> bytes:
         message_body = pack_string(username)
         return pack_message(cls.MESSAGE_ID, message_body)
 
@@ -342,7 +341,7 @@ class UserSearch(Message):
     MESSAGE_ID = 0x2A
 
     @classmethod
-    def create(cls, username, ticket, query):
+    def create(cls, username: str, ticket: int, query: str):
         message_body = (
             pack_string(username) + pack_int(ticket) + pack_string(query))
         return pack_message(cls.MESSAGE_ID, message_body)
@@ -372,7 +371,7 @@ class HaveNoParents(Message):
     MESSAGE_ID = 0x47
 
     @classmethod
-    def create(cls, have_parents):
+    def create(cls, have_parents: bool) -> bytes:
         message_body = pack_bool(have_parents)
         return pack_message(cls.MESSAGE_ID, message_body)
 
@@ -406,7 +405,7 @@ class AcceptChildren(Message):
     MESSAGE_ID = 0x64
 
     @classmethod
-    def create(cls, accept):
+    def create(cls, accept: bool) -> bytes:
         message_body = pack_bool(accept)
         return pack_message(cls.MESSAGE_ID, message_body)
 
@@ -431,7 +430,7 @@ class BranchLevel(Message):
     MESSAGE_ID = 0x7E
 
     @classmethod
-    def create(cls, branch_level):
+    def create(cls, branch_level: int) -> bytes:
         message_body = pack_int(branch_level)
         return pack_message(cls.MESSAGE_ID, message_body)
 
@@ -440,7 +439,7 @@ class BranchRoot(Message):
     MESSAGE_ID = 0x7F
 
     @classmethod
-    def create(cls, branch_root):
+    def create(cls, branch_root: str) -> bytes:
         message_body = pack_string(branch_root)
         return pack_message(cls.MESSAGE_ID, message_body)
 
@@ -449,7 +448,7 @@ class CantConnect(Message):
     MESSAGE_ID = 0x3E9
 
     @classmethod
-    def create(cls, token, username):
+    def create(cls, token: int, username: str) -> bytes:
         message_body = pack_int(token) + pack_string(username)
         return pack_message(cls.MESSAGE_ID, message_body)
 
@@ -488,7 +487,7 @@ class DistributedSearchRequest(DistributedMessage):
     MESSAGE_ID = 0x03
 
     @classmethod
-    def create(cls, username, ticket, query, unknown=0):
+    def create(cls, username: str, ticket: int, query: str, unknown=0) -> bytes:
         message_body = (
             pack_int(unknown) + pack_string(username) + pack_int(ticket) + pack_string(query))
         return pack_message(cls.MESSAGE_ID, message_body, id_as_uchar=True)
@@ -509,7 +508,7 @@ class DistributedBranchLevel(DistributedMessage):
     MESSAGE_ID = 0x04
 
     @classmethod
-    def create(cls, level):
+    def create(cls, level: int) -> bytes:
         message_body = pack_int(level)
         return pack_message(cls.MESSAGE_ID, message_body, id_as_uchar=True)
 
@@ -526,7 +525,7 @@ class DistributedBranchRoot(DistributedMessage):
     MESSAGE_ID = 0x05
 
     @classmethod
-    def create(cls, root):
+    def create(cls, root: str) -> bytes:
         message_body = pack_string(root)
         return pack_message(cls.MESSAGE_ID, message_body, id_as_uchar=True)
 
@@ -543,7 +542,7 @@ class DistributedBranchChildDepth(DistributedMessage):
     MESSAGE_ID = 0x07
 
     @classmethod
-    def create(cls, child_depth):
+    def create(cls, child_depth: int) -> bytes:
         message_body = pack_int(child_depth)
         return pack_message(cls.MESSAGE_ID, message_body, id_as_uchar=True)
 
@@ -569,7 +568,7 @@ class PeerPierceFirewall(PeerMessage):
     MESSAGE_ID = 0x00
 
     @classmethod
-    def create(cls, token):
+    def create(cls, token: int) -> bytes:
         return pack_message(cls.MESSAGE_ID, pack_int(token), id_as_uchar=True)
 
     def parse(self):
@@ -584,7 +583,7 @@ class PeerInit(PeerMessage):
     MESSAGE_ID = 0x01
 
     @classmethod
-    def create(cls, user, typ, token):
+    def create(cls, user: str, typ: str, token: int) -> bytes:
         message_body = (pack_string(user) + pack_string(typ) + pack_int(token))
         return pack_message(cls.MESSAGE_ID, message_body, id_as_uchar=True)
 
@@ -659,7 +658,7 @@ class PeerTransferRequest(PeerMessage):
     MESSAGE_ID = 0x28
 
     @classmethod
-    def create(cls, direction, ticket, filename):
+    def create(cls, direction: int, ticket: int, filename: str):
         message_body = (
             pack_int(direction) + pack_int(ticket) + pack_string(filename))
         # TODO: Check if as uchar
@@ -682,7 +681,7 @@ class PeerDownloadReply(PeerMessage):
     MESSAGE_ID = 0x29
 
     @classmethod
-    def create(cls, ticket, allowed, reason=None):
+    def create(cls, ticket: int, allowed: int, reason=None):
         # I do not understand why ticket is described as a string here when all
         # other messages have it as an int
         message_body = (pack_string(ticket) + pack_uchar(allowed))
@@ -696,7 +695,7 @@ class PeerUploadReply(PeerMessage):
     MESSAGE_ID = 0x29
 
     @classmethod
-    def create(cls, ticket, allowed, reason=None, filesize=0):
+    def create(cls, ticket: int, allowed: bool, reason: str=None, filesize=0):
         # I do not understand why ticket is described as a string here when all
         # other messages have it as an int
         message_body = (pack_string(ticket) + pack_uchar(allowed))
@@ -734,7 +733,7 @@ class PeerTransferQueue(PeerMessage):
     MESSAGE_ID = 0x2B
 
     @classmethod
-    def create(cls, filename):
+    def create(cls, filename: str) -> bytes:
         message_body = pack_string(filename)
         return pack_message(cls.MESSAGE_ID, message_body)
 

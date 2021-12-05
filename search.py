@@ -7,8 +7,8 @@ class SearchQuery:
         @ivar query: The query string
         @ivar results: List of L{SearchResult} objects
         """
-        self.ticket = ticket
-        self.query = query
+        self.ticket: int = ticket
+        self.query: str = query
         self.results = []
 
 

@@ -1,30 +1,37 @@
+import logging
+import time
+
 from connection import (
     PeerConnection,
     PeerConnectionType,
+    NetworkManager,
 )
 import messages
 import state
 from search import SearchQuery, SearchResult
 from utils import ticket_generator, get_directories_absolute_paths, get_file_count
 
-import logging
-import time
 
 logger = logging.getLogger()
 
 
 class SoulSeek:
 
-    def __init__(self, network, server_connection, settings):
-        self.network = network
-        self.server_connection = server_connection
+    def __init__(self, settings):
         self.settings = settings
+
+        self.network = NetworkManager(settings['network'])
         self.state = state.State()
-        self.peers = []
         self.ticket_generator = ticket_generator()
         self.search_queries = {}
 
         self._create_message_mappings()
+
+    def start_network(self):
+        self.network.initialize(self)
+
+    def stop_network(self):
+        self.network.quit()
 
     def _create_message_mappings(self):
         self._server_message_map = {
@@ -53,7 +60,7 @@ class SoulSeek:
 
     def get_file_sharing_stats(self):
         """Returns the amount of files and directories shared"""
-        directories = get_directories_absolute_paths(self.settings.directories)
+        directories = get_directories_absolute_paths(self.settings['sharing']['directories'])
         count = 0
         for directory in directories:
             count += get_file_count(directory)
@@ -63,10 +70,10 @@ class SoulSeek:
         """Perform a login request with the username and password found in
         L{self.settings} and waits until L{self.state.logged_in} is set.
         """
-        username = self.settings.username
-        password = self.settings.password
+        username = self.settings['credentials']['username']
+        password = self.settings['credentials']['password']
         logger.info(f"Logging on with credentials: {username}:{password}")
-        self.server_connection.messages.put(
+        self.network.send_server_message(
             messages.Login.create(username, password, 157)
         )
         while not self.state.logged_in:
@@ -75,7 +82,7 @@ class SoulSeek:
     def search(self, query):
         logger.info(f"Starting search for query: {query}")
         ticket = next(self.ticket_generator)
-        self.server_connection.messages.put(
+        self.network.send_server_message(
             messages.FileSearch.create(ticket, query))
         self.search_queries[ticket] = SearchQuery(ticket, query)
         return ticket
@@ -99,7 +106,7 @@ class SoulSeek:
         This method will call L{on_unknown_message} if the message has no
         handler method
         """
-        message_func = self._server_message_map.get(smessage.MESSAGE_ID, self.on_unknown_message)
+        message_func = self._server_message_map.get(message.MESSAGE_ID, self.on_unknown_message)
         logger.debug(f"Handling message {message!r}")
         message_func(message)
 
@@ -121,38 +128,38 @@ class SoulSeek:
 
         # Make setup calls
         dir_count, file_count = self.get_file_sharing_stats()
-        self.server_connection.messages.put(
+        self.network.send_server_message(
             messages.CheckPrivileges.create())
         # Advertise listening port including obfuscated
-        self.server_connection.messages.put(
+        self.network.send_server_message(
             messages.SetListenPort.create(
-                self.settings.listening_port,
-                self.settings.listening_port + 1
+                self.settings['network']['listening_port'],
+                self.settings['network']['listening_port'] + 1
             )
         )
         # Advertise listening port excluding obfuscated
-        # self.server_connection.messages.put(
+        # self.network.send_server_message(
         #     messages.SetListenPort.create(
         #         self.settings.listening_port
         #     )
         # )
-        self.server_connection.messages.put(
+        self.network.send_server_message(
             messages.SetStatus.create(2)) # Available
-        self.server_connection.messages.put(
+        self.network.send_server_message(
             messages.HaveNoParents.create(True))
-        self.server_connection.messages.put(
+        self.network.send_server_message(
             messages.BranchRoot.create(self.settings.username))
-        self.server_connection.messages.put(
+        self.network.send_server_message(
             messages.BranchLevel.create(0))
         logger.debug(f"Sharing {dir_count} directories and {file_count} files")
-        # self.server_connection.messages.put(
+        # self.network.send_server_message(
         #     messages.SharedFoldersFiles.create(dir_count, file_count))
-        self.server_connection.messages.put(
+        self.network.send_server_message(
             messages.SharedFoldersFiles.create(5, 1000))
         # GetUserStats on self? message ID 36
-        self.server_connection.messages.put(
+        self.network.send_server_message(
             messages.AddUser.create(self.settings.username))
-        self.server_connection.messages.put(
+        self.network.send_server_message(
             messages.AcceptChildren.create(True))
 
     def on_connect_to_peer(self, message):
@@ -160,15 +167,8 @@ class SoulSeek:
         logger.info("ConnectToPeer message contents: {!r}".format(contents))
         username, typ, ip, port, token, privileged = contents
 
-        if self.network._is_already_connected(ip):
-            logger.debug(
-                f"ConnectToPeer: IP address {ip} already connected, not opening "
-                "a new connection")
-            return
-
         peer_connection = PeerConnection(hostname=ip, port=port, listener=self)
-        peer_connection.listener = self
-        peer_connection.connect(self.network.selector)
+        peer_connection.connect(self.network.network_loop.selector)
         peer_connection.messages.put(
             messages.PeerPierceFirewall.create(token))
 
@@ -176,7 +176,7 @@ class SoulSeek:
         username, typ, ip, port, token, privileged = message.parse()
         peer_connection = PeerConnection(
             hostname=ip, port=port, listener=self, connection_type=typ.decode('utf-8'))
-        peer_connection.connect(self.network.selector)
+        peer_connection.connect(self.network.network_loop.selector)
 
     def on_net_info(self, message):
         net_info_list = message.parse()
@@ -192,7 +192,7 @@ class SoulSeek:
                 connection_type=PeerConnectionType.DISTRIBUTED
             )
             # peer_connection.connect(self.network.selector)
-            # self.server_connection.messages.put(
+            # self.network.send_server_message(
             #     messages.ConnectToPeer.create(
             #         next(self.ticket_generator),
             #         username,
