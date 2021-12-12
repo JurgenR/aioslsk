@@ -13,9 +13,10 @@ class UPNP:
     def __init__(self):
         pass
 
-    def map_port(self, ip: str, port: int):
+    def map_port(self, ip: str, port: int, duration: int):
         """Maps a port using UPNP
 
+        @param duration: Lease duration in seconds
         """
         logging.debug(f"discover UPNP devices")
         devices = upnpclient.discover()

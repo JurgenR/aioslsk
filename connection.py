@@ -16,32 +16,37 @@ import upnp
 logger = logging.getLogger()
 
 
-def is_already_connected(selector, ip_addr):
-    for val in selector.get_map().values():
-        if ip_addr == val.data.hostname:
-            return val
-    return None
-
-
-def get_connection_by_ip(selector, ip_addr):
-    for val in selector.get_map().values():
-        if ip_addr == val.data.hostname:
-            return val
-    raise PySlskException(f"No connection with IP address {ip_addr} in selector")
-
-
 class PeerConnectionType:
     FILE = 'F'
     PEER = 'P'
     DISTRIBUTED = 'D'
 
 
+class ConnectionState:
+    DISCONNECTED = 0
+    CONNECTED = 1
+    SHOULD_CLOSE = 2
+    CLOSED = 3
+
+
 class Connection:
 
-    def __init__(self, hostname: str, port: int):
+    def __init__(self, hostname: str, port: int, state=ConnectionState.DISCONNECTED):
         self.hostname = hostname
         self.port = port
         self.fileobj = None
+        self.state = state
+
+    def disconnect(self, callback=None):
+        logger.debug(f"disconnecting from {self.hostname}:{self.port}")
+        try:
+            self.fileobj.close()
+        except OSError:
+            logger.exception(f"exception while disconnecting {self.fileobj}")
+        finally:
+            self.state = ConnectionState.CLOSED
+            if callback is not None:
+                callback(connection=self)
 
 
 class ServerConnection(Connection):
@@ -60,15 +65,19 @@ class ServerConnection(Connection):
         """
         return self.fileobj.getsockname()[0]
 
-    def connect(self, selector):
-        """Open connection and register on the given L{selector}"""
+    def connect(self):
         logger.info(
-            f"open {self.hostname}:{self.port}")
+            f"open {self.hostname}:{self.port} : server connection")
         self.fileobj = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.fileobj.setblocking(False)
         self.fileobj.connect_ex((self.hostname, self.port, ))
-        selector.register(
-            self.fileobj, selectors.EVENT_READ | selectors.EVENT_WRITE, data=self)
+
+        self.state = ConnectionState.CONNECTED
+        self.listener.on_server_connected(self)
+        return self.fileobj
+
+    def disconnect(self):
+        super().disconnect(callback=self.listener.on_server_disconnected)
 
     def buffer(self, data):
         """Adds data to the internal L{_buffer} and tries to detects whether a
@@ -97,8 +106,7 @@ class ServerConnection(Connection):
     def handle_message(self, message_data):
         try:
             message = messages.parse_message(message_data)
-            # print(f"Handle message {message_data}")
-            self.listener.on_message(message)
+            self.listener.on_server_message(message, self)
         except Exception as exc:
             logger.error(
                 f"Failed to handle server message data {message_data}",
@@ -118,30 +126,35 @@ class ListeningConnection(Connection):
         self.listener = listener
         self.last_interaction = 0
 
-    def connect(self, selector):
-        """Open connection and register on the given L{selector}"""
+    def connect(self):
         logger.info(
             f"open {self.hostname}:{self.port} : listening connection")
         self.fileobj = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.fileobj.bind((self.hostname, self.port, ))
         self.fileobj.setblocking(False)
         self.fileobj.listen()
-        selector.register(self.fileobj, selectors.EVENT_READ, data=self)
 
-    def accept(self, sock, selector):
-        """Accept the incoming connection (L{sock}) and registers it with the
-        given L{selector}.
-        """
+        self.state = ConnectionState.CONNECTED
+        self.listener.on_listener_connected(self)
+
+        return self.fileobj
+
+    def disconnect(self):
+        super().disconnect(callback=self.listener.on_listener_disconnected)
+
+    def accept(self, sock):
+        """Accept the incoming connection (L{sock})"""
         fileobj, addr = sock.accept()
         logger.info(f"accepted {addr[0]}:{addr[1]}")
         fileobj.setblocking(False)
 
         peer_connection = PeerConnection(
-            hostname=addr[0], port=addr[1], obfuscated=self.obfuscated, listener=self.listener)
+            hostname=addr[0], port=addr[1],
+            obfuscated=self.obfuscated, listener=self.listener
+        )
         peer_connection.fileobj = fileobj
 
-        # Register it to the selector
-        selector.register(fileobj, selectors.EVENT_READ | selectors.EVENT_WRITE, data=peer_connection)
+        self.listener.on_peer_accepted(peer_connection)
         return peer_connection
 
 
@@ -158,29 +171,24 @@ class PeerConnection(Connection):
         self.obfuscated = obfuscated
         self.last_interaction = 0
         self.connection_type = connection_type
-        self.fileobj = None
 
-    def connect(self, selector):
-        """Open connection and register on the given L{selector}"""
+    def connect(self):
         logger.info(f"open {self.hostname}:{self.port} : peer connection")
         self.fileobj = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.fileobj.setblocking(False)
         res = self.fileobj.connect_ex((self.hostname, self.port, ))
-        logger.info(f"open {self.hostname}:{self.port} : peer connection, result {res} [{errno.errorcode[res]}]")
+        self.state = ConnectionState.CONNECTED
 
+        logger.info(f"open {self.hostname}:{self.port} : peer connection, result {res} [{errno.errorcode[res]}]")
         # This can return error code 10035 (WSAEWOULDBLOCK) which can be ignored
         # What to do with other error codes?
-        selector.register(
-            self.fileobj, selectors.EVENT_READ | selectors.EVENT_WRITE, data=self)
 
-    def close(self, selector):
-        """Closes the peer connection by unregistering it from the selector and
-        closing the connection. If this is closed in the connection loop we
-        must clear the message queue to avoid a message getting sent through
-        this connection after we closed the connection
-        """
-        selector.unregister(self.fileobj)
-        self.fileobj.close()
+        self.listener.on_peer_connected(self)
+
+        return self.fileobj
+
+    def disconnect(self):
+        super().disconnect(callback=self.listener.on_peer_disconnected)
 
     def buffer(self, data):
         """Main entry point for incoming network data. The L{data} should always
@@ -239,25 +247,22 @@ class PeerConnection(Connection):
             self.handle_message(message)
 
     def handle_message(self, message_data):
-        if self.connection_type in (PeerConnectionType.PEER, PeerConnectionType.DISTRIBUTED, ):
-            try:
-                if self.connection_type == PeerConnectionType.PEER:
-                    message = messages.parse_peer_message(message_data)
-                else:
-                    message = messages.parse_distributed_message(message_data)
-                self.listener.on_peer_message(message, connection=self)
-            except Exception as exc:
-                logger.error(
-                    f"Failed to handle peer ({self.connection_type}) message data {message_data}", exc_info=True)
-            else:
-                self.received_messages.append(message)
+        message_parser = {
+            PeerConnectionType.PEER: messages.parse_peer_message,
+            PeerConnectionType.DISTRIBUTED: messages.parse_distributed_message
+        }.get(self.connection_type)
 
-        elif self.connection_type == PeerConnectionType.FILE:
-            raise NotImplementedError("File connections not yet implemented")
+        if message_parser is None:
+            raise NotImplementedError(f"No message parser implemented for {self.connection_type}")
 
+        try:
+            message = message_parser(message_data)
+            self.listener.on_peer_message(message, self)
+        except Exception as exc:
+            logger.error(
+                f"Failed to handle peer ({self.connection_type}) message data {message_data}", exc_info=True)
         else:
-            raise Exception(
-                f"Unknown connection type assigned to this peer connection {self.connection_type!r}")
+            self.received_messages.append(message)
 
 
 class NetworkLoop(threading.Thread):
@@ -267,12 +272,6 @@ class NetworkLoop(threading.Thread):
         self.selector = selectors.DefaultSelector()
         self.stop_event = stop_event
         self._last_log_time = 0
-
-    def _is_already_connected(self, ip_addr):
-        for val in self.selector.get_map().values():
-            if ip_addr == val.data.hostname:
-                return True
-        return False
 
     def _log_open_connections(self):
         current_time = int(time.time())
@@ -292,30 +291,29 @@ class NetworkLoop(threading.Thread):
             for selector_key in self.selector.get_map().values()
         ]
 
-    def close_connection(self, connection_obj: Connection, work_socket):
-        """Closes the connection and removes it from the selector"""
-        self.selector.unregister(work_socket)
-        work_socket.close()
-        connection_obj.fileobj = None
-
     def run(self):
         """Start the network loop, and run until L{stop_event} is set. This is
         the network loop for all L{Connection} instances.
         """
         while not self.stop_event.is_set():
+            if len(self.selector.get_map()) == 0:
+                logger.debug("In here")
+                time.sleep(0.1)
+                continue
+
             events = self.selector.select(timeout=None)
             self._log_open_connections()
             current_time = time.time()
 
             for key, mask in events:
                 work_socket = key.fileobj
-                connection_obj = key.data
+                connection = key.data
 
                 if mask & selectors.EVENT_READ:
                     # Listening connection
-                    if isinstance(connection_obj, ListeningConnection):
+                    if isinstance(connection, ListeningConnection):
                         # Accept incoming connections on the listening socket
-                        peer_connection = connection_obj.accept(work_socket, self.selector)
+                        connection.accept(work_socket)
                         continue
 
                     # Server socket or peer socket
@@ -324,17 +322,17 @@ class NetworkLoop(threading.Thread):
                     except OSError as exc:
                         logger.exception(f"Exception receiving data on connection {work_socket}")
                         # Only remove the peer connections?
-                        logger.info(f"close {connection_obj.hostname}:{connection_obj.port} : exception while reading")
-                        self.close_connection(connection_obj, work_socket)
+                        logger.info(f"close {connection.hostname}:{connection.port} : exception while reading")
+                        connection.disconnect()
                         continue
                     else:
                         if recv_data:
-                            connection_obj.last_interaction = current_time
-                            connection_obj.buffer(recv_data)
+                            connection.last_interaction = current_time
+                            connection.buffer(recv_data)
                         else:
                             logger.warning(
-                                f"close {connection_obj.hostname}:{connection_obj.port} : no data received")
-                            self.close_connection(connection_obj, work_socket)
+                                f"close {connection.hostname}:{connection.port} : no data received")
+                            connection.disconnect()
                             continue
 
                 if mask & selectors.EVENT_WRITE:
@@ -344,90 +342,31 @@ class NetworkLoop(threading.Thread):
                     if socket_err != 0:
                         logger.debug(
                             "error {}:{} : {} [{}] : cleaning up"
-                            .format(connection_obj.hostname, connection_obj.port, socket_err, errno.errorcode[socket_err]))
-                        self.close_connection(connection_obj, work_socket)
+                            .format(connection.hostname, connection.port, socket_err, errno.errorcode[socket_err]))
+                        connection.disconnect()
                         continue
 
                     try:
                         # Attempt to get the message from the Queue and send it
                         # over the socket it belongs to
-                        message = connection_obj.messages.get(block=False)
+                        message = connection.messages.get(block=False)
                     except queue.Empty:
                         pass
                     else:
                         try:
-                            logger.debug(f"send {connection_obj.hostname}:{connection_obj.port} : message {message.hex()}")
-                            connection_obj.last_interaction = current_time
+                            logger.debug(f"send {connection.hostname}:{connection.port} : message {message.hex()}")
+                            connection.last_interaction = current_time
                             work_socket.sendall(message)
                         except OSError as exc:
                             logger.exception(
-                                f"close {connection_obj.hostname}:{connection_obj.port} : exception while sending")
-                            self.close_connection(connection_obj, work_socket)
+                                f"close {connection.hostname}:{connection.port} : exception while sending")
+                            connection.disconnect()
                             continue
 
+            # Clean up connections
+            for selector_key in self.selector.get_map().values():
+                connection = selector_key.data
+                if connection.state == ConnectionState.SHOULD_CLOSE:
+                    connection.disconnect()
+
         self.selector.close()
-
-
-class NetworkManager:
-
-    def __init__(self, settings):
-        self.settings = settings
-
-        self.upnp = upnp.UPNP()
-
-        self.stop_event = threading.Event()
-        self.network_loop: NetworkLoop = None
-        self.server: ServerConnection = None
-        self.listening_connections = []
-        self.peers = []
-
-    def send_server_message(self, message):
-        self.server.messages.put(message)
-
-    def initialize(self, listener):
-        logger.info("initializing network")
-
-        # Init connections
-        self.network_loop = NetworkLoop(self.stop_event)
-
-        self.server = ServerConnection(
-            hostname=self.settings['server_hostname'],
-            port=self.settings['server_port'],
-            listener=listener
-        )
-        self.listening_connections = [
-            ListeningConnection(
-                port=self.settings['listening_port'],
-                listener=listener
-            ),
-            ListeningConnection(
-                port=self.settings['listening_port'] + 1,
-                obfuscated=True,
-                listener=listener
-            )
-        ]
-
-        # Perform the socket connections and start the network loop
-        self.server.connect(self.network_loop.selector)
-        for listening_connection in self.listening_connections:
-            listening_connection.connect(self.network_loop.selector)
-
-        self.network_loop.start()
-
-        if self.settings['use_upnp']:
-            self.enable_upnp()
-
-    def quit(self):
-        logger.debug("stopping network")
-        self.stop_event.set()
-        self.network_loop.join(timeout=60)
-        if self.network_loop.is_alive():
-            pass
-
-    def enable_upnp(self):
-        listening_port = self.settings['listening_port']
-        for port in [listening_port, listening_port + 1, ]:
-            self.upnp.map_port(self.server.get_connecting_ip(), port)
-
-    def create_peer_connection(self):
-        pass

@@ -21,12 +21,12 @@ class SoulSeekCmd(cmd.Cmd):
     def do_results(self, query):
         # If query is empty list all searches performed
         if not query:
-            for ticket, search_query in self.client.search_queries.items():
+            for ticket, search_query in self.client.state.search_queries.items():
                 print(f"{ticket}\t{search_query.query}\t{len(search_query.results)}")
             return
 
         query_obj = None
-        for ticket, search_query in self.client.search_queries.items():
+        for ticket, search_query in self.client.state.search_queries.items():
             if search_query.query == query:
                 query_obj = search_query
                 break
@@ -43,9 +43,10 @@ class SoulSeekCmd(cmd.Cmd):
                 idx += 1
 
     def do_connections(self, _):
-        connections = self.network.get_connections()
-        for connection in connections:
-            print(f"* {connection.hostname}:{connection.port}")
+        return
+        # connections = self.network.get_connections()
+        # for connection in connections:
+        #     print(f"* {connection.hostname}:{connection.port}")
 
     def do_state(self, _):
         print("State: {}".format(self.client.state.__dict__))
