@@ -31,10 +31,10 @@ class ConnectionState:
 
 class Connection:
 
-    def __init__(self, hostname: str, port: int, state=ConnectionState.DISCONNECTED):
+    def __init__(self, hostname: str, port: int, fileobj=None, state=ConnectionState.DISCONNECTED):
         self.hostname = hostname
         self.port = port
-        self.fileobj = None
+        self.fileobj = fileobj
         self.state = state
 
     def disconnect(self, callback=None):
@@ -47,6 +47,11 @@ class Connection:
             self.state = ConnectionState.CLOSED
             if callback is not None:
                 callback(connection=self)
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}(hostname={self.hostname!r}, port={self.port}, "
+            f"fileobj={self.fileobj!r}, state={self.state})")
 
 
 class ServerConnection(Connection):
@@ -145,14 +150,18 @@ class ListeningConnection(Connection):
     def accept(self, sock):
         """Accept the incoming connection (L{sock})"""
         fileobj, addr = sock.accept()
-        logger.info(f"accepted {addr[0]}:{addr[1]}")
+        logger.info(f"accepted {addr[0]}:{addr[1]} on {self.hostname}:{self.port} (obfuscated={self.obfuscated})")
         fileobj.setblocking(False)
 
         peer_connection = PeerConnection(
             hostname=addr[0], port=addr[1],
-            obfuscated=self.obfuscated, listener=self.listener
+            obfuscated=self.obfuscated,
+            connection_type=PeerConnectionType.PEER,
+            listener=self.listener,
+            incoming=True
         )
         peer_connection.fileobj = fileobj
+        peer_connection.state = ConnectionState.CONNECTED
 
         self.listener.on_peer_accepted(peer_connection)
         return peer_connection
@@ -162,7 +171,8 @@ class PeerConnection(Connection):
 
     def __init__(
             self, hostname='0.0.0.0', port=None, obfuscated=False,
-            listener=None, connection_type=PeerConnectionType.PEER):
+            listener=None, connection_type=PeerConnectionType.PEER,
+            incoming=False):
         super().__init__(hostname, port)
         self._buffer = b''
         self.listener = listener
@@ -171,6 +181,7 @@ class PeerConnection(Connection):
         self.obfuscated = obfuscated
         self.last_interaction = 0
         self.connection_type = connection_type
+        self.incoming = incoming
 
     def connect(self):
         logger.info(f"open {self.hostname}:{self.port} : peer connection")
@@ -227,7 +238,7 @@ class PeerConnection(Connection):
     def buffer_obfuscated(self):
         # Require at least 8 bytes (4 bytes key, 4 bytes length)
         if len(self._buffer) < (obfuscation.KEY_SIZE + 4):
-            raise Exception("Invalid buffer size for obfuscated message")
+            return
 
         # NOTE: We might need a check here if we have a multiple of 4
         decoded_buffer = obfuscation.decode(self._buffer)
@@ -247,30 +258,16 @@ class PeerConnection(Connection):
             self.handle_message(message)
 
     def handle_message(self, message_data):
-        message_parser = {
-            PeerConnectionType.PEER: messages.parse_peer_message,
-            PeerConnectionType.DISTRIBUTED: messages.parse_distributed_message
-        }.get(self.connection_type)
-
-        if message_parser is None:
-            raise NotImplementedError(f"No message parser implemented for {self.connection_type}")
-
-        try:
-            message = message_parser(message_data)
-            self.listener.on_peer_message(message, self)
-        except Exception as exc:
-            logger.error(
-                f"Failed to handle peer ({self.connection_type}) message data {message_data}", exc_info=True)
-        else:
-            self.received_messages.append(message)
+        self.listener.on_peer_message(message_data, self)
 
 
 class NetworkLoop(threading.Thread):
 
-    def __init__(self, stop_event):
+    def __init__(self, stop_event, lock):
         super().__init__()
         self.selector = selectors.DefaultSelector()
         self.stop_event = stop_event
+        self.lock = lock
         self._last_log_time = 0
 
     def _log_open_connections(self):
@@ -297,12 +294,14 @@ class NetworkLoop(threading.Thread):
         """
         while not self.stop_event.is_set():
             if len(self.selector.get_map()) == 0:
-                logger.debug("In here")
                 time.sleep(0.1)
                 continue
 
+            with self.lock:
+                self._log_open_connections()
+
             events = self.selector.select(timeout=None)
-            self._log_open_connections()
+
             current_time = time.time()
 
             for key, mask in events:
@@ -364,7 +363,7 @@ class NetworkLoop(threading.Thread):
                             continue
 
             # Clean up connections
-            for selector_key in self.selector.get_map().values():
+            for selector_key in list(self.selector.get_map().values()):
                 connection = selector_key.data
                 if connection.state == ConnectionState.SHOULD_CLOSE:
                     connection.disconnect()

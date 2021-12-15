@@ -2,7 +2,7 @@ import logging
 
 from connection import PeerConnection, PeerConnectionType
 import messages
-from state import State
+from state import ConnectionRequest, State
 from utils import get_stats
 
 
@@ -110,28 +110,37 @@ class ServerManager:
         )
         peer_connection.messages.put(
             messages.PeerPierceFirewall.create(token))
-        self.network_manager.connect_to_peer(peer_connection)
+        self.network_manager.connect_to_peer(peer_connection, username)
 
     def on_net_info(self, message):
         net_info_list = message.parse()
 
-        idx = 1
-        for username, ip, port in net_info_list:
-            logger.info(f"NetInfo user {idx}: {username!r} : {ip}:{port}")
-            idx += 1
-            self.state.net_info[username] = (ip, port, )
+        for idx, (username, ip, port) in enumerate(net_info_list, 1):
+            ticket = next(self.state.ticket_generator)
+            logger.info(f"netinfo user {idx}: {username!r} : {ip}:{port} (ticket={ticket})")
+            logger.debug(f"ticket: {messages.pack_int(ticket)!r}")
+            self.state.connection_requests.append(
+                ConnectionRequest(
+                    ticket=ticket,
+                    username=username,
+                    ip=ip,
+                    port=port,
+                    type=PeerConnectionType.DISTRIBUTED
+                )
+            )
             peer_connection = PeerConnection(
                 hostname=ip,
                 port=port,
                 connection_type=PeerConnectionType.DISTRIBUTED
             )
-            # self.network_manager.send_server_messages(
-            #     messages.ConnectToPeer.create(
-            #         next(self.ticket_generator),
-            #         username,
-            #         PeerConnectionType.DISTRIBUTED
-            #     )
-            # )
+            self.network_manager.connect_to_peer(peer_connection, username)
+            self.network_manager.send_server_messages(
+                messages.ConnectToPeer.create(
+                    ticket,
+                    username,
+                    PeerConnectionType.DISTRIBUTED
+                )
+            )
 
     def on_unknown_message(self, message):
         """Method called for messages that have no handler"""

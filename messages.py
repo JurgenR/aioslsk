@@ -478,6 +478,7 @@ class DistributedPing(DistributedMessage):
         if len(self.message[self._pos:]) > 0:
             ticket = self.parse_int()
         else:
+            # I don't recall when this occurs again
             # Perhaps None would be better as 0 would be a valid ticket number
             ticket = 0
         return ticket
