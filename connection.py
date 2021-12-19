@@ -1,3 +1,4 @@
+import enum
 import errno
 import logging
 import queue
@@ -22,31 +23,35 @@ class PeerConnectionType:
     DISTRIBUTED = 'D'
 
 
-class ConnectionState:
+class ConnectionState(enum.Enum):
     DISCONNECTED = 0
-    CONNECTED = 1
-    SHOULD_CLOSE = 2
-    CLOSED = 3
+    CONNECTING = 1
+    CONNECTED = 2
+    SHOULD_CLOSE = 3
+    CLOSED = 4
 
 
 class Connection:
 
-    def __init__(self, hostname: str, port: int, fileobj=None, state=ConnectionState.DISCONNECTED):
-        self.hostname = hostname
-        self.port = port
+    def __init__(self, hostname: str, port: int, fileobj=None, state: ConnectionState=ConnectionState.DISCONNECTED):
+        self.hostname: str = hostname
+        self.port: int = port
         self.fileobj = fileobj
-        self.state = state
+        self.state: ConnectionState = state
+        self.listener = None
 
-    def disconnect(self, callback=None):
+    def set_state(self, state: ConnectionState):
+        self.state = state
+        self.listener.on_state_changed(state, self)
+
+    def disconnect(self):
         logger.debug(f"disconnecting from {self.hostname}:{self.port}")
         try:
             self.fileobj.close()
         except OSError:
             logger.exception(f"exception while disconnecting {self.fileobj}")
         finally:
-            self.state = ConnectionState.CLOSED
-            if callback is not None:
-                callback(connection=self)
+            self.set_state(ConnectionState.CLOSED)
 
     def __repr__(self):
         return (
@@ -77,12 +82,8 @@ class ServerConnection(Connection):
         self.fileobj.setblocking(False)
         self.fileobj.connect_ex((self.hostname, self.port, ))
 
-        self.state = ConnectionState.CONNECTED
-        self.listener.on_server_connected(self)
+        self.set_state(ConnectionState.CONNECTING)
         return self.fileobj
-
-    def disconnect(self):
-        super().disconnect(callback=self.listener.on_server_disconnected)
 
     def buffer(self, data):
         """Adds data to the internal L{_buffer} and tries to detects whether a
@@ -97,6 +98,10 @@ class ServerConnection(Connection):
         removed
         """
         self._buffer += data
+
+        if len(self._buffer) < struct.calcsize('I'):
+            return
+
         _, msg_len = messages.parse_int(0, self._buffer)
         msg_len_with_len = struct.calcsize('I') + msg_len
         if len(self._buffer) >= msg_len_with_len:
@@ -139,13 +144,9 @@ class ListeningConnection(Connection):
         self.fileobj.setblocking(False)
         self.fileobj.listen()
 
-        self.state = ConnectionState.CONNECTED
-        self.listener.on_listener_connected(self)
+        self.set_state(ConnectionState.CONNECTING)
 
         return self.fileobj
-
-    def disconnect(self):
-        super().disconnect(callback=self.listener.on_listener_disconnected)
 
     def accept(self, sock):
         """Accept the incoming connection (L{sock})"""
@@ -177,7 +178,6 @@ class PeerConnection(Connection):
         self._buffer = b''
         self.listener = listener
         self.messages = queue.Queue()
-        self.received_messages = []
         self.obfuscated = obfuscated
         self.last_interaction = 0
         self.connection_type = connection_type
@@ -188,18 +188,14 @@ class PeerConnection(Connection):
         self.fileobj = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.fileobj.setblocking(False)
         res = self.fileobj.connect_ex((self.hostname, self.port, ))
-        self.state = ConnectionState.CONNECTED
 
         logger.info(f"open {self.hostname}:{self.port} : peer connection, result {res} [{errno.errorcode[res]}]")
         # This can return error code 10035 (WSAEWOULDBLOCK) which can be ignored
         # What to do with other error codes?
 
-        self.listener.on_peer_connected(self)
+        self.set_state(ConnectionState.CONNECTING)
 
         return self.fileobj
-
-    def disconnect(self):
-        super().disconnect(callback=self.listener.on_peer_disconnected)
 
     def buffer(self, data):
         """Main entry point for incoming network data. The L{data} should always
@@ -307,6 +303,20 @@ class NetworkLoop(threading.Thread):
             for key, mask in events:
                 work_socket = key.fileobj
                 connection = key.data
+
+                # If this is the first time the connection is selected we should
+                # still be in the CONNECTING state. Check if we are successfully
+                # connected otherwise close the socket
+                if connection.state == ConnectionState.CONNECTING:
+                    socket_err = work_socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+                    if socket_err != 0:
+                        logger.debug(
+                            "error connecting {}:{} : {} [{}] : cleaning up"
+                            .format(connection.hostname, connection.port, socket_err, errno.errorcode[socket_err]))
+                        connection.disconnect()
+                    else:
+                        connection.set_state(ConnectionState.CONNECTED)
+                    continue
 
                 if mask & selectors.EVENT_READ:
                     # Listening connection

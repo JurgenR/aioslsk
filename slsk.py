@@ -56,3 +56,8 @@ class SoulSeek:
             messages.FileSearch.create(ticket, query))
         self.state.search_queries[ticket] = SearchQuery(ticket, query)
         return ticket
+
+    def accept_children(self):
+        logger.info("Start accepting children")
+        self.network_manager.send_server_messages(
+            messages.AcceptChildren.create(True))

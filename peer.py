@@ -22,7 +22,6 @@ class Peer:
         self.branch_root: str = None
 
     def reset_branch_values(self):
-        self.is_parent = False
         self.branch_level = None
         self.branch_root = None
 
@@ -65,7 +64,7 @@ class PeerManager:
             messages.DistributedSearchRequest.MESSAGE_ID: self.on_distributed_search_request
         }
 
-    def _create_peer(self, username, connection):
+    def _create_peer(self, username, connection: PeerConnection):
         """Creates a new peer object and adds it to our list of peers"""
         if username not in self.peers:
             self.peers[username] = Peer(username)
@@ -78,7 +77,7 @@ class PeerManager:
             peer_connections = peer.get_connections(PeerConnectionType.PEER)
             for peer_connection in peer_connections:
                 peer.remove_connection(peer_connection)
-                peer_connection.state = ConnectionState.SHOULD_CLOSE
+                peer_connection.set_state(ConnectionState.SHOULD_CLOSE)
 
         peer.connections.append(connection)
 
@@ -94,40 +93,58 @@ class PeerManager:
                 return peer
         return None
 
-    def set_parent(self, parent_connection):
+    def set_parent(self, parent_connection: PeerConnection):
         peer = self.get_peer(parent_connection)
         if peer is None:
             logger.error(
                 f"parent connection was not found in the list of peers (connection={parent_connection!r})")
             return
 
-        peer.is_parent = True
-        self.state.has_parent = True
-
         logger.info(f"set parent {peer.username!r}: {parent_connection!r}")
 
+        peer.is_parent = True
+        self.state.set_parent(peer.branch_level + 1, peer.branch_root)
+
         self.network_manager.send_server_messages(
-            messages.BranchLevel.create(peer.branch_level + 1),
-            messages.BranchRoot.create(peer.branch_root),
-            messages.HaveNoParents.create(False)
+            messages.HaveNoParents.create(False),
+            messages.ParentIP.create(parent_connection.hostname),
+            messages.BranchLevel.create(self.state.branch_level),
+            messages.BranchRoot.create(self.state.branch_root),
         )
+
+        # The original Windows client sends out the child depth (=0)
 
         # Remove all other distributed connections
         # Even the distributed connections from the parent should be removed
         for potential_parent_peer in self.peers.values():
             connections = potential_parent_peer.get_connections(PeerConnectionType.DISTRIBUTED)
             # Reset branch values
-            if parent_connection not in connections:
-                potential_parent_peer.reset_branch_values()
+            # NOTE: I saw a situation where a parent stopped sending us anything
+            # for a while. Then suddenly readvertised its branch level, we
+            # never unset branch root so it kind of messed up because we already
+            # had a value for this peer and passed through the _check_if_parent.
+            # Therefor we also unset the branch values for the parent itself
             for connection in connections:
                 if connection != parent_connection:
                     potential_parent_peer.remove_connection(connection)
-                    connection.state = ConnectionState.SHOULD_CLOSE
+                    connection.set_state(ConnectionState.SHOULD_CLOSE)
 
-    def unset_parent(self, peer, parent_connection):
+    def _check_if_parent(self, peer, connection):
+        """Called after BranchRoot or BranchLevel, checks if all information is
+        complete for this peer/connection to become a parent and makes it a
+        parent if we don't have one.
+        """
+        if peer.branch_level and peer.branch_root:
+            if self.get_parent() is None:
+                self.set_parent(connection)
+            else:
+                peer.remove_connection(connection)
+                connection.set_state(ConnectionState.SHOULD_CLOSE)
+
+    def unset_parent(self, peer: Peer, parent_connection: PeerConnection):
         logger.debug(f"unset parent {peer.username!r}: {parent_connection!r}")
 
-        self.state.has_parent = False
+        self.state.unset_parent()
         peer.reset_branch_values()
 
         self.network_manager.send_server_messages(
@@ -136,11 +153,11 @@ class PeerManager:
             messages.HaveNoParents.create(True)
         )
 
-    def on_unknown_message(self, message, connection):
+    def on_unknown_message(self, message, connection: PeerConnection):
         """Method called for messages that have no handler"""
         logger.warning(f"Don't know how to handle message {message!r}")
 
-    def on_peer_message(self, message_data, connection):
+    def on_peer_message(self, message_data, connection: PeerConnection):
         """Method called upon receiving a message from a peer/distributed socket"""
         message_parser = {
             PeerConnectionType.PEER: messages.parse_peer_message,
@@ -172,7 +189,7 @@ class PeerManager:
                 f"failed to handle peer message {message}", exc_info=True)
 
     # Peer messages
-    def on_peer_pierce_firewall(self, message, connection):
+    def on_peer_pierce_firewall(self, message, connection: PeerConnection):
         ticket = message.parse()
         logger.debug(f"PeerPierceFirewall (connection={connection}, ticket={ticket})")
 
@@ -190,7 +207,7 @@ class PeerManager:
         else:
             logger.error(f"got multiple tickets with number {ticket} in cache")
 
-    def on_peer_init(self, message, connection):
+    def on_peer_init(self, message, connection: PeerConnection):
         username, typ, token = message.parse()
         logger.info(f"PeerInit from {username}, {typ}, {token}")
 
@@ -199,7 +216,7 @@ class PeerManager:
 
         self._create_peer(username, connection)
 
-    def on_peer_search_reply(self, message, connection):
+    def on_peer_search_reply(self, message, connection: PeerConnection):
         contents = message.parse()
         user, token, results, free_slots, avg_speed, queue_len, locked_results = contents
         search_result = SearchResult(
@@ -211,44 +228,38 @@ class PeerManager:
             logger.warning(f"Search reply token '{token}' does not match any search query we have made")
 
     # Distributed messages
-    def on_distributed_ping(self, message, connection):
+    def on_distributed_ping(self, message, connection: PeerConnection):
         unknown = message.parse()
         logger.info(f"Ping request with number {unknown!r}")
 
-    def on_distributed_search_request(self, message, connection):
+    def on_distributed_search_request(self, message, connection: PeerConnection):
         _, username, ticket, query = message.parse()
         logger.info(f"Search request from {username!r}, query: {query!r}")
 
-    def on_distributed_branch_level(self, message, connection):
+    def on_distributed_branch_level(self, message, connection: PeerConnection):
         level = message.parse()
         logger.info(f"branch level {level!r}: {connection!r}")
 
         peer = self.get_peer(connection)
         peer.branch_level = level
-        if peer.branch_level and peer.branch_root:
-            if self.get_parent() is None:
-                self.set_parent(connection)
-            else:
-                peer.remove_connection(connection)
-                connection.state = ConnectionState.SHOULD_CLOSE
+        self._check_if_parent(peer, connection)
 
-    def on_distributed_branch_root(self, message, connection):
+    def on_distributed_branch_root(self, message, connection: PeerConnection):
         root = message.parse()
         logger.info(f"branch root {root!r}: {connection!r}")
 
         peer = self.get_peer(connection)
         peer.branch_root = root
-        if peer.branch_level and peer.branch_root:
-            if self.get_parent() is None:
-                self.set_parent(connection)
-            else:
-                peer.remove_connection(connection)
-                connection.state = ConnectionState.SHOULD_CLOSE
+        self._check_if_parent(peer, connection)
 
-    def on_connect_to_peer(self, connection, username):
+    def on_connect_to_peer(self, connection: PeerConnection, username):
         self._create_peer(username, connection)
 
-    def on_peer_disconnected(self, connection):
+    # State changes
+    def on_connecting(self, connection: PeerConnection):
+        pass
+
+    def on_closed(self, connection: PeerConnection):
         for peer in self.peers.values():
             if connection in peer.connections:
                 peer.remove_connection(connection)
@@ -256,8 +267,8 @@ class PeerManager:
                     self.unset_parent(peer, connection)
                 break
 
-    def on_peer_connected(self, connection):
+    def on_connected(self, connection: PeerConnection):
         pass
 
-    def on_peer_accepted(self, connection):
+    def on_accepted(self, connection: PeerConnection):
         pass

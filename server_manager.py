@@ -70,9 +70,9 @@ class ServerManager:
             messages.HaveNoParents.create(True),
             messages.BranchRoot.create(self.settings['credentials']['username']),
             messages.BranchLevel.create(0),
+            messages.AcceptChildren.create(True),
             messages.SharedFoldersFiles.create(dir_count, file_count),
-            messages.AddUser.create(self.settings['credentials']['username']),
-            messages.AcceptChildren.create(False)
+            messages.AddUser.create(self.settings['credentials']['username'])
         )
 
     # State related messages
@@ -134,10 +134,17 @@ class ServerManager:
                 connection_type=PeerConnectionType.DISTRIBUTED
             )
             self.network_manager.connect_to_peer(peer_connection, username)
+            peer_connection.messages.put(
+                messages.PeerInit.create(
+                    self.settings['credentials']['username'],
+                    PeerConnectionType.DISTRIBUTED,
+                    ticket
+                )
+            )
             self.network_manager.send_server_messages(
                 messages.ConnectToPeer.create(
                     ticket,
-                    username,
+                    self.settings['credentials']['username'],
                     PeerConnectionType.DISTRIBUTED
                 )
             )
@@ -147,8 +154,11 @@ class ServerManager:
         logger.warning(f"Don't know how to handle message {message!r}")
 
     # Connection state listeners
-    def on_server_connected(self):
+    def on_connecting(self):
         pass
 
-    def on_server_disconnected(self):
+    def on_connected(self):
+        pass
+
+    def on_closed(self):
         pass
