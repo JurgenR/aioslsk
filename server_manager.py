@@ -101,7 +101,7 @@ class ServerManager:
     def on_connect_to_peer(self, message):
         contents = message.parse()
         logger.info("ConnectToPeer message contents: {!r}".format(contents))
-        username, typ, ip, port, token, privileged = contents
+        username, typ, ip, port, token, privileged, unknown, obfuscated_port = contents
 
         peer_connection = PeerConnection(
             hostname=ip,
