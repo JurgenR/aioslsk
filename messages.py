@@ -217,13 +217,20 @@ class SetListenPort(Message):
     def create(cls, port, obfuscated_port=None):
         message_body = pack_int(port)
         if obfuscated_port is not None:
+            message_body += pack_int(1)
             message_body += pack_int(obfuscated_port)
         return pack_message(cls.MESSAGE_ID, message_body)
 
     def parse_server(self):
         super().parse()
         port = self.parse_int()
-        return port
+        if self.has_unparsed_bytes():
+            unknown = self.parse_int()
+            obfuscated_port = self.parse_int()
+        else:
+            unknown = None
+            obfuscated_port = None
+        return port, unknown, obfuscated_port
 
 
 class GetPeerAddress(Message):
@@ -237,7 +244,7 @@ class GetPeerAddress(Message):
         super().parse()
         username = self.parse_string()
         ip_addr = self.parse_ip()
-        port = self.parse_ip()
+        port = self.parse_int()
         return username, ip_addr, port
 
     def parse_server(self):
@@ -264,7 +271,10 @@ class AddUser(Message):
         download_num = self.parse_int64()
         file_count = self.parse_int()
         dir_count = self.parse_int()
-        country_code = self.parse_string()
+        if self.has_unparsed_bytes():
+            country_code = self.parse_string()
+        else:
+            country_code = None
         return username, exists, status, avg_speed, download_num, file_count, dir_count, country_code
 
     def parse_server(self):
@@ -300,6 +310,12 @@ class ConnectToPeer(Message):
         port = self.parse_int()
         token = self.parse_int()
         privileged = self.parse_uchar()
+
+        # The following 2 integers aren't described in the Museek documentation:
+        # the second of these 2 is the obfuscated port. I'm not sure about the
+        # meaning of the first one, but possibly it's just to indicate there is
+        # an obfuscated port (I've only ever seen it as being '1' with and an
+        # obfuscated port
         if self.has_unparsed_bytes():
             unknown = self.parse_int()
             obfuscated_port = self.parse_int()
@@ -486,10 +502,17 @@ class ParentSpeedRatio(Message):
 class CheckPrivileges(Message):
     MESSAGE_ID = 0x5C
 
+    @classmethod
+    def create(cls):
+        return pack_message(cls.MESSAGE_ID, b'')
+
     def parse(self):
         super().parse()
         time_left = self.parse_int()
         return time_left
+
+    def parse_server(self):
+        super().parse()
 
 
 class AcceptChildren(Message):
@@ -589,6 +612,30 @@ class ChildDepth(Message):
         return child_depth
 
 
+class FileSearchEx(Message):
+    """File search sent by SoulSeekQT, the message received from the server
+    seems to be some kind of acknowledgement. The query is repeated and what
+    looks like an integer (always seems to be 0)
+    """
+    MESSAGE_ID = 0x99
+
+    @classmethod
+    def create(cls, query):
+        message_body = pack_string(query)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+    def parse(self):
+        super().parse()
+        query = self.parse_string()
+        unknown = self.parse_int()
+        return query, unknown
+
+    def parse_server(self):
+        super().parse()
+        query = self.parse_string()
+        return query
+
+
 class CantConnect(Message):
     MESSAGE_ID = 0x3E9
 
@@ -600,7 +647,11 @@ class CantConnect(Message):
     def parse(self):
         super().parse()
         token = self.parse_int()
-        username = self.parse_string()
+        # Username appears to be optional
+        if self.has_unparsed_bytes():
+            username = self.parse_string()
+        else:
+            username = None
         return token, username
 
     def parse_server(self):
