@@ -18,7 +18,7 @@ def parse_basic(pos: int, data, data_type: str):
     return pos + size, struct.unpack(data_type, value)[0]
 
 
-def parse_int(pos: int, data):
+def parse_int(pos: int, data) -> int:
     return parse_basic(pos, data, '<I')
 
 
@@ -27,7 +27,7 @@ def parse_int64(pos: int, data) -> int:
     return parse_basic(pos, data, '<Q')
 
 
-def parse_uchar(pos: int, data) -> str:
+def parse_uchar(pos: int, data) -> int:
     return parse_basic(pos, data, '<B')
 
 
@@ -179,6 +179,14 @@ class ServerMessage(Message):
 class Login(Message):
     MESSAGE_ID = 0x01
 
+    @classmethod
+    def create(cls, username, password, client_version, number=100):
+        md5_hash = calc_md5(username + password)
+        message_body = (
+            pack_string(username) + pack_string(password) +
+            pack_int(client_version) + pack_string(md5_hash) + pack_int(number))
+        return pack_message(cls.MESSAGE_ID, message_body)
+
     def parse(self):
         super().parse()
         result = self.parse_uchar()
@@ -192,13 +200,14 @@ class Login(Message):
             reason = self.parse_string()
             return result, reason
 
-    @classmethod
-    def create(cls, username, password, client_version, number=100):
-        md5_hash = calc_md5(username + password)
-        message_body = (
-            pack_string(username) + pack_string(password) +
-            pack_int(client_version) + pack_string(md5_hash) + pack_int(number))
-        return pack_message(cls.MESSAGE_ID, message_body)
+    def parse_server(self):
+        super().parse()
+        username = self.parse_string()
+        password = self.parse_string()
+        version_number = self.parse_int()
+        md5_hash = self.parse_string()
+        minor_version = self.parse_int()
+        return username, password, version_number, md5_hash, minor_version
 
 
 class SetListenPort(Message):
@@ -211,9 +220,18 @@ class SetListenPort(Message):
             message_body += pack_int(obfuscated_port)
         return pack_message(cls.MESSAGE_ID, message_body)
 
+    def parse_server(self):
+        super().parse()
+        port = self.parse_int()
+        return port
+
 
 class GetPeerAddress(Message):
     MESSAGE_ID = 0x03
+
+    @classmethod
+    def create(cls, username: str) -> bytes:
+        return pack_message(cls.MESSAGE_ID, pack_string(username))
 
     def parse(self):
         super().parse()
@@ -222,9 +240,10 @@ class GetPeerAddress(Message):
         port = self.parse_ip()
         return username, ip_addr, port
 
-    @classmethod
-    def create(cls, username: str) -> bytes:
-        return pack_message(cls.MESSAGE_ID, pack_string(username))
+    def parse_server(self):
+        super().parse()
+        username = self.parse_string()
+        return username
 
 
 class AddUser(Message):
@@ -247,6 +266,11 @@ class AddUser(Message):
         dir_count = self.parse_int()
         country_code = self.parse_string()
         return username, exists, status, avg_speed, download_num, file_count, dir_count, country_code
+
+    def parse_server(self):
+        super().parse()
+        username = self.parse_string()
+        return username
 
 
 class GetUserStatus(Message):
@@ -276,7 +300,19 @@ class ConnectToPeer(Message):
         port = self.parse_int()
         token = self.parse_int()
         privileged = self.parse_uchar()
-        return username, typ, ip_addr, port, token, privileged
+        if self.has_unparsed_bytes():
+            unknown = self.parse_int()
+            obfuscated_port = self.parse_int()
+            return username, typ, ip_addr, port, token, privileged, unknown, obfuscated_port
+        else:
+            return username, typ, ip_addr, port, token, privileged, None, None
+
+    def parse_server(self):
+        super().parse()
+        token = self.parse_int()
+        username = self.parse_string()
+        typ = self.parse_string()
+        return token, username, typ
 
 
 class FileSearch(Message):
@@ -295,6 +331,12 @@ class FileSearch(Message):
         query = self.parse_string()
         return username, ticket, query
 
+    def parse_server(self):
+        super().parse()
+        ticket = self.parse_int()
+        query = self.parse_string()
+        return ticket, query
+
 
 class SetStatus(Message):
     MESSAGE_ID = 0x1C
@@ -305,9 +347,21 @@ class SetStatus(Message):
         message_body = pack_int(status)
         return pack_message(cls.MESSAGE_ID, message_body)
 
+    def parse_server(self):
+        super().parse()
+        status = self.parse_int()
+        return status
+
 
 class Ping(Message):
     MESSAGE_ID = 0x20
+
+    @classmethod
+    def create(cls):
+        return pack_message(cls.MESSAGE_ID, b'')
+
+    def parse_server(self):
+        super().parse()
 
 
 class SharedFoldersFiles(Message):
@@ -317,6 +371,12 @@ class SharedFoldersFiles(Message):
     def create(cls, dir_count: int, file_count: int) -> bytes:
         message_body = pack_int(dir_count) + pack_int(file_count)
         return pack_message(cls.MESSAGE_ID, message_body)
+
+    def parse_server(self):
+        super().parse()
+        dir_count = self.parse_int()
+        file_count = self.parse_int()
+        return dir_count, file_count
 
 
 class GetUserStats(Message):
@@ -336,6 +396,11 @@ class GetUserStats(Message):
         dirs = self.parse_int()
         return username, avg_speed, download_num, files, dirs
 
+    def parse_server(self):
+        super().parse()
+        username = self.parse_string()
+        return username
+
 
 class UserSearch(Message):
     MESSAGE_ID = 0x2A
@@ -345,6 +410,13 @@ class UserSearch(Message):
         message_body = (
             pack_string(username) + pack_int(ticket) + pack_string(query))
         return pack_message(cls.MESSAGE_ID, message_body)
+
+    def parse_server(self):
+        super().parse()
+        username = self.parse_string()
+        ticket = self.parse_int()
+        query = self.parse_string()
+        return username, ticket, query
 
 
 class RoomList(Message):
@@ -374,6 +446,25 @@ class HaveNoParents(Message):
     def create(cls, have_parents: bool) -> bytes:
         message_body = pack_bool(have_parents)
         return pack_message(cls.MESSAGE_ID, message_body)
+
+    def parse_server(self):
+        super().parse()
+        have_parents = self.parse_uchar()
+        return have_parents
+
+
+class ParentIP(Message):
+    MESSAGE_ID = 0x49
+
+    @classmethod
+    def create(cls, ip_addr: str) -> bytes:
+        message_body = pack_ip(ip_addr)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+    def parse_server(self):
+        super().parse()
+        ip_addr = self.parse_ip()
+        return ip_addr
 
 
 class ParentMinSpeed(Message):
@@ -409,6 +500,11 @@ class AcceptChildren(Message):
         message_body = pack_bool(accept)
         return pack_message(cls.MESSAGE_ID, message_body)
 
+    def parse_server(self):
+        super().parse()
+        accept = self.parse_uchar()
+        return accept
+
 
 class NetInfo(Message):
     MESSAGE_ID = 0x66
@@ -426,6 +522,31 @@ class WishlistInterval(Message):
         return self.parse_int()
 
 
+class PrivilegeNotification(Message):
+    MESSAGE_ID = 0x7C
+
+    @classmethod
+    def create(cls, token: int, username: str):
+        message_body = (
+            pack_int(token) + pack_string(username))
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+    def parse_server(self):
+        super().parse()
+        token = self.parse_int()
+        username = self.parse_string()
+        return token, username
+
+
+class AckPrivilegeNotification(Message):
+    MESSAGE_ID = 0x7D
+
+    def parse(self):
+        super().parse()
+        token = self.parse_int()
+        return token
+
+
 class BranchLevel(Message):
     MESSAGE_ID = 0x7E
 
@@ -433,6 +554,11 @@ class BranchLevel(Message):
     def create(cls, branch_level: int) -> bytes:
         message_body = pack_int(branch_level)
         return pack_message(cls.MESSAGE_ID, message_body)
+
+    def parse_server(self):
+        super().parse()
+        level = self.parse_int()
+        return level
 
 
 class BranchRoot(Message):
@@ -442,6 +568,25 @@ class BranchRoot(Message):
     def create(cls, branch_root: str) -> bytes:
         message_body = pack_string(branch_root)
         return pack_message(cls.MESSAGE_ID, message_body)
+
+    def parse_server(self):
+        super().parse()
+        root = self.parse_string()
+        return root
+
+
+class ChildDepth(Message):
+    MESSAGE_ID = 0x81
+
+    @classmethod
+    def create(cls, child_depth: int) -> bytes:
+        message_body = pack_int(child_depth)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+    def parse_server(self):
+        super().parse()
+        child_depth = self.parse_int()
+        return child_depth
 
 
 class CantConnect(Message):
@@ -458,8 +603,14 @@ class CantConnect(Message):
         username = self.parse_string()
         return token, username
 
-### Distributed messages
+    def parse_server(self):
+        super().parse()
+        ticket = self.parse_int()
+        username = self.parse_string()
+        return ticket, username
 
+
+### Distributed messages
 
 class DistributedMessage(Message):
 
@@ -539,7 +690,7 @@ class DistributedBranchRoot(DistributedMessage):
         return root
 
 
-class DistributedBranchChildDepth(DistributedMessage):
+class DistributedChildDepth(DistributedMessage):
     MESSAGE_ID = 0x07
 
     @classmethod
@@ -783,7 +934,7 @@ def parse_message(message):
     for msg_class in Message.__subclasses__():
         if msg_class.MESSAGE_ID == message_id:
             return msg_class(message)
-    print("Unknown message ID {}. Message={!r}".format(message_id, message))
+    print("Unknown server message ID {}. Message={!r}".format(message_id, message))
 
 
 def parse_server_messages(message):
