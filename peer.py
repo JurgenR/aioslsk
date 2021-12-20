@@ -17,7 +17,6 @@ class Peer:
     def __init__(self, username: str):
         self.connections: List[PeerConnection] = []
         self.username: str = username
-        self.is_parent: bool = False
         self.branch_level: int = None
         self.branch_root: str = None
 
@@ -36,7 +35,7 @@ class Peer:
 
     def __repr__(self):
         return (
-            f"Peer(username={self.username!r}, is_parent={self.is_parent!r}, "
+            f"Peer(username={self.username!r}, "
             f"branch_root={self.branch_root!r}, branch_level={self.branch_level}, "
             f"connections={self.connections!r})"
         )
@@ -87,12 +86,6 @@ class PeerManager:
                 return peer
         return None
 
-    def get_parent(self):
-        for peer in self.peers.values():
-            if peer.is_parent:
-                return peer
-        return None
-
     def set_parent(self, parent_connection: PeerConnection):
         peer = self.get_peer(parent_connection)
         if peer is None:
@@ -102,17 +95,21 @@ class PeerManager:
 
         logger.info(f"set parent {peer.username!r}: {parent_connection!r}")
 
-        peer.is_parent = True
-        self.state.set_parent(peer.branch_level + 1, peer.branch_root)
+        parent = Parent(
+            peer.branch_level + 1,
+            peer.branch_root,
+            peer,
+            parent_connection
+        )
+        self.state.parent = parent
 
+        # The original Windows client sends out the child depth (=0) and the
+        # ParentIP
         self.network_manager.send_server_messages(
             messages.HaveNoParents.create(False),
-            messages.ParentIP.create(parent_connection.hostname),
-            messages.BranchLevel.create(self.state.branch_level),
-            messages.BranchRoot.create(self.state.branch_root),
+            messages.BranchLevel.create(parent.branch_level),
+            messages.BranchRoot.create(parent.branch_root),
         )
-
-        # The original Windows client sends out the child depth (=0)
 
         # Remove all other distributed connections
         # Even the distributed connections from the parent should be removed
@@ -129,23 +126,26 @@ class PeerManager:
                     potential_parent_peer.remove_connection(connection)
                     connection.set_state(ConnectionState.SHOULD_CLOSE)
 
+                    # TODO: There might be a possibility that we still read
+                    # some data before closing the connections
+                    self.reset_branch_values()
+
     def _check_if_parent(self, peer, connection):
         """Called after BranchRoot or BranchLevel, checks if all information is
         complete for this peer/connection to become a parent and makes it a
-        parent if we don't have one.
+        parent if we don't have one, otherwise just close the connection.
         """
         if peer.branch_level and peer.branch_root:
-            if self.get_parent() is None:
+            if self.state.parent is None:
                 self.set_parent(connection)
             else:
                 peer.remove_connection(connection)
                 connection.set_state(ConnectionState.SHOULD_CLOSE)
 
-    def unset_parent(self, peer: Peer, parent_connection: PeerConnection):
-        logger.debug(f"unset parent {peer.username!r}: {parent_connection!r}")
+    def unset_parent(self):
+        logger.debug(f"unset parent {self.state.parent!r}")
 
-        self.state.unset_parent()
-        peer.reset_branch_values()
+        self.state.parent = None
 
         self.network_manager.send_server_messages(
             messages.BranchLevel.create(0),
@@ -153,40 +153,37 @@ class PeerManager:
             messages.HaveNoParents.create(True)
         )
 
-    def on_unknown_message(self, message, connection: PeerConnection):
+    def on_unhandled_message(self, message, connection: PeerConnection):
         """Method called for messages that have no handler"""
         logger.warning(f"Don't know how to handle message {message!r}")
 
     def on_peer_message(self, message_data, connection: PeerConnection):
         """Method called upon receiving a message from a peer/distributed socket"""
-        message_parser = {
-            PeerConnectionType.PEER: messages.parse_peer_message,
-            PeerConnectionType.DISTRIBUTED: messages.parse_distributed_message
-        }.get(connection.connection_type)
+        message_parsers = {
+            PeerConnectionType.PEER: (messages.parse_peer_message, self.peer_message_map, ),
+            PeerConnectionType.DISTRIBUTED: (messages.parse_distributed_message, self.distributed_message_map, )
+        }
 
-        if message_parser is None:
+        try:
+            parser_function, callback_map = message_parsers[connection.connection_type]
+        except KeyError:
             raise NotImplementedError(f"No message parser implemented for {connection.connection_type}")
 
+        # Parse the message_data
         try:
-            message = message_parser(message_data)
+            message = parser_function(message_data)
         except Exception as exc:
-            logger.error(
-                f"failed to parse peer ({connection.connection_type}) message data {message_data}", exc_info=True)
+            logger.exception(
+                f"failed to parse peer ({connection.connection_type}) message data {message_data}")
             return
 
-        message_map = {
-            PeerConnectionType.PEER: self.peer_message_map,
-            PeerConnectionType.DISTRIBUTED: self.distributed_message_map
-        }.get(connection.connection_type)
-
-        message_func = message_map.get(message.MESSAGE_ID, self.on_unknown_message)
-
+        # Run the callback
+        message_callback = callback_map.get(message.MESSAGE_ID, self.on_unhandled_message)
         logger.debug(f"handling peer message {message!r}")
         try:
-            message_func(message, connection)
+            message_callback(message, connection)
         except Exception:
-            logger.error(
-                f"failed to handle peer message {message}", exc_info=True)
+            logger.exception(f"failed to handle peer message {message}")
 
     # Peer messages
     def on_peer_pierce_firewall(self, message, connection: PeerConnection):
@@ -194,16 +191,24 @@ class PeerManager:
         logger.debug(f"PeerPierceFirewall (connection={connection}, ticket={ticket})")
 
         requests = list(filter(lambda r: r.ticket == ticket, self.state.connection_requests))
+
         if len(requests) == 0:
             logger.warning(f"received PeerPierceFirewall with unknown ticket {ticket}")
             return
+
         elif len(requests) == 1:
             request = requests[0]
-            # TODO: More sanity checks
             connection.connection_type = request.type
             self._create_peer(request.username, connection)
             logger.debug(f"handled ticket {ticket}")
             requests.remove(request)
+
+            # I'm seeing connections that go from obfuscated to non-obfuscated
+            # for some reason
+            if connection.obfuscated:
+                logger.debug(f"setting connection to unobfuscated : {connection}")
+                connection.obfuscated = False
+
         else:
             logger.error(f"got multiple tickets with number {ticket} in cache")
 
@@ -260,15 +265,20 @@ class PeerManager:
         pass
 
     def on_closed(self, connection: PeerConnection):
+        # Specific reference for parent peer
+        if connection == self.state.parent.connection:
+            self.state.parent.peer.remove_connection(connection)
+            self.unset_parent()
+            return
+
+        # I wish there was a better way
         for peer in self.peers.values():
             if connection in peer.connections:
                 peer.remove_connection(connection)
-                if peer.is_parent:
-                    self.unset_parent(peer, connection)
                 break
 
     def on_connected(self, connection: PeerConnection):
         pass
 
     def on_accepted(self, connection: PeerConnection):
-        pass
+        logger.debug(f"accepted {connection}")

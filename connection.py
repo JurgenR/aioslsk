@@ -88,7 +88,7 @@ class ServerConnection(Connection):
     def buffer(self, data):
         """Adds data to the internal L{_buffer} and tries to detects whether a
         message is complete. If a message is complete the L{handle_message}
-        method is called and L{_buffer} is cleared.
+        method is called and the message is cleared from the L{_buffer}.
 
         Detection is done by parsing the message length and comparing if the
         current L{_buffer} object has the desired length.
@@ -107,8 +107,8 @@ class ServerConnection(Connection):
         if len(self._buffer) >= msg_len_with_len:
             message = self._buffer[:msg_len_with_len]
             logger.debug(
-                "server message {}:{} : {!r}"
-                .format(self.hostname, self.port, self._buffer.hex()[:8 * 2]))
+                "server message {}:{} : {!r} ({} bytes)"
+                .format(self.hostname, self.port, self._buffer[:8 * 2].hex()), len(message))
             # Remove message from buffer
             self._buffer = self._buffer[msg_len_with_len:]
             self.handle_message(message)
@@ -220,6 +220,9 @@ class PeerConnection(Connection):
         This method won't clear the buffer entirely but will remove the message
         from the _buffer and keep the rest. (When does this happen?)
         """
+        if len(self._buffer) < (obfuscation.KEY_SIZE + 4):
+            return
+
         _, msg_len = messages.parse_int(0, self._buffer)
         # Calculate total message length (message length + length indicator)
         total_msg_len = struct.calcsize('I') + msg_len
@@ -259,9 +262,10 @@ class PeerConnection(Connection):
 
 class NetworkLoop(threading.Thread):
 
-    def __init__(self, stop_event, lock):
+    def __init__(self, settings, stop_event, lock):
         super().__init__()
         self.selector = selectors.DefaultSelector()
+        self.settings = settings
         self.stop_event = stop_event
         self.lock = lock
         self._last_log_time = 0
@@ -315,6 +319,8 @@ class NetworkLoop(threading.Thread):
                             .format(connection.hostname, connection.port, socket_err, errno.errorcode[socket_err]))
                         connection.disconnect()
                     else:
+                        logger.debug(
+                            "successfully connected {}:{}".format(connection.hostname, connection.port))
                         connection.set_state(ConnectionState.CONNECTED)
                     continue
 
@@ -349,7 +355,7 @@ class NetworkLoop(threading.Thread):
                     # them. Clean them up and move on if this happens
                     socket_err = work_socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
                     if socket_err != 0:
-                        logger.debug(
+                        logger.warning(
                             "error {}:{} : {} [{}] : cleaning up"
                             .format(connection.hostname, connection.port, socket_err, errno.errorcode[socket_err]))
                         connection.disconnect()
@@ -375,7 +381,20 @@ class NetworkLoop(threading.Thread):
             # Clean up connections
             for selector_key in list(self.selector.get_map().values()):
                 connection = selector_key.data
+
+                # Clean up connections we requested to close
                 if connection.state == ConnectionState.SHOULD_CLOSE:
                     connection.disconnect()
+                    continue
+
+                # Clean up connections that went into timeout
+                if isinstance(connection, PeerConnection):
+                    if connection.last_interaction == 0:
+                        continue
+
+                    if connection.last_interaction + 30 < current_time:
+                        logger.warning(f"connection {connection.hostname}:{connection.port}: timeout reached")
+                        connection.disconnect()
+                        continue
 
         self.selector.close()

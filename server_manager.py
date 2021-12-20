@@ -28,16 +28,17 @@ class ServerManager:
             messages.PrivilegedUsers.MESSAGE_ID: self.on_privileged_users,
             messages.RoomList.MESSAGE_ID: self.on_room_list,
             messages.WishlistInterval.MESSAGE_ID: self.on_wish_list_interval,
+            messages.CannotConnect.MESSAGE_ID: self.on_cannot_connect,
         }
 
     def on_server_message(self, message):
         """Method called upon receiving a message from the server socket
 
-        This method will call L{on_unknown_message} if the message has no
+        This method will call L{on_unhandled_message} if the message has no
         handler method
         """
-        message_func = self.message_map.get(message.MESSAGE_ID, self.on_unknown_message)
-        logger.debug(f"Handling message {message!r}")
+        message_func = self.message_map.get(message.MESSAGE_ID, self.on_unhandled_message)
+        logger.debug(f"handling message of type {message.__class__.__name__!r}")
         message_func(message)
 
     def on_login(self, message):
@@ -70,7 +71,7 @@ class ServerManager:
             messages.HaveNoParents.create(True),
             messages.BranchRoot.create(self.settings['credentials']['username']),
             messages.BranchLevel.create(0),
-            messages.AcceptChildren.create(True),
+            messages.AcceptChildren.create(False),
             messages.SharedFoldersFiles.create(dir_count, file_count),
             messages.AddUser.create(self.settings['credentials']['username'])
         )
@@ -96,7 +97,7 @@ class ServerManager:
 
     def on_add_user(self, message):
         add_user_info = message.parse()
-        logger.info(f"Add user info: {add_user_info}")
+        logger.info(f"Added user info: {add_user_info}")
 
     def on_connect_to_peer(self, message):
         contents = message.parse()
@@ -118,7 +119,6 @@ class ServerManager:
         for idx, (username, ip, port) in enumerate(net_info_list, 1):
             ticket = next(self.state.ticket_generator)
             logger.info(f"netinfo user {idx}: {username!r} : {ip}:{port} (ticket={ticket})")
-            logger.debug(f"ticket: {messages.pack_int(ticket)!r}")
             self.state.connection_requests.append(
                 ConnectionRequest(
                     ticket=ticket,
@@ -133,23 +133,27 @@ class ServerManager:
                 port=port,
                 connection_type=PeerConnectionType.DISTRIBUTED
             )
-            self.network_manager.connect_to_peer(peer_connection, username)
-            peer_connection.messages.put(
-                messages.PeerInit.create(
-                    self.settings['credentials']['username'],
-                    PeerConnectionType.DISTRIBUTED,
-                    ticket
-                )
-            )
+            # self.network_manager.connect_to_peer(peer_connection, username)
+            # peer_connection.messages.put(
+            #     messages.PeerInit.create(
+            #         self.settings['credentials']['username'],
+            #         PeerConnectionType.DISTRIBUTED,
+            #         ticket
+            #     )
+            # )
             self.network_manager.send_server_messages(
                 messages.ConnectToPeer.create(
                     ticket,
-                    self.settings['credentials']['username'],
+                    username,
                     PeerConnectionType.DISTRIBUTED
                 )
             )
 
-    def on_unknown_message(self, message):
+    def on_cannot_connect(self, message):
+        contents = message.parse()
+        logger.debug(f"got CannotConnect: {contents}")
+
+    def on_unhandled_message(self, message):
         """Method called for messages that have no handler"""
         logger.warning(f"Don't know how to handle message {message!r}")
 

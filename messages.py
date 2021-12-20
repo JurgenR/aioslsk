@@ -4,6 +4,8 @@ import struct
 from typing import Callable
 import zlib
 
+from exceptions import UnknownMessageError
+
 
 def calc_md5(value: bytes):
     enc = hashlib.md5()
@@ -16,6 +18,10 @@ def parse_basic(pos: int, data, data_type: str):
     size = struct.calcsize(data_type)
     value = data[pos:pos + size]
     return pos + size, struct.unpack(data_type, value)[0]
+
+
+def parse_short(pos: int, data) -> int:
+    return parse_basic(pos, data, '<H')
 
 
 def parse_int(pos: int, data) -> int:
@@ -137,6 +143,10 @@ class Message:
         self._pos, value = parse_string(self._pos, self.message)
         return value
 
+    def parse_short(self):
+        self._pos, value = parse_short(self._pos, self.message)
+        return value
+
     def parse_int(self):
         self._pos, value = parse_int(self._pos, self.message)
         return value
@@ -216,9 +226,10 @@ class SetListenPort(Message):
     @classmethod
     def create(cls, port, obfuscated_port=None):
         message_body = pack_int(port)
-        if obfuscated_port is not None:
-            message_body += pack_int(1)
-            message_body += pack_int(obfuscated_port)
+        if obfuscated_port is None:
+            message_body += pack_int(0) + pack_int(0)
+        else:
+            message_body += pack_int(1) + pack_int(obfuscated_port)
         return pack_message(cls.MESSAGE_ID, message_body)
 
     def parse_server(self):
@@ -245,7 +256,13 @@ class GetPeerAddress(Message):
         username = self.parse_string()
         ip_addr = self.parse_ip()
         port = self.parse_int()
-        return username, ip_addr, port
+        if self.has_unparsed_bytes():
+            unknown = self.parse_int()
+            obfuscated_port = self.parse_short()
+        else:
+            unknown = None
+            obfuscated_port = None
+        return username, ip_addr, port, unknown, obfuscated_port
 
     def parse_server(self):
         super().parse()
@@ -636,7 +653,7 @@ class FileSearchEx(Message):
         return query
 
 
-class CantConnect(Message):
+class CannotConnect(Message):
     MESSAGE_ID = 0x3E9
 
     @classmethod
@@ -953,7 +970,7 @@ def parse_distributed_message(message):
     for msg_class in DistributedMessage.__subclasses__():
         if msg_class.MESSAGE_ID == message_id:
             return msg_class(message)
-    print("Unknown distributed message ID {}. Message={!r}".format(message_id, message))
+    raise UnknownMessageError(message_id, message, "Failed to parse distributed message")
 
 
 def parse_distributed_messages(message):
@@ -985,7 +1002,7 @@ def parse_message(message):
     for msg_class in Message.__subclasses__():
         if msg_class.MESSAGE_ID == message_id:
             return msg_class(message)
-    print("Unknown server message ID {}. Message={!r}".format(message_id, message))
+    raise UnknownMessageError(message_id, message, "Failed to parse server message")
 
 
 def parse_server_messages(message):
@@ -1017,7 +1034,7 @@ def parse_peer_message(message):
     for msg_class in PeerMessage.__subclasses__():
         if msg_class.MESSAGE_ID == message_id:
             return msg_class(message)
-    print("Unknown peer message ID {}. Message={!r}".format(message_id, message))
+    raise UnknownMessageError(message_id, message, "Failed to parse peer message")
 
 
 def parse_peer_messages(message):
