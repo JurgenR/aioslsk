@@ -2,11 +2,22 @@ import logging
 
 from connection import PeerConnection, PeerConnectionType
 import messages
+from scheduler import Job
 from state import ConnectionRequest, State
 from utils import get_stats
 
 
 logger = logging.getLogger()
+
+
+class User:
+    name: str
+    status: int = 0
+    country: str = None
+    avg_speed: int = 0
+    downloads: int = 0
+    files: int = 0
+    directories: int = 0
 
 
 class ServerManager:
@@ -16,6 +27,8 @@ class ServerManager:
         self.settings = settings
         self.network_manager = network_manager
         self.network_manager.server_listener = self
+
+        self._ping_job = Job(5 * 60, self.send_ping)
 
         self.message_map = {
             messages.AddUser.MESSAGE_ID: self.on_add_user,
@@ -30,6 +43,9 @@ class ServerManager:
             messages.WishlistInterval.MESSAGE_ID: self.on_wish_list_interval,
             messages.CannotConnect.MESSAGE_ID: self.on_cannot_connect,
         }
+
+    def send_ping(self):
+        self.network_manager.send_server_messages(messages.Ping.create())
 
     def on_server_message(self, message):
         """Method called upon receiving a message from the server socket
@@ -98,6 +114,17 @@ class ServerManager:
     def on_add_user(self, message):
         add_user_info = message.parse()
         logger.info(f"Added user info: {add_user_info}")
+        name, exists, status, avg_speed, downloads, files, directories, country = add_user_info
+        if exists:
+            user = User(
+                name=name,
+                status=status,
+                avg_speed=avg_speed,
+                downloads=downloads,
+                files=files,
+                directories=directories,
+                country=country
+            )
 
     def on_connect_to_peer(self, message):
         contents = message.parse()
@@ -155,14 +182,14 @@ class ServerManager:
 
     def on_unhandled_message(self, message):
         """Method called for messages that have no handler"""
-        logger.warning(f"Don't know how to handle message {message!r}")
+        logger.warning(f"don't know how to handle message {message!r}")
 
     # Connection state listeners
     def on_connecting(self):
         pass
 
     def on_connected(self):
-        pass
+        self.state.scheduler.add_job(self._ping_job)
 
     def on_closed(self):
-        pass
+        self.state.scheduler.remove(self._ping_job)

@@ -19,12 +19,12 @@ logger = logging.getLogger()
 
 class NetworkManager:
 
-    def __init__(self, settings):
+    def __init__(self, settings, stop_event):
         self.settings = settings
 
         self.upnp = upnp.UPNP()
 
-        self.stop_event = threading.Event()
+        self.stop_event = stop_event
         self.lock = threading.Lock()
         self.network_loop: NetworkLoop = None
         self.server: ServerConnection = None
@@ -63,12 +63,8 @@ class NetworkManager:
 
         self.network_loop.start()
 
-    def quit(self):
-        logger.info("stopping network")
-        self.stop_event.set()
-        self.network_loop.join(timeout=60)
-        if self.network_loop.is_alive():
-            pass
+    def get_network_loops(self):
+        return [self.network_loop, ]
 
     def enable_upnp(self):
         listening_port = self.settings['listening_port']
@@ -80,12 +76,10 @@ class NetworkManager:
             )
 
     def _register_to_network_loop(self, fileobj, events, connection):
-        with self.lock:
-            self.network_loop.selector.register(fileobj, events, connection)
+        self.network_loop.selector.register(fileobj, events, connection)
 
     def _unregister_from_network_loop(self, fileobj):
-        with self.lock:
-            self.network_loop.selector.unregister(fileobj)
+        self.network_loop.selector.unregister(fileobj)
 
     # Connection state changes
     def on_state_changed(self, state: ConnectionState, connection: Connection):

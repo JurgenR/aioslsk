@@ -108,7 +108,7 @@ class ServerConnection(Connection):
             message = self._buffer[:msg_len_with_len]
             logger.debug(
                 "server message {}:{} : {!r} ({} bytes)"
-                .format(self.hostname, self.port, self._buffer[:8 * 2].hex()), len(message))
+                .format(self.hostname, self.port, self._buffer[:8 * 2].hex(), len(message)))
             # Remove message from buffer
             self._buffer = self._buffer[msg_len_with_len:]
             self.handle_message(message)
@@ -292,109 +292,115 @@ class NetworkLoop(threading.Thread):
         """Start the network loop, and run until L{stop_event} is set. This is
         the network loop for all L{Connection} instances.
         """
-        while not self.stop_event.is_set():
-            if len(self.selector.get_map()) == 0:
-                time.sleep(0.1)
-                continue
+        try:
+            while not self.stop_event.is_set():
+                if len(self.selector.get_map()) == 0:
+                    time.sleep(0.1)
+                    continue
 
-            with self.lock:
                 self._log_open_connections()
 
-            events = self.selector.select(timeout=None)
+                events = self.selector.select(timeout=None)
 
-            current_time = time.time()
+                current_time = time.time()
 
-            for key, mask in events:
-                work_socket = key.fileobj
-                connection = key.data
+                for key, mask in events:
+                    work_socket = key.fileobj
+                    connection = key.data
 
-                # If this is the first time the connection is selected we should
-                # still be in the CONNECTING state. Check if we are successfully
-                # connected otherwise close the socket
-                if connection.state == ConnectionState.CONNECTING:
-                    socket_err = work_socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-                    if socket_err != 0:
-                        logger.debug(
-                            "error connecting {}:{} : {} [{}] : cleaning up"
-                            .format(connection.hostname, connection.port, socket_err, errno.errorcode[socket_err]))
-                        connection.disconnect()
-                    else:
-                        logger.debug(
-                            "successfully connected {}:{}".format(connection.hostname, connection.port))
-                        connection.set_state(ConnectionState.CONNECTED)
-                    continue
-
-                if mask & selectors.EVENT_READ:
-                    # Listening connection
-                    if isinstance(connection, ListeningConnection):
-                        # Accept incoming connections on the listening socket
-                        connection.accept(work_socket)
-                        continue
-
-                    # Server socket or peer socket
-                    try:
-                        recv_data = work_socket.recv(4)
-                    except OSError as exc:
-                        logger.exception(f"Exception receiving data on connection {work_socket}")
-                        # Only remove the peer connections?
-                        logger.info(f"close {connection.hostname}:{connection.port} : exception while reading")
-                        connection.disconnect()
-                        continue
-                    else:
-                        if recv_data:
-                            connection.last_interaction = current_time
-                            connection.buffer(recv_data)
+                    # If this is the first time the connection is selected we should
+                    # still be in the CONNECTING state. Check if we are successfully
+                    # connected otherwise close the socket
+                    if connection.state == ConnectionState.CONNECTING:
+                        socket_err = work_socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+                        if socket_err != 0:
+                            logger.debug(
+                                "error connecting {}:{} : {} [{}] : cleaning up"
+                                .format(connection.hostname, connection.port, socket_err, errno.errorcode[socket_err]))
+                            connection.disconnect()
                         else:
-                            logger.warning(
-                                f"close {connection.hostname}:{connection.port} : no data received")
-                            connection.disconnect()
-                            continue
-
-                if mask & selectors.EVENT_WRITE:
-                    # Sockets will go into write even if an error occurred on
-                    # them. Clean them up and move on if this happens
-                    socket_err = work_socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-                    if socket_err != 0:
-                        logger.warning(
-                            "error {}:{} : {} [{}] : cleaning up"
-                            .format(connection.hostname, connection.port, socket_err, errno.errorcode[socket_err]))
-                        connection.disconnect()
+                            logger.debug(
+                                "successfully connected {}:{}".format(connection.hostname, connection.port))
+                            connection.set_state(ConnectionState.CONNECTED)
                         continue
 
-                    try:
-                        # Attempt to get the message from the Queue and send it
-                        # over the socket it belongs to
-                        message = connection.messages.get(block=False)
-                    except queue.Empty:
-                        pass
-                    else:
+                    if mask & selectors.EVENT_READ:
+                        # Listening connection
+                        if isinstance(connection, ListeningConnection):
+                            # Accept incoming connections on the listening socket
+                            connection.accept(work_socket)
+                            continue
+
+                        # Server socket or peer socket
                         try:
-                            logger.debug(f"send {connection.hostname}:{connection.port} : message {message.hex()}")
-                            connection.last_interaction = current_time
-                            work_socket.sendall(message)
+                            recv_data = work_socket.recv(4)
                         except OSError as exc:
-                            logger.exception(
-                                f"close {connection.hostname}:{connection.port} : exception while sending")
+                            logger.exception(f"Exception receiving data on connection {work_socket}")
+                            # Only remove the peer connections?
+                            logger.info(f"close {connection.hostname}:{connection.port} : exception while reading")
+                            connection.disconnect()
+                            continue
+                        else:
+                            if recv_data:
+                                connection.last_interaction = current_time
+                                connection.buffer(recv_data)
+                            else:
+                                logger.warning(
+                                    f"close {connection.hostname}:{connection.port} : no data received")
+                                connection.disconnect()
+                                continue
+
+                    if mask & selectors.EVENT_WRITE:
+                        # Sockets will go into write even if an error occurred on
+                        # them. Clean them up and move on if this happens
+                        socket_err = work_socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+                        if socket_err != 0:
+                            logger.warning(
+                                "error {}:{} : {} [{}] : cleaning up"
+                                .format(connection.hostname, connection.port, socket_err, errno.errorcode[socket_err]))
                             connection.disconnect()
                             continue
 
-            # Clean up connections
-            for selector_key in list(self.selector.get_map().values()):
-                connection = selector_key.data
+                        try:
+                            # Attempt to get the message from the Queue and send it
+                            # over the socket it belongs to
+                            message = connection.messages.get(block=False)
+                        except queue.Empty:
+                            pass
+                        else:
+                            try:
+                                logger.debug(f"send {connection.hostname}:{connection.port} : message {message.hex()}")
+                                connection.last_interaction = current_time
+                                work_socket.sendall(message)
+                            except OSError as exc:
+                                logger.exception(
+                                    f"close {connection.hostname}:{connection.port} : exception while sending")
+                                connection.disconnect()
+                                continue
 
-                # Clean up connections we requested to close
-                if connection.state == ConnectionState.SHOULD_CLOSE:
-                    connection.disconnect()
-                    continue
+                # Clean up connections
+                for selector_key in list(self.selector.get_map().values()):
+                    connection = selector_key.data
 
-                # Clean up connections that went into timeout
-                if isinstance(connection, PeerConnection):
-                    if connection.last_interaction == 0:
-                        continue
-
-                    if connection.last_interaction + 30 < current_time:
-                        logger.warning(f"connection {connection.hostname}:{connection.port}: timeout reached")
+                    # Clean up connections we requested to close
+                    if connection.state == ConnectionState.SHOULD_CLOSE:
                         connection.disconnect()
                         continue
 
-        self.selector.close()
+                    # Clean up connections that went into timeout
+                    if isinstance(connection, PeerConnection):
+                        if connection.last_interaction == 0:
+                            continue
+
+                        if connection.last_interaction + 30 < current_time:
+                            logger.warning(f"connection {connection.hostname}:{connection.port}: timeout reached")
+                            connection.disconnect()
+                            continue
+
+        except Exception as exc:
+            logger.exception("failure inside network loop")
+        finally:
+            for data in self.selector.get_map().values():
+                data.fileobj.close()
+
+            self.selector.close()

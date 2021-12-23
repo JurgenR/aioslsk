@@ -6,7 +6,7 @@ from connection import PeerConnection, PeerConnectionType, ConnectionState
 import messages
 from network_manager import NetworkManager
 from search import SearchResult
-from state import State
+from state import Parent, State
 
 
 logger = logging.getLogger()
@@ -75,7 +75,6 @@ class PeerManager:
             # to close that connection
             peer_connections = peer.get_connections(PeerConnectionType.PEER)
             for peer_connection in peer_connections:
-                peer.remove_connection(peer_connection)
                 peer_connection.set_state(ConnectionState.SHOULD_CLOSE)
 
         peer.connections.append(connection)
@@ -106,9 +105,9 @@ class PeerManager:
         # The original Windows client sends out the child depth (=0) and the
         # ParentIP
         self.network_manager.send_server_messages(
-            messages.HaveNoParents.create(False),
             messages.BranchLevel.create(parent.branch_level),
             messages.BranchRoot.create(parent.branch_root),
+            messages.HaveNoParents.create(False),
         )
 
         # Remove all other distributed connections
@@ -123,12 +122,11 @@ class PeerManager:
             # Therefor we also unset the branch values for the parent itself
             for connection in connections:
                 if connection != parent_connection:
-                    potential_parent_peer.remove_connection(connection)
                     connection.set_state(ConnectionState.SHOULD_CLOSE)
 
                     # TODO: There might be a possibility that we still read
                     # some data before closing the connections
-                    self.reset_branch_values()
+                    potential_parent_peer.reset_branch_values()
 
     def _check_if_parent(self, peer, connection):
         """Called after BranchRoot or BranchLevel, checks if all information is
@@ -139,7 +137,6 @@ class PeerManager:
             if self.state.parent is None:
                 self.set_parent(connection)
             else:
-                peer.remove_connection(connection)
                 connection.set_state(ConnectionState.SHOULD_CLOSE)
 
     def unset_parent(self):
@@ -179,7 +176,7 @@ class PeerManager:
 
         # Run the callback
         message_callback = callback_map.get(message.MESSAGE_ID, self.on_unhandled_message)
-        logger.debug(f"handling peer message {message!r}")
+        logger.debug(f"handling peer message of type {message.__class__.__name__!r}")
         try:
             message_callback(message, connection)
         except Exception:
@@ -266,8 +263,9 @@ class PeerManager:
 
     def on_closed(self, connection: PeerConnection):
         # Specific reference for parent peer
-        if connection == self.state.parent.connection:
-            self.state.parent.peer.remove_connection(connection)
+        parent = self.state.parent
+        if parent and connection == parent.connection:
+            parent.peer.remove_connection(connection)
             self.unset_parent()
             return
 

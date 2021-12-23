@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 
 from connection import (
@@ -9,6 +10,7 @@ from network_manager import NetworkManager
 import messages
 from peer import PeerManager
 from server_manager import ServerManager
+from scheduler import Scheduler
 from state import State
 from search import SearchQuery
 
@@ -21,17 +23,28 @@ class SoulSeek:
     def __init__(self, settings):
         self.settings = settings
 
-        self.state = State()
+        self._stop_event = threading.Event()
 
-        self.network_manager = NetworkManager(settings['network'])
+        self.state = State()
+        self.state.scheduler = Scheduler(self._stop_event)
+
+        self.network_manager = NetworkManager(settings['network'], self._stop_event)
         self.peer_manager = PeerManager(self.state, settings, self.network_manager)
         self.server_manager = ServerManager(self.state, settings, self.network_manager)
 
-    def start_network(self):
+    def start(self):
         self.network_manager.initialize()
+        self.state.scheduler.start()
 
-    def stop_network(self):
-        self.network_manager.quit()
+    def stop(self):
+        logging.info("signaling client to exit")
+        self._stop_event.set()
+        network_loops = self.network_manager.get_network_loops()
+        for thread in network_loops + [self.state.scheduler, ]:
+            logger.debug(f"wait for thread {thread!r} to finish")
+            thread.join(timeout=30)
+            if thread.is_alive():
+                logger.warning(f"thread is still alive after 60s : {thread!r}")
 
     def get_connections(self):
         return []

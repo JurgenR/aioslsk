@@ -11,8 +11,8 @@ ConnectionRequest = namedtuple('ConnectionRequest', ['ticket', 'username', 'ip',
 class Parent:
     branch_level: int = None
     branch_root: str = None
-    peer = None
-    connection = None
+    peer: 'Peer' = None
+    connection: 'PeerConnection' = None
 
 
 @dataclass

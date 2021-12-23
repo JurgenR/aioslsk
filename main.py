@@ -1,6 +1,5 @@
 import connection
 import messages
-import upnp
 import slsk
 
 import argparse
@@ -56,15 +55,21 @@ class SoulSeekCmd(cmd.Cmd):
         ticket = self.client.search(query)
         print(f"Ticket number : {ticket}")
 
-    def do_download(self, selection):
-        pass
+    def do_enable(self, obj):
+        if obj == 'children':
+            self.client.accept_children()
+
+    def do_user(self, command):
+        action, username = command.split()
+        if action == 'info':
+            self.client.get_user_info(username)
 
     def do_s(self, _):
         self.client.search('urbanus klinkers en klankers')
 
     def do_exit(self, arg):
         print("Exiting")
-        self.client.stop_network()
+        self.client.stop()
         return True
 
 
@@ -80,7 +85,7 @@ if __name__ == '__main__':
         settings = yaml.safe_load(f.read())
 
     client = slsk.SoulSeek(settings)
-    client.start_network()
+    client.start()
 
     # Login and start the command loop
     client.login()

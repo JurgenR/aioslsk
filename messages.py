@@ -1,10 +1,15 @@
+import functools
 import hashlib
+import logging
 import socket
 import struct
 from typing import Callable
 import zlib
 
 from exceptions import UnknownMessageError
+
+
+logger = logging.getLogger()
 
 
 def calc_md5(value: bytes):
@@ -120,7 +125,20 @@ def pack_message(message_id: int, value: bytes, id_as_uchar=False) -> bytes:
     return struct.pack('<I', len(full_body)) + full_body
 
 
-# Messages
+def warn_on_unparsed_bytes(parse_func):
+    @functools.wraps(parse_func)
+    def check_for_unparsed_bytes(message):
+        results = parse_func(message)
+        unparsed_bytes = message.get_unparsed_bytes()
+        if len(unparsed_bytes) > 0:
+            logger.warning(
+                f"{message.__class__.__name__} has {len(unparsed_bytes)} unparsed bytes : {unparsed_bytes.hex()!r}")
+        else:
+            logger.debug("all bytes parsed")
+        return results
+    return check_for_unparsed_bytes
+
+
 class Message:
     MESSAGE_ID = 0x0
 
@@ -197,6 +215,7 @@ class Login(Message):
             pack_int(client_version) + pack_string(md5_hash) + pack_int(number))
         return pack_message(cls.MESSAGE_ID, message_body)
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         result = self.parse_uchar()
@@ -251,6 +270,7 @@ class GetPeerAddress(Message):
     def create(cls, username: str) -> bytes:
         return pack_message(cls.MESSAGE_ID, pack_string(username))
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         username = self.parse_string()
@@ -277,6 +297,7 @@ class AddUser(Message):
     def create(cls, username: str) -> bytes:
         return pack_message(cls.MESSAGE_ID, pack_string(username))
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         username = self.parse_string()
@@ -303,6 +324,7 @@ class AddUser(Message):
 class GetUserStatus(Message):
     MESSAGE_ID = 0x07
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         username = self.parse_string()
@@ -319,6 +341,7 @@ class ConnectToPeer(Message):
         message_body = pack_int(token) + pack_string(username) + pack_string(typ)
         return pack_message(cls.MESSAGE_ID, message_body)
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         username = self.parse_string()
@@ -356,6 +379,7 @@ class FileSearch(Message):
         message_body = pack_int(ticket) + pack_string(query)
         return pack_message(cls.MESSAGE_ID, message_body)
 
+    @warn_on_unparsed_bytes
     def parse(self):
         # This from another user? Doesn't seem like a response to our query
         super().parse()
@@ -420,6 +444,7 @@ class GetUserStats(Message):
         message_body = pack_string(username)
         return pack_message(cls.MESSAGE_ID, message_body)
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         username = self.parse_string()
@@ -455,6 +480,7 @@ class UserSearch(Message):
 class RoomList(Message):
     MESSAGE_ID = 0x40
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         rooms = self.parse_room_list()
@@ -467,6 +493,7 @@ class RoomList(Message):
 class PrivilegedUsers(Message):
     MESSAGE_ID = 0x45
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         return self.parse_list(parse_string)
@@ -503,6 +530,7 @@ class ParentIP(Message):
 class ParentMinSpeed(Message):
     MESSAGE_ID = 0x53
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         return self.parse_int()
@@ -511,6 +539,7 @@ class ParentMinSpeed(Message):
 class ParentSpeedRatio(Message):
     MESSAGE_ID = 0x54
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         return self.parse_int()
@@ -523,6 +552,7 @@ class CheckPrivileges(Message):
     def create(cls):
         return pack_message(cls.MESSAGE_ID, b'')
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         time_left = self.parse_int()
@@ -549,6 +579,7 @@ class AcceptChildren(Message):
 class NetInfo(Message):
     MESSAGE_ID = 0x66
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         return self.parse_list(item_parser=parse_net_info_entry)
@@ -557,6 +588,7 @@ class NetInfo(Message):
 class WishlistInterval(Message):
     MESSAGE_ID = 0x68
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         return self.parse_int()
@@ -581,6 +613,7 @@ class PrivilegeNotification(Message):
 class AckPrivilegeNotification(Message):
     MESSAGE_ID = 0x7D
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         token = self.parse_int()
@@ -641,6 +674,7 @@ class FileSearchEx(Message):
         message_body = pack_string(query)
         return pack_message(cls.MESSAGE_ID, message_body)
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         query = self.parse_string()
@@ -661,6 +695,7 @@ class CannotConnect(Message):
         message_body = pack_int(token) + pack_string(username)
         return pack_message(cls.MESSAGE_ID, message_body)
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         token = self.parse_int()
@@ -688,6 +723,7 @@ class DistributedMessage(Message):
 class DistributedPing(DistributedMessage):
     MESSAGE_ID = 0x00
 
+    @warn_on_unparsed_bytes
     def parse(self):
         length = self.parse_int()
         message_id = self.parse_uchar()
@@ -712,6 +748,7 @@ class DistributedSearchRequest(DistributedMessage):
             pack_int(unknown) + pack_string(username) + pack_int(ticket) + pack_string(query))
         return pack_message(cls.MESSAGE_ID, message_body, id_as_uchar=True)
 
+    @warn_on_unparsed_bytes
     def parse(self):
         # Override super as message_id is a uchar for this function
         length = self.parse_int()
@@ -732,6 +769,7 @@ class DistributedBranchLevel(DistributedMessage):
         message_body = pack_int(level)
         return pack_message(cls.MESSAGE_ID, message_body, id_as_uchar=True)
 
+    @warn_on_unparsed_bytes
     def parse(self):
         # Override super as message_id is a uchar for this function
         length = self.parse_int()
@@ -749,6 +787,7 @@ class DistributedBranchRoot(DistributedMessage):
         message_body = pack_string(root)
         return pack_message(cls.MESSAGE_ID, message_body, id_as_uchar=True)
 
+    @warn_on_unparsed_bytes
     def parse(self):
         # Override super as message_id is a uchar for this function
         length = self.parse_int()
@@ -766,6 +805,7 @@ class DistributedChildDepth(DistributedMessage):
         message_body = pack_int(child_depth)
         return pack_message(cls.MESSAGE_ID, message_body, id_as_uchar=True)
 
+    @warn_on_unparsed_bytes
     def parse(self):
         # Override super as message_id is a uchar for this function
         length = self.parse_int()
@@ -791,6 +831,7 @@ class PeerPierceFirewall(PeerMessage):
     def create(cls, token: int) -> bytes:
         return pack_message(cls.MESSAGE_ID, pack_int(token), id_as_uchar=True)
 
+    @warn_on_unparsed_bytes
     def parse(self):
         # Override super as message_id is a uchar for this function
         length = self.parse_int()
@@ -807,6 +848,7 @@ class PeerInit(PeerMessage):
         message_body = (pack_string(user) + pack_string(typ) + pack_int(token))
         return pack_message(cls.MESSAGE_ID, message_body, id_as_uchar=True)
 
+    @warn_on_unparsed_bytes
     def parse(self):
         # Override super as message_id is a uchar for this function
         length = self.parse_int()
@@ -824,6 +866,7 @@ class PeerSharesRequest(PeerMessage):
 class PeerSharesReply(PeerMessage):
     MESSAGE_ID = 0x05
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         raise NotImplementedError()
@@ -850,6 +893,7 @@ class PeerSearchReply(PeerMessage):
             results.append(result)
         return results
 
+    @warn_on_unparsed_bytes
     def parse(self):
         length, _ = super().parse()
 
@@ -884,6 +928,7 @@ class PeerTransferRequest(PeerMessage):
         # TODO: Check if as uchar
         return pack_message(cls.MESSAGE_ID, message_body, id_as_uchar=True)
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         direction = self.parse_int()
@@ -930,6 +975,7 @@ class PeerUploadReply(PeerMessage):
 class PeerTransferReply(PeerMessage):
     MESSAGE_ID = 0x29
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         # Error in the specification for 2 reasons:
@@ -957,6 +1003,7 @@ class PeerTransferQueue(PeerMessage):
         message_body = pack_string(filename)
         return pack_message(cls.MESSAGE_ID, message_body)
 
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         filename = self.parse_string()
