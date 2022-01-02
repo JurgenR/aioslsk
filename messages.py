@@ -133,8 +133,6 @@ def warn_on_unparsed_bytes(parse_func):
         if len(unparsed_bytes) > 0:
             logger.warning(
                 f"{message.__class__.__name__} has {len(unparsed_bytes)} unparsed bytes : {unparsed_bytes.hex()!r}")
-        else:
-            logger.debug("all bytes parsed")
         return results
     return check_for_unparsed_bytes
 
@@ -691,20 +689,20 @@ class CannotConnect(Message):
     MESSAGE_ID = 0x3E9
 
     @classmethod
-    def create(cls, token: int, username: str) -> bytes:
-        message_body = pack_int(token) + pack_string(username)
+    def create(cls, ticket: int, username: str) -> bytes:
+        message_body = pack_int(ticket) + pack_string(username)
         return pack_message(cls.MESSAGE_ID, message_body)
 
     @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
-        token = self.parse_int()
+        ticket = self.parse_int()
         # Username appears to be optional
         if self.has_unparsed_bytes():
             username = self.parse_string()
         else:
             username = None
-        return token, username
+        return ticket, username
 
     def parse_server(self):
         super().parse()
@@ -815,6 +813,18 @@ class DistributedChildDepth(DistributedMessage):
         return child_depth
 
 
+class DistributedServerSearchRequest(DistributedMessage):
+    MESSAGE_ID = 0x5D
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        length, _ = super().parse()
+        distrib_code = self.parse_uchar()
+        # This is a list of bytes as is
+        message = self.get_unparsed_bytes()
+        return distrib_code, message
+
+
 ### Peer messages
 # PeerPierceFirewall and PeerInit are the only messages that use a uchar for
 # the message_id. Remainder of the message types use int.
@@ -855,7 +865,10 @@ class PeerInit(PeerMessage):
         message_id = self.parse_uchar()
         user = self.parse_string()
         typ = self.parse_string()
-        token = self.parse_int()
+        if len(self.get_unparsed_bytes()) == 4:
+            token = self.parse_int()
+        else:
+            token = self.parse_int64()
         return user, typ, token
 
 
@@ -925,8 +938,7 @@ class PeerTransferRequest(PeerMessage):
     def create(cls, direction: int, ticket: int, filename: str):
         message_body = (
             pack_int(direction) + pack_int(ticket) + pack_string(filename))
-        # TODO: Check if as uchar
-        return pack_message(cls.MESSAGE_ID, message_body, id_as_uchar=True)
+        return pack_message(cls.MESSAGE_ID, message_body)
 
     @warn_on_unparsed_bytes
     def parse(self):
@@ -941,39 +953,17 @@ class PeerTransferRequest(PeerMessage):
             return direction, ticket, filename, 0
 
 
-# The following 3 have the same MESSAGE_ID
-class PeerDownloadReply(PeerMessage):
-    MESSAGE_ID = 0x29
-
-    @classmethod
-    def create(cls, ticket: int, allowed: int, reason=None):
-        # I do not understand why ticket is described as a string here when all
-        # other messages have it as an int
-        message_body = (pack_string(ticket) + pack_uchar(allowed))
-        if allowed == 0:
-            message_body += pack_string(reason)
-        # TODO: Check if as uchar
-        return pack_message(cls.MESSAGE_ID, message_body)
-
-
-class PeerUploadReply(PeerMessage):
-    MESSAGE_ID = 0x29
-
-    @classmethod
-    def create(cls, ticket: int, allowed: bool, reason: str=None, filesize=0):
-        # I do not understand why ticket is described as a string here when all
-        # other messages have it as an int
-        message_body = (pack_string(ticket) + pack_uchar(allowed))
-        if allowed == 0:
-            message_body += pack_string(reason)
-        else:
-            message_body += pack_int64(filesize)
-        # TODO: Check if as uchar
-        return pack_message(cls.MESSAGE_ID, message_body)
-
-
 class PeerTransferReply(PeerMessage):
     MESSAGE_ID = 0x29
+
+    @classmethod
+    def create(cls, ticket: int, allowed: bool, filesize: int=None, reason: str=None):
+        message_body = pack_int(ticket) + pack_bool(allowed)
+        if allowed:
+            message_body += pack_int64(filesize)
+        else:
+            message_body += pack_string(reason)
+        return pack_message(cls.MESSAGE_ID, message_body)
 
     @warn_on_unparsed_bytes
     def parse(self):

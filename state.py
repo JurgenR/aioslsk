@@ -1,10 +1,23 @@
+from cachetools import TTLCache
 from collections import namedtuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import timedelta
+from typing import List
 
+from messages import Message
 from utils import ticket_generator
 
 
-ConnectionRequest = namedtuple('ConnectionRequest', ['ticket', 'username', 'ip', 'port', 'type'])
+@dataclass
+class ConnectionRequest:
+    ticket: int
+    username: str
+    ip: str
+    port: int
+    typ: str
+    connection: 'PeerConnection'
+    is_requested_by_us: bool
+    messages: List[Message] = field(default_factory=lambda: [])
 
 
 @dataclass
@@ -29,8 +42,13 @@ class State:
 
     wishlist_interval = 0
 
-    connection_requests = []
+    connection_requests = TTLCache(maxsize=1000, ttl=15 * 60)
 
     search_queries = {}
+    transfers = []
 
     ticket_generator = ticket_generator()
+
+    def expire_caches(self, cache_lock):
+        with cache_lock:
+            self.connection_requests.expire()

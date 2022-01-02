@@ -1,3 +1,4 @@
+from datetime import timedelta
 import logging
 import threading
 import time
@@ -10,7 +11,7 @@ from network_manager import NetworkManager
 import messages
 from peer import PeerManager
 from server_manager import ServerManager
-from scheduler import Scheduler
+from scheduler import Job, Scheduler
 from state import State
 from search import SearchQuery
 
@@ -24,13 +25,32 @@ class SoulSeek:
         self.settings = settings
 
         self._stop_event = threading.Event()
+        self._cache_lock = threading.Lock()
 
         self.state = State()
         self.state.scheduler = Scheduler(self._stop_event)
 
+        cache_expiration_job = Job(
+            60,
+            self.state.expire_caches,
+            args=[self._cache_lock, ]
+        )
+        self.state.scheduler.add_job(cache_expiration_job)
+
+
         self.network_manager = NetworkManager(settings['network'], self._stop_event)
-        self.peer_manager = PeerManager(self.state, settings, self.network_manager)
-        self.server_manager = ServerManager(self.state, settings, self.network_manager)
+        self.peer_manager = PeerManager(
+            self.state,
+            self._cache_lock,
+            settings,
+            self.network_manager
+        )
+        self.server_manager = ServerManager(
+            self.state,
+            self._cache_lock,
+            settings,
+            self.network_manager
+        )
 
     def start(self):
         self.network_manager.initialize()
@@ -69,6 +89,9 @@ class SoulSeek:
             messages.FileSearch.create(ticket, query))
         self.state.search_queries[ticket] = SearchQuery(ticket, query)
         return ticket
+
+    def download(self, search_result):
+        pass
 
     def accept_children(self):
         logger.info("Start accepting children")

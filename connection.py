@@ -27,8 +27,18 @@ class ConnectionState(enum.Enum):
     DISCONNECTED = 0
     CONNECTING = 1
     CONNECTED = 2
-    SHOULD_CLOSE = 3
-    CLOSED = 4
+    SHOULD_CLOSE = 4
+    CLOSED = 5
+
+
+class CloseReason(enum.Enum):
+    UNKNOWN = -1
+    CONNECT_FAILED = 0
+    REQUESTED = 1
+    READ_ERROR = 2
+    WRITE_ERROR = 3
+    TIMEOUT = 4
+    EOF = 6
 
 
 class Connection:
@@ -40,18 +50,18 @@ class Connection:
         self.state: ConnectionState = state
         self.listener = None
 
-    def set_state(self, state: ConnectionState):
+    def set_state(self, state: ConnectionState, close_reason=CloseReason.UNKNOWN):
         self.state = state
-        self.listener.on_state_changed(state, self)
+        self.listener.on_state_changed(state, self, close_reason=close_reason)
 
-    def disconnect(self):
-        logger.debug(f"disconnecting from {self.hostname}:{self.port}")
+    def disconnect(self, reason=CloseReason.UNKNOWN):
+        logger.debug(f"disconnecting from {self.hostname}:{self.port} reason : {reason.name}")
         try:
             self.fileobj.close()
         except OSError:
             logger.exception(f"exception while disconnecting {self.fileobj}")
         finally:
-            self.set_state(ConnectionState.CLOSED)
+            self.set_state(ConnectionState.CLOSED, close_reason=reason)
 
     def __repr__(self):
         return (
@@ -113,7 +123,7 @@ class ServerConnection(Connection):
             self._buffer = self._buffer[msg_len_with_len:]
             self.handle_message(message)
 
-    def handle_message(self, message_data):
+    def handle_message(self, message_data: bytes):
         try:
             message = messages.parse_message(message_data)
             self.listener.on_server_message(message, self)
@@ -121,6 +131,9 @@ class ServerConnection(Connection):
             logger.error(
                 f"Failed to handle server message data {message_data}",
                 exc_info=True)
+
+    def send_message(self, message):
+        self.fileobj.sendall(message)
 
 
 class ListeningConnection(Connection):
@@ -220,7 +233,7 @@ class PeerConnection(Connection):
         This method won't clear the buffer entirely but will remove the message
         from the _buffer and keep the rest. (When does this happen?)
         """
-        if len(self._buffer) < (obfuscation.KEY_SIZE + 4):
+        if len(self._buffer) < struct.calcsize('I'):
             return
 
         _, msg_len = messages.parse_int(0, self._buffer)
@@ -236,10 +249,9 @@ class PeerConnection(Connection):
 
     def buffer_obfuscated(self):
         # Require at least 8 bytes (4 bytes key, 4 bytes length)
-        if len(self._buffer) < (obfuscation.KEY_SIZE + 4):
+        if len(self._buffer) < (obfuscation.KEY_SIZE + struct.calcsize('I')):
             return
 
-        # NOTE: We might need a check here if we have a multiple of 4
         decoded_buffer = obfuscation.decode(self._buffer)
 
         # TODO: there should be common code between this and buffer_unobfuscated
@@ -256,8 +268,14 @@ class PeerConnection(Connection):
             self._buffer = self._buffer[total_msg_len + obfuscation.KEY_SIZE:]
             self.handle_message(message)
 
-    def handle_message(self, message_data):
+    def handle_message(self, message_data: bytes):
         self.listener.on_peer_message(message_data, self)
+
+    def send_message(self, message):
+        if self.obfuscated:
+            self.fileobj.sendall(obfuscation.encode(message))
+        else:
+            self.fileobj.sendall(message)
 
 
 class NetworkLoop(threading.Thread):
@@ -317,7 +335,7 @@ class NetworkLoop(threading.Thread):
                             logger.debug(
                                 "error connecting {}:{} : {} [{}] : cleaning up"
                                 .format(connection.hostname, connection.port, socket_err, errno.errorcode[socket_err]))
-                            connection.disconnect()
+                            connection.disconnect(reason=CloseReason.CONNECT_FAILED)
                         else:
                             logger.debug(
                                 "successfully connected {}:{}".format(connection.hostname, connection.port))
@@ -335,10 +353,10 @@ class NetworkLoop(threading.Thread):
                         try:
                             recv_data = work_socket.recv(4)
                         except OSError as exc:
-                            logger.exception(f"Exception receiving data on connection {work_socket}")
+                            logger.exception(f"exception receiving data on connection {work_socket}")
                             # Only remove the peer connections?
                             logger.info(f"close {connection.hostname}:{connection.port} : exception while reading")
-                            connection.disconnect()
+                            connection.disconnect(reason=CloseReason.READ_ERROR)
                             continue
                         else:
                             if recv_data:
@@ -347,7 +365,7 @@ class NetworkLoop(threading.Thread):
                             else:
                                 logger.warning(
                                     f"close {connection.hostname}:{connection.port} : no data received")
-                                connection.disconnect()
+                                connection.disconnect(reason=CloseReason.EOF)
                                 continue
 
                     if mask & selectors.EVENT_WRITE:
@@ -358,7 +376,7 @@ class NetworkLoop(threading.Thread):
                             logger.warning(
                                 "error {}:{} : {} [{}] : cleaning up"
                                 .format(connection.hostname, connection.port, socket_err, errno.errorcode[socket_err]))
-                            connection.disconnect()
+                            connection.disconnect(reason=CloseReason.WRITE_ERROR)
                             continue
 
                         try:
@@ -371,11 +389,11 @@ class NetworkLoop(threading.Thread):
                             try:
                                 logger.debug(f"send {connection.hostname}:{connection.port} : message {message.hex()}")
                                 connection.last_interaction = current_time
-                                work_socket.sendall(message)
+                                connection.send_message(message)
                             except OSError as exc:
                                 logger.exception(
                                     f"close {connection.hostname}:{connection.port} : exception while sending")
-                                connection.disconnect()
+                                connection.disconnect(reason=CloseReason.WRITE_ERROR)
                                 continue
 
                 # Clean up connections
@@ -384,7 +402,7 @@ class NetworkLoop(threading.Thread):
 
                     # Clean up connections we requested to close
                     if connection.state == ConnectionState.SHOULD_CLOSE:
-                        connection.disconnect()
+                        connection.disconnect(reason=CloseReason.REQUESTED)
                         continue
 
                     # Clean up connections that went into timeout
@@ -394,7 +412,7 @@ class NetworkLoop(threading.Thread):
 
                         if connection.last_interaction + 30 < current_time:
                             logger.warning(f"connection {connection.hostname}:{connection.port}: timeout reached")
-                            connection.disconnect()
+                            connection.disconnect(reason=CloseReason.TIMEOUT)
                             continue
 
         except Exception as exc:

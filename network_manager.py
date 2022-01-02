@@ -82,17 +82,27 @@ class NetworkManager:
         self.network_loop.selector.unregister(fileobj)
 
     # Connection state changes
-    def on_state_changed(self, state: ConnectionState, connection: Connection):
+    def on_state_changed(self, state: ConnectionState, connection: Connection, close_reason=None):
+        """Called when the state of a connection changes. This method calls 3
+        private method based on the type of L{connection} that was passed
+
+        @param state: the new state the connection has received
+        @param connection: the connection for which the state changed
+        @param close_reason: in case ConnectionState.CLOSED is passed a reason
+            will be given as well, this is useful when we need to send a
+            CannotConnect to the server after a ConnectToPeer was sent and we
+            failed to connect to that peer
+        """
         if isinstance(connection, ServerConnection):
-            self._on_server_connection_state_changed(state, connection)
+            self._on_server_connection_state_changed(state, connection, close_reason=close_reason)
 
         elif isinstance(connection, PeerConnection):
-            self._on_peer_connection_state_changed(state, connection)
+            self._on_peer_connection_state_changed(state, connection, close_reason=close_reason)
 
         elif isinstance(connection, ListeningConnection):
             self._on_listening_connection_state_changed(state, connection)
 
-    def _on_server_connection_state_changed(self, state: ConnectionState, connection: ServerConnection):
+    def _on_server_connection_state_changed(self, state: ConnectionState, connection: ServerConnection, close_reason=None):
         if state == ConnectionState.CONNECTING:
             self._register_to_network_loop(
                 connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
@@ -108,9 +118,9 @@ class NetworkManager:
 
         elif state == ConnectionState.CLOSED:
             self._unregister_from_network_loop(connection.fileobj)
-            self.server_listener.on_closed()
+            self.server_listener.on_closed(reason=close_reason)
 
-    def _on_peer_connection_state_changed(self, state: ConnectionState, connection: PeerConnection):
+    def _on_peer_connection_state_changed(self, state: ConnectionState, connection: PeerConnection, close_reason=None):
         if state == ConnectionState.CONNECTING:
             self._register_to_network_loop(
                 connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
@@ -118,9 +128,9 @@ class NetworkManager:
 
         elif state == ConnectionState.CLOSED:
             self._unregister_from_network_loop(connection.fileobj)
-            self.peer_listener.on_closed(connection)
+            self.peer_listener.on_closed(connection, reason=close_reason)
 
-    def _on_listening_connection_state_changed(self, state: ConnectionState, connection: PeerConnection):
+    def _on_listening_connection_state_changed(self, state: ConnectionState, connection: ListeningConnection):
         if state == ConnectionState.CONNECTING:
             self._register_to_network_loop(
                 connection.fileobj, EVENT_READ, connection)
@@ -131,6 +141,10 @@ class NetworkManager:
 
     # Peer related
     def connect_to_peer(self, connection: PeerConnection, username: str):
+        """This method should be called by the ServerManager in case it needs to
+        connect to a peer. The PeerManager is then notified that we should add
+        another peer to the list
+        """
         self.peer_listener.on_connect_to_peer(connection, username)
         connection.listener = self
         connection.connect()

@@ -1,8 +1,11 @@
 from collections import namedtuple
 from dataclasses import dataclass, field
+import logging
 import threading
 import time
 from typing import Any, Callable, List, Dict
+
+logger = logging.getLogger()
 
 
 @dataclass

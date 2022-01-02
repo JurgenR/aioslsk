@@ -2,7 +2,7 @@ import logging
 import queue
 from typing import List
 
-from connection import PeerConnection, PeerConnectionType, ConnectionState
+from connection import PeerConnection, PeerConnectionType, ConnectionState, CloseReason
 import messages
 from network_manager import NetworkManager
 from search import SearchResult
@@ -43,8 +43,9 @@ class Peer:
 
 class PeerManager:
 
-    def __init__(self, state: State, settings, network_manager: NetworkManager):
+    def __init__(self, state: State, cache_lock, settings, network_manager: NetworkManager):
         self.state = state
+        self.cache_lock = cache_lock
         self.settings = settings
         self.network_manager = network_manager
         self.network_manager.peer_listener = self
@@ -54,14 +55,17 @@ class PeerManager:
         self.peer_message_map = {
             messages.PeerInit.MESSAGE_ID: self.on_peer_init,
             messages.PeerPierceFirewall.MESSAGE_ID: self.on_peer_pierce_firewall,
-            messages.PeerSearchReply.MESSAGE_ID: self.on_peer_search_reply
+            messages.PeerSearchReply.MESSAGE_ID: self.on_peer_search_reply,
+            messages.PeerTransferRequest: self.on_peer_transfer_request,
         }
         self.distributed_message_map = {
             messages.DistributedPing.MESSAGE_ID: self.on_distributed_ping,
             messages.DistributedBranchLevel.MESSAGE_ID: self.on_distributed_branch_level,
             messages.DistributedBranchRoot.MESSAGE_ID: self.on_distributed_branch_root,
-            messages.DistributedSearchRequest.MESSAGE_ID: self.on_distributed_search_request
+            messages.DistributedSearchRequest.MESSAGE_ID: self.on_distributed_search_request,
+            messages.DistributedServerSearchRequest.MESSAGE_ID: self.on_distributed_server_search_request
         }
+        self.file_message_map = {}
 
     def _create_peer(self, username, connection: PeerConnection):
         """Creates a new peer object and adds it to our list of peers"""
@@ -133,11 +137,15 @@ class PeerManager:
         complete for this peer/connection to become a parent and makes it a
         parent if we don't have one, otherwise just close the connection.
         """
-        if peer.branch_level and peer.branch_root:
+        # Explicit None checks because we can get 0 as branch level
+        if peer.branch_level is not None and peer.branch_root is not None:
             if self.state.parent is None:
                 self.set_parent(connection)
             else:
                 connection.set_state(ConnectionState.SHOULD_CLOSE)
+                peer = self.get_peer(connection)
+                if peer is not None:
+                    peer.reset_branch_values()
 
     def unset_parent(self):
         logger.debug(f"unset parent {self.state.parent!r}")
@@ -158,7 +166,8 @@ class PeerManager:
         """Method called upon receiving a message from a peer/distributed socket"""
         message_parsers = {
             PeerConnectionType.PEER: (messages.parse_peer_message, self.peer_message_map, ),
-            PeerConnectionType.DISTRIBUTED: (messages.parse_distributed_message, self.distributed_message_map, )
+            PeerConnectionType.DISTRIBUTED: (messages.parse_distributed_message, self.distributed_message_map, ),
+            PeerConnectionType.FILE: (messages.parse_peer_message, self.peer_message_map, )
         }
 
         try:
@@ -187,27 +196,29 @@ class PeerManager:
         ticket = message.parse()
         logger.debug(f"PeerPierceFirewall (connection={connection}, ticket={ticket})")
 
-        requests = list(filter(lambda r: r.ticket == ticket, self.state.connection_requests))
-
-        if len(requests) == 0:
+        try:
+            with self.cache_lock:
+                request = self.state.connection_requests.pop(ticket)
+        except KeyError:
             logger.warning(f"received PeerPierceFirewall with unknown ticket {ticket}")
             return
 
-        elif len(requests) == 1:
-            request = requests[0]
-            connection.connection_type = request.type
-            self._create_peer(request.username, connection)
-            logger.debug(f"handled ticket {ticket}")
-            requests.remove(request)
+        connection.connection_type = request.typ
+        self._create_peer(request.username, connection)
+        logger.debug(f"handled ticket {ticket}")
 
-            # I'm seeing connections that go from obfuscated to non-obfuscated
-            # for some reason
-            if connection.obfuscated:
-                logger.debug(f"setting connection to unobfuscated : {connection}")
-                connection.obfuscated = False
+        # I'm seeing connections that go from obfuscated to non-obfuscated
+        # for some reason but only for distributed connections
+        if connection.obfuscated and request.typ == PeerConnectionType.DISTRIBUTED:
+            logger.debug(f"setting connection to unobfuscated : {connection}")
+            connection.obfuscated = False
 
-        else:
-            logger.error(f"got multiple tickets with number {ticket} in cache")
+        # We get here when we failed to connect, after which we sent a
+        # ConnectToPeer. We probably still have some messages that were never
+        # sent
+        if request.is_requested_by_us:
+            for queued_message in request.messages:
+                connection.messages.put(queued_message)
 
     def on_peer_init(self, message, connection: PeerConnection):
         username, typ, token = message.parse()
@@ -218,21 +229,24 @@ class PeerManager:
 
         self._create_peer(username, connection)
 
+        if connection.connection_type == PeerConnectionType.DISTRIBUTED:
+            pass
+
     def on_peer_search_reply(self, message, connection: PeerConnection):
         contents = message.parse()
-        user, token, results, free_slots, avg_speed, queue_len, locked_results = contents
+        user, ticket, results, free_slots, avg_speed, queue_len, locked_results = contents
         search_result = SearchResult(
-            user, token, results, free_slots, avg_speed, queue_len, locked_results)
+            user, ticket, results, free_slots, avg_speed, queue_len, locked_results)
         try:
-            self.state.search_queries[token].results.append(search_result)
+            self.state.search_queries[ticket].results.append(search_result)
         except KeyError:
             # This happens if we close then re-open too quickly
-            logger.warning(f"Search reply token '{token}' does not match any search query we have made")
+            logger.warning(f"search reply ticket '{ticket}' does not match any search query we have made")
 
     # Distributed messages
     def on_distributed_ping(self, message, connection: PeerConnection):
         unknown = message.parse()
-        logger.info(f"Ping request with number {unknown!r}")
+        logger.info(f"ping request with number {unknown!r}")
 
     def on_distributed_search_request(self, message, connection: PeerConnection):
         _, username, ticket, query = message.parse()
@@ -254,14 +268,26 @@ class PeerManager:
         peer.branch_root = root
         self._check_if_parent(peer, connection)
 
+    def on_distributed_server_search_request(self, message, connection: PeerConnection):
+        distrib_code, distrib_message = message.parse()
+        logger.info(f"distributed server search request: {distrib_code} {distrib_message}")
+
+    # Transfers
+    def on_peer_transfer_request(self, message, connection: PeerConnection):
+        pass
+
+    # Other
     def on_connect_to_peer(self, connection: PeerConnection, username):
+        """This method is called from network manager when server manager tries
+        to make a peer connection
+        """
         self._create_peer(username, connection)
 
     # State changes
     def on_connecting(self, connection: PeerConnection):
         pass
 
-    def on_closed(self, connection: PeerConnection):
+    def on_closed(self, connection: PeerConnection, reason=None):
         # Specific reference for parent peer
         parent = self.state.parent
         if parent and connection == parent.connection:
@@ -269,11 +295,32 @@ class PeerManager:
             self.unset_parent()
             return
 
-        # I wish there was a better way
+        # Remove the peer connection
         for peer in self.peers.values():
             if connection in peer.connections:
                 peer.remove_connection(connection)
                 break
+
+        # In case connection failed and this was requested by someone, notify
+        # the server who will notify the peer
+        if reason == CloseReason.CONNECT_FAILED:
+            with self.cache_lock:
+                for ticket, connection_req in self.state.connection_requests.items():
+                    if connection != connection_req.connection:
+                        continue
+
+                    if not connection_req.is_requested_by_us:
+                        # In case we failed to connect to the other after they requested it, give up
+                        self.network_manager.send_server_messages(
+                            messages.CannotConnect.create(ticket, connection_req.username)
+                        )
+                        self.state.connection_requests.pop(ticket)
+                        break
+                    else:
+                        # In case we want to connect to someone, don't give up just yet
+                        # and send a ConnectToPeer
+                        self.network_manager.send_server_messages(
+                            messages.ConnectToPeer.create())
 
     def on_connected(self, connection: PeerConnection):
         pass

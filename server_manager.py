@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+import enum
 import logging
 
 from connection import PeerConnection, PeerConnectionType
@@ -10,6 +12,14 @@ from utils import get_stats
 logger = logging.getLogger()
 
 
+class UserState(enum.Enum):
+    UNKNOWN = -1
+    OFFLINE = 0
+    AWAY = 1
+    ONLINE = 2
+
+
+@dataclass
 class User:
     name: str
     status: int = 0
@@ -22,8 +32,9 @@ class User:
 
 class ServerManager:
 
-    def __init__(self, state: State, settings, network_manager):
+    def __init__(self, state: State, cache_lock, settings, network_manager):
         self.state = state
+        self.cache_lock = cache_lock
         self.settings = settings
         self.network_manager = network_manager
         self.network_manager.server_listener = self
@@ -83,7 +94,7 @@ class ServerManager:
                 self.settings['network']['listening_port'],
                 self.settings['network']['listening_port'] + 1
             ),
-            messages.SetStatus.create(2),
+            messages.SetStatus.create(UserState.ONLINE.value),
             messages.HaveNoParents.create(True),
             messages.BranchRoot.create(self.settings['credentials']['username']),
             messages.BranchLevel.create(0),
@@ -129,15 +140,25 @@ class ServerManager:
     def on_connect_to_peer(self, message):
         contents = message.parse()
         logger.info("ConnectToPeer message contents: {!r}".format(contents))
-        username, typ, ip, port, token, privileged, unknown, obfuscated_port = contents
+        username, typ, ip, port, ticket, privileged, unknown, obfuscated_port = contents
 
         peer_connection = PeerConnection(
             hostname=ip,
             port=port,
-            connection_type=PeerConnectionType.PEER
+            connection_type=typ
         )
         peer_connection.messages.put(
-            messages.PeerPierceFirewall.create(token))
+            messages.PeerPierceFirewall.create(ticket))
+        with self.cache_lock:
+            self.state.connection_requests[ticket] = ConnectionRequest(
+                ticket=ticket,
+                username=username,
+                ip=ip,
+                port=port,
+                typ=typ,
+                connection=peer_connection,
+                is_requested_by_us=False
+            )
         self.network_manager.connect_to_peer(peer_connection, username)
 
     def on_net_info(self, message):
@@ -146,39 +167,49 @@ class ServerManager:
         for idx, (username, ip, port) in enumerate(net_info_list, 1):
             ticket = next(self.state.ticket_generator)
             logger.info(f"netinfo user {idx}: {username!r} : {ip}:{port} (ticket={ticket})")
-            self.state.connection_requests.append(
-                ConnectionRequest(
+            with self.cache_lock:
+                self.state.connection_requests[ticket] = ConnectionRequest(
                     ticket=ticket,
                     username=username,
                     ip=ip,
                     port=port,
-                    type=PeerConnectionType.DISTRIBUTED
+                    typ=PeerConnectionType.DISTRIBUTED,
+                    connection=None,
+                    is_requested_by_us=True
                 )
-            )
+            # self.network_manager.send_server_messages(
+            #     messages.ConnectToPeer.create(
+            #         ticket,
+            #         username,
+            #         PeerConnectionType.DISTRIBUTED
+            #     )
+            # )
+
             peer_connection = PeerConnection(
                 hostname=ip,
                 port=port,
                 connection_type=PeerConnectionType.DISTRIBUTED
             )
-            # self.network_manager.connect_to_peer(peer_connection, username)
-            # peer_connection.messages.put(
-            #     messages.PeerInit.create(
-            #         self.settings['credentials']['username'],
-            #         PeerConnectionType.DISTRIBUTED,
-            #         ticket
-            #     )
-            # )
-            self.network_manager.send_server_messages(
-                messages.ConnectToPeer.create(
-                    ticket,
-                    username,
-                    PeerConnectionType.DISTRIBUTED
+            self.network_manager.connect_to_peer(peer_connection, username)
+            peer_connection.messages.put(
+                messages.PeerInit.create(
+                    self.settings['credentials']['username'],
+                    PeerConnectionType.DISTRIBUTED,
+                    ticket
                 )
             )
 
     def on_cannot_connect(self, message):
-        contents = message.parse()
-        logger.debug(f"got CannotConnect: {contents}")
+        ticket, username = message.parse()
+        logger.debug(f"got CannotConnect: {ticket} , {username}")
+        with self.cache_lock:
+            try:
+                self.state.connection_requests.pop(ticket)
+            except KeyError:
+                logger.warning(
+                    f"CannotConnect : ticket {ticket} (username={username}) was not found in cache")
+            else:
+                logger.debug(f"CannotConnect : removed ticket {ticket} (username={username}) from cache")
 
     def on_unhandled_message(self, message):
         """Method called for messages that have no handler"""
@@ -191,5 +222,5 @@ class ServerManager:
     def on_connected(self):
         self.state.scheduler.add_job(self._ping_job)
 
-    def on_closed(self):
+    def on_closed(self, reason=None):
         self.state.scheduler.remove(self._ping_job)
