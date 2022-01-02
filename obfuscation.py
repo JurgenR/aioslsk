@@ -1,7 +1,13 @@
 import secrets
+import struct
+
 
 KEY_SIZE = 4
 """@var KEY_SIZE: Amount of bytes in the key"""
+
+def generate_key():
+    return secrets.token_bytes(KEY_SIZE)
+
 
 def rotate_key_orig(key, const=31):
     """Rotate the L{key} to the right by L{const} bits
@@ -35,8 +41,9 @@ def rotate_key(key, rot_bits=31):
     return key_i_rot.to_bytes(4, 'little')
 
 
-def decode(data, const=31):
-    """De-obfuscate given L{data}
+def decode(data):
+    """De-obfuscate given L{data}, the key should be the first 4 bytes of the
+    data
 
     @type data: bytes like object
     @param data: Data to be de-obfuscated
@@ -49,13 +56,29 @@ def decode(data, const=31):
     dec_message = bytearray()
     for idx, byt in enumerate(enc_message):
         if idx % KEY_SIZE == 0:
-            key = rotate_key(key)
+            key = rotate_key(key, rot_bits=31)
         dec_message.append(key[idx % KEY_SIZE] ^ byt)
     return bytes(dec_message)
 
 
-def generate_key():
-    return secrets.token_bytes(KEY_SIZE)
+def encode(data, key=None):
+    """Obfuscate the given L{data} with the provided L{key}, if no key is given
+    it will be automatically generated
+    """
+    # I'm not sure about the endianness. When testing I just used a key which
+    # was already converted to little endian. When generating a key the
+    # endianness doesn't really matter because it's random anyway
+    if key is None:
+        key = generate_key()
+    orig_key = bytes(key)
+
+    enc_message = bytearray()
+    for idx, byt in enumerate(data):
+        if idx % KEY_SIZE == 0:
+            key = rotate_key(key, rot_bits=31)
+        enc_message.append(key[idx % KEY_SIZE] ^ byt)
+
+    return orig_key + bytes(enc_message)
 
 
 if __name__ == '__main__':
