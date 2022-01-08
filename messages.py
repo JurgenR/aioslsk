@@ -206,11 +206,11 @@ class Login(Message):
     MESSAGE_ID = 0x01
 
     @classmethod
-    def create(cls, username, password, client_version, number=100):
+    def create(cls, username, password, client_version, minor_version=100):
         md5_hash = calc_md5(username + password)
         message_body = (
             pack_string(username) + pack_string(password) +
-            pack_int(client_version) + pack_string(md5_hash) + pack_int(number))
+            pack_int(client_version) + pack_string(md5_hash) + pack_int(minor_version))
         return pack_message(cls.MESSAGE_ID, message_body)
 
     @warn_on_unparsed_bytes
@@ -272,6 +272,7 @@ class GetPeerAddress(Message):
     def parse(self):
         super().parse()
         username = self.parse_string()
+        # In case user does not exist all values will be 0
         ip_addr = self.parse_ip()
         port = self.parse_int()
         if self.has_unparsed_bytes():
@@ -888,6 +889,40 @@ class PeerSharesReply(PeerMessage):
 class PeerSearchReply(PeerMessage):
     MESSAGE_ID = 0x09
 
+    @classmethod
+    def create(self, username: str, ticket: int, results, slotfree: bool, avg_speed: int, queue_len: int):
+        message_body = pack_string(username) + pack_int(ticket)
+
+        message_body += pack_int(len(results))
+
+        results_body = bytes()
+        for result in results:
+            results_body += (
+                pack_uchar(1) +
+                pack_string(result['filename']) +
+                pack_int64(result['filesize']) +
+                pack_string(result['extension'])
+            )
+
+            results_body += pack_int(len(results['attributes']))
+            for attr_place, attr_value in results['attributes']:
+                results_body += pack_int(attr_place) + pack_int(attr_value)
+
+        message_body += results_body
+
+        message_body += (
+            pack_bool(slotfree) +
+            pack_int(avg_speed) +
+            pack_int(queue_len)
+        )
+
+        # Locked results not implemented
+        # TODO: Require some investigation if these locked results actually
+        # exist or if the 'one' is actually used to indicate this (could also
+        # be both)
+
+        return pack_message(cls.MESSAGE_ID, zlib.compress(message_body))
+
     def parse_result_list(self):
         results = []
         result_count = self.parse_int()
@@ -897,12 +932,12 @@ class PeerSearchReply(PeerMessage):
             result['filename'] = self.parse_string()
             result['filesize'] = self.parse_int64()
             result['extension'] = self.parse_string()
-            result['attrs'] = []
+            result['attributes'] = []
             attr_count = self.parse_int()
             for _ in range(attr_count):
                 attr_place = self.parse_int()
                 attr = self.parse_int()
-                result['attrs'].append(attr)
+                result['attributes'].append((attr_place, attr, ))
             results.append(result)
         return results
 
