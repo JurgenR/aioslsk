@@ -7,6 +7,7 @@ from connection import (
     PeerConnection,
     PeerConnectionType,
 )
+from filemanager import FileManager
 from network_manager import NetworkManager
 import messages
 from peer import PeerManager
@@ -30,24 +31,24 @@ class SoulSeek:
         self.state = State()
         self.state.scheduler = Scheduler(self._stop_event)
 
-        cache_expiration_job = Job(
-            60,
-            self.state.expire_caches,
-            args=[self._cache_lock, ]
+        self.state.file_manager = FileManager(settings['sharing'])
+
+        self.network_manager = NetworkManager(
+            settings,
+            self._stop_event,
+            self._cache_lock
         )
+
+        cache_expiration_job = Job(60, self.network_manager.expire_caches)
         self.state.scheduler.add_job(cache_expiration_job)
 
-
-        self.network_manager = NetworkManager(settings['network'], self._stop_event)
         self.peer_manager = PeerManager(
             self.state,
-            self._cache_lock,
             settings,
             self.network_manager
         )
         self.server_manager = ServerManager(
             self.state,
-            self._cache_lock,
             settings,
             self.network_manager
         )
@@ -91,7 +92,8 @@ class SoulSeek:
         return ticket
 
     def download(self, search_result):
-        pass
+        ticket = next(self.state.ticket_generator)
+        self.peer_manager.download(ticket, search_result)
 
     def accept_children(self):
         logger.info("Start accepting children")

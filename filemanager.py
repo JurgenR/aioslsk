@@ -7,6 +7,7 @@ import re
 
 logger = logging.getLogger()
 
+
 _COMPRESSED_FORMATS = [
     'MP3',
     'MP4',
@@ -18,10 +19,10 @@ _LOSSLESS_FORMATS = [
     'WAVE'
 ]
 
-SharedItem = namedtuple('SharedTuple', ['root', 'subdir', 'filename'])
+SharedItem = namedtuple('SharedItem', ['root', 'subdir', 'filename'])
 
 
-def convert_to_results(shared_item):
+def convert_to_result(shared_item):
     file_path = os.path.join(shared_item.root, shared_item.subdir, shared_item.filename)
     file_size = os.path.getsize(file_path)
     file_ext = os.path.splitext(shared_item.filename)[-1]
@@ -51,14 +52,24 @@ def convert_to_results(shared_item):
                 ]
 
     except mutagen.MutagenError:
-        logger.exception(f"Failed retrieve audio file metadata path={file_path!r}")
+        logger.exception(f"failed retrieve audio file metadata path={file_path!r}")
 
     return {
         'filename': file_path,
         'filesize': file_size,
         'file_ext': file_ext,
-        'attrs': attributes
+        'attributes': attributes
     }
+
+
+def convert_to_results(shared_items):
+    results = []
+    for shared_item in shared_items:
+        try:
+            results.append(convert_to_result(shared_item))
+        except OSError:
+            logger.exception(f"failed to convert to result : {shared_item!r}")
+    return results
 
 
 class FileManager:

@@ -41,6 +41,26 @@ class SoulSeekCmd(cmd.Cmd):
                 print(f"\t{idx}\t{result['filename']}\t{result['extension']}\t{result['filesize']}")
                 idx += 1
 
+    def do_rresults(self, query):
+        # If query is empty list all searches performed
+        if not query:
+            for ticket, search_query in self.client.state.search_queries.items():
+                print(f"{ticket}\t{search_query.query}\t{len(search_query.results)}")
+            return
+
+        query_obj = None
+        for ticket, search_query in self.client.state.search_queries.items():
+            if search_query.query == query:
+                query_obj = search_query
+                break
+        else:
+            print(f"Couldn't find results for query : {query}")
+            return
+
+        # Print results
+        for idx, user_result in enumerate(query_obj.results):
+            print(f"{idx} : {user_result!r}")
+
     def do_connections(self, _):
         return
         # connections = self.network.get_connections()
@@ -49,6 +69,11 @@ class SoulSeekCmd(cmd.Cmd):
 
     def do_state(self, _):
         print("State: {}".format(self.client.state.__dict__))
+
+    def do_address(self, username):
+        print(f"Getting peer address for user {username}")
+        self.client.network_manager.send_server_messages(
+            messages.GetPeerAddress.create(username))
 
     def do_search(self, query):
         print(f"Starting search for {query}")

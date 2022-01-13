@@ -839,24 +839,24 @@ class PeerPierceFirewall(PeerMessage):
     MESSAGE_ID = 0x00
 
     @classmethod
-    def create(cls, token: int) -> bytes:
-        return pack_message(cls.MESSAGE_ID, pack_int(token), id_as_uchar=True)
+    def create(cls, ticket: int) -> bytes:
+        return pack_message(cls.MESSAGE_ID, pack_int(ticket), id_as_uchar=True)
 
     @warn_on_unparsed_bytes
     def parse(self):
         # Override super as message_id is a uchar for this function
         length = self.parse_int()
         message_id = self.parse_uchar()
-        token = self.parse_int()
-        return token
+        ticket = self.parse_int()
+        return ticket
 
 
 class PeerInit(PeerMessage):
     MESSAGE_ID = 0x01
 
     @classmethod
-    def create(cls, user: str, typ: str, token: int) -> bytes:
-        message_body = (pack_string(user) + pack_string(typ) + pack_int(token))
+    def create(cls, user: str, typ: str, ticket: int) -> bytes:
+        message_body = (pack_string(user) + pack_string(typ) + pack_int(ticket))
         return pack_message(cls.MESSAGE_ID, message_body, id_as_uchar=True)
 
     @warn_on_unparsed_bytes
@@ -867,10 +867,10 @@ class PeerInit(PeerMessage):
         user = self.parse_string()
         typ = self.parse_string()
         if len(self.get_unparsed_bytes()) == 4:
-            token = self.parse_int()
+            ticket = self.parse_int()
         else:
-            token = self.parse_int64()
-        return user, typ, token
+            ticket = self.parse_int64()
+        return user, typ, ticket
 
 
 class PeerSharesRequest(PeerMessage):

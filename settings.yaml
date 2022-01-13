@@ -15,4 +15,5 @@ credentials:
 
 sharing:
   directories:
-    - share
+    - H:\soulseek-downloads
+    - H:\My Music

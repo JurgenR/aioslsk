@@ -24,7 +24,7 @@ class PeerConnectionType:
 
 
 class ConnectionState(enum.Enum):
-    DISCONNECTED = 0
+    UNINITIALIZED = 0
     CONNECTING = 1
     CONNECTED = 2
     SHOULD_CLOSE = 4
@@ -43,16 +43,17 @@ class CloseReason(enum.Enum):
 
 class Connection:
 
-    def __init__(self, hostname: str, port: int, fileobj=None, state: ConnectionState=ConnectionState.DISCONNECTED):
+    def __init__(self, hostname: str, port: int, state: ConnectionState=ConnectionState.UNINITIALIZED):
         self.hostname: str = hostname
         self.port: int = port
-        self.fileobj = fileobj
+        self.fileobj = None
         self.state: ConnectionState = state
-        self.listener = None
+        self.listeners = []
 
     def set_state(self, state: ConnectionState, close_reason=CloseReason.UNKNOWN):
         self.state = state
-        self.listener.on_state_changed(state, self, close_reason=close_reason)
+        for listener in self.listeners:
+            listener.on_state_changed(state, self, close_reason=close_reason)
 
     def disconnect(self, reason=CloseReason.UNKNOWN):
         logger.debug(f"disconnecting from {self.hostname}:{self.port} reason : {reason.name}")
@@ -69,14 +70,77 @@ class Connection:
             f"fileobj={self.fileobj!r}, state={self.state})")
 
 
-class ServerConnection(Connection):
+class ListeningConnection(Connection):
+    """A listening connection, objects of this class are responsible for
+    accepting incoming connections
+    """
 
-    def __init__(self, hostname='server.slsknet.org', port=2416, listener=None):
+    def __init__(self, hostname='0.0.0.0', port=64823, obfuscated=False, listeners=None):
         super().__init__(hostname, port)
-        self._buffer = b''
+        self.obfuscated = obfuscated
+        self.listeners = listeners
+
+        self.connections_accepted = 0
+
+    def connect(self):
+        logger.info(
+            f"open {self.hostname}:{self.port} : listening connection")
+        self.fileobj = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.fileobj.bind((self.hostname, self.port, ))
+        self.fileobj.setblocking(False)
+        self.fileobj.listen()
+
+        self.set_state(ConnectionState.CONNECTING)
+
+        return self.fileobj
+
+    def accept(self, sock):
+        """Accept the incoming connection (L{sock})"""
+        self.connections_accepted += 1
+
+        fileobj, addr = sock.accept()
+        logger.info(f"accepted {addr[0]}:{addr[1]} on {self.hostname}:{self.port} (obfuscated={self.obfuscated})")
+        fileobj.setblocking(False)
+
+        peer_connection = PeerConnection(
+            hostname=addr[0], port=addr[1],
+            obfuscated=self.obfuscated,
+            connection_type=PeerConnectionType.PEER,
+            incoming=True
+        )
+        peer_connection.fileobj = fileobj
+        peer_connection.state = ConnectionState.CONNECTED
+
+        for listener in self.listeners:
+            listener.on_peer_accepted(peer_connection)
+        return peer_connection
+
+
+class DataConnection(Connection):
+
+    def __init__(self, hostname, port):
+        super().__init__(hostname, port)
+        self._buffer = bytes()
         self.messages = queue.Queue()
-        self.listener = listener
+
         self.last_interaction = 0
+        self.bytes_received = 0
+        self.bytes_sent = 0
+
+    def buffer(self, data: bytes):
+        self.bytes_received += len(data)
+        self._buffer += data
+
+    def send_message(self, message: bytes):
+        self.bytes_sent += len(message)
+        self.fileobj.sendall(message)
+
+
+class ServerConnection(DataConnection):
+
+    def __init__(self, hostname='server.slsknet.org', port=2416, listeners=None):
+        super().__init__(hostname, port)
+        self.listeners = listeners
 
     def get_connecting_ip(self):
         """Gets the IP address being used to connect to the SoulSeek server.
@@ -107,7 +171,7 @@ class ServerConnection(Connection):
         the extra bytes are kept in the L{_buffer} and only the message is
         removed
         """
-        self._buffer += data
+        super().buffer(data)
 
         if len(self._buffer) < struct.calcsize('I'):
             return
@@ -125,74 +189,30 @@ class ServerConnection(Connection):
 
     def handle_message(self, message_data: bytes):
         try:
-            message = messages.parse_message(message_data)
-            self.listener.on_server_message(message, self)
+            messages.parse_message(message_data)
         except Exception as exc:
-            logger.error(
-                f"Failed to handle server message data {message_data}",
-                exc_info=True)
+            logger.exception(
+                f"failed to parse server message data {message_data}")
+            return
 
-    def send_message(self, message):
-        self.fileobj.sendall(message)
-
-
-class ListeningConnection(Connection):
-    """A listening connection, objects of this class are responsible for
-    accepting incoming connections
-    """
-
-    def __init__(self, hostname='0.0.0.0', port=64823, obfuscated=False, listener=None):
-        super().__init__(hostname, port)
-        self._buffer = b''
-        self.messages = queue.Queue()
-        self.obfuscated = obfuscated
-        self.listener = listener
-        self.last_interaction = 0
-
-    def connect(self):
-        logger.info(
-            f"open {self.hostname}:{self.port} : listening connection")
-        self.fileobj = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.fileobj.bind((self.hostname, self.port, ))
-        self.fileobj.setblocking(False)
-        self.fileobj.listen()
-
-        self.set_state(ConnectionState.CONNECTING)
-
-        return self.fileobj
-
-    def accept(self, sock):
-        """Accept the incoming connection (L{sock})"""
-        fileobj, addr = sock.accept()
-        logger.info(f"accepted {addr[0]}:{addr[1]} on {self.hostname}:{self.port} (obfuscated={self.obfuscated})")
-        fileobj.setblocking(False)
-
-        peer_connection = PeerConnection(
-            hostname=addr[0], port=addr[1],
-            obfuscated=self.obfuscated,
-            connection_type=PeerConnectionType.PEER,
-            listener=self.listener,
-            incoming=True
-        )
-        peer_connection.fileobj = fileobj
-        peer_connection.state = ConnectionState.CONNECTED
-
-        self.listener.on_peer_accepted(peer_connection)
-        return peer_connection
+        for listener in self.listeners:
+            message = messages.parse_message(message_data)
+            try:
+                listener.on_server_message(message, self)
+            except Exception as exc:
+                logger.exception(
+                    f"failed to handle server message {message!r} in listener {listener!r}")
 
 
-class PeerConnection(Connection):
+class PeerConnection(DataConnection):
 
     def __init__(
             self, hostname='0.0.0.0', port=None, obfuscated=False,
-            listener=None, connection_type=PeerConnectionType.PEER,
+            listeners=None, connection_type=PeerConnectionType.PEER,
             incoming=False):
         super().__init__(hostname, port)
-        self._buffer = b''
-        self.listener = listener
-        self.messages = queue.Queue()
+        self.listeners = listeners
         self.obfuscated = obfuscated
-        self.last_interaction = 0
         self.connection_type = connection_type
         self.incoming = incoming
 
@@ -216,7 +236,7 @@ class PeerConnection(Connection):
         internal L{_buffer} object and call 2 helper methods depending on the
         L{obfuscated} flag.
         """
-        self._buffer += data
+        super().buffer(data)
         if self.obfuscated:
             self.buffer_obfuscated()
         else:
@@ -269,13 +289,38 @@ class PeerConnection(Connection):
             self.handle_message(message)
 
     def handle_message(self, message_data: bytes):
-        self.listener.on_peer_message(message_data, self)
+        parser_map = {
+            PeerConnectionType.PEER: messages.parse_peer_message,
+            PeerConnectionType.FILE: messages.parse_peer_message,
+            PeerConnectionType.DISTRIBUTED: messages.parse_distributed_message
+        }
+        try:
+            parser_func = parser_map[self.connection_type]
+        except KeyError:
+            logger.exception(f"no parser implemented for connection type : {self.connection_type}")
+            return
+
+        try:
+            parser_func(message_data)
+        except Exception:
+            logger.exception(f"failed to parse peer message : {message_data!r}")
+            return
+
+        for listener in self.listeners:
+            # TODO: we need to create a new message each time we call a listener
+            # because both listeners will call .parse on the object. The second
+            # time this will fail.
+            message = parser_func(message_data)
+            try:
+                listener.on_peer_message(message, self)
+            except Exception:
+                logger.exception(f"error handling peer message : {message!r} (listener={listener!r})")
 
     def send_message(self, message):
         if self.obfuscated:
-            self.fileobj.sendall(obfuscation.encode(message))
+            super().send_message(obfuscation.encode(message))
         else:
-            self.fileobj.sendall(message)
+            super().send_message(message)
 
 
 class NetworkLoop(threading.Thread):

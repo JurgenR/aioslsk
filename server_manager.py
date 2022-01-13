@@ -2,11 +2,10 @@ from dataclasses import dataclass
 import enum
 import logging
 
-from connection import PeerConnection, PeerConnectionType
+from connection import PeerConnection, PeerConnectionType, ConnectionState
 import messages
 from scheduler import Job
-from state import ConnectionRequest, State
-from utils import get_stats
+from state import State
 
 
 logger = logging.getLogger()
@@ -32,9 +31,8 @@ class User:
 
 class ServerManager:
 
-    def __init__(self, state: State, cache_lock, settings, network_manager):
+    def __init__(self, state: State, settings, network_manager):
         self.state = state
-        self.cache_lock = cache_lock
         self.settings = settings
         self.network_manager = network_manager
         self.network_manager.server_listener = self
@@ -52,13 +50,14 @@ class ServerManager:
             messages.PrivilegedUsers.MESSAGE_ID: self.on_privileged_users,
             messages.RoomList.MESSAGE_ID: self.on_room_list,
             messages.WishlistInterval.MESSAGE_ID: self.on_wish_list_interval,
+            messages.GetPeerAddress.MESSAGE_ID: self.on_get_peer_address,
             messages.CannotConnect.MESSAGE_ID: self.on_cannot_connect,
         }
 
     def send_ping(self):
         self.network_manager.send_server_messages(messages.Ping.create())
 
-    def on_server_message(self, message):
+    def on_server_message(self, message, connection):
         """Method called upon receiving a message from the server socket
 
         This method will call L{on_unhandled_message} if the message has no
@@ -85,7 +84,7 @@ class ServerManager:
             logger.error("Failed to login, reason: {reason!r}")
 
         # Make setup calls
-        dir_count, file_count = get_stats(self.settings['sharing']['directories'])
+        dir_count, file_count = self.state.file_manager.get_stats()
         logger.debug(f"Sharing {dir_count} directories and {file_count} files")
 
         self.network_manager.send_server_messages(
@@ -142,85 +141,37 @@ class ServerManager:
         logger.info("ConnectToPeer message contents: {!r}".format(contents))
         username, typ, ip, port, ticket, privileged, unknown, obfuscated_port = contents
 
-        peer_connection = PeerConnection(
-            hostname=ip,
-            port=port,
-            connection_type=typ
-        )
-        peer_connection.messages.put(
-            messages.PeerPierceFirewall.create(ticket))
-        with self.cache_lock:
-            self.state.connection_requests[ticket] = ConnectionRequest(
-                ticket=ticket,
-                username=username,
-                ip=ip,
-                port=port,
-                typ=typ,
-                connection=peer_connection,
-                is_requested_by_us=False
-            )
-        self.network_manager.connect_to_peer(peer_connection, username)
-
     def on_net_info(self, message):
         net_info_list = message.parse()
 
         for idx, (username, ip, port) in enumerate(net_info_list, 1):
             ticket = next(self.state.ticket_generator)
             logger.info(f"netinfo user {idx}: {username!r} : {ip}:{port} (ticket={ticket})")
-            with self.cache_lock:
-                self.state.connection_requests[ticket] = ConnectionRequest(
-                    ticket=ticket,
-                    username=username,
-                    ip=ip,
-                    port=port,
-                    typ=PeerConnectionType.DISTRIBUTED,
-                    connection=None,
-                    is_requested_by_us=True
-                )
-            # self.network_manager.send_server_messages(
-            #     messages.ConnectToPeer.create(
-            #         ticket,
-            #         username,
-            #         PeerConnectionType.DISTRIBUTED
-            #     )
-            # )
 
-            peer_connection = PeerConnection(
-                hostname=ip,
-                port=port,
-                connection_type=PeerConnectionType.DISTRIBUTED
+            self.network_manager.init_peer_connection(
+                ticket,
+                username,
+                PeerConnectionType.DISTRIBUTED,
+                ip=ip,
+                port=port
             )
-            self.network_manager.connect_to_peer(peer_connection, username)
-            peer_connection.messages.put(
-                messages.PeerInit.create(
-                    self.settings['credentials']['username'],
-                    PeerConnectionType.DISTRIBUTED,
-                    ticket
-                )
-            )
+
+    def on_get_peer_address(self, message):
+        contents = message.parse()
+        logger.debug(f"got GetPeerAddress : {contents!r}")
 
     def on_cannot_connect(self, message):
         ticket, username = message.parse()
         logger.debug(f"got CannotConnect: {ticket} , {username}")
-        with self.cache_lock:
-            try:
-                self.state.connection_requests.pop(ticket)
-            except KeyError:
-                logger.warning(
-                    f"CannotConnect : ticket {ticket} (username={username}) was not found in cache")
-            else:
-                logger.debug(f"CannotConnect : removed ticket {ticket} (username={username}) from cache")
 
     def on_unhandled_message(self, message):
         """Method called for messages that have no handler"""
         logger.warning(f"don't know how to handle message {message!r}")
 
     # Connection state listeners
-    def on_connecting(self):
-        pass
+    def on_state_changed(self, state, connection, close_reason=None):
+        if state == ConnectionState.CONNECTED:
+            self.state.scheduler.add_job(self._ping_job)
 
-    def on_connected(self):
-        self.state.scheduler.add_job(self._ping_job)
-
-    def on_closed(self, reason=None):
-        self.state.scheduler.remove(self._ping_job)
+        elif state == ConnectionState.CLOSED:
+            self.state.scheduler.remove(self._ping_job)

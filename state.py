@@ -9,18 +9,6 @@ from utils import ticket_generator
 
 
 @dataclass
-class ConnectionRequest:
-    ticket: int
-    username: str
-    ip: str
-    port: int
-    typ: str
-    connection: 'PeerConnection'
-    is_requested_by_us: bool
-    messages: List[Message] = field(default_factory=lambda: [])
-
-
-@dataclass
 class Parent:
     branch_level: int = None
     branch_root: str = None
@@ -48,7 +36,3 @@ class State:
     transfers = []
 
     ticket_generator = ticket_generator()
-
-    def expire_caches(self, cache_lock):
-        with cache_lock:
-            self.connection_requests.expire()

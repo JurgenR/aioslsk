@@ -3,10 +3,12 @@ import queue
 from typing import List
 
 from connection import PeerConnection, PeerConnectionType, ConnectionState, CloseReason
+from filemanager import convert_to_results
 import messages
 from network_manager import NetworkManager
 from search import SearchResult
 from state import Parent, State
+from transfer import TransferManager
 
 
 logger = logging.getLogger()
@@ -25,9 +27,6 @@ class Peer:
         self.branch_root = None
 
     def get_connections(self, typ: str):
-        return self.get_connections(typ)[-1]
-
-    def get_connections(self, typ: str):
         return list(filter(lambda c: c.connection_type == typ, self.connections))
 
     def remove_connection(self, connection):
@@ -43,12 +42,12 @@ class Peer:
 
 class PeerManager:
 
-    def __init__(self, state: State, cache_lock, settings, network_manager: NetworkManager):
+    def __init__(self, state: State, settings, network_manager: NetworkManager):
         self.state = state
-        self.cache_lock = cache_lock
         self.settings = settings
         self.network_manager = network_manager
         self.network_manager.peer_listener = self
+        self.transfer_manager = TransferManager()
 
         self.peers = {}
 
@@ -59,7 +58,8 @@ class PeerManager:
             messages.PeerTransferRequest: self.on_peer_transfer_request,
         }
         self.distributed_message_map = {
-            messages.DistributedPing.MESSAGE_ID: self.on_distributed_ping,
+            messages.PeerInit.MESSAGE_ID: self.on_peer_init,
+            messages.PeerPierceFirewall.MESSAGE_ID: self.on_peer_pierce_firewall,
             messages.DistributedBranchLevel.MESSAGE_ID: self.on_distributed_branch_level,
             messages.DistributedBranchRoot.MESSAGE_ID: self.on_distributed_branch_root,
             messages.DistributedSearchRequest.MESSAGE_ID: self.on_distributed_search_request,
@@ -67,7 +67,14 @@ class PeerManager:
         }
         self.file_message_map = {}
 
-    def _create_peer(self, username, connection: PeerConnection):
+    def download(self, ticket: int, search_result: SearchResult):
+        logger.info(f"initiating download {ticket} : {search_result}")
+        transfer = transfer = Transfer(
+            ticket=ticket,
+            username=search_result.username,
+        )
+
+    def create_peer(self, username: str, connection: PeerConnection):
         """Creates a new peer object and adds it to our list of peers"""
         if username not in self.peers:
             self.peers[username] = Peer(username)
@@ -160,28 +167,20 @@ class PeerManager:
 
     def on_unhandled_message(self, message, connection: PeerConnection):
         """Method called for messages that have no handler"""
-        logger.warning(f"Don't know how to handle message {message!r}")
+        logger.warning(f"no handler for message {message!r}")
 
-    def on_peer_message(self, message_data, connection: PeerConnection):
+    def on_peer_message(self, message, connection: PeerConnection):
         """Method called upon receiving a message from a peer/distributed socket"""
         message_parsers = {
-            PeerConnectionType.PEER: (messages.parse_peer_message, self.peer_message_map, ),
-            PeerConnectionType.DISTRIBUTED: (messages.parse_distributed_message, self.distributed_message_map, ),
-            PeerConnectionType.FILE: (messages.parse_peer_message, self.peer_message_map, )
+            PeerConnectionType.PEER: self.peer_message_map,
+            PeerConnectionType.DISTRIBUTED: self.distributed_message_map,
+            PeerConnectionType.FILE: self.peer_message_map
         }
 
         try:
-            parser_function, callback_map = message_parsers[connection.connection_type]
+            callback_map = message_parsers[connection.connection_type]
         except KeyError:
-            raise NotImplementedError(f"No message parser implemented for {connection.connection_type}")
-
-        # Parse the message_data
-        try:
-            message = parser_function(message_data)
-        except Exception as exc:
-            logger.exception(
-                f"failed to parse peer ({connection.connection_type}) message data {message_data}")
-            return
+            raise NotImplementedError(f"no message map for connection type {connection.connection_type}")
 
         # Run the callback
         message_callback = callback_map.get(message.MESSAGE_ID, self.on_unhandled_message)
@@ -196,41 +195,9 @@ class PeerManager:
         ticket = message.parse()
         logger.debug(f"PeerPierceFirewall (connection={connection}, ticket={ticket})")
 
-        try:
-            with self.cache_lock:
-                request = self.state.connection_requests.pop(ticket)
-        except KeyError:
-            logger.warning(f"received PeerPierceFirewall with unknown ticket {ticket}")
-            return
-
-        connection.connection_type = request.typ
-        self._create_peer(request.username, connection)
-        logger.debug(f"handled ticket {ticket}")
-
-        # I'm seeing connections that go from obfuscated to non-obfuscated
-        # for some reason but only for distributed connections
-        if connection.obfuscated and request.typ == PeerConnectionType.DISTRIBUTED:
-            logger.debug(f"setting connection to unobfuscated : {connection}")
-            connection.obfuscated = False
-
-        # We get here when we failed to connect, after which we sent a
-        # ConnectToPeer. We probably still have some messages that were never
-        # sent
-        if request.is_requested_by_us:
-            for queued_message in request.messages:
-                connection.messages.put(queued_message)
-
     def on_peer_init(self, message, connection: PeerConnection):
         username, typ, token = message.parse()
         logger.info(f"PeerInit from {username}, {typ}, {token}")
-
-        # Maybe this is misplaced?
-        connection.connection_type = typ.decode('utf-8')
-
-        self._create_peer(username, connection)
-
-        if connection.connection_type == PeerConnectionType.DISTRIBUTED:
-            pass
 
     def on_peer_search_reply(self, message, connection: PeerConnection):
         contents = message.parse()
@@ -244,13 +211,24 @@ class PeerManager:
             logger.warning(f"search reply ticket '{ticket}' does not match any search query we have made")
 
     # Distributed messages
-    def on_distributed_ping(self, message, connection: PeerConnection):
-        unknown = message.parse()
-        logger.info(f"ping request with number {unknown!r}")
 
     def on_distributed_search_request(self, message, connection: PeerConnection):
-        _, username, ticket, query = message.parse()
+        _, username, search_ticket, query = message.parse()
         logger.info(f"Search request from {username!r}, query: {query!r}")
+        results = self.state.file_manager.query(query.decode('utf-8'))
+        if len(results) == 0:
+            return
+
+        logger.debug(f"got {len(results)} for query {query}")
+
+        connection_ticket = next(self.state.ticket_generator)
+        # self.network_manager.init_peer_connection(
+        #     connection_ticket,
+        #     username,
+        #     messages=[
+        #         messages.PeerSearchReply.create(convert_to_results(results))
+        #     ]
+        # )
 
     def on_distributed_branch_level(self, message, connection: PeerConnection):
         level = message.parse()
@@ -276,54 +254,18 @@ class PeerManager:
     def on_peer_transfer_request(self, message, connection: PeerConnection):
         pass
 
-    # Other
-    def on_connect_to_peer(self, connection: PeerConnection, username):
-        """This method is called from network manager when server manager tries
-        to make a peer connection
-        """
-        self._create_peer(username, connection)
-
     # State changes
-    def on_connecting(self, connection: PeerConnection):
-        pass
 
-    def on_closed(self, connection: PeerConnection, reason=None):
-        # Specific reference for parent peer
-        parent = self.state.parent
-        if parent and connection == parent.connection:
-            parent.peer.remove_connection(connection)
-            self.unset_parent()
-            return
+    def on_state_changed(self, state, connection, close_reason=None):
+        if state == ConnectionState.CLOSED:
+            parent = self.state.parent
+            if parent and connection == parent.connection:
+                parent.peer.remove_connection(connection)
+                self.unset_parent()
+                return
 
-        # Remove the peer connection
-        for peer in self.peers.values():
-            if connection in peer.connections:
-                peer.remove_connection(connection)
-                break
-
-        # In case connection failed and this was requested by someone, notify
-        # the server who will notify the peer
-        if reason == CloseReason.CONNECT_FAILED:
-            with self.cache_lock:
-                for ticket, connection_req in self.state.connection_requests.items():
-                    if connection != connection_req.connection:
-                        continue
-
-                    if not connection_req.is_requested_by_us:
-                        # In case we failed to connect to the other after they requested it, give up
-                        self.network_manager.send_server_messages(
-                            messages.CannotConnect.create(ticket, connection_req.username)
-                        )
-                        self.state.connection_requests.pop(ticket)
-                        break
-                    else:
-                        # In case we want to connect to someone, don't give up just yet
-                        # and send a ConnectToPeer
-                        self.network_manager.send_server_messages(
-                            messages.ConnectToPeer.create())
-
-    def on_connected(self, connection: PeerConnection):
-        pass
-
-    def on_accepted(self, connection: PeerConnection):
-        logger.debug(f"accepted {connection}")
+            # Remove the peer connection
+            for peer in self.peers.values():
+                if connection in peer.connections:
+                    peer.remove_connection(connection)
+                    break
