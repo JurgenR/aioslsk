@@ -110,3 +110,11 @@ class FileManager:
         file_count = len(self.shared_items)
         dir_count = len(set([shared_item.subdir for shared_item in self.shared_items]))
         return dir_count, file_count
+
+    def get_download_path(self, filename):
+        """Gets the download path for a filename returned by another peer"""
+        download_dir = self.settings['download']
+        if not os.path.exists(download_dir):
+            os.makedirs(download_dir, exist_ok=True)
+
+        return os.path.join(download_dir, os.path.basename(filename))

@@ -9,6 +9,7 @@ from connection import (
     Connection,
     ConnectionState,
     CloseReason,
+    FileTransferState,
     ListeningConnection,
     NetworkLoop,
     PeerConnection,
@@ -158,6 +159,11 @@ class NetworkManager:
             with self.cache_lock:
                 for ticket, request in self.connection_requests.items():
                     if connection == request.connection:
+                        # Send messages
+                        if request.messages is not None:
+                            for message in request.messages:
+                                connection.messages.put(message)
+
                         logger.debug(f"handled connection request (ticket={ticket})")
                         self.connection_requests.pop(ticket)
                         self.peer_listener.create_peer(request.username, connection)
@@ -216,6 +222,12 @@ class NetworkManager:
 
             self.peer_listener.create_peer(username, connection)
 
+            if connection.connection_type == PeerConnectionType.FILE:
+                # Reset the obfuscated flag, the next incoming 4 bytes should
+                # be the plain ticket number which is handled by the Connection
+                connection.obfuscated = False
+                connection.transfer_state = FileTransferState.AWAITING_TICKET
+
         elif message.MESSAGE_ID == PeerPierceFirewall.MESSAGE_ID:
             ticket = message.parse()
             logger.debug(f"PeerPierceFirewall (connection={connection}, ticket={ticket})")
@@ -244,7 +256,20 @@ class NetworkManager:
                 for queued_message in request.messages:
                     connection.messages.put(queued_message)
 
-    def init_peer_connection(self, ticket, username, typ, ip=None, port=None, messages=None):
+    def init_peer_connection(self, ticket: int, username: str, typ, ip=None, port=None, messages=None) -> ConnectionRequest:
+        """Starts the process of peer connection initialization
+
+        The L{ip} and L{port} parameters are optional, in case they are missing
+        a L{GetPeerAddress} message will be sent to request this information
+
+        @param ticket: ticket to be used throughout the process
+        @param username: username of the peer to connect to
+        @param typ: type of peer connection
+        @param ip: IP address of the peer (Default: None)
+        @param port: port to which to connect (Default: None)
+        @param messages: list of messages to be delivered when the connection
+            is successfully established (Default: None)
+        """
         messages = [] if messages is None else messages
         connection_request = ConnectionRequest(
             ticket=ticket,
@@ -262,9 +287,11 @@ class NetworkManager:
         if ip is None and port is None:
             # Request peer address if ip and port are not given
             self.send_server_messages(GetPeerAddress.create(username))
-
         else:
-            self._connect_to_peer(ticket, connection_request)
+            with self.cache_lock:
+                self._connect_to_peer(ticket, connection_request)
+
+        return connection_request
 
     def _connect_to_peer(self, ticket, connection_request):
         """Attempts to establish a connection to a peer"""
@@ -274,8 +301,7 @@ class NetworkManager:
             connection_type=connection_request.typ,
             listeners=[self, self.peer_listener, ]
         )
-        with self.cache_lock:
-            connection_request.connection = peer_connection
+        connection_request.connection = peer_connection
 
         if connection_request.is_requested_by_us:
             peer_connection.messages.put(
@@ -291,6 +317,13 @@ class NetworkManager:
             )
 
         peer_connection.connect()
+
+    # Transfer related
+    def on_transfer_ticket(self, ticket, connection: PeerConnection):
+        pass
+
+    def on_transfer_data(self, data, connection: PeerConnection):
+        pass
 
     # Server related
 

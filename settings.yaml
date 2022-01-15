@@ -3,7 +3,7 @@ network:
   server_hostname: server.slsknet.org
   server_port: 2416
   listening_port: 61000
-  use_upnp: true
+  use_upnp: false
   upnp_lease_duration: 0
   timeout:
     peer: 10
@@ -14,6 +14,10 @@ credentials:
   password: Test1234
 
 sharing:
+  download: H:\pyslsk-downloads
   directories:
     - H:\soulseek-downloads
     - H:\My Music
+
+debug:
+  search_for_parent: false

@@ -17,6 +17,12 @@ import upnp
 logger = logging.getLogger()
 
 
+DEFAULT_RECV_BYTES = 4
+"""Default amount of bytes to recv from the socket"""
+
+DEFAULT_RECV_BYTES_FILE = 128
+
+
 class PeerConnectionType:
     FILE = 'F'
     PEER = 'P'
@@ -39,6 +45,12 @@ class CloseReason(enum.Enum):
     WRITE_ERROR = 3
     TIMEOUT = 4
     EOF = 6
+
+
+class FileTransferState(enum.Enum):
+    AWAITING_INIT = 0
+    AWAITING_TICKET = 1
+    TRANSFERING = 2
 
 
 class Connection:
@@ -215,6 +227,7 @@ class PeerConnection(DataConnection):
         self.obfuscated = obfuscated
         self.connection_type = connection_type
         self.incoming = incoming
+        self.transfer_state = FileTransferState.AWAITING_INIT
 
     def connect(self):
         logger.info(f"open {self.hostname}:{self.port} : peer connection")
@@ -237,10 +250,35 @@ class PeerConnection(DataConnection):
         L{obfuscated} flag.
         """
         super().buffer(data)
+
+        # TODO: Check if every connection starts as a PEER connection type
+        if self.connection_type == PeerConnectionType.FILE:
+            if self.transfer_state != FileTransferState.AWAITING_INIT:
+                self.buffer_file_transfer()
+                return
+
         if self.obfuscated:
             self.buffer_obfuscated()
         else:
             self.buffer_unobfuscated()
+
+    def buffer_file_transfer(self):
+        if self.transfer_state == FileTransferState.AWAITING_TICKET:
+
+            # After peer initialization, we should just receive 4 bytes with the
+            # ticket number
+            if len(self._buffer) >= struct.calcsize('I'):
+                pos, ticket = messages.parse_int(0, self._buffer)
+                self._buffer = self._buffer[pos:]
+                for listener in self.listeners:
+                    listener.on_transfer_ticket(ticket, self)
+
+        elif self.transfer_state == FileTransferState.TRANSFERING:
+
+            data = self._buffer
+            self._buffer = bytes()
+            for listener in self.listeners:
+                listener.on_transfer_data(data, self)
 
     def buffer_unobfuscated(self):
         """Helper method for the unobfuscated buffer.

@@ -91,9 +91,8 @@ class SoulSeek:
         self.state.search_queries[ticket] = SearchQuery(ticket, query)
         return ticket
 
-    def download(self, search_result):
-        ticket = next(self.state.ticket_generator)
-        self.peer_manager.download(ticket, search_result)
+    def download(self, username: str, filename: str):
+        return self.peer_manager.download(username, filename)
 
     def accept_children(self):
         logger.info("Start accepting children")

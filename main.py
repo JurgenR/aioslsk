@@ -61,6 +61,48 @@ class SoulSeekCmd(cmd.Cmd):
         for idx, user_result in enumerate(query_obj.results):
             print(f"{idx} : {user_result!r}")
 
+    def do_rrresults(self, ticket):
+        ticket = int(ticket)
+
+        try:
+            query = self.client.state.search_queries[ticket]
+        except KeyError:
+            print(f"ticket {ticket} does not match any search queries")
+            return
+
+        result_list = []
+        for user_result in query.results:
+            for entry in user_result.results:
+                result_list.append((user_result.username, entry['filename']))
+
+        for index, (username, filename) in enumerate(result_list):
+            print(f"{index}: {username!r} - {filename!r}")
+
+    def do_download(self, info):
+        ticket, index = info.split()
+        ticket, index = int(ticket), int(index)
+
+        try:
+            query = self.client.state.search_queries[ticket]
+        except KeyError:
+            print(f"ticket {ticket} does not match any search queries")
+            return
+
+        result_list = []
+        for user_result in query.results:
+            for entry in user_result.results:
+                result_list.append((user_result.username, entry['filename']))
+
+        try:
+            result = result_list[index]
+        except IndexError:
+            print("could not find index {index}")
+            return
+
+        print(f"download {result[1]} from {result[0]}")
+        transfer = self.client.download(result[0], result[1])
+        print(f"download started : {transfer}")
+
     def do_connections(self, _):
         return
         # connections = self.network.get_connections()

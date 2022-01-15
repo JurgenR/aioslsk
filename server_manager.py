@@ -144,6 +144,10 @@ class ServerManager:
     def on_net_info(self, message):
         net_info_list = message.parse()
 
+        if not self.settings['debug']['search_for_parent']:
+            logger.debug(f"ignoring NetInfo message : searching for parent is disabled")
+            return
+
         for idx, (username, ip, port) in enumerate(net_info_list, 1):
             ticket = next(self.state.ticket_generator)
             logger.info(f"netinfo user {idx}: {username!r} : {ip}:{port} (ticket={ticket})")

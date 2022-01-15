@@ -87,6 +87,10 @@ def pack_int(value: int) -> bytes:
     return struct.pack('<I', value)
 
 
+def pack_int64(value: int) -> bytes:
+    return struct.pack('<Q', value)
+
+
 def pack_uchar(value: str) -> bytes:
     return struct.pack('<B', value)
 
@@ -890,7 +894,7 @@ class PeerSearchReply(PeerMessage):
     MESSAGE_ID = 0x09
 
     @classmethod
-    def create(self, username: str, ticket: int, results, slotfree: bool, avg_speed: int, queue_len: int):
+    def create(cls, username: str, ticket: int, results, slotfree: bool, avg_speed: int, queue_len: int):
         message_body = pack_string(username) + pack_int(ticket)
 
         message_body += pack_int(len(results))
@@ -994,9 +998,9 @@ class PeerTransferReply(PeerMessage):
     @classmethod
     def create(cls, ticket: int, allowed: bool, filesize: int=None, reason: str=None):
         message_body = pack_int(ticket) + pack_bool(allowed)
-        if allowed:
+        if filesize is not None:
             message_body += pack_int64(filesize)
-        else:
+        if reason is not None:
             message_body += pack_string(reason)
         return pack_message(cls.MESSAGE_ID, message_body)
 
@@ -1008,8 +1012,7 @@ class PeerTransferReply(PeerMessage):
         # 2. The filesize and reason are only optionally returned
         ticket = self.parse_int()
         allowed = self.parse_uchar()
-        # Check if any remaining bytes are left to be parsed
-        if self._pos == len(self.message):
+        if self.has_unparsed_bytes():
             return ticket, allowed, 0, None
         else:
             if allowed == 1:
@@ -1022,6 +1025,21 @@ class PeerTransferReply(PeerMessage):
 
 class PeerTransferQueue(PeerMessage):
     MESSAGE_ID = 0x2B
+
+    @classmethod
+    def create(cls, filename: str) -> bytes:
+        message_body = pack_string(filename)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        filename = self.parse_string()
+        return filename
+
+
+class PeerUploadFailed(PeerMessage):
+    MESSAGE_ID = 0x2E
 
     @classmethod
     def create(cls, filename: str) -> bytes:
