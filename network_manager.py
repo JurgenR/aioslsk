@@ -17,7 +17,6 @@ from connection import (
     ServerConnection,
 )
 from messages import (
-    Message,
     CannotConnect,
     ConnectToPeer,
     GetPeerAddress,
@@ -35,11 +34,13 @@ class ConnectionRequest:
     ticket: int
     username: str
     is_requested_by_us: bool
+    """Should be False if we received a ConnectToPeer message from another user"""
     ip: str = None
     port: int = 0
     typ: str = None
     connection: PeerConnection = None
-    messages: List[Message] = field(default_factory=lambda: [])
+    messages: List[bytes] = field(default_factory=lambda: [])
+    """List of messages to be delivered when connection is established"""
 
 
 class NetworkManager:
@@ -91,6 +92,9 @@ class NetworkManager:
             listening_connection.connect()
 
         self.network_loop.start()
+
+    def get_connections(self):
+        return self.network_loop.get_connections()
 
     def get_network_loops(self):
         return [self.network_loop, ]
@@ -239,25 +243,29 @@ class NetworkManager:
                 logger.warning(f"received PeerPierceFirewall with unknown ticket {ticket}")
                 return
 
-            connection.connection_type = request.typ
             self.peer_listener.create_peer(request.username, connection)
-            logger.debug(f"handled connection ticket {ticket}")
 
-            # I'm seeing connections that go from obfuscated to non-obfuscated
-            # for some reason but only for distributed connections
-            if connection.obfuscated and request.typ == PeerConnectionType.DISTRIBUTED:
+            connection.connection_type = request.typ
+            if connection.connection_type != PeerConnectionType.PEER:
+                # Distributed and file connection switch to unobfuscated after
+                # the initialization message
                 logger.debug(f"setting connection to unobfuscated : {connection}")
                 connection.obfuscated = False
+
+            if connection.connection_type == PeerConnectionType.FILE:
+                connection.transfer_state = FileTransferState.AWAITING_TICKET
+
+            logger.debug(f"handled connection ticket {ticket}")
 
             # We get here when we failed to connect, after which we sent a
             # ConnectToPeer. We probably still have some messages that were never
             # sent
             if request.is_requested_by_us:
-                for queued_message in request.messages:
-                    connection.messages.put(queued_message)
+                for message in request.messages:
+                    connection.messages.put(message)
 
     def init_peer_connection(self, ticket: int, username: str, typ, ip=None, port=None, messages=None) -> ConnectionRequest:
-        """Starts the process of peer connection initialization
+        """Starts the process of peer connection initialization.
 
         The L{ip} and L{port} parameters are optional, in case they are missing
         a L{GetPeerAddress} message will be sent to request this information
@@ -269,6 +277,8 @@ class NetworkManager:
         @param port: port to which to connect (Default: None)
         @param messages: list of messages to be delivered when the connection
             is successfully established (Default: None)
+
+        @return: created L{ConnectionRequest} object
         """
         messages = [] if messages is None else messages
         connection_request = ConnectionRequest(
@@ -343,7 +353,7 @@ class NetworkManager:
         elif message.MESSAGE_ID == ConnectToPeer.MESSAGE_ID:
             contents = message.parse()
             logger.info("ConnectToPeer message contents: {!r}".format(contents))
-            username, typ, ip, port, ticket, privileged, unknown, obfuscated_port = contents
+            username, typ, ip, port, ticket, privileged, _, obfuscated_port = contents
 
             connection_request = ConnectionRequest(
                 ticket=ticket,

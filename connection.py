@@ -16,11 +16,13 @@ import upnp
 
 logger = logging.getLogger()
 
+DEFAULT_PEER_TIMEOUT = 30
 
-DEFAULT_RECV_BYTES = 4
+
+DEFAULT_RECV_BUF_SIZE = 4
 """Default amount of bytes to recv from the socket"""
 
-DEFAULT_RECV_BYTES_FILE = 128
+TRANSFER_REVC_BUF_SIZE = 128
 
 
 class PeerConnectionType:
@@ -138,6 +140,7 @@ class DataConnection(Connection):
         self.last_interaction = 0
         self.bytes_received = 0
         self.bytes_sent = 0
+        self.recv_buf_size = DEFAULT_RECV_BUF_SIZE
 
     def buffer(self, data: bytes):
         self.bytes_received += len(data)
@@ -228,6 +231,7 @@ class PeerConnection(DataConnection):
         self.connection_type = connection_type
         self.incoming = incoming
         self.transfer_state = FileTransferState.AWAITING_INIT
+        self.timeout = DEFAULT_PEER_TIMEOUT
 
     def connect(self):
         logger.info(f"open {self.hostname}:{self.port} : peer connection")
@@ -434,7 +438,7 @@ class NetworkLoop(threading.Thread):
 
                         # Server socket or peer socket
                         try:
-                            recv_data = work_socket.recv(4)
+                            recv_data = work_socket.recv(connection.recv_buf_size)
                         except OSError as exc:
                             logger.exception(f"exception receiving data on connection {work_socket}")
                             # Only remove the peer connections?
@@ -493,7 +497,7 @@ class NetworkLoop(threading.Thread):
                         if connection.last_interaction == 0:
                             continue
 
-                        if connection.last_interaction + 30 < current_time:
+                        if connection.last_interaction + connection.timeout < current_time:
                             logger.warning(f"connection {connection.hostname}:{connection.port}: timeout reached")
                             connection.disconnect(reason=CloseReason.TIMEOUT)
                             continue

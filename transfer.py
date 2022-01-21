@@ -13,6 +13,7 @@ class TransferState(enum.Enum):
     DOWNLOADING = 2
     UPLOADING = 3
     COMPLETE = 4
+    FAILED = 5
 
 
 class Transfer:
@@ -22,14 +23,18 @@ class Transfer:
 
         self.username: str = username
         self.filename: str = filename
+        """filename of the remote file"""
         self.direction: TransferDirection = direction
 
         self.ticket: int = ticket
         self.filesize: int = None
+        """filesize in bytes"""
 
         self.target_path: str = None
         self.bytes_transfered: int = 0
+        """amount of bytes transfered"""
         self.bytes_written: int = 0
+        """amount of bytes written to file"""
         self.connection = None
         self._fileobj = None
 
@@ -40,6 +45,15 @@ class Transfer:
         return self.filesize == self.bytes_transfered
 
     def write(self, data: bytes) -> bool:
+        """Write data to the file object. A file object will be created if it
+        does not yet exist and will be closed when the transfer was complete.
+
+        This method updates the internal L{bytes_transfered} and
+        L{bytes_written} variables.
+
+        @return: a C{bool} indicating whether the transfer was complete or more
+            data is expected
+        """
         self.bytes_transfered += len(data)
         if self._fileobj is None:
             self._fileobj = open(self.target_path, 'wb')
@@ -67,6 +81,10 @@ class TransferManager:
 
     def __init__(self):
         self._transfers = []
+
+    @property
+    def transfers(self):
+        return self._transfers
 
     def add(self, transfer: Transfer):
         self._transfers.append(transfer)

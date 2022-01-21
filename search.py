@@ -1,31 +1,40 @@
-class SearchQuery:
-
-    def __init__(self, ticket, query):
-        """
-
-        @ivar ticket: Ticket number
-        @ivar query: The query string
-        @ivar results: List of L{SearchResult} objects
-        """
-        self.ticket: int = ticket
-        self.query: str = query
-        self.results = []
+from dataclasses import dataclass, field
+from typing import List, Tuple
 
 
+@dataclass
+class ReceivedSearch:
+    username: str
+    query: str
+    matched_files: int
+
+
+@dataclass
+class SearchItem:
+    filename: str
+    filesize: int
+    attributes: List[Tuple[int, int]]
+
+    @classmethod
+    def from_shared_item(cls, shared_item):
+        return cls()
+
+
+@dataclass
 class SearchResult:
+    ticket: int
+    username: str
 
-    def __init__(self, username, ticket, results, free_slots, avg_speed, queue_len, locked_results):
-        self.username = username
-        self.ticket = ticket
-        self.results = results
-        self.free_slots = free_slots
-        self.avg_speed = avg_speed
-        self.queue_len = queue_len
-        self.locked_results = locked_results
+    free_slots: int = 0
+    avg_speed: int = 0
+    queue_len: int = 0
 
-    def __repr__(self):
-        return (
-            f"SearchResult(username={self.username!r}, ticket={self.ticket}, results={self.results!r}, "
-            f"free_slots={self.free_slots}, avg_speed={self.avg_speed}, queue_len={self.queue_len}, "
-            f"locked_results={self.locked_results!r})"
-        )
+    shared_items: List[SearchItem] = field(default_factory=list)
+    locked_results: List[SearchItem] = field(default_factory=list)
+
+
+@dataclass
+class SearchQuery:
+    ticket: int
+    query: str
+    results: List[SearchResult] = field(default_factory=list)

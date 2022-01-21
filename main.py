@@ -37,31 +37,11 @@ class SoulSeekCmd(cmd.Cmd):
         idx = 1
         for user_result in query_obj.results:
             print(f"Results for user : {user_result.username}")
-            for result in user_result.results:
-                print(f"\t{idx}\t{result['filename']}\t{result['extension']}\t{result['filesize']}")
+            for shared_item in user_result.shared_items:
+                print(f"\t{idx}\t{shared_item['filename']}\t{shared_item['extension']}\t{shared_item['filesize']}")
                 idx += 1
 
-    def do_rresults(self, query):
-        # If query is empty list all searches performed
-        if not query:
-            for ticket, search_query in self.client.state.search_queries.items():
-                print(f"{ticket}\t{search_query.query}\t{len(search_query.results)}")
-            return
-
-        query_obj = None
-        for ticket, search_query in self.client.state.search_queries.items():
-            if search_query.query == query:
-                query_obj = search_query
-                break
-        else:
-            print(f"Couldn't find results for query : {query}")
-            return
-
-        # Print results
-        for idx, user_result in enumerate(query_obj.results):
-            print(f"{idx} : {user_result!r}")
-
-    def do_rrresults(self, ticket):
+    def do_res(self, ticket):
         ticket = int(ticket)
 
         try:
@@ -72,8 +52,8 @@ class SoulSeekCmd(cmd.Cmd):
 
         result_list = []
         for user_result in query.results:
-            for entry in user_result.results:
-                result_list.append((user_result.username, entry['filename']))
+            for shared_item in user_result.shared_items:
+                result_list.append((user_result.username, shared_item['filename']))
 
         for index, (username, filename) in enumerate(result_list):
             print(f"{index}: {username!r} - {filename!r}")
@@ -90,8 +70,8 @@ class SoulSeekCmd(cmd.Cmd):
 
         result_list = []
         for user_result in query.results:
-            for entry in user_result.results:
-                result_list.append((user_result.username, entry['filename']))
+            for shared_item in user_result.shared_items:
+                result_list.append((user_result.username, shared_item['filename']))
 
         try:
             result = result_list[index]

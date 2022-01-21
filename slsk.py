@@ -3,10 +3,6 @@ import logging
 import threading
 import time
 
-from connection import (
-    PeerConnection,
-    PeerConnectionType,
-)
 from filemanager import FileManager
 from network_manager import NetworkManager
 import messages
@@ -15,6 +11,7 @@ from server_manager import ServerManager
 from scheduler import Job, Scheduler
 from state import State
 from search import SearchQuery
+from transfer import TransferManager
 
 
 logger = logging.getLogger()
@@ -33,6 +30,8 @@ class SoulSeek:
 
         self.state.file_manager = FileManager(settings['sharing'])
 
+        self.transfer_manager = TransferManager()
+
         self.network_manager = NetworkManager(
             settings,
             self._stop_event,
@@ -45,6 +44,7 @@ class SoulSeek:
         self.peer_manager = PeerManager(
             self.state,
             settings,
+            self.transfer_manager,
             self.network_manager
         )
         self.server_manager = ServerManager(
@@ -68,7 +68,13 @@ class SoulSeek:
                 logger.warning(f"thread is still alive after 60s : {thread!r}")
 
     def get_connections(self):
-        return []
+        return self.network_manager.get_connections()
+
+    def get_transfers(self):
+        return self.transfer_manager.transfers
+
+    def get_search_results_by_ticket(self, ticket):
+        return self.state.search_queries[ticket]
 
     def login(self):
         """Perform a login request with the username and password found in
@@ -87,8 +93,9 @@ class SoulSeek:
         logger.info(f"Starting search for query: {query}")
         ticket = next(self.state.ticket_generator)
         self.network_manager.send_server_messages(
-            messages.FileSearch.create(ticket, query))
-        self.state.search_queries[ticket] = SearchQuery(ticket, query)
+            messages.FileSearch.create(ticket, query)
+        )
+        self.state.search_queries[ticket] = SearchQuery(ticket=ticket, query=query)
         return ticket
 
     def download(self, username: str, filename: str):

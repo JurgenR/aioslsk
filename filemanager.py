@@ -22,14 +22,11 @@ _LOSSLESS_FORMATS = [
 SharedItem = namedtuple('SharedItem', ['root', 'subdir', 'filename'])
 
 
-def convert_to_result(shared_item):
-    file_path = os.path.join(shared_item.root, shared_item.subdir, shared_item.filename)
-    file_size = os.path.getsize(file_path)
-    file_ext = os.path.splitext(shared_item.filename)[-1]
-
+def extract_attributes(filepath: str):
+    """Attempts to extract attributes from the file at L{filepath}"""
     attributes = []
     try:
-        mutagen_file = mutagen.File(file_path)
+        mutagen_file = mutagen.File(filepath)
         if mutagen_file is not None:
             if mutagen_file.__class__.__name__ in _COMPRESSED_FORMATS:
                 attributes = [
@@ -52,7 +49,15 @@ def convert_to_result(shared_item):
                 ]
 
     except mutagen.MutagenError:
-        logger.exception(f"failed retrieve audio file metadata path={file_path!r}")
+        logger.exception(f"failed retrieve audio file metadata path={filepath!r}")
+
+    return attributes
+
+def convert_to_result(shared_item):
+    file_path = os.path.join(shared_item.root, shared_item.subdir, shared_item.filename)
+    file_size = os.path.getsize(file_path)
+    file_ext = os.path.splitext(shared_item.filename)[-1]
+    attributes = extract_attributes(file_path)
 
     return {
         'filename': file_path,
@@ -82,7 +87,7 @@ class FileManager:
         shared_items = []
         for shared_dir in self.settings['directories']:
             shared_dir_abs = os.path.abspath(shared_dir)
-            for directory, subdirs, files in os.walk(shared_dir):
+            for directory, _, files in os.walk(shared_dir):
                 subdir = os.path.relpath(directory, shared_dir_abs)
                 for filename in files:
                     shared_items.append(SharedItem(shared_dir_abs, subdir, filename))
