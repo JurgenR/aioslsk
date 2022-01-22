@@ -1,4 +1,5 @@
 import enum
+import time
 
 
 class TransferDirection(enum.Enum):
@@ -23,23 +24,58 @@ class Transfer:
 
         self.username: str = username
         self.filename: str = filename
-        """filename of the remote file"""
+        """Filename of the remote file"""
         self.direction: TransferDirection = direction
 
         self.ticket: int = ticket
         self.filesize: int = None
-        """filesize in bytes"""
+        """Filesize in bytes"""
 
         self.target_path: str = None
         self.bytes_transfered: int = 0
-        """amount of bytes transfered"""
+        """Amount of bytes transfered"""
         self.bytes_written: int = 0
-        """amount of bytes written to file"""
+        """Amount of bytes written to file"""
         self.connection = None
         self._fileobj = None
 
+        self.transfer_start_time: float = None
+        """Time at which the transfer was started. This is the time the transfer
+        entered the download or upload state
+        """
+        self.transfer_complete_time: float = None
+        """Time at which the transfer was completed. This is the time the
+        transfer entered the complete state.
+        """
+
     def set_state(self, state: TransferState):
+        if state == self.state:
+            return
+
+        if state in (TransferState.DOWNLOADING, TransferState.UPLOADING):
+            self.transfer_start_time = time.time()
+        elif state == TransferState.COMPLETE:
+            self.transfer_complete_time = time.time()
         self.state = state
+
+    def get_speed(self) -> float:
+        """Retrieve the speed of the transfer
+
+        @return: Zero if the transfer has not yet begun. The current speed if
+            the transfer is ongoing. The transfer speed if the transfer was
+            complete. Bytes per second
+        """
+        if self.transfer_start_time is None:
+            return 0.0
+
+        if self.transfer_complete_time is None:
+            # Transfer in progress
+            end_time = time.time()
+        else:
+            end_time = self.transfer_complete_time
+        transfer_duration = end_time - self.transfer_start_time
+
+        return self.bytes_transfered / transfer_duration
 
     def is_complete(self) -> bool:
         return self.filesize == self.bytes_transfered
@@ -85,6 +121,9 @@ class TransferManager:
     @property
     def transfers(self):
         return self._transfers
+
+    def has_slots_free(self):
+        return True
 
     def add(self, transfer: Transfer):
         self._transfers.append(transfer)

@@ -1,6 +1,7 @@
 import functools
 import hashlib
 import logging
+from pydoc import classname
 import socket
 import struct
 from typing import Callable
@@ -40,6 +41,10 @@ def parse_int64(pos: int, data) -> int:
 
 def parse_uchar(pos: int, data) -> int:
     return parse_basic(pos, data, '<B')
+
+
+def parse_bool(pos: int, data) -> bool:
+    return parse_basic(pos, data, '<?')
 
 
 def parse_string(pos: int, data) -> str:
@@ -106,7 +111,7 @@ def pack_string(value: str) -> bytes:
 
 
 def pack_bool(value: bool) -> bytes:
-    return struct.pack('>?', value)
+    return struct.pack('<?', value)
 
 
 def pack_ip(value: str) -> bytes:
@@ -177,6 +182,10 @@ class Message:
 
     def parse_uchar(self):
         self._pos, value = parse_uchar(self._pos, self.message)
+        return value
+
+    def parse_bool(self):
+        self._pos, value = parse_bool(self._pos, self.message)
         return value
 
     def parse_ip(self):
@@ -1051,6 +1060,42 @@ class PeerUploadFailed(PeerMessage):
         super().parse()
         filename = self.parse_string()
         return filename
+
+
+class PeerUserInfoRequest(PeerMessage):
+    MESSAGE_ID = 0x0F
+
+    @classmethod
+    def create(cls) -> bytes:
+        return pack_message(cls.MESSAGE_ID, bytes())
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        return None
+
+
+class PeerUserInfoReply(PeerMessage):
+    MESSAGE_ID = 0x10
+
+    @classmethod
+    def create(cls) -> bytes:
+        return pack_message(cls.MESSAGE_ID)
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        description = self.parse_string()
+        has_picture = self.parse_bool()
+        if has_picture:
+            picture = self.parse_string()
+        else:
+            picture = None
+        total_uploads = self.parse_int()
+        queue_size = self.parse_int()
+        has_slots_free = self.parse_bool()
+        return description, picture, total_uploads, queue_size, has_slots_free
+
 
 
 def parse_distributed_message(message):

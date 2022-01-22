@@ -24,6 +24,7 @@ class JobMeta:
 
 
 class Scheduler(threading.Thread):
+    """Class for scheduling events to run at intervals"""
 
     _INTERVAL = 0.5
 

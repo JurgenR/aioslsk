@@ -1,9 +1,11 @@
 from dataclasses import dataclass
 import enum
 import logging
+from typing import List
 
-from connection import PeerConnection, PeerConnectionType, ConnectionState
+from connection import PeerConnectionType, ConnectionState
 import messages
+from network_manager import NetworkManager
 from scheduler import Job
 from state import State
 
@@ -31,10 +33,10 @@ class User:
 
 class ServerManager:
 
-    def __init__(self, state: State, settings, network_manager):
-        self.state = state
+    def __init__(self, state: State, settings, network_manager: NetworkManager):
+        self.state: State = state
         self.settings = settings
-        self.network_manager = network_manager
+        self.network_manager: NetworkManager = network_manager
         self.network_manager.server_listener = self
 
         self._ping_job = Job(5 * 60, self.send_ping)
@@ -53,9 +55,16 @@ class ServerManager:
             messages.GetPeerAddress.MESSAGE_ID: self.on_get_peer_address,
             messages.CannotConnect.MESSAGE_ID: self.on_cannot_connect,
         }
+        self.users: List[User] = []
 
     def send_ping(self):
         self.network_manager.send_server_messages(messages.Ping.create())
+
+    def get_user(self, name: str):
+        for user in self.users:
+            if user.name == name:
+                return user
+        raise LookupError("user with name {name} not found in list of users")
 
     def on_server_message(self, message, connection):
         """Method called upon receiving a message from the server socket
@@ -135,11 +144,17 @@ class ServerManager:
                 directories=directories,
                 country=country
             )
+            try:
+                user = self.get_user(name)
+            except LookupError:
+                self.users.append(user)
+            else:
+                self.users.pop(user)
+                self.users.append(user)
 
     def on_connect_to_peer(self, message):
         contents = message.parse()
         logger.info("ConnectToPeer message contents: {!r}".format(contents))
-        username, typ, ip, port, ticket, privileged, unknown, obfuscated_port = contents
 
     def on_net_info(self, message):
         net_info_list = message.parse()
