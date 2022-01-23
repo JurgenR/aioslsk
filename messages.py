@@ -1,7 +1,9 @@
+from email import message
 import functools
 import hashlib
 import logging
 from pydoc import classname
+from pyexpat.errors import messages
 import socket
 import struct
 from typing import Callable
@@ -229,16 +231,16 @@ class Login(Message):
     @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
-        result = self.parse_uchar()
-        if result == 1:
+        success = self.parse_bool()
+        if success:
             greet = self.parse_string()
             ip = self.parse_ip()
             md5hash = self.parse_string()
             unknown = self.parse_uchar()
-            return result, greet, ip, md5hash, unknown
+            return success, greet, ip, md5hash, unknown
         else:
             reason = self.parse_string()
-            return result, reason
+            return success, reason
 
     def parse_server(self):
         super().parse()
@@ -606,6 +608,15 @@ class WishlistInterval(Message):
         return self.parse_int()
 
 
+class SendUploadSpeed(Message):
+    MESSAGE_ID = 0x79
+
+    @classmethod
+    def create(cls, speed: int) -> bytes:
+        message_body = pack_int(speed)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+
 class PrivilegeNotification(Message):
     MESSAGE_ID = 0x7C
 
@@ -903,7 +914,7 @@ class PeerSearchReply(PeerMessage):
     MESSAGE_ID = 0x09
 
     @classmethod
-    def create(cls, username: str, ticket: int, results, slotfree: bool, avg_speed: int, queue_len: int):
+    def create(cls, username: str, ticket: int, results, has_slots_free: bool, avg_speed: int, queue_size: int):
         message_body = pack_string(username) + pack_int(ticket)
 
         message_body += pack_int(len(results))
@@ -924,9 +935,9 @@ class PeerSearchReply(PeerMessage):
         message_body += results_body
 
         message_body += (
-            pack_bool(slotfree) +
+            pack_bool(has_slots_free) +
             pack_int(avg_speed) +
-            pack_int(queue_len)
+            pack_int(queue_size)
         )
 
         # Locked results not implemented
@@ -969,14 +980,49 @@ class PeerSearchReply(PeerMessage):
         username = message.parse_string()
         token = message.parse_int()
         results = message.parse_result_list()
-        free_slots = message.parse_uchar()
+        has_free_slots = message.parse_bool()
         avg_speed = message.parse_int()
-        queue_len = message.parse_int64()
+        queue_size = message.parse_int64()
         if len(message.message[message._pos:]) > 0:
             locked_results = message.parse_result_list()
         else:
             locked_results = []
-        return username, token, results, free_slots, avg_speed, queue_len, locked_results
+        return username, token, results, has_free_slots, avg_speed, queue_size, locked_results
+
+
+class PeerUserInfoRequest(PeerMessage):
+    MESSAGE_ID = 0x0F
+
+    @classmethod
+    def create(cls) -> bytes:
+        return pack_message(cls.MESSAGE_ID, bytes())
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        return None
+
+
+class PeerUserInfoReply(PeerMessage):
+    MESSAGE_ID = 0x10
+
+    @classmethod
+    def create(cls) -> bytes:
+        return pack_message(cls.MESSAGE_ID)
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        description = self.parse_string()
+        has_picture = self.parse_bool()
+        if has_picture:
+            picture = self.parse_string()
+        else:
+            picture = None
+        total_uploads = self.parse_int()
+        queue_size = self.parse_int()
+        has_slots_free = self.parse_bool()
+        return description, picture, total_uploads, queue_size, has_slots_free
 
 
 class PeerTransferRequest(PeerMessage):
@@ -1020,11 +1066,11 @@ class PeerTransferReply(PeerMessage):
         # 1. Ticket should be an int and not a string
         # 2. The filesize and reason are only optionally returned
         ticket = self.parse_int()
-        allowed = self.parse_uchar()
+        allowed = self.parse_bool()
         if self.has_unparsed_bytes():
             return ticket, allowed, 0, None
         else:
-            if allowed == 1:
+            if allowed:
                 filesize = self.parse_int64()
                 return ticket, allowed, filesize, None
             else:
@@ -1047,6 +1093,22 @@ class PeerTransferQueue(PeerMessage):
         return filename
 
 
+class PeerPlaceInQueueReply(PeerMessage):
+    MESSAGE_ID = 0x2C
+
+    @classmethod
+    def create(cls, filename: str, place: int) -> bytes:
+        message_body = pack_string(filename) + pack_int(place)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        filename = self.parse_string()
+        place = self.parse_int()
+        return filename, place
+
+
 class PeerUploadFailed(PeerMessage):
     MESSAGE_ID = 0x2E
 
@@ -1062,40 +1124,19 @@ class PeerUploadFailed(PeerMessage):
         return filename
 
 
-class PeerUserInfoRequest(PeerMessage):
-    MESSAGE_ID = 0x0F
+class PeerPlaceInQueueRequest(PeerMessage):
+    MESSAGE_ID = 0x33
 
     @classmethod
-    def create(cls) -> bytes:
-        return pack_message(cls.MESSAGE_ID, bytes())
+    def create(cls, filename: str) -> bytes:
+        message_body = pack_string(filename)
+        return pack_message(cls.MESSAGE_ID, message_body)
 
     @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
-        return None
-
-
-class PeerUserInfoReply(PeerMessage):
-    MESSAGE_ID = 0x10
-
-    @classmethod
-    def create(cls) -> bytes:
-        return pack_message(cls.MESSAGE_ID)
-
-    @warn_on_unparsed_bytes
-    def parse(self):
-        super().parse()
-        description = self.parse_string()
-        has_picture = self.parse_bool()
-        if has_picture:
-            picture = self.parse_string()
-        else:
-            picture = None
-        total_uploads = self.parse_int()
-        queue_size = self.parse_int()
-        has_slots_free = self.parse_bool()
-        return description, picture, total_uploads, queue_size, has_slots_free
-
+        filename = self.parse_string()
+        return filename
 
 
 def parse_distributed_message(message):

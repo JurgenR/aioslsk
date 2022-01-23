@@ -25,9 +25,9 @@ class SearchResult:
     ticket: int
     username: str
 
-    free_slots: int = 0
+    has_free_slots: bool = False
     avg_speed: int = 0
-    queue_len: int = 0
+    queue_size: int = 0
 
     shared_items: List[SearchItem] = field(default_factory=list)
     locked_results: List[SearchItem] = field(default_factory=list)

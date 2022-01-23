@@ -8,10 +8,8 @@ import struct
 import threading
 import time
 
-from exceptions import PySlskException
 import obfuscation
 import messages
-import upnp
 
 
 logger = logging.getLogger()
@@ -22,7 +20,8 @@ DEFAULT_PEER_TIMEOUT = 30
 DEFAULT_RECV_BUF_SIZE = 4
 """Default amount of bytes to recv from the socket"""
 
-TRANSFER_REVC_BUF_SIZE = 128
+TRANSFER_RECV_BUF_SIZE = 1024 * 8
+"""Default amount of bytes to recv during file transfer"""
 
 
 class PeerConnectionType:
@@ -51,8 +50,12 @@ class CloseReason(enum.Enum):
 
 class FileTransferState(enum.Enum):
     AWAITING_INIT = 0
+    """Connection is open, but no init message has been received yet"""
     AWAITING_TICKET = 1
+    """Init message was received, but the ticket has not yet been received"""
     TRANSFERING = 2
+    """Offset is sent (currently unconfirmed) and we are clear or receiving data
+    """
 
 
 class Connection:
@@ -232,6 +235,11 @@ class PeerConnection(DataConnection):
         self.incoming = incoming
         self.transfer_state = FileTransferState.AWAITING_INIT
         self.timeout = DEFAULT_PEER_TIMEOUT
+
+    def set_file_transfer_state(self, state: FileTransferState):
+        if state == FileTransferState.TRANSFERING:
+            self.recv_buf_size = TRANSFER_RECV_BUF_SIZE
+        self.transfer_state = state
 
     def connect(self):
         logger.info(f"open {self.hostname}:{self.port} : peer connection")

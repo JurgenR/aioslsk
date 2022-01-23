@@ -26,12 +26,14 @@ class Transfer:
         self.filename: str = filename
         """Filename of the remote file"""
         self.direction: TransferDirection = direction
+        self.place_in_queue: int = None
 
         self.ticket: int = ticket
         self.filesize: int = None
         """Filesize in bytes"""
 
         self.target_path: str = None
+        """Path to download the file to or upload the file from"""
         self.bytes_transfered: int = 0
         """Amount of bytes transfered"""
         self.bytes_written: int = 0
@@ -57,6 +59,10 @@ class Transfer:
         elif state == TransferState.COMPLETE:
             self.transfer_complete_time = time.time()
         self.state = state
+
+    def queue(self, place_in_queue=None):
+        self.set_state(TransferState.QUEUED)
+        self.place_in_queue = place_in_queue
 
     def get_speed(self) -> float:
         """Retrieve the speed of the transfer
@@ -115,15 +121,34 @@ class TransferQueue:
 
 class TransferManager:
 
-    def __init__(self):
+    def __init__(self, settings):
+        self.settings = settings
         self._transfers = []
 
     @property
     def transfers(self):
         return self._transfers
 
-    def has_slots_free(self):
+    def has_slots_free(self) -> bool:
         return True
+
+    def get_queue_size(self) -> int:
+        return len([
+            transfer for transfer in self._transfers
+            if transfer.state == TransferState.QUEUED
+        ])
+
+    def get_download_speed(self) -> float:
+        return sum([
+            transfer.get_speed() for transfer in self._transfers
+            if transfer.state == TransferState.DOWNLOADING
+        ])
+
+    def get_upload_speed(self) -> float:
+        return sum([
+            transfer.get_speed() for transfer in self._transfers
+            if transfer.state == TransferState.UPLOADING
+        ])
 
     def add(self, transfer: Transfer):
         self._transfers.append(transfer)

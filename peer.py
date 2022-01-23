@@ -58,6 +58,8 @@ class PeerManager:
         self.peer_message_map = {
             messages.PeerInit.MESSAGE_ID: self.on_peer_init,
             messages.PeerPierceFirewall.MESSAGE_ID: self.on_peer_pierce_firewall,
+            messages.PeerPlaceInQueueReply.MESSAGE_ID: self.on_peer_place_in_queue_reply,
+            messages.PeerPlaceInQueueRequest.MESSAGE_ID: self.on_peer_place_in_queue_request,
             messages.PeerSearchReply.MESSAGE_ID: self.on_peer_search_reply,
             messages.PeerTransferRequest.MESSAGE_ID: self.on_peer_transfer_request,
             messages.PeerUploadFailed.MESSAGE_ID: self.on_peer_upload_failed,
@@ -218,6 +220,14 @@ class PeerManager:
         contents = message.parse()
         logger.info(f"PeerTransferReply: {contents}")
 
+    def on_peer_place_in_queue_request(self, message, connection: PeerConnection):
+        contents = message.parse()
+        logger.info(f"{message.__class__.__name__}: {contents}")
+
+    def on_peer_place_in_queue_reply(self, message, connection: PeerConnection):
+        contents = message.parse()
+        logger.info(f"{message.__class__.__name__}: {contents}")
+
     def on_peer_upload_failed(self, message, connection: PeerConnection):
         filename = message.parse()
         logger.info(f"PeerUploadFailed: upload failed for {filename}")
@@ -242,8 +252,7 @@ class PeerManager:
 
         # We can only know the connection when we get the ticket
         transfer.connection = connection
-        connection.transfer_state = FileTransferState.TRANSFERING
-        connection.recv_buf_size = 8192
+        connection.set_file_transfer_state(FileTransferState.TRANSFERING)
         # Send the offset (for now always 0)
         connection.messages.put(messages.pack_int64(0))
 
@@ -299,14 +308,14 @@ class PeerManager:
 
     def on_peer_search_reply(self, message, connection: PeerConnection):
         contents = message.parse()
-        username, ticket, shared_items, free_slots, avg_speed, queue_len, locked_results = contents
+        username, ticket, shared_items, has_free_slots, avg_speed, queue_size, locked_results = contents
 
         search_result = SearchResult(
             ticket=ticket,
             username=username,
-            free_slots=free_slots,
+            has_free_slots=has_free_slots,
             avg_speed=avg_speed,
-            queue_len=queue_len,
+            queue_size=queue_size,
             shared_items=shared_items,
             locked_results=locked_results
         )

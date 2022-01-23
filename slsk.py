@@ -30,7 +30,7 @@ class SoulSeek:
 
         self.state.file_manager = FileManager(settings['sharing'])
 
-        self.transfer_manager = TransferManager()
+        self.transfer_manager = TransferManager(settings)
 
         self.network_manager = NetworkManager(
             settings,

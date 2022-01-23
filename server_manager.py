@@ -82,15 +82,15 @@ class ServerManager:
         @param message: L{Message} object
         """
         login_values = message.parse()
-        # The first value should be 0 or 1 depending on failure or succes
-        if login_values[0] == 1:
+        # First value indicates success
+        if login_values[0]:
             self.state.logged_in = True
-            result, greet, ip, md5hash, unknown = login_values
+            success, greet, ip, md5hash, unknown = login_values
             logger.info(
                 f"Successfully logged on. Greeting message: {greet!r}. Your IP: {ip!r}")
         else:
-            result, reason = login_values
-            logger.error("Failed to login, reason: {reason!r}")
+            success, reason = login_values
+            logger.error(f"Failed to login, reason: {reason!r}")
 
         # Make setup calls
         dir_count, file_count = self.state.file_manager.get_stats()
@@ -184,7 +184,6 @@ class ServerManager:
         logger.debug(f"got CannotConnect: {ticket} , {username}")
 
     def on_unhandled_message(self, message):
-        """Method called for messages that have no handler"""
         logger.warning(f"don't know how to handle message {message!r}")
 
     # Connection state listeners
