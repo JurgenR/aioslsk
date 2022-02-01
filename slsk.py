@@ -28,7 +28,7 @@ class SoulSeek:
         self.state = State()
         self.state.scheduler = Scheduler(self._stop_event)
 
-        self.state.file_manager = FileManager(settings['sharing'])
+        self.file_manager = FileManager(settings['sharing'])
 
         self.transfer_manager = TransferManager(settings)
 
@@ -44,12 +44,14 @@ class SoulSeek:
         self.peer_manager = PeerManager(
             self.state,
             settings,
+            self.file_manager,
             self.transfer_manager,
             self.network_manager
         )
         self.server_manager = ServerManager(
             self.state,
             settings,
+            self.file_manager,
             self.network_manager
         )
 
@@ -65,7 +67,7 @@ class SoulSeek:
             logger.debug(f"wait for thread {thread!r} to finish")
             thread.join(timeout=30)
             if thread.is_alive():
-                logger.warning(f"thread is still alive after 60s : {thread!r}")
+                logger.warning(f"thread is still alive after 30s : {thread!r}")
 
     def get_connections(self):
         return self.network_manager.get_connections()

@@ -1,20 +1,22 @@
-import enum
+from enum import auto, Enum
 import time
 
+from typing import List
 
-class TransferDirection(enum.Enum):
+
+class TransferDirection(Enum):
     UPLOAD = 0
     DOWNLOAD = 1
 
 
-class TransferState(enum.Enum):
-    UNINITIALIZED = -1
-    REQUESTED = 0
-    QUEUED = 1
-    DOWNLOADING = 2
-    UPLOADING = 3
-    COMPLETE = 4
-    FAILED = 5
+class TransferState(Enum):
+    UNINITIALIZED = auto()
+    REQUESTED = auto()
+    QUEUED = auto()
+    DOWNLOADING = auto()
+    UPLOADING = auto()
+    COMPLETE = auto()
+    FAILED = auto()
 
 
 class Transfer:
@@ -38,6 +40,7 @@ class Transfer:
         """Amount of bytes transfered"""
         self.bytes_written: int = 0
         """Amount of bytes written to file"""
+        self.bytes_read: int = 0
         self.connection = None
         self._fileobj = None
 
@@ -71,11 +74,12 @@ class Transfer:
             the transfer is ongoing. The transfer speed if the transfer was
             complete. Bytes per second
         """
+        # Transfer hasn't begun
         if self.transfer_start_time is None:
             return 0.0
 
+        # Transfer in progress or complete
         if self.transfer_complete_time is None:
-            # Transfer in progress
             end_time = time.time()
         else:
             end_time = self.transfer_complete_time
@@ -85,6 +89,10 @@ class Transfer:
 
     def is_complete(self) -> bool:
         return self.filesize == self.bytes_transfered
+
+    def read(self) -> bytes:
+        if self._fileobj is None:
+            self._fileobj = open(self.filename, 'rb')
 
     def write(self, data: bytes) -> bool:
         """Write data to the file object. A file object will be created if it
@@ -138,17 +146,30 @@ class TransferManager:
             if transfer.state == TransferState.QUEUED
         ])
 
+    def get_downloading(self) -> List[Transfer]:
+        return [
+            transfer for transfer in self._transfers
+            if transfer.state == TransferState.DOWNLOADING
+        ]
+
+    def get_uploading(self) -> List[Transfer]:
+        return [
+            transfer for transfer in self._transfers
+            if transfer.state == TransferState.UPLOADING
+        ]
+
     def get_download_speed(self) -> float:
         return sum([
-            transfer.get_speed() for transfer in self._transfers
-            if transfer.state == TransferState.DOWNLOADING
+            transfer.get_speed() for transfer in self.get_downloading()
         ])
 
     def get_upload_speed(self) -> float:
         return sum([
-            transfer.get_speed() for transfer in self._transfers
-            if transfer.state == TransferState.UPLOADING
+            transfer.get_speed() for transfer in self.get_uploading()
         ])
+
+    def queue_transfer(self, transfer: Transfer):
+        self.add(transfer)
 
     def add(self, transfer: Transfer):
         self._transfers.append(transfer)

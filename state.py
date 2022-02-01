@@ -33,6 +33,5 @@ class State:
     received_searches: Deque['ReceivedSearch'] = field(default_factory=lambda: deque(list(), 500))
 
     search_queries: Dict[int, 'SearchQuery'] = field(default_factory=dict)
-    transfers: List['Transfer'] = field(default_factory=list)
 
     ticket_generator = ticket_generator()

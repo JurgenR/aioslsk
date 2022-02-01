@@ -1,3 +1,4 @@
+from functools import partial
 import logging
 from typing import List
 
@@ -5,10 +6,28 @@ from connection import (
     PeerConnection,
     PeerConnectionType,
     ConnectionState,
-    FileTransferState
+    PeerConnectionState
 )
-from filemanager import convert_to_results
-import messages
+from filemanager import convert_to_results, FileManager
+from listeners import on_message
+from messages import (
+    pack_int,
+    pack_int64,
+    BranchLevel,
+    BranchRoot,
+    HaveNoParents,
+    DistributedBranchLevel,
+    DistributedBranchRoot,
+    DistributedSearchRequest,
+    DistributedServerSearchRequest,
+    PeerPlaceInQueueReply,
+    PeerPlaceInQueueRequest,
+    PeerSearchReply,
+    PeerTransferReply,
+    PeerTransferRequest,
+    PeerTransferQueue,
+    PeerUploadFailed,
+)
 from network_manager import NetworkManager
 from search import ReceivedSearch, SearchResult
 from state import Parent, State
@@ -46,34 +65,18 @@ class Peer:
 
 class PeerManager:
 
-    def __init__(self, state: State, settings, transfer_manager: TransferManager, network_manager: NetworkManager):
+    def __init__(self, state: State, settings, file_manager: FileManager, transfer_manager: TransferManager, network_manager: NetworkManager):
         self.state: State = state
         self.settings = settings
+        self.file_manager: FileManager = file_manager
+        self.transfer_manager: TransferManager = transfer_manager
         self.network_manager: NetworkManager = network_manager
         self.network_manager.peer_listener = self
-        self.transfer_manager = transfer_manager
 
         self.peers = {}
 
-        self.peer_message_map = {
-            messages.PeerInit.MESSAGE_ID: self.on_peer_init,
-            messages.PeerPierceFirewall.MESSAGE_ID: self.on_peer_pierce_firewall,
-            messages.PeerPlaceInQueueReply.MESSAGE_ID: self.on_peer_place_in_queue_reply,
-            messages.PeerPlaceInQueueRequest.MESSAGE_ID: self.on_peer_place_in_queue_request,
-            messages.PeerSearchReply.MESSAGE_ID: self.on_peer_search_reply,
-            messages.PeerTransferRequest.MESSAGE_ID: self.on_peer_transfer_request,
-            messages.PeerUploadFailed.MESSAGE_ID: self.on_peer_upload_failed,
-        }
-        self.distributed_message_map = {
-            messages.PeerInit.MESSAGE_ID: self.on_peer_init,
-            messages.PeerPierceFirewall.MESSAGE_ID: self.on_peer_pierce_firewall,
-            messages.DistributedBranchLevel.MESSAGE_ID: self.on_distributed_branch_level,
-            messages.DistributedBranchRoot.MESSAGE_ID: self.on_distributed_branch_root,
-            messages.DistributedSearchRequest.MESSAGE_ID: self.on_distributed_search_request,
-            messages.DistributedServerSearchRequest.MESSAGE_ID: self.on_distributed_server_search_request
-        }
-
     def download(self, username: str, filename: str) -> Transfer:
+        """Initiate downloading of a file"""
         logger.info(f"initiating download from {username} : {filename}")
         transfer = Transfer(
             username=username,
@@ -90,7 +93,7 @@ class PeerManager:
             username,
             PeerConnectionType.PEER,
             messages=[
-                messages.PeerTransferQueue.create(filename)
+                PeerTransferQueue.create(filename)
             ]
         )
         return transfer
@@ -143,9 +146,9 @@ class PeerManager:
         # The original Windows client sends out the child depth (=0) and the
         # ParentIP
         self.network_manager.send_server_messages(
-            messages.BranchLevel.create(parent.branch_level),
-            messages.BranchRoot.create(parent.branch_root),
-            messages.HaveNoParents.create(False),
+            BranchLevel.create(parent.branch_level),
+            BranchRoot.create(parent.branch_root),
+            HaveNoParents.create(False),
         )
 
         # Remove all other distributed connections
@@ -187,16 +190,53 @@ class PeerManager:
         self.state.parent = None
 
         self.network_manager.send_server_messages(
-            messages.BranchLevel.create(0),
-            messages.BranchRoot.create(self.settings['credentials']['username']),
-            messages.HaveNoParents.create(True)
+            BranchLevel.create(0),
+            BranchRoot.create(self.settings['credentials']['username']),
+            HaveNoParents.create(True)
         )
 
     # Transfer
 
+    @on_message(PeerTransferQueue)
+    def on_peer_transfer_queue(self, message, connection: PeerConnection):
+        """Initial message received in the transfer process. The peer is
+        requesting to download a file from us here. The proper response is to
+        ignore it.
+        """
+        filename = message.parse()
+        logger.info(f"PeerTransferRequest: {filename}")
+
+        peer = self.get_peer(connection)
+
+        transfer_ticket = next(self.state.ticket_generator)
+        transfer = Transfer(
+            username=peer.username,
+            filename=filename,
+            ticket=transfer_ticket,
+            direction=TransferDirection.UPLOAD
+        )
+        self.transfer_manager.queue_transfer(transfer)
+
+        # TODO: Catch LookupError here for error handling (file does not exist)
+        self.file_manager.get_shared_item(filename.decode('utf-8'))
+        filesize = self.file_manager.get_filesize(filename.decode('utf-8'))
+
+        # TODO: Let the transfer manager manage this. Right we should only be
+        # sending this if we are actually ready for upload
+        connection.queue_message(
+            PeerTransferRequest.create(
+                TransferDirection.DOWNLOAD,
+                transfer_ticket,
+                filename,
+                filesize
+            )
+        )
+
+    @on_message(PeerTransferRequest)
     def on_peer_transfer_request(self, message, connection: PeerConnection):
-        """The PeerTransferRequest message will contain more information about
-        the transfer.
+        """The PeerTransferRequest message is sent when the peer is ready to
+        transfer the file. The message contains more information about the
+        transfer.
         """
         direction, ticket, filename, filesize = message.parse()
         logger.info(f"PeerTransferRequest: {filename} {direction} (filesize={filesize}, ticket={ticket})")
@@ -212,35 +252,54 @@ class PeerManager:
         transfer.filesize = filesize
 
         logger.debug(f"sending PeerTransferReply (ticket={ticket})")
-        connection.messages.put(
-            messages.PeerTransferReply.create(ticket, 1)
+        connection.queue_message(
+            PeerTransferReply.create(ticket, 1)
         )
 
+    @on_message(PeerTransferReply)
     def on_peer_transfer_reply(self, message, connection: PeerConnection):
-        contents = message.parse()
-        logger.info(f"PeerTransferReply: {contents}")
+        """The PeerTransferReply is a reponse to PeerTransferRequest"""
+        ticket, allowed, filesize, reason = message.parse()
+        logger.info(f"PeerTransferReply: allowed={allowed}, filesize={filesize}, reason={reason!r} (ticket={ticket})")
+        if not allowed:
+            return
 
+        transfer = self.transfer_manager.get_transfer_by_ticket(ticket)
+
+        self.network_manager.init_peer_connection(
+            transfer.username,
+            typ=PeerConnectionType.FILE,
+            transfer=transfer,
+            messages=[pack_int(ticket)]
+        )
+
+    @on_message(PeerPlaceInQueueRequest)
     def on_peer_place_in_queue_request(self, message, connection: PeerConnection):
         contents = message.parse()
         logger.info(f"{message.__class__.__name__}: {contents}")
 
+    @on_message(PeerPlaceInQueueReply)
     def on_peer_place_in_queue_reply(self, message, connection: PeerConnection):
         contents = message.parse()
         logger.info(f"{message.__class__.__name__}: {contents}")
 
+    @on_message(PeerUploadFailed)
     def on_peer_upload_failed(self, message, connection: PeerConnection):
         filename = message.parse()
         logger.info(f"PeerUploadFailed: upload failed for {filename}")
         peer = self.get_peer(connection)
         if peer is not None:
             try:
-                transfer = self.transfer_manager.get_transfer(peer.username, filename)
+                transfer = self.transfer_manager.get_transfer_by_connection(connection)
             except LookupError:
                 logger.error(f"PeerUploadFailed: could not find transfer for {filename} from {peer.username}")
             else:
                 transfer.set_state(TransferState.FAILED)
         else:
             logger.error(f"PeerUploadFailed: no peer for {peer.username}")
+
+    def on_transfer_offset(self, offset, connection: PeerConnection):
+        pass
 
     def on_transfer_ticket(self, ticket, connection: PeerConnection):
         logger.info(f"got transfer ticket {ticket} on {connection}")
@@ -252,60 +311,45 @@ class PeerManager:
 
         # We can only know the connection when we get the ticket
         transfer.connection = connection
-        connection.set_file_transfer_state(FileTransferState.TRANSFERING)
-        # Send the offset (for now always 0)
-        connection.messages.put(messages.pack_int64(0))
 
-    def on_transfer_data(self, data: bytes, connection: PeerConnection):
+        # Send the offset (for now always 0)
+        connection.queue_message(
+            pack_int64(0),
+            callback=partial(connection.set_connection_state, PeerConnectionState.TRANSFERING)
+        )
+
+    def on_transfer_data_received(self, data: bytes, connection: PeerConnection):
+        """Called when data has been received in the context of a transfer.
+        If the download path hasn't been set yet (ie. it is the first data we
+        received for this transfer) it will be determined and data will start to
+        be written.
+
+        This method also checks whether the transfer has been completed and
+        closes the connection.
+        """
         transfer = self.transfer_manager.get_transfer_by_connection(connection)
 
         transfer.set_state(TransferState.DOWNLOADING)
 
         if transfer.target_path is None:
-            download_path = self.state.file_manager.get_download_path(transfer.filename.decode('utf-8'))
+            download_path = self.file_manager.get_download_path(transfer.filename.decode('utf-8'))
             transfer.target_path = download_path
             logger.info(f"started receiving transfer data, download path : {download_path}")
 
         is_complete = transfer.write(data)
         if is_complete:
             logger.info(f"completed transfer of {transfer.filename} from {transfer.username} to {transfer.target_path}")
+            connection.set_state(ConnectionState.SHOULD_CLOSE)
+            transfer.connection = None
 
-    # Messaging
+    def on_transfer_data_sent(self, data: bytes, connection: PeerConnection):
+        transfer = self.transfer_manager.get_transfer_by_connection(connection)
 
-    def on_unhandled_message(self, message, connection: PeerConnection):
-        """Method called for messages that have no handler"""
-        logger.warning(f"no handler for message {message!r}")
-
-    def on_peer_message(self, message, connection: PeerConnection):
-        """Method called upon receiving a message from a peer/distributed socket"""
-        message_parsers = {
-            PeerConnectionType.PEER: self.peer_message_map,
-            PeerConnectionType.FILE: self.peer_message_map,
-            PeerConnectionType.DISTRIBUTED: self.distributed_message_map
-        }
-
-        try:
-            callback_map = message_parsers[connection.connection_type]
-        except KeyError:
-            raise NotImplementedError(f"no message map for connection type {connection.connection_type}")
-
-        # Run the callback
-        message_callback = callback_map.get(message.MESSAGE_ID, self.on_unhandled_message)
-        logger.debug(f"handling peer message of type {message.__class__.__name__!r}")
-        try:
-            message_callback(message, connection)
-        except Exception:
-            logger.exception(f"failed to handle peer message {message}")
+        transfer.set_state(TransferState.UPLOADING)
 
     # Peer messages
-    def on_peer_pierce_firewall(self, message, connection: PeerConnection):
-        ticket = message.parse()
-        logger.debug(f"PeerPierceFirewall (connection={connection}, ticket={ticket})")
 
-    def on_peer_init(self, message, connection: PeerConnection):
-        username, typ, token = message.parse()
-        logger.info(f"PeerInit from {username}, {typ}, {token}")
-
+    @on_message(PeerSearchReply)
     def on_peer_search_reply(self, message, connection: PeerConnection):
         contents = message.parse()
         username, ticket, shared_items, has_free_slots, avg_speed, queue_size, locked_results = contents
@@ -327,10 +371,11 @@ class PeerManager:
 
     # Distributed messages
 
+    @on_message(DistributedSearchRequest)
     def on_distributed_search_request(self, message, connection: PeerConnection):
         _, username, search_ticket, query = message.parse()
         logger.info(f"search request from {username!r}, query: {query!r}")
-        results = self.state.file_manager.query(query.decode('utf-8'))
+        results = self.file_manager.query(query.decode('utf-8'))
 
         self.state.received_searches.append(
             ReceivedSearch(username=username, query=query, matched_files=len(results))
@@ -339,25 +384,26 @@ class PeerManager:
         if len(results) == 0:
             return
 
-        logger.debug(f"got {len(results)} for query {query}")
+        logger.debug(f"got {len(results)} results for query {query}")
 
         connection_ticket = next(self.state.ticket_generator)
-        # self.network_manager.init_peer_connection(
-        #     connection_ticket,
-        #     username,
-        #     PeerConnectionType.PEER,
-        #     messages=[
-        #         messages.PeerSearchReply.create(
-        #             self.settings['credentials']['username'],
-        #             search_ticket,
-        #             convert_to_results(results),
-        #             True,
-        #             0,
-        #             0
-        #         )
-        #     ]
-        # )
+        self.network_manager.init_peer_connection(
+            connection_ticket,
+            username,
+            PeerConnectionType.PEER,
+            messages=[
+                PeerSearchReply.create(
+                    self.settings['credentials']['username'],
+                    search_ticket,
+                    convert_to_results(results),
+                    True,
+                    0,
+                    0
+                )
+            ]
+        )
 
+    @on_message(DistributedBranchLevel)
     def on_distributed_branch_level(self, message, connection: PeerConnection):
         level = message.parse()
         logger.info(f"branch level {level!r}: {connection!r}")
@@ -366,6 +412,7 @@ class PeerManager:
         peer.branch_level = level
         self._check_if_parent(peer, connection)
 
+    @on_message(DistributedBranchRoot)
     def on_distributed_branch_root(self, message, connection: PeerConnection):
         root = message.parse()
         logger.info(f"branch root {root!r}: {connection!r}")
@@ -374,6 +421,7 @@ class PeerManager:
         peer.branch_root = root
         self._check_if_parent(peer, connection)
 
+    @on_message(DistributedServerSearchRequest)
     def on_distributed_server_search_request(self, message, connection: PeerConnection):
         distrib_code, distrib_message = message.parse()
         logger.info(f"distributed server search request: {distrib_code} {distrib_message}")
@@ -393,3 +441,7 @@ class PeerManager:
                 if connection in peer.connections:
                     peer.remove_connection(connection)
                     break
+
+            if connection.connection_type == PeerConnectionType.FILE:
+                # Handle broken downloads
+                pass

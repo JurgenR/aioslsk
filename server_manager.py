@@ -4,7 +4,30 @@ import logging
 from typing import List
 
 from connection import PeerConnectionType, ConnectionState
-import messages
+from filemanager import FileManager
+from listeners import on_message
+from messages import (
+    AcceptChildren,
+    AddUser,
+    BranchRoot,
+    BranchLevel,
+    CannotConnect,
+    CheckPrivileges,
+    ConnectToPeer,
+    GetPeerAddress,
+    HaveNoParents,
+    Login,
+    NetInfo,
+    ParentMinSpeed,
+    ParentSpeedRatio,
+    Ping,
+    PrivilegedUsers,
+    RoomList,
+    SetListenPort,
+    SetStatus,
+    SharedFoldersFiles,
+    WishlistInterval,
+)
 from network_manager import NetworkManager
 from scheduler import Job
 from state import State
@@ -33,59 +56,33 @@ class User:
 
 class ServerManager:
 
-    def __init__(self, state: State, settings, network_manager: NetworkManager):
+    def __init__(self, state: State, settings, file_manager: FileManager, network_manager: NetworkManager):
         self.state: State = state
         self.settings = settings
+        self.file_manager: FileManager = file_manager
         self.network_manager: NetworkManager = network_manager
         self.network_manager.server_listener = self
 
         self._ping_job = Job(5 * 60, self.send_ping)
-
-        self.message_map = {
-            messages.AddUser.MESSAGE_ID: self.on_add_user,
-            messages.CheckPrivileges.MESSAGE_ID: self.on_check_privileges,
-            messages.ConnectToPeer.MESSAGE_ID: self.on_connect_to_peer,
-            messages.Login.MESSAGE_ID: self.on_login,
-            messages.NetInfo.MESSAGE_ID: self.on_net_info,
-            messages.ParentMinSpeed.MESSAGE_ID: self.on_parent_min_speed,
-            messages.ParentSpeedRatio.MESSAGE_ID: self.on_parent_speed_ratio,
-            messages.PrivilegedUsers.MESSAGE_ID: self.on_privileged_users,
-            messages.RoomList.MESSAGE_ID: self.on_room_list,
-            messages.WishlistInterval.MESSAGE_ID: self.on_wish_list_interval,
-            messages.GetPeerAddress.MESSAGE_ID: self.on_get_peer_address,
-            messages.CannotConnect.MESSAGE_ID: self.on_cannot_connect,
-        }
         self.users: List[User] = []
 
     def send_ping(self):
-        self.network_manager.send_server_messages(messages.Ping.create())
+        self.network_manager.send_server_messages(Ping.create())
 
     def get_user(self, name: str):
         for user in self.users:
             if user.name == name:
                 return user
-        raise LookupError("user with name {name} not found in list of users")
+        raise LookupError(f"user with name {name!r} not found in list of users")
 
-    def on_server_message(self, message, connection):
-        """Method called upon receiving a message from the server socket
-
-        This method will call L{on_unhandled_message} if the message has no
-        handler method
-        """
-        message_func = self.message_map.get(message.MESSAGE_ID, self.on_unhandled_message)
-        logger.debug(f"handling message of type {message.__class__.__name__!r}")
-        message_func(message)
-
+    @on_message(Login)
     def on_login(self, message):
-        """Called when a response is received to a logon call
-
-        @param message: L{Message} object
-        """
+        """Called when a response is received to a logon call"""
         login_values = message.parse()
         # First value indicates success
         if login_values[0]:
             self.state.logged_in = True
-            success, greet, ip, md5hash, unknown = login_values
+            success, greet, ip, md5hash, _ = login_values
             logger.info(
                 f"Successfully logged on. Greeting message: {greet!r}. Your IP: {ip!r}")
         else:
@@ -93,43 +90,50 @@ class ServerManager:
             logger.error(f"Failed to login, reason: {reason!r}")
 
         # Make setup calls
-        dir_count, file_count = self.state.file_manager.get_stats()
+        dir_count, file_count = self.file_manager.get_stats()
         logger.debug(f"Sharing {dir_count} directories and {file_count} files")
 
         self.network_manager.send_server_messages(
-            messages.CheckPrivileges.create(),
-            messages.SetListenPort.create(
+            CheckPrivileges.create(),
+            SetListenPort.create(
                 self.settings['network']['listening_port'],
                 self.settings['network']['listening_port'] + 1
             ),
-            messages.SetStatus.create(UserState.ONLINE.value),
-            messages.HaveNoParents.create(True),
-            messages.BranchRoot.create(self.settings['credentials']['username']),
-            messages.BranchLevel.create(0),
-            messages.AcceptChildren.create(False),
-            messages.SharedFoldersFiles.create(dir_count, file_count),
-            messages.AddUser.create(self.settings['credentials']['username'])
+            SetStatus.create(UserState.ONLINE.value),
+            HaveNoParents.create(True),
+            BranchRoot.create(self.settings['credentials']['username']),
+            BranchLevel.create(0),
+            AcceptChildren.create(False),
+            SharedFoldersFiles.create(dir_count, file_count),
+            AddUser.create(self.settings['credentials']['username'])
         )
 
     # State related messages
+    @on_message(CheckPrivileges)
     def on_check_privileges(self, message):
         self.state.privileges_time_left = message.parse()
 
+    @on_message(RoomList)
     def on_room_list(self, message):
         self.state.room_list = message.parse()
 
+    @on_message(ParentMinSpeed)
     def on_parent_min_speed(self, message):
         self.state.parent_min_speed = message.parse()
 
+    @on_message(ParentSpeedRatio)
     def on_parent_speed_ratio(self, message):
         self.state.parent_speed_ratio = message.parse()
 
+    @on_message(PrivilegedUsers)
     def on_privileged_users(self, message):
         self.state.privileged_users = message.parse()
 
+    @on_message(WishlistInterval)
     def on_wish_list_interval(self, message):
         self.state.wishlist_interval = message.parse()
 
+    @on_message(AddUser)
     def on_add_user(self, message):
         add_user_info = message.parse()
         logger.info(f"Added user info: {add_user_info}")
@@ -152,10 +156,7 @@ class ServerManager:
                 self.users.pop(user)
                 self.users.append(user)
 
-    def on_connect_to_peer(self, message):
-        contents = message.parse()
-        logger.info("ConnectToPeer message contents: {!r}".format(contents))
-
+    @on_message(NetInfo)
     def on_net_info(self, message):
         net_info_list = message.parse()
 
@@ -174,17 +175,6 @@ class ServerManager:
                 ip=ip,
                 port=port
             )
-
-    def on_get_peer_address(self, message):
-        contents = message.parse()
-        logger.debug(f"got GetPeerAddress : {contents!r}")
-
-    def on_cannot_connect(self, message):
-        ticket, username = message.parse()
-        logger.debug(f"got CannotConnect: {ticket} , {username}")
-
-    def on_unhandled_message(self, message):
-        logger.warning(f"don't know how to handle message {message!r}")
 
     # Connection state listeners
     def on_state_changed(self, state, connection, close_reason=None):

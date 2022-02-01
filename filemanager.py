@@ -4,6 +4,7 @@ import mutagen
 from mutagen.mp3 import BitrateMode
 import os
 import re
+from typing import List, Tuple
 
 logger = logging.getLogger()
 
@@ -62,7 +63,7 @@ def convert_to_result(shared_item):
     return {
         'filename': file_path,
         'filesize': file_size,
-        'file_ext': file_ext,
+        'extension': file_ext,
         'attributes': attributes
     }
 
@@ -83,17 +84,39 @@ class FileManager:
         self.settings = settings
         self.shared_items = self.fetch_shared_items()
 
-    def fetch_shared_items(self):
+    def fetch_shared_items(self) -> List[SharedItem]:
         shared_items = []
         for shared_dir in self.settings['directories']:
             shared_dir_abs = os.path.abspath(shared_dir)
+
             for directory, _, files in os.walk(shared_dir):
                 subdir = os.path.relpath(directory, shared_dir_abs)
+                if subdir == '.':
+                    subdir = ''
+
                 for filename in files:
                     shared_items.append(SharedItem(shared_dir_abs, subdir, filename))
         return shared_items
 
-    def query(self, query):
+    def get_shared_item(self, filename: str) -> SharedItem:
+        """Gets a shared item from the cache based on the given file path. If
+        the file does not exist in the L{shared_items} or the file is present
+        in the cache but does not exist on disk a C{LookupError} is raised.
+
+        This method should be called when an upload is requested from the user
+        """
+        for item in self.shared_items:
+            if os.path.join(item.root, item.subdir, item.filename) == filename:
+                if not os.path.exists(filename):
+                    raise LookupError(f"file name {filename} found in cache but not on disk")
+                return item
+        else:
+            raise LookupError(f"file name {filename} not found in shared items")
+
+    def get_filesize(self, filename: str) -> int:
+        return os.path.getsize(filename)
+
+    def query(self, query: str):
         clean_pattern = re.compile(r"[^\w\d]")
 
         # When looking through files, take -, _ and / as word seperators
@@ -111,12 +134,12 @@ class FileManager:
 
         return found_items
 
-    def get_stats(self):
+    def get_stats(self) -> Tuple[int, int]:
         file_count = len(self.shared_items)
         dir_count = len(set([shared_item.subdir for shared_item in self.shared_items]))
         return dir_count, file_count
 
-    def get_download_path(self, filename):
+    def get_download_path(self, filename: str):
         """Gets the download path for a filename returned by another peer"""
         download_dir = self.settings['download']
         if not os.path.exists(download_dir):

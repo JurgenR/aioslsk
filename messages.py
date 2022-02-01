@@ -1,9 +1,7 @@
-from email import message
+from distutils.log import warn
 import functools
 import hashlib
 import logging
-from pydoc import classname
-from pyexpat.errors import messages
 import socket
 import struct
 from typing import Callable
@@ -146,6 +144,13 @@ def warn_on_unparsed_bytes(parse_func):
                 f"{message.__class__.__name__} has {len(unparsed_bytes)} unparsed bytes : {unparsed_bytes.hex()!r}")
         return results
     return check_for_unparsed_bytes
+
+
+def decode_string(value):
+    try:
+        return value.decode('utf-8')
+    except UnicodeDecodeError:
+        return value.decode('cp1252')
 
 
 class Message:
@@ -736,10 +741,9 @@ class CannotConnect(Message):
         return ticket, username
 
 
-### Distributed messages
+#### Distributed messages
 
 class DistributedMessage(Message):
-
     pass
 
 
@@ -859,6 +863,9 @@ class PeerMessage(Message):
     pass
 
 
+
+#### Init messages
+
 class PeerPierceFirewall(PeerMessage):
     MESSAGE_ID = 0x00
 
@@ -896,7 +903,6 @@ class PeerInit(PeerMessage):
             ticket = self.parse_int64()
         return user, typ, ticket
 
-
 class PeerSharesRequest(PeerMessage):
     MESSAGE_ID = 0x04
 
@@ -928,8 +934,8 @@ class PeerSearchReply(PeerMessage):
                 pack_string(result['extension'])
             )
 
-            results_body += pack_int(len(results['attributes']))
-            for attr_place, attr_value in results['attributes']:
+            results_body += pack_int(len(result['attributes']))
+            for attr_place, attr_value in result['attributes']:
                 results_body += pack_int(attr_place) + pack_int(attr_value)
 
         message_body += results_body
@@ -1029,9 +1035,11 @@ class PeerTransferRequest(PeerMessage):
     MESSAGE_ID = 0x28
 
     @classmethod
-    def create(cls, direction: int, ticket: int, filename: str):
+    def create(cls, direction: int, ticket: int, filename: str, filesize: int=None):
         message_body = (
             pack_int(direction) + pack_int(ticket) + pack_string(filename))
+        if filesize is not None:
+            message_body += pack_int64(filesize)
         return pack_message(cls.MESSAGE_ID, message_body)
 
     @warn_on_unparsed_bytes
@@ -1124,6 +1132,22 @@ class PeerUploadFailed(PeerMessage):
         return filename
 
 
+class PeerTransferQueueFailed(PeerMessage):
+    MESSAGE_ID = 0x32
+
+    @classmethod
+    def create(cls, filename: str, reason: str) -> bytes:
+        message_body = pack_string(filename) + pack_string(reason)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        filename = self.parse_string()
+        reason = self.parse_string()
+        return filename, reason
+
+
 class PeerPlaceInQueueRequest(PeerMessage):
     MESSAGE_ID = 0x33
 
@@ -1137,38 +1161,6 @@ class PeerPlaceInQueueRequest(PeerMessage):
         super().parse()
         filename = self.parse_string()
         return filename
-
-
-def parse_distributed_message(message):
-    """Attempts to parse a distributed message"""
-    pos, length = parse_int(0, message)
-    pos, message_id = parse_uchar(pos, message)
-    for msg_class in DistributedMessage.__subclasses__():
-        if msg_class.MESSAGE_ID == message_id:
-            return msg_class(message)
-    raise UnknownMessageError(message_id, message, "Failed to parse distributed message")
-
-
-def parse_distributed_messages(message):
-    """Parses multiple messages from a single message"""
-    current_message = message
-    message_objects = []
-    while len(current_message) > 0:
-        message_object = parse_distributed_message(current_message)
-        # Call parse to get unparsed bytes, remove the unparsed bytes from the
-        # current message object
-        message_object.parse()
-        unparsed_bytes = message_object.get_unparsed_bytes()
-        if message_object.has_unparsed_bytes():
-            message_object.message = message_object.message[:-len(unparsed_bytes)]
-
-        # Call reset and append to the list
-        message_object.reset()
-        message_objects.append(message_object)
-
-        # Set current message to the unparsed bytes
-        current_message = unparsed_bytes
-    return message_objects
 
 
 def parse_message(message):
@@ -1201,6 +1193,16 @@ def parse_server_messages(message):
         # Set current message to the unparsed bytes
         current_message = unparsed_bytes
     return message_objects
+
+
+def parse_distributed_message(message):
+    """Attempts to parse a distributed message"""
+    pos, length = parse_int(0, message)
+    pos, message_id = parse_uchar(pos, message)
+    for msg_class in DistributedMessage.__subclasses__():
+        if msg_class.MESSAGE_ID == message_id:
+            return msg_class(message)
+    raise UnknownMessageError(message_id, message, "Failed to parse distributed message")
 
 
 def parse_peer_message(message):
