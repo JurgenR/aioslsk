@@ -11,8 +11,8 @@ class TransferDirection(Enum):
 
 class TransferState(Enum):
     UNINITIALIZED = auto()
-    REQUESTED = auto()
     QUEUED = auto()
+    INCOMPLETE = auto()
     DOWNLOADING = auto()
     UPLOADING = auto()
     COMPLETE = auto()
@@ -21,8 +21,8 @@ class TransferState(Enum):
 
 class Transfer:
 
-    def __init__(self, username: str, filename: str, direction: TransferDirection, ticket=None):
-        self.state = TransferState.UNINITIALIZED
+    def __init__(self, username: str, filename: str, direction: TransferDirection, ticket: int=None):
+        self.state = TransferState.QUEUED
 
         self.username: str = username
         self.filename: str = filename
@@ -33,6 +33,12 @@ class Transfer:
         self.ticket: int = ticket
         self.filesize: int = None
         """Filesize in bytes"""
+        self._offset: int = None
+        """Offset used for resuming downloads. This offset will be used and
+        reset by the L{read} method of this object
+        """
+
+        self.fail_reason: str = None
 
         self.target_path: str = None
         """Path to download the file to or upload the file from"""
@@ -44,11 +50,11 @@ class Transfer:
         self.connection = None
         self._fileobj = None
 
-        self.transfer_start_time: float = None
+        self.start_time: float = None
         """Time at which the transfer was started. This is the time the transfer
         entered the download or upload state
         """
-        self.transfer_complete_time: float = None
+        self.complete_time: float = None
         """Time at which the transfer was completed. This is the time the
         transfer entered the complete state.
         """
@@ -58,10 +64,20 @@ class Transfer:
             return
 
         if state in (TransferState.DOWNLOADING, TransferState.UPLOADING):
-            self.transfer_start_time = time.time()
+            self.start_time = time.time()
         elif state == TransferState.COMPLETE:
-            self.transfer_complete_time = time.time()
+            self.complete_time = time.time()
         self.state = state
+
+    def set_offset(self, offset: int):
+        self._offset = offset
+
+    def fail(self, reason: str=None):
+        """Sets the internal state to TransferState.FAILED with an optional
+        reason for failure
+        """
+        self.set_state(TransferState.FAILED)
+        self.fail_reason = reason
 
     def queue(self, place_in_queue=None):
         self.set_state(TransferState.QUEUED)
@@ -75,24 +91,34 @@ class Transfer:
             complete. Bytes per second
         """
         # Transfer hasn't begun
-        if self.transfer_start_time is None:
+        if self.start_time is None:
             return 0.0
 
         # Transfer in progress or complete
-        if self.transfer_complete_time is None:
+        if self.complete_time is None:
             end_time = time.time()
         else:
-            end_time = self.transfer_complete_time
-        transfer_duration = end_time - self.transfer_start_time
+            end_time = self.complete_time
+        transfer_duration = end_time - self.start_time
 
         return self.bytes_transfered / transfer_duration
 
     def is_complete(self) -> bool:
         return self.filesize == self.bytes_transfered
 
-    def read(self) -> bytes:
+    def read(self, bytes_amount: int) -> bytes:
+        """Read the given amount of bytes from the file object"""
         if self._fileobj is None:
             self._fileobj = open(self.filename, 'rb')
+
+        if self._offset is not None:
+            self._fileobj.seek(self._offset)
+            self._offset = None
+
+        data = self._fileobj.read(bytes_amount)
+        self.bytes_read += len(data)
+
+        return data
 
     def write(self, data: bytes) -> bool:
         """Write data to the file object. A file object will be created if it
@@ -108,17 +134,13 @@ class Transfer:
         if self._fileobj is None:
             self._fileobj = open(self.target_path, 'wb')
 
-        self._fileobj.write(data)
-        self.bytes_written += len(data)
+        bytes_written = self._fileobj.write(data)
+        self.bytes_written += len(bytes_written)
 
-        is_complete = self.is_complete()
-        if is_complete:
-            self.set_state(TransferState.COMPLETE)
-            self.finalize()
-
-        return is_complete
+        return self.is_complete()
 
     def finalize(self):
+        self.set_state(TransferState.COMPLETE)
         if self._fileobj is not None:
             self._fileobj.close()
 
@@ -167,6 +189,13 @@ class TransferManager:
         return sum([
             transfer.get_speed() for transfer in self.get_uploading()
         ])
+
+    def get_average_upload_speed(self) -> float:
+        upload_speeds = [
+            transfer.get_speed() for transfer in self._transfers
+            if transfer.state == TransferState.COMPLETE and transfer.direction == TransferDirection.UPLOAD
+        ]
+        return sum(upload_speeds) / len(upload_speeds)
 
     def queue_transfer(self, transfer: Transfer):
         self.add(transfer)

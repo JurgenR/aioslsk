@@ -11,6 +11,7 @@ import time
 
 import obfuscation
 from listeners import get_listener_methods
+from transfer import TransferDirection
 import messages
 
 
@@ -24,6 +25,9 @@ DEFAULT_RECV_BUF_SIZE = 4
 
 TRANSFER_RECV_BUF_SIZE = 1024 * 8
 """Default amount of bytes to recv during file transfer"""
+
+TRANSFER_SEND_BUF_SIZE = 1024 * 8
+"""Default amount of bytes to send during file transfer"""
 
 
 class PeerConnectionType:
@@ -150,6 +154,7 @@ class DataConnection(Connection):
         self.bytes_received = 0
         self.bytes_sent = 0
         self.recv_buf_size = DEFAULT_RECV_BUF_SIZE
+        self.send_buf_size = TRANSFER_RECV_BUF_SIZE
 
     def read(self) -> bool:
         """Attempts to read data from the socket. When data is received the
@@ -377,12 +382,27 @@ class PeerConnection(DataConnection):
         return self.fileobj
 
     def write(self) -> bool:
-        if self.connection_state == PeerConnectionState.TRANSFERING:
+        is_upload = self.transfer is not None and self.transfer.direction == TransferDirection.UPLOAD
+        if self.connection_state == PeerConnectionState.TRANSFERING and is_upload:
             return self.send_data()
         else:
             return self.send_message()
 
-    def send_data(self):
+    def send_data(self) -> bool:
+        """Transfers data over the connection"""
+        data = self.transfer.read(self.send_buf_size)
+        try:
+            self.last_interaction = time.time()
+            self.fileobj.sendall(data)
+        except OSError:
+            logger.exception(
+                f"close {self.hostname}:{self.port} : exception while sending")
+            self.disconnect(reason=CloseReason.WRITE_ERROR)
+            return False
+        else:
+            self.bytes_sent += len(data)
+            for listener in self.listeners:
+                listener.on_transfer_data_sent(len(data), self)
         return True
 
     def process_buffer(self):

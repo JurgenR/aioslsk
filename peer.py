@@ -1,5 +1,6 @@
 from functools import partial
 import logging
+from sqlite3 import connect
 from typing import List
 
 from connection import (
@@ -16,6 +17,7 @@ from messages import (
     BranchLevel,
     BranchRoot,
     HaveNoParents,
+    SendUploadSpeed,
     DistributedBranchLevel,
     DistributedBranchRoot,
     DistributedSearchRequest,
@@ -26,7 +28,10 @@ from messages import (
     PeerTransferReply,
     PeerTransferRequest,
     PeerTransferQueue,
+    PeerTransferQueueFailed,
     PeerUploadFailed,
+    PeerUserInfoRequest,
+    PeerUserInfoReply,
 )
 from network_manager import NetworkManager
 from search import ReceivedSearch, SearchResult
@@ -83,11 +88,12 @@ class PeerManager:
             filename=filename,
             direction=TransferDirection.DOWNLOAD
         )
+        transfer.set_state(TransferState.QUEUED)
         self.transfer_manager.add(transfer)
 
         connection_ticket = next(self.state.ticket_generator)
 
-        transfer.set_state(TransferState.REQUESTED)
+
         self.network_manager.init_peer_connection(
             connection_ticket,
             username,
@@ -204,7 +210,7 @@ class PeerManager:
         ignore it.
         """
         filename = message.parse()
-        logger.info(f"PeerTransferRequest: {filename}")
+        logger.info(f"PeerTransferQueue : {filename}")
 
         peer = self.get_peer(connection)
 
@@ -217,18 +223,24 @@ class PeerManager:
         )
         self.transfer_manager.queue_transfer(transfer)
 
-        # TODO: Catch LookupError here for error handling (file does not exist)
-        self.file_manager.get_shared_item(filename.decode('utf-8'))
-        filesize = self.file_manager.get_filesize(filename.decode('utf-8'))
+        try:
+            self.file_manager.get_shared_item(filename.decode('utf-8'))
+            transfer.filesize = self.file_manager.get_filesize(filename.decode('utf-8'))
+        except LookupError:
+            reason = "File not shared."
+            transfer.fail(reason=reason)
+            connection.queue_message(
+                PeerTransferQueueFailed.create(filename, transfer.fail_reason)
+            )
 
-        # TODO: Let the transfer manager manage this. Right we should only be
-        # sending this if we are actually ready for upload
+        # TODO: Let the transfer manager manage this. We should only be sending
+        # this if we are actually ready for upload
         connection.queue_message(
             PeerTransferRequest.create(
-                TransferDirection.DOWNLOAD,
-                transfer_ticket,
-                filename,
-                filesize
+                TransferDirection.DOWNLOAD.value,
+                transfer.ticket,
+                transfer.filename,
+                filesize=transfer.filesize
             )
         )
 
@@ -239,34 +251,36 @@ class PeerManager:
         transfer.
         """
         direction, ticket, filename, filesize = message.parse()
-        logger.info(f"PeerTransferRequest: {filename} {direction} (filesize={filesize}, ticket={ticket})")
+        logger.info(f"PeerTransferRequest : {filename} {direction} (filesize={filesize}, ticket={ticket})")
 
         try:
             transfer = self.transfer_manager.get_transfer(filename, TransferDirection(direction))
         except LookupError:
-            logger.error("got a PeerTransferRequest for an unknown transfer")
+            logger.error("PeerTransferRequest : unknown transfer")
             # Should we somehow tell the peer we want to cancel?
             return
 
         transfer.ticket = ticket
         transfer.filesize = filesize
 
-        logger.debug(f"sending PeerTransferReply (ticket={ticket})")
+        logger.debug(f"PeerTransferRequest : sending PeerTransferReply (ticket={ticket})")
         connection.queue_message(
-            PeerTransferReply.create(ticket, 1)
+            PeerTransferReply.create(ticket, True)
         )
 
     @on_message(PeerTransferReply)
     def on_peer_transfer_reply(self, message, connection: PeerConnection):
         """The PeerTransferReply is a reponse to PeerTransferRequest"""
         ticket, allowed, filesize, reason = message.parse()
-        logger.info(f"PeerTransferReply: allowed={allowed}, filesize={filesize}, reason={reason!r} (ticket={ticket})")
+        logger.info(f"PeerTransferReply : allowed={allowed}, filesize={filesize}, reason={reason!r} (ticket={ticket})")
         if not allowed:
             return
 
         transfer = self.transfer_manager.get_transfer_by_ticket(ticket)
 
+        connection_ticket = next(self.state.ticket_generator)
         self.network_manager.init_peer_connection(
+            connection_ticket,
             transfer.username,
             typ=PeerConnectionType.FILE,
             transfer=transfer,
@@ -286,20 +300,46 @@ class PeerManager:
     @on_message(PeerUploadFailed)
     def on_peer_upload_failed(self, message, connection: PeerConnection):
         filename = message.parse()
-        logger.info(f"PeerUploadFailed: upload failed for {filename}")
+        logger.info(f"PeerUploadFailed : upload failed for {filename}")
         peer = self.get_peer(connection)
         if peer is not None:
             try:
                 transfer = self.transfer_manager.get_transfer_by_connection(connection)
             except LookupError:
-                logger.error(f"PeerUploadFailed: could not find transfer for {filename} from {peer.username}")
+                logger.error(f"PeerUploadFailed : could not find transfer for {filename} from {peer.username}")
             else:
-                transfer.set_state(TransferState.FAILED)
+                transfer.fail()
         else:
-            logger.error(f"PeerUploadFailed: no peer for {peer.username}")
+            logger.error(f"PeerUploadFailed : no peer for {peer.username}")
+
+    @on_message(PeerTransferQueueFailed)
+    def on_peer_transfer_queue_failed(self, message, connection: PeerConnection):
+        filename, reason = message.parse()
+        logger.info(f"PeerTransferQueueFailed : upload failed for {filename}, reason={reason}")
+
+        peer = self.get_peer(connection)
+        if peer is not None:
+            try:
+                transfer = self.transfer_manager.get_transfer_by_connection(connection)
+            except LookupError:
+                logger.error(f"PeerUploadFailed : could not find transfer for {filename} from {peer.username}")
+            else:
+                transfer.fail(reason=reason)
+        else:
+            logger.error(f"PeerUploadFailed : no peer for {peer.username}")
 
     def on_transfer_offset(self, offset, connection: PeerConnection):
-        pass
+        logger.info(f"received transfer offset (offset={offset})")
+
+        transfer = connection.transfer
+        if transfer is None:
+            logger.error(f"got a transfer offset for a connection without transfer. connection={connection!r}")
+            return
+
+        transfer.set_offset(offset)
+        transfer.filesize = self.file_manager.get_filesize(transfer.filename)
+
+        connection.set_connection_state(PeerConnectionState.TRANSFERING)
 
     def on_transfer_ticket(self, ticket, connection: PeerConnection):
         logger.info(f"got transfer ticket {ticket} on {connection}")
@@ -311,6 +351,7 @@ class PeerManager:
 
         # We can only know the connection when we get the ticket
         transfer.connection = connection
+        connection.transfer = transfer
 
         # Send the offset (for now always 0)
         connection.queue_message(
@@ -338,14 +379,26 @@ class PeerManager:
 
         is_complete = transfer.write(data)
         if is_complete:
-            logger.info(f"completed transfer of {transfer.filename} from {transfer.username} to {transfer.target_path}")
+            transfer.finalize()
+            logger.info(f"completed downloading of {transfer.filename} from {transfer.username} to {transfer.target_path}")
             connection.set_state(ConnectionState.SHOULD_CLOSE)
             transfer.connection = None
 
-    def on_transfer_data_sent(self, data: bytes, connection: PeerConnection):
+    def on_transfer_data_sent(self, bytes_sent: int, connection: PeerConnection):
         transfer = self.transfer_manager.get_transfer_by_connection(connection)
 
         transfer.set_state(TransferState.UPLOADING)
+
+        transfer.bytes_transfered += bytes_sent
+        if transfer.is_complete():
+            transfer.finalize()
+            logger.info(f"completed uploading of {transfer.filename} to {transfer.username}")
+            connection.set_state(ConnectionState.SHOULD_CLOSE)
+            transfer.connection = None
+
+            self.network_manager.send_server_messages(
+                SendUploadSpeed.create(int(self.transfer_manager.get_average_upload_speed()))
+            )
 
     # Peer messages
 
@@ -368,6 +421,12 @@ class PeerManager:
         except KeyError:
             # This happens if we close then re-open too quickly
             logger.warning(f"search reply ticket '{ticket}' does not match any search query")
+
+    @on_message(PeerUserInfoRequest)
+    def on_peer_user_info_request(self, message, connection: PeerConnection):
+        connection.queue_message(
+            PeerUserInfoReply.create()
+        )
 
     # Distributed messages
 
@@ -436,12 +495,19 @@ class PeerManager:
                 self.unset_parent()
                 return
 
+            if connection.connection_type == PeerConnectionType.FILE:
+                # Handle broken downloads
+                try:
+                    transfer = self.transfer_manager.get_transfer_by_connection(connection)
+                except LookupError:
+                    logger.warning(
+                        f"couldn't find transfer associated with closed connection (connection={connection!r})")
+                else:
+                    if transfer.state != TransferState.COMPLETE:
+                        transfer.set_state(TransferState.INCOMPLETE)
+
             # Remove the peer connection
             for peer in self.peers.values():
                 if connection in peer.connections:
                     peer.remove_connection(connection)
                     break
-
-            if connection.connection_type == PeerConnectionType.FILE:
-                # Handle broken downloads
-                pass

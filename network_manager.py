@@ -297,7 +297,10 @@ class NetworkManager:
         logger.debug(f"finalizing peer connection : {request!r}")
 
         connection.connection_type = request.typ
+        # A bit overkill
         connection.transfer = request.transfer
+        if request.transfer is not None:
+            request.transfer.connection = connection
         self.peer_listener.create_peer(request.username, connection)
 
         # Non-peer connections always go to unobfuscated after initialization
@@ -339,7 +342,7 @@ class NetworkManager:
     def on_transfer_data_received(self, data, connection: PeerConnection):
         pass
 
-    def on_transfer_data_sent(self, data, connection: PeerConnection):
+    def on_transfer_data_sent(self, bytes_sent, connection: PeerConnection):
         pass
 
     # Server related
