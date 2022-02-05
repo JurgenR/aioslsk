@@ -67,6 +67,9 @@ class Transfer:
             self.start_time = time.time()
         elif state == TransferState.COMPLETE:
             self.complete_time = time.time()
+        elif state == TransferState.INCOMPLETE:
+            self.complete_time = time.time()
+
         self.state = state
 
     def set_offset(self, offset: int):
@@ -139,10 +142,14 @@ class Transfer:
 
         return self.is_complete()
 
-    def finalize(self):
+    def complete(self):
         self.set_state(TransferState.COMPLETE)
+        self.close()
+
+    def close(self):
         if self._fileobj is not None:
             self._fileobj.close()
+            self._fileobj = None
 
 
 class TransferQueue:

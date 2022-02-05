@@ -379,7 +379,7 @@ class PeerManager:
 
         is_complete = transfer.write(data)
         if is_complete:
-            transfer.finalize()
+            transfer.complete()
             logger.info(f"completed downloading of {transfer.filename} from {transfer.username} to {transfer.target_path}")
             connection.set_state(ConnectionState.SHOULD_CLOSE)
             transfer.connection = None
@@ -391,7 +391,7 @@ class PeerManager:
 
         transfer.bytes_transfered += bytes_sent
         if transfer.is_complete():
-            transfer.finalize()
+            transfer.complete()
             logger.info(f"completed uploading of {transfer.filename} to {transfer.username}")
             connection.set_state(ConnectionState.SHOULD_CLOSE)
             transfer.connection = None
