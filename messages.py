@@ -128,6 +128,13 @@ def pack_ip(value: str) -> bytes:
     return struct.pack('<4s', bytes(reversed(ip_b)))
 
 
+def pack_list(values, pack_func=pack_string):
+    body = pack_int(len(values))
+    for value in values:
+        body += pack_func(value)
+    return body
+
+
 def pack_message(message_id: int, value: bytes, id_as_uchar=False) -> bytes:
     """Adds the header (length + message ID) to a message body
 
@@ -442,7 +449,7 @@ class ChatUserJoinedRoom(Message):
 class ChatUserLeftRoom(Message):
     MESSAGE_ID = 0x11
 
-        @warn_on_unparsed_bytes
+    @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
         room = self.parse_string()
@@ -745,6 +752,64 @@ class WishlistInterval(Message):
         return self.parse_int()
 
 
+class ChatRoomTickers(Message):
+    MESSAGE_ID = 0x71
+
+    @staticmethod
+    def parse_users():
+        pos, user = self.parse_string()
+        pos, tickers = self.parse_string()
+        return pos, (user, tickers)
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        room = self.parse_string()
+        users = self.parse_list(self.parse_users)
+        return room, users
+
+
+class ChatRoomTickerAdd(Message):
+    MESSAGE_ID = 0x72
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        room = self.parse_string()
+        user = self.parse_string()
+        ticker = self.parse_string()
+        return room, user, ticker
+
+
+class ChatRoomTickerRemove(Message):
+    MESSAGE_ID = 0x73
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        room = self.parse_string()
+        user = self.parse_string()
+        return room, user
+
+
+class ChatRoomTickerSet(Message):
+    MESSAGE_ID = 0x74
+
+    @classmethod
+    def create(cls, room: str, ticker: str):
+        message_body = pack_string(room) + pack_string(ticker)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+
+class ChatRoomSearch(Message):
+    MESSAGE_ID = 0x78
+
+    @classmethod
+    def create(cls, room: str, ticket: str, query: str):
+        message_body = pack_string(room) + pack_string(ticket) + pack_string(query)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+
 class SendUploadSpeed(Message):
     MESSAGE_ID = 0x79
 
@@ -820,6 +885,199 @@ class ChildDepth(Message):
         super().parse()
         child_depth = self.parse_int()
         return child_depth
+
+
+class ChatPrivateRoomAddUser(Message):
+    MESSAGE_ID = 0x86
+
+    @classmethod
+    def create(cls, room: str, user: str):
+        message_body = pack_string(room) + pack_string(user)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        room = self.parse_string()
+        user = self.parse_string()
+        return room, user
+
+
+class ChatPrivateRoomRemoveUser(Message):
+    MESSAGE_ID = 0x87
+
+    @classmethod
+    def create(cls, room: str, user: str):
+        message_body = pack_string(room) + pack_string(user)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        room = self.parse_string()
+        user = self.parse_string()
+        return room, user
+
+class ChatPrivateRoomDropMembership(Message):
+    MESSAGE_ID = 0x87
+
+    @classmethod
+    def create(cls, room: str):
+        return pack_message(cls.MESSAGE_ID, pack_string(room))
+
+
+class ChatPrivateRoomDropOwnership(Message):
+    MESSAGE_ID = 0x88
+
+    @classmethod
+    def create(cls, room: str):
+        return pack_message(cls.MESSAGE_ID, pack_string(room))
+
+
+class PrivateRoomAdded(Message):
+    MESSAGE_ID = 0x8B
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        room = self.parse_string()
+        return room
+
+
+class PrivateRoomRemoved(Message):
+    MESSAGE_ID = 0x8C
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        room = self.parse_string()
+        return room
+
+
+class PrivateRoomToggle(Message):
+    MESSAGE_ID = 0x8D
+
+    @classmethod
+    def create(cls, enable: bool):
+        return pack_message(cls.MESSAGE_ID, pack_bool(enable))
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        enable = self.parse_bool()
+        return enable
+
+
+class NewPassword(Message):
+    MESSAGE_ID = 0x8E
+
+    @classmethod
+    def create(cls, password: str):
+        return pack_message(cls.MESSAGE_ID, pack_string(password))
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        password = self.parse_string()
+        return password
+
+
+class ChatPrivateRoomAddOperator(Message):
+    MESSAGE_ID = 0x8F
+
+    @classmethod
+    def create(cls, room: str, operator: str):
+        message_body = pack_string(room) + pack_string(operator)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        room = self.parse_string()
+        operator = self.parse_string()
+        return room, operator
+
+class ChatPrivateRoomRemoveOperator(Message):
+    MESSAGE_ID = 0x90
+
+    @classmethod
+    def create(cls, room: str, operator: str):
+        message_body = pack_string(room) + pack_string(operator)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        room = self.parse_string()
+        operator = self.parse_string()
+        return room, operator
+
+class ChatPrivateRoomOperatorAdded(Message):
+    MESSAGE_ID = 0x91
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        room = self.parse_string()
+        return room
+
+
+class ChatPrivateRoomOperatorRemoved(Message):
+    MESSAGE_ID = 0x92
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        room = self.parse_string()
+        return room
+
+
+class ChatPrivateRoomOperators(Message):
+    MESSAGE_ID = 0x94
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        room = self.parse_string()
+        operators = self.parse_list(parse_string)
+        return room, operators
+
+
+class ChatMessageUsers(Message):
+    MESSAGE_ID = 0x95
+
+    @classmethod
+    def create(cls, users, message: str):
+        message_body = pack_list(users, pack_func=pack_string) + pack_string(message)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+
+class ChatEnablePublic(Message):
+    MESSAGE_ID = 0x96
+
+    @classmethod
+    def create(cls):
+        return pack_message(cls.MESSAGE_ID, bytes())
+
+
+class ChatDisablePublic(Message):
+    MESSAGE_ID = 0x97
+
+    @classmethod
+    def create(cls):
+        return pack_message(cls.MESSAGE_ID, bytes())
+
+
+class ChatServerMessage(Message):
+    MESSAGE_ID = 0x98
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        room = self.parse_string()
+        user = self.parse_string()
+        message = self.parse_string()
+        return room, user, message
 
 
 class FileSearchEx(Message):
