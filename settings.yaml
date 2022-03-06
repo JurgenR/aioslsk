@@ -14,10 +14,14 @@ credentials:
   password: Test1234
 
 sharing:
+  limits:
+    download_slots: 10
+    upload_slots: 10
   download: H:\pyslsk-downloads
   directories:
     - H:\soulseek-downloads
     - H:\My Music
+    - H:\pyslsk-uploads
 
 debug:
-  search_for_parent: false
+  search_for_parent: true
