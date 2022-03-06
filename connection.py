@@ -9,8 +9,8 @@ import struct
 import threading
 import time
 
+from events import get_listener_methods
 import obfuscation
-from listeners import get_listener_methods
 from transfer import TransferDirection
 import messages
 
