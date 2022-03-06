@@ -17,7 +17,7 @@ from connection import (
     PeerConnectionType,
     ServerConnection,
 )
-from listeners import on_message
+from events import on_message
 from messages import (
     CannotConnect,
     ConnectToPeer,
@@ -39,7 +39,7 @@ class ConnectionRequest:
     is_requested_by_us: bool
     """Should be False if we received a ConnectToPeer message from another user"""
     ip: str = None
-    port: int = 0
+    port: int = None
     typ: str = None
     connection: PeerConnection = None
     transfer: Transfer = None
@@ -50,7 +50,7 @@ class ConnectionRequest:
 class NetworkManager:
 
     def __init__(self, settings, stop_event, cache_lock):
-        self.settings = settings
+        self._settings = settings
 
         self.upnp = upnp.UPNP()
 
@@ -71,20 +71,20 @@ class NetworkManager:
         logger.info("initializing network")
 
         # Init connections
-        self.network_loop = NetworkLoop(self.settings, self.stop_event, self.lock)
+        self.network_loop = NetworkLoop(self._settings, self.stop_event, self.lock)
 
         self.server = ServerConnection(
-            hostname=self.settings['network']['server_hostname'],
-            port=self.settings['network']['server_port'],
+            hostname=self._settings['network']['server_hostname'],
+            port=self._settings['network']['server_port'],
             listeners=[self, self.server_listener, ]
         )
         self.listening_connections = [
             ListeningConnection(
-                port=self.settings['network']['listening_port'],
+                port=self._settings['network']['listening_port'],
                 listeners=[self, ]
             ),
             ListeningConnection(
-                port=self.settings['network']['listening_port'] + 1,
+                port=self._settings['network']['listening_port'] + 1,
                 obfuscated=True,
                 listeners=[self, ]
             )
@@ -104,12 +104,12 @@ class NetworkManager:
         return [self.network_loop, ]
 
     def enable_upnp(self):
-        listening_port = self.settings['network']['listening_port']
+        listening_port = self._settings['network']['listening_port']
         for port in [listening_port, listening_port + 1, ]:
             self.upnp.map_port(
                 self.server.get_connecting_ip(),
                 port,
-                self.settings['network']['upnp_lease_duration']
+                self._settings['network']['upnp_lease_duration']
             )
 
     def expire_caches(self):
@@ -152,7 +152,7 @@ class NetworkManager:
             # For registering with UPNP we need to know our own IP first, we can
             # get this from the server connection but we first need to be
             # fully connected to it before we can request a valid IP
-            if self.settings['network']['use_upnp']:
+            if self._settings['network']['use_upnp']:
                 self.enable_upnp()
 
         elif state == ConnectionState.CLOSED:
@@ -265,7 +265,7 @@ class NetworkManager:
         if request.is_requested_by_us:
             connection.queue_message(
                 PeerInit.create(
-                    self.settings['credentials']['username'],
+                    self._settings['credentials']['username'],
                     request.typ,
                     request.ticket
                 ),
@@ -301,6 +301,7 @@ class NetworkManager:
         connection.transfer = request.transfer
         if request.transfer is not None:
             request.transfer.connection = connection
+
         self.peer_listener.create_peer(request.username, connection)
 
         # Non-peer connections always go to unobfuscated after initialization
@@ -311,6 +312,8 @@ class NetworkManager:
         # File connections should go into AWAITING_TICKET or AWAITING_OFFSET
         # depending on the state of the transfer
         if request.typ == PeerConnectionType.FILE:
+            # The transfer for the request will be none if the peer is connecting
+            # to us. We don't know for which transfer he is connecting us yet
             if request.transfer is None:
                 connection.set_connection_state(PeerConnectionState.AWAITING_TICKET)
             else:
@@ -321,6 +324,7 @@ class NetworkManager:
         else:
             connection.set_connection_state(PeerConnectionState.ESTABLISHED)
 
+        # Remove the connection request
         if request.ticket is not None and request.ticket != 0:
             with self.cache_lock:
                 try:

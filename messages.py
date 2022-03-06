@@ -1,5 +1,3 @@
-from distutils.log import warn
-from email import message
 import functools
 import hashlib
 import logging
@@ -69,7 +67,7 @@ def parse_list(pos: int, data, item_parser: Callable=parse_string) -> list:
     items = []
     pos_after_list_len, list_len = parse_int(pos, data)
     current_item_pos = pos_after_list_len
-    for idx in range(list_len):
+    for _ in range(list_len):
         current_item_pos, item = item_parser(current_item_pos, data)
         items.append(item)
     return current_item_pos, items
@@ -373,7 +371,7 @@ class GetUserStatus(Message):
 
 
 
-class ChatSayInRoom(Message):
+class ChatRoomMessage(Message):
     MESSAGE_ID = 0x0D
 
     @classmethod
@@ -409,9 +407,11 @@ class ChatJoinRoom(Message):
         if self.has_unparsed_bytes():
             owner = self.parse_string()
             operators = self.parse_list(parse_string)
+        else:
+            owner = None
+            operators = []
 
-        raise NotImplementedError()
-        return room
+        return room, users, users_status, users_data, users_has_slots_free, users_countries, owner, operators
 
 
 class ChatLeaveRoom(Message):
@@ -497,6 +497,11 @@ class ConnectToPeer(Message):
 
 class ChatPrivateMessage(Message):
     MESSAGE_ID = 0x16
+
+    @classmethod
+    def create(cls, username: str, message: str):
+        message_body = pack_string(username) + pack_string(message)
+        return pack_message(cls.MESSAGE_ID, message_body)
 
     @warn_on_unparsed_bytes
     def parse(self):
@@ -756,9 +761,9 @@ class ChatRoomTickers(Message):
     MESSAGE_ID = 0x71
 
     @staticmethod
-    def parse_users():
-        pos, user = self.parse_string()
-        pos, tickers = self.parse_string()
+    def parse_users(pos: int, value: bytes):
+        pos, user = parse_string(pos, value)
+        pos, tickers = parse_string(pos, value)
         return pos, (user, tickers)
 
     @warn_on_unparsed_bytes
@@ -1235,7 +1240,6 @@ class DistributedChildDepth(DistributedMessage):
 class DistributedServerSearchRequest(DistributedMessage):
     MESSAGE_ID = 0x5D
 
-    @warn_on_unparsed_bytes
     def parse(self):
         length, _ = super().parse()
         distrib_code = self.parse_uchar()

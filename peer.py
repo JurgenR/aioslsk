@@ -1,6 +1,5 @@
 from functools import partial
 import logging
-from sqlite3 import connect
 from typing import List
 
 from connection import (
@@ -9,8 +8,8 @@ from connection import (
     ConnectionState,
     PeerConnectionState
 )
+from events import on_message, EventBus
 from filemanager import convert_to_results, FileManager
-from listeners import on_message
 from messages import (
     pack_int,
     pack_int64,
@@ -47,6 +46,9 @@ class Peer:
     def __init__(self, username: str):
         self.connections: List[PeerConnection] = []
         self.username: str = username
+
+        self.is_potential_parent: bool = False
+
         self.branch_level: int = None
         self.branch_root: str = None
 
@@ -70,9 +72,10 @@ class Peer:
 
 class PeerManager:
 
-    def __init__(self, state: State, settings, file_manager: FileManager, transfer_manager: TransferManager, network_manager: NetworkManager):
-        self.state: State = state
-        self.settings = settings
+    def __init__(self, state: State, settings, event_bus: EventBus, file_manager: FileManager, transfer_manager: TransferManager, network_manager: NetworkManager):
+        self._state: State = state
+        self._settings = settings
+        self._event_bus: EventBus = event_bus
         self.file_manager: FileManager = file_manager
         self.transfer_manager: TransferManager = transfer_manager
         self.network_manager: NetworkManager = network_manager
@@ -88,11 +91,9 @@ class PeerManager:
             filename=filename,
             direction=TransferDirection.DOWNLOAD
         )
-        transfer.set_state(TransferState.QUEUED)
-        self.transfer_manager.add(transfer)
+        self.transfer_manager.queue_transfer(transfer)
 
-        connection_ticket = next(self.state.ticket_generator)
-
+        connection_ticket = next(self._state.ticket_generator)
 
         self.network_manager.init_peer_connection(
             connection_ticket,
@@ -147,8 +148,9 @@ class PeerManager:
             peer,
             parent_connection
         )
-        self.state.parent = parent
+        self._state.parent = parent
 
+        logger.info(f"notifying server of our parent : {parent.branch_level} {parent.branch_root}")
         # The original Windows client sends out the child depth (=0) and the
         # ParentIP
         self.network_manager.send_server_messages(
@@ -182,7 +184,7 @@ class PeerManager:
         """
         # Explicit None checks because we can get 0 as branch level
         if peer.branch_level is not None and peer.branch_root is not None:
-            if self.state.parent is None:
+            if self._state.parent is None:
                 self.set_parent(connection)
             else:
                 connection.set_state(ConnectionState.SHOULD_CLOSE)
@@ -191,13 +193,13 @@ class PeerManager:
                     peer.reset_branch_values()
 
     def unset_parent(self):
-        logger.debug(f"unset parent {self.state.parent!r}")
+        logger.debug(f"unset parent {self._state.parent!r}")
 
-        self.state.parent = None
+        self._state.parent = None
 
         self.network_manager.send_server_messages(
             BranchLevel.create(0),
-            BranchRoot.create(self.settings['credentials']['username']),
+            BranchRoot.create(self._settings['credentials']['username']),
             HaveNoParents.create(True)
         )
 
@@ -214,7 +216,7 @@ class PeerManager:
 
         peer = self.get_peer(connection)
 
-        transfer_ticket = next(self.state.ticket_generator)
+        transfer_ticket = next(self._state.ticket_generator)
         transfer = Transfer(
             username=peer.username,
             filename=filename,
@@ -227,8 +229,7 @@ class PeerManager:
             self.file_manager.get_shared_item(filename.decode('utf-8'))
             transfer.filesize = self.file_manager.get_filesize(filename.decode('utf-8'))
         except LookupError:
-            reason = "File not shared."
-            transfer.fail(reason=reason)
+            transfer.fail(reason="File not shared.")
             connection.queue_message(
                 PeerTransferQueueFailed.create(filename, transfer.fail_reason)
             )
@@ -273,12 +274,13 @@ class PeerManager:
         """The PeerTransferReply is a reponse to PeerTransferRequest"""
         ticket, allowed, filesize, reason = message.parse()
         logger.info(f"PeerTransferReply : allowed={allowed}, filesize={filesize}, reason={reason!r} (ticket={ticket})")
-        if not allowed:
-            return
 
         transfer = self.transfer_manager.get_transfer_by_ticket(ticket)
+        if not allowed:
+            transfer.fail(reason=reason)
+            return
 
-        connection_ticket = next(self.state.ticket_generator)
+        connection_ticket = next(self._state.ticket_generator)
         self.network_manager.init_peer_connection(
             connection_ticket,
             transfer.username,
@@ -322,11 +324,11 @@ class PeerManager:
             try:
                 transfer = self.transfer_manager.get_transfer_by_connection(connection)
             except LookupError:
-                logger.error(f"PeerUploadFailed : could not find transfer for {filename} from {peer.username}")
+                logger.error(f"PeerTransferQueueFailed : could not find transfer for {filename} from {peer.username}")
             else:
                 transfer.fail(reason=reason)
         else:
-            logger.error(f"PeerUploadFailed : no peer for {peer.username}")
+            logger.error(f"PeerTransferQueueFailed : no peer for {peer.username}")
 
     def on_transfer_offset(self, offset, connection: PeerConnection):
         logger.info(f"received transfer offset (offset={offset})")
@@ -417,16 +419,16 @@ class PeerManager:
             locked_results=locked_results
         )
         try:
-            self.state.search_queries[ticket].results.append(search_result)
+            self._state.search_queries[ticket].results.append(search_result)
         except KeyError:
-            # This happens if we close then re-open too quickly
             logger.warning(f"search reply ticket '{ticket}' does not match any search query")
 
     @on_message(PeerUserInfoRequest)
     def on_peer_user_info_request(self, message, connection: PeerConnection):
-        connection.queue_message(
-            PeerUserInfoReply.create()
-        )
+        pass
+        # connection.queue_message(
+        #     PeerUserInfoReply.create()
+        # )
 
     # Distributed messages
 
@@ -436,7 +438,7 @@ class PeerManager:
         logger.info(f"search request from {username!r}, query: {query!r}")
         results = self.file_manager.query(query.decode('utf-8'))
 
-        self.state.received_searches.append(
+        self._state.received_searches.append(
             ReceivedSearch(username=username, query=query, matched_files=len(results))
         )
 
@@ -445,18 +447,18 @@ class PeerManager:
 
         logger.debug(f"got {len(results)} results for query {query}")
 
-        connection_ticket = next(self.state.ticket_generator)
+        connection_ticket = next(self._state.ticket_generator)
         self.network_manager.init_peer_connection(
             connection_ticket,
             username,
             PeerConnectionType.PEER,
             messages=[
                 PeerSearchReply.create(
-                    self.settings['credentials']['username'],
+                    self._settings['credentials']['username'],
                     search_ticket,
                     convert_to_results(results),
-                    True,
-                    0,
+                    self.transfer_manager.has_slots_free(),
+                    int(self.transfer_manager.get_average_upload_speed()),
                     0
                 )
             ]
@@ -469,6 +471,10 @@ class PeerManager:
 
         peer = self.get_peer(connection)
         peer.branch_level = level
+        # Branch root is not always sent in case the peer advertises branch
+        # level 0 because he himself is the root
+        if level == 0:
+            peer.branch_root = peer.username
         self._check_if_parent(peer, connection)
 
     @on_message(DistributedBranchRoot)
@@ -489,7 +495,7 @@ class PeerManager:
 
     def on_state_changed(self, state, connection, close_reason=None):
         if state == ConnectionState.CLOSED:
-            parent = self.state.parent
+            parent = self._state.parent
             if parent and connection == parent.connection:
                 parent.peer.remove_connection(connection)
                 self.unset_parent()

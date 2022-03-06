@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from distutils.command.upload import upload
 from enum import auto, Enum
 import time
 
@@ -10,8 +12,8 @@ class TransferDirection(Enum):
 
 
 class TransferState(Enum):
-    UNINITIALIZED = auto()
     QUEUED = auto()
+    INITIALIZING = auto()
     INCOMPLETE = auto()
     DOWNLOADING = auto()
     UPLOADING = auto()
@@ -26,9 +28,11 @@ class Transfer:
 
         self.username: str = username
         self.filename: str = filename
-        """Filename of the remote file"""
+        """Remote filename in case of download, local path in case of upload"""
         self.direction: TransferDirection = direction
         self.place_in_queue: int = None
+        """Place in queue, only applicable for downloads"""
+        self.fail_reason: str = None
 
         self.ticket: int = ticket
         self.filesize: int = None
@@ -37,8 +41,6 @@ class Transfer:
         """Offset used for resuming downloads. This offset will be used and
         reset by the L{read} method of this object
         """
-
-        self.fail_reason: str = None
 
         self.target_path: str = None
         """Path to download the file to or upload the file from"""
@@ -56,8 +58,10 @@ class Transfer:
         """
         self.complete_time: float = None
         """Time at which the transfer was completed. This is the time the
-        transfer entered the complete state.
+        transfer entered the complete or incomplete state
         """
+
+        self.state_listeners = []
 
     def set_state(self, state: TransferState):
         if state == self.state:
@@ -71,6 +75,9 @@ class Transfer:
             self.complete_time = time.time()
 
         self.state = state
+
+        for listener in self.state_listeners:
+            listener.on_transfer_state_changed(self, state)
 
     def set_offset(self, offset: int):
         self._offset = offset
@@ -152,22 +159,30 @@ class Transfer:
             self._fileobj = None
 
 
-class TransferQueue:
-    pass
-
-
 class TransferManager:
 
     def __init__(self, settings):
         self.settings = settings
-        self._transfers = []
+        self.upload_slots: int = settings['sharing']['limits']['upload_slots']
+        self.download_slots: int = settings['sharing']['limits']['download_slots']
+        self._transfers: List[Transfer] = []
 
     @property
     def transfers(self):
         return self._transfers
 
     def has_slots_free(self) -> bool:
-        return True
+        return self.get_free_slots() > 0
+
+    def get_free_upload_slots(self) -> int:
+        """Get the amount of free upload slots"""
+        uploading_transfers = []
+        for transfer in self._transfers:
+            if transfer.state == TransferState.UPLOADING or (transfer.direction == TransferDirection.UPLOAD and transfer.state == TransferState.INITIALIZING):
+                uploading_transfers.append(transfer)
+
+        available_slots = self.upload_slots - len(uploading_transfers)
+        return 0 if available_slots < 0 else available_slots
 
     def get_queue_size(self) -> int:
         return len([
@@ -188,16 +203,19 @@ class TransferManager:
         ]
 
     def get_download_speed(self) -> float:
+        """Return current download speed (in bytes/second)"""
         return sum([
             transfer.get_speed() for transfer in self.get_downloading()
         ])
 
     def get_upload_speed(self) -> float:
+        """Return current upload speed (in bytes/second)"""
         return sum([
             transfer.get_speed() for transfer in self.get_uploading()
         ])
 
     def get_average_upload_speed(self) -> float:
+        """Returns average upload speed (in bytes/second)"""
         upload_speeds = [
             transfer.get_speed() for transfer in self._transfers
             if transfer.state == TransferState.COMPLETE and transfer.direction == TransferDirection.UPLOAD
@@ -205,10 +223,9 @@ class TransferManager:
         return sum(upload_speeds) / len(upload_speeds)
 
     def queue_transfer(self, transfer: Transfer):
-        self.add(transfer)
-
-    def add(self, transfer: Transfer):
         self._transfers.append(transfer)
+        transfer.state_listeners.append(self)
+        self.cycle()
 
     def get_transfer_by_connection(self, connection) -> Transfer:
         for transfer in self._transfers:
@@ -228,3 +245,14 @@ class TransferManager:
                 return transfer
         raise LookupError(
             f"transfer with filename {filename} (direction={direction}) not found")
+
+    def on_transfer_state_changed(self, transfer: Transfer, state: TransferState):
+        self.cycle()
+
+    def cycle(self):
+        if self.get_free_upload_slots() <= 0:
+            return
+
+        for transfer in self._transfers:
+            if transfer.state == TransferState.QUEUED:
+                pass

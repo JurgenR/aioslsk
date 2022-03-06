@@ -1,5 +1,4 @@
 import secrets
-import struct
 
 
 KEY_SIZE = 4
