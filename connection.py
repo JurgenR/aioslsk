@@ -11,7 +11,7 @@ import time
 
 from events import get_listener_methods
 import obfuscation
-from transfer import TransferDirection
+from transfer import Transfer, TransferDirection, TransferState
 import messages
 
 
@@ -60,7 +60,7 @@ class PeerConnectionState(Enum):
     AWAITING_TICKET = auto()
     """Transfer connections: awaiting the transfer ticket"""
     AWAITING_OFFSET = auto()
-    """Transfer connections: awaiting the transfer ticket"""
+    """Transfer connections: awaiting the transfer offset"""
     ESTABLISHED = auto()
     """Message connections: ready to receive / send data"""
     TRANSFERING = auto()
@@ -356,7 +356,7 @@ class PeerConnection(DataConnection):
         self.connection_type = connection_type
         self.incoming: bool = incoming
         self.connection_state = PeerConnectionState.AWAITING_INIT
-        self.transfer = None
+        self.transfer: Transfer = None
         self.timeout = DEFAULT_PEER_TIMEOUT
 
     def set_connection_type(self, connection_type):
@@ -390,7 +390,11 @@ class PeerConnection(DataConnection):
 
     def send_data(self) -> bool:
         """Transfers data over the connection"""
+        if self.transfer.state == TransferState.COMPLETE:
+            return True
+
         data = self.transfer.read(self.send_buf_size)
+
         try:
             self.last_interaction = time.time()
             self.fileobj.sendall(data)
@@ -462,12 +466,11 @@ class PeerConnection(DataConnection):
 
 class NetworkLoop(threading.Thread):
 
-    def __init__(self, settings, stop_event, lock):
+    def __init__(self, settings, stop_event):
         super().__init__()
         self.selector = selectors.DefaultSelector()
         self.settings = settings
         self.stop_event = stop_event
-        self.lock = lock
         self._last_log_time = 0
 
     def _log_open_connections(self):

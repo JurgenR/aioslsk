@@ -15,8 +15,8 @@ credentials:
 
 sharing:
   limits:
-    download_slots: 10
-    upload_slots: 10
+    download_slots: 2
+    upload_slots: 2
   download: H:\pyslsk-downloads
   directories:
     - H:\soulseek-downloads

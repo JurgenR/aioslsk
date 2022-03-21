@@ -13,6 +13,7 @@ from filemanager import convert_to_results, FileManager
 from messages import (
     pack_int,
     pack_int64,
+    parse_distributed_message,
     BranchLevel,
     BranchRoot,
     HaveNoParents,
@@ -89,20 +90,11 @@ class PeerManager:
         transfer = Transfer(
             username=username,
             filename=filename,
-            direction=TransferDirection.DOWNLOAD
+            direction=TransferDirection.DOWNLOAD,
+            listeners=[self, ]
         )
         self.transfer_manager.queue_transfer(transfer)
 
-        connection_ticket = next(self._state.ticket_generator)
-
-        self.network_manager.init_peer_connection(
-            connection_ticket,
-            username,
-            PeerConnectionType.PEER,
-            messages=[
-                PeerTransferQueue.create(filename)
-            ]
-        )
         return transfer
 
     def create_peer(self, username: str, connection: PeerConnection) -> Peer:
@@ -150,13 +142,13 @@ class PeerManager:
         )
         self._state.parent = parent
 
-        logger.info(f"notifying server of our parent : {parent.branch_level} {parent.branch_root}")
+        logger.info(f"notifying server of our parent : level={parent.branch_level} root={parent.branch_root}")
         # The original Windows client sends out the child depth (=0) and the
         # ParentIP
         self.network_manager.send_server_messages(
             BranchLevel.create(parent.branch_level),
             BranchRoot.create(parent.branch_root),
-            HaveNoParents.create(False),
+            HaveNoParents.create(False)
         )
 
         # Remove all other distributed connections
@@ -221,9 +213,9 @@ class PeerManager:
             username=peer.username,
             filename=filename,
             ticket=transfer_ticket,
-            direction=TransferDirection.UPLOAD
+            direction=TransferDirection.UPLOAD,
+            listeners=[self, ]
         )
-        self.transfer_manager.queue_transfer(transfer)
 
         try:
             self.file_manager.get_shared_item(filename.decode('utf-8'))
@@ -234,16 +226,7 @@ class PeerManager:
                 PeerTransferQueueFailed.create(filename, transfer.fail_reason)
             )
 
-        # TODO: Let the transfer manager manage this. We should only be sending
-        # this if we are actually ready for upload
-        connection.queue_message(
-            PeerTransferRequest.create(
-                TransferDirection.DOWNLOAD.value,
-                transfer.ticket,
-                transfer.filename,
-                filesize=transfer.filesize
-            )
-        )
+        self.transfer_manager.queue_transfer(transfer)
 
     @on_message(PeerTransferRequest)
     def on_peer_transfer_request(self, message, connection: PeerConnection):
@@ -372,7 +355,8 @@ class PeerManager:
         """
         transfer = self.transfer_manager.get_transfer_by_connection(connection)
 
-        transfer.set_state(TransferState.DOWNLOADING)
+        if transfer.state != TransferState.DOWNLOADING:
+            transfer.set_state(TransferState.DOWNLOADING)
 
         if transfer.target_path is None:
             download_path = self.file_manager.get_download_path(transfer.filename.decode('utf-8'))
@@ -389,13 +373,16 @@ class PeerManager:
     def on_transfer_data_sent(self, bytes_sent: int, connection: PeerConnection):
         transfer = self.transfer_manager.get_transfer_by_connection(connection)
 
-        transfer.set_state(TransferState.UPLOADING)
+        if transfer.state != TransferState.UPLOADING:
+            transfer.set_state(TransferState.UPLOADING)
 
         transfer.bytes_transfered += bytes_sent
         if transfer.is_complete():
             transfer.complete()
-            logger.info(f"completed uploading of {transfer.filename} to {transfer.username}")
-            connection.set_state(ConnectionState.SHOULD_CLOSE)
+            logger.info(
+                f"completed uploading of {transfer.filename} to {transfer.username}. "
+                f"filesize={transfer.filesize}, transfered={transfer.bytes_transfered}, read={transfer.bytes_read}")
+            # connection.set_state(ConnectionState.SHOULD_CLOSE)
             transfer.connection = None
 
             self.network_manager.send_server_messages(
@@ -490,6 +477,53 @@ class PeerManager:
     def on_distributed_server_search_request(self, message, connection: PeerConnection):
         distrib_code, distrib_message = message.parse()
         logger.info(f"distributed server search request: {distrib_code} {distrib_message}")
+
+        try:
+            parsed_message = parse_distributed_message(distrib_message)
+            if isinstance(message, DistributedSearchRequest):
+                self.on_distributed_search_request(parsed_message, connection)
+            else:
+                logger.warning(f"no handling for server search request with code {distrib_code}")
+        except Exception:
+            logger.exception("failed to parse server search request")
+
+        # TODO: Pass on to children
+
+    # Transfer state changes
+    def on_transfer_state_changed(self, transfer: Transfer, state: TransferState):
+        if state == TransferState.INITIALIZING:
+            return
+
+        downloads, uploads = self.transfer_manager.get_next_transfers()
+
+        for download in downloads:
+            connection_ticket = next(self._state.ticket_generator)
+
+            self.network_manager.init_peer_connection(
+                connection_ticket,
+                download.username,
+                PeerConnectionType.PEER,
+                messages=[
+                    PeerTransferQueue.create(download.filename)
+                ]
+            )
+
+        for upload in uploads:
+            connection_ticket = next(self._state.ticket_generator)
+
+            self.network_manager.init_peer_connection(
+                connection_ticket,
+                upload.username,
+                PeerConnectionType.PEER,
+                messages=[
+                    PeerTransferRequest.create(
+                        TransferDirection.DOWNLOAD.value,
+                        upload.ticket,
+                        upload.filename,
+                        filesize=upload.filesize
+                    )
+                ]
+            )
 
     # State changes
 

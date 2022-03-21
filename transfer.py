@@ -1,9 +1,7 @@
-from dataclasses import dataclass
-from distutils.command.upload import upload
 from enum import auto, Enum
 import time
 
-from typing import List
+from typing import List, Tuple
 
 
 class TransferDirection(Enum):
@@ -12,6 +10,7 @@ class TransferDirection(Enum):
 
 
 class TransferState(Enum):
+    VIRGIN = auto()
     QUEUED = auto()
     INITIALIZING = auto()
     INCOMPLETE = auto()
@@ -23,8 +22,8 @@ class TransferState(Enum):
 
 class Transfer:
 
-    def __init__(self, username: str, filename: str, direction: TransferDirection, ticket: int=None):
-        self.state = TransferState.QUEUED
+    def __init__(self, username: str, filename: str, direction: TransferDirection, ticket: int=None, listeners=None):
+        self.state = TransferState.VIRGIN
 
         self.username: str = username
         self.filename: str = filename
@@ -61,17 +60,12 @@ class Transfer:
         transfer entered the complete or incomplete state
         """
 
-        self.state_listeners = []
+        self.state_listeners = [] if listeners is None else listeners
 
     def set_state(self, state: TransferState):
-        if state == self.state:
-            return
-
         if state in (TransferState.DOWNLOADING, TransferState.UPLOADING):
             self.start_time = time.time()
-        elif state == TransferState.COMPLETE:
-            self.complete_time = time.time()
-        elif state == TransferState.INCOMPLETE:
+        elif state in (TransferState.COMPLETE, TransferState.INCOMPLETE):
             self.complete_time = time.time()
 
         self.state = state
@@ -111,7 +105,12 @@ class Transfer:
             end_time = self.complete_time
         transfer_duration = end_time - self.start_time
 
+        if transfer_duration == 0.0:
+            return 0.0
         return self.bytes_transfered / transfer_duration
+
+    def is_processing(self) -> bool:
+        return self.state in (TransferState.DOWNLOADING, TransferState.UPLOADING, TransferState.INITIALIZING, )
 
     def is_complete(self) -> bool:
         return self.filesize == self.bytes_transfered
@@ -145,7 +144,7 @@ class Transfer:
             self._fileobj = open(self.target_path, 'wb')
 
         bytes_written = self._fileobj.write(data)
-        self.bytes_written += len(bytes_written)
+        self.bytes_written += bytes_written
 
         return self.is_complete()
 
@@ -172,16 +171,26 @@ class TransferManager:
         return self._transfers
 
     def has_slots_free(self) -> bool:
-        return self.get_free_slots() > 0
+        return self.get_free_upload_slots() > 0
 
     def get_free_upload_slots(self) -> int:
         """Get the amount of free upload slots"""
         uploading_transfers = []
         for transfer in self._transfers:
-            if transfer.state == TransferState.UPLOADING or (transfer.direction == TransferDirection.UPLOAD and transfer.state == TransferState.INITIALIZING):
+            if transfer.direction == TransferDirection.UPLOAD and transfer.is_processing():
                 uploading_transfers.append(transfer)
 
         available_slots = self.upload_slots - len(uploading_transfers)
+        return 0 if available_slots < 0 else available_slots
+
+    def get_free_download_slots(self) -> int:
+        """Get the amount of free download slots"""
+        downloading_transfers = []
+        for transfer in self._transfers:
+            if transfer.direction == TransferDirection.DOWNLOAD and transfer.is_processing():
+                downloading_transfers.append(transfer)
+
+        available_slots = self.download_slots - len(downloading_transfers)
         return 0 if available_slots < 0 else available_slots
 
     def get_queue_size(self) -> int:
@@ -220,12 +229,14 @@ class TransferManager:
             transfer.get_speed() for transfer in self._transfers
             if transfer.state == TransferState.COMPLETE and transfer.direction == TransferDirection.UPLOAD
         ]
+        if len(upload_speeds) == 0:
+            return 0.0
         return sum(upload_speeds) / len(upload_speeds)
 
     def queue_transfer(self, transfer: Transfer):
         self._transfers.append(transfer)
         transfer.state_listeners.append(self)
-        self.cycle()
+        transfer.set_state(TransferState.QUEUED)
 
     def get_transfer_by_connection(self, connection) -> Transfer:
         for transfer in self._transfers:
@@ -247,12 +258,27 @@ class TransferManager:
             f"transfer with filename {filename} (direction={direction}) not found")
 
     def on_transfer_state_changed(self, transfer: Transfer, state: TransferState):
-        self.cycle()
+        pass
 
-    def cycle(self):
-        if self.get_free_upload_slots() <= 0:
-            return
+    def get_next_transfers(self) -> Tuple[List[Transfer], List[Transfer]]:
+        """Get the next transfers to initialize"""
+        free_download_slots = self.get_free_download_slots()
+        free_upload_slots = self.get_free_upload_slots()
 
-        for transfer in self._transfers:
-            if transfer.state == TransferState.QUEUED:
-                pass
+        queued_uploads = [
+            transfer for transfer in self._transfers
+            if transfer.state == TransferState.QUEUED and transfer.direction == TransferDirection.UPLOAD
+        ]
+
+        queued_downloads = [
+            transfer for transfer in self._transfers
+            if transfer.state == TransferState.QUEUED and transfer.direction == TransferDirection.DOWNLOAD
+        ]
+
+        to_download = queued_downloads[:free_download_slots]
+        to_upload = queued_uploads[:free_upload_slots]
+
+        for transfer in to_download + to_upload:
+            transfer.set_state(TransferState.INITIALIZING)
+
+        return to_download, to_upload

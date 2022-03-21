@@ -23,7 +23,6 @@ class SoulSeek:
         self.settings = settings
 
         self._stop_event = threading.Event()
-        self._cache_lock = threading.Lock()
 
         self.events = EventBus()
 
@@ -32,16 +31,17 @@ class SoulSeek:
 
         self.file_manager = FileManager(settings['sharing'])
 
-        self.transfer_manager = TransferManager(settings)
-
         self._network_manager = NetworkManager(
             settings,
-            self._stop_event,
-            self._cache_lock
+            self._stop_event
         )
 
         cache_expiration_job = Job(60, self._network_manager.expire_caches)
         self.state.scheduler.add_job(cache_expiration_job)
+
+        self.transfer_manager = TransferManager(
+            settings
+        )
 
         self._peer_manager = PeerManager(
             self.state,

@@ -49,14 +49,13 @@ class ConnectionRequest:
 
 class NetworkManager:
 
-    def __init__(self, settings, stop_event, cache_lock):
+    def __init__(self, settings, stop_event):
         self._settings = settings
 
         self.upnp = upnp.UPNP()
 
         self.stop_event = stop_event
-        self.cache_lock = cache_lock
-        self.lock = threading.Lock()
+        self._cache_lock = threading.Lock()
 
         self.network_loop: NetworkLoop = None
         self.server: ServerConnection = None
@@ -71,7 +70,7 @@ class NetworkManager:
         logger.info("initializing network")
 
         # Init connections
-        self.network_loop = NetworkLoop(self._settings, self.stop_event, self.lock)
+        self.network_loop = NetworkLoop(self._settings, self.stop_event)
 
         self.server = ServerConnection(
             hostname=self._settings['network']['server_hostname'],
@@ -113,7 +112,7 @@ class NetworkManager:
             )
 
     def expire_caches(self):
-        with self.cache_lock:
+        with self._cache_lock:
             self.connection_requests.expire()
 
     def _register_to_network_loop(self, fileobj, events, connection):
@@ -167,7 +166,7 @@ class NetworkManager:
             self._unregister_from_network_loop(connection.fileobj)
 
             if close_reason == CloseReason.CONNECT_FAILED:
-                with self.cache_lock:
+                with self._cache_lock:
                     for ticket, connection_req in self.connection_requests.items():
                         if connection != connection_req.connection:
                             continue
@@ -234,14 +233,14 @@ class NetworkManager:
             messages=messages
         )
 
-        with self.cache_lock:
+        with self._cache_lock:
             self.connection_requests[ticket] = connection_request
 
         if ip is None and port is None:
             # Request peer address if ip and port are not given
             self.send_server_messages(GetPeerAddress.create(username))
         else:
-            with self.cache_lock:
+            with self._cache_lock:
                 self._connect_to_peer(ticket, connection_request)
 
         return connection_request
@@ -326,7 +325,7 @@ class NetworkManager:
 
         # Remove the connection request
         if request.ticket is not None and request.ticket != 0:
-            with self.cache_lock:
+            with self._cache_lock:
                 try:
                     self.connection_requests.pop(request.ticket)
                 except KeyError:
@@ -377,7 +376,7 @@ class NetworkManager:
         logger.debug(f"PeerPierceFirewall : (ticket={ticket})")
 
         try:
-            with self.cache_lock:
+            with self._cache_lock:
                 request = self.connection_requests[ticket]
         except KeyError:
             logger.warning(f"PeerPierceFirewall : unknown ticket (ticket={ticket})")
@@ -392,11 +391,11 @@ class NetworkManager:
             logger.warning(f"GetPeerAddress : no address returned for username : {username}")
             return
 
-        with self.cache_lock:
+        with self._cache_lock:
             for ticket, request in self.connection_requests.items():
                 if request.username == username:
                     if username.decode('utf-8') == 'Khyle':
-                        request.ip = '192.168.0.158'
+                        request.ip = '192.168.0.154'
                     else:
                         request.ip = ip
                     request.port = port
@@ -409,7 +408,7 @@ class NetworkManager:
         username, typ, ip, port, ticket, privileged, _, obfuscated_port = contents
 
         if username.decode('utf-8') == 'Khyle':
-            ip = '192.168.0.158'
+            ip = '192.168.0.154'
 
         connection_request = ConnectionRequest(
             ticket=ticket,
@@ -419,7 +418,7 @@ class NetworkManager:
             ip=ip,
             port=port
         )
-        with self.cache_lock:
+        with self._cache_lock:
             self.connection_requests[ticket] = connection_request
 
         self._connect_to_peer(ticket, connection_request)
@@ -428,7 +427,7 @@ class NetworkManager:
     def on_cannot_connect(self, message):
         ticket, username = message.parse()
         logger.debug(f"CannotConnect : username={username} (ticket={ticket})")
-        with self.cache_lock:
+        with self._cache_lock:
             try:
                 self.connection_requests.pop(ticket)
             except KeyError:
