@@ -1,3 +1,4 @@
+from __future__ import annotations
 import logging
 import threading
 import time
@@ -40,7 +41,10 @@ class SoulSeek:
         self.state.scheduler.add_job(cache_expiration_job)
 
         self.transfer_manager = TransferManager(
-            settings
+            self.state,
+            settings,
+            self.file_manager,
+            self._network_manager
         )
 
         self._peer_manager = PeerManager(

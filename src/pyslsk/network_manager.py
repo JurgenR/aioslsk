@@ -1,10 +1,11 @@
+from __future__ import annotations
 from cachetools import TTLCache
 from dataclasses import dataclass, field
 from functools import partial
 import logging
 from selectors import EVENT_READ, EVENT_WRITE
 import threading
-from typing import List, Tuple, Callable
+from typing import Callable, List
 
 from connection import (
     Connection,
@@ -45,6 +46,8 @@ class ConnectionRequest:
     transfer: Transfer = None
     messages: List[bytes] = field(default_factory=lambda: [])
     """List of messages to be delivered when connection is established"""
+    on_failure: Callable = None
+    """Callback called when connection cannot be initialized"""
 
 
 class NetworkManager:
@@ -61,10 +64,11 @@ class NetworkManager:
         self.server: ServerConnection = None
         self.listening_connections: List[ListeningConnection] = []
 
-        self.connection_requests = TTLCache(maxsize=1000, ttl=15 * 60)
+        self.connection_requests = TTLCache(maxsize=1000, ttl=5 * 60)
 
         self.peer_listener = None
         self.server_listener = None
+        self.transfer_listener = None
 
     def initialize(self):
         logger.info("initializing network")
@@ -187,6 +191,7 @@ class NetworkManager:
                                 CannotConnect.create(ticket, connection_req.username)
                             )
                             self.connection_requests.pop(ticket)
+                            self.fail_peer_connection_request(connection_req)
                             break
 
     def _on_listening_connection_state_changed(self, state: ConnectionState, connection: ListeningConnection):
@@ -205,7 +210,7 @@ class NetworkManager:
         self._register_to_network_loop(
             connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
 
-    def init_peer_connection(self, ticket: int, username: str, typ, ip=None, port=None, transfer: Transfer=None, messages=None) -> ConnectionRequest:
+    def init_peer_connection(self, ticket: int, username: str, typ, ip=None, port=None, transfer: Transfer=None, messages=None, on_failure=None) -> ConnectionRequest:
         """Starts the process of peer connection initialization.
 
         The L{ip} and L{port} parameters are optional, in case they are missing
@@ -218,6 +223,7 @@ class NetworkManager:
         @param port: port to which to connect (Default: None)
         @param messages: list of messages to be delivered when the connection
             is successfully established (Default: None)
+        @param on_failure: callback for when connection failed
 
         @return: created L{ConnectionRequest} object
         """
@@ -230,7 +236,8 @@ class NetworkManager:
             ip=ip,
             port=port,
             transfer=transfer,
-            messages=messages
+            messages=messages,
+            on_failure=on_failure
         )
 
         with self._cache_lock:
@@ -292,6 +299,9 @@ class NetworkManager:
 
         It will also remove the connection request from the cache and queue any
         messages that are set in the connection request.
+
+        @param request: the associated L{ConnectionRequest} object
+        @param connection: the associated L{PeerConnection} object
         """
         logger.debug(f"finalizing peer connection : {request!r}")
 
@@ -311,6 +321,7 @@ class NetworkManager:
         # File connections should go into AWAITING_TICKET or AWAITING_OFFSET
         # depending on the state of the transfer
         if request.typ == PeerConnectionType.FILE:
+            connection.transfer_listeners.append(self.transfer_listener)
             # The transfer for the request will be none if the peer is connecting
             # to us. We don't know for which transfer he is connecting us yet
             if request.transfer is None:
@@ -335,18 +346,18 @@ class NetworkManager:
         for message in request.messages:
             connection.queue_message(message)
 
-    # Transfer related
-    def on_transfer_ticket(self, ticket, connection: PeerConnection):
-        pass
+    def fail_peer_connection_request(self, connection_request: ConnectionRequest):
+        """Method called after peer connection could not be established. It is
+        called after the following 3 situations:
 
-    def on_transfer_offset(self, offset, connection: PeerConnection):
-        pass
+        - GetPeerAddress returned nothing
+        - We received a CannotConnect from the server
+        - We sent a ConnectToPeer to the server but didn't get an incoming
+          connection in a timely fashion
+        """
 
-    def on_transfer_data_received(self, data, connection: PeerConnection):
-        pass
-
-    def on_transfer_data_sent(self, bytes_sent, connection: PeerConnection):
-        pass
+        if connection_request.on_failure is not None:
+            pass
 
     # Server related
 
@@ -354,9 +365,6 @@ class NetworkManager:
     def on_peer_init(self, message, connection: PeerConnection):
         username, typ, ticket = message.parse()
         logger.info(f"PeerInit : {username}, {typ} (ticket={ticket})")
-
-        # Maybe this is misplaced?
-        self.peer_listener.create_peer(username, connection)
 
         self.finalize_peer_connection(
             # Create a dummy connection request for peers that are directly
@@ -387,15 +395,20 @@ class NetworkManager:
     def on_get_peer_address(self, message):
         username, ip, port, _, obfuscated_port = message.parse()
         logger.debug(f"GetPeerAddress : username={username}, ip={ip}, ports={port}/{obfuscated_port}")
+
         if ip == '0.0.0.0':
             logger.warning(f"GetPeerAddress : no address returned for username : {username}")
+            with self._cache_lock:
+                for ticket, request in self.connection_requests.items():
+                    if request.username == username:
+                        self.fail_peer_connection_request(request)
             return
 
         with self._cache_lock:
             for ticket, request in self.connection_requests.items():
                 if request.username == username:
                     if username.decode('utf-8') == 'Khyle':
-                        request.ip = '192.168.0.154'
+                        request.ip = '192.168.0.158'
                     else:
                         request.ip = ip
                     request.port = port
@@ -408,7 +421,7 @@ class NetworkManager:
         username, typ, ip, port, ticket, privileged, _, obfuscated_port = contents
 
         if username.decode('utf-8') == 'Khyle':
-            ip = '192.168.0.154'
+            ip = '192.168.0.158'
 
         connection_request = ConnectionRequest(
             ticket=ticket,
@@ -429,12 +442,13 @@ class NetworkManager:
         logger.debug(f"CannotConnect : username={username} (ticket={ticket})")
         with self._cache_lock:
             try:
-                self.connection_requests.pop(ticket)
+                request = self.connection_requests.pop(ticket)
             except KeyError:
                 logger.warning(
                     f"CannotConnect : ticket {ticket} (username={username}) was not found in cache")
             else:
                 logger.debug(f"CannotConnect : removed ticket {ticket} (username={username}) from cache")
+                self.fail_peer_connection_request(request)
 
     def send_server_messages(self, *messages):
         for message in messages:

@@ -1,4 +1,6 @@
+from __future__ import annotations
 from enum import auto, Enum
+from typing import List
 import copy
 import errno
 import logging
@@ -11,7 +13,7 @@ import time
 
 from events import get_listener_methods
 import obfuscation
-from transfer import Transfer, TransferDirection, TransferState
+from listeners import TransferListener
 import messages
 
 
@@ -156,6 +158,9 @@ class DataConnection(Connection):
         self.recv_buf_size = DEFAULT_RECV_BUF_SIZE
         self.send_buf_size = TRANSFER_RECV_BUF_SIZE
 
+    def interact(self):
+        self.last_interaction = time.monotonic()
+
     def read(self) -> bool:
         """Attempts to read data from the socket. When data is received the
         L{buffer} method of this object will be called with the received data
@@ -169,8 +174,8 @@ class DataConnection(Connection):
             self.disconnect(reason=CloseReason.READ_ERROR)
             return False
         else:
+            self.interact()
             if recv_data:
-                self.last_interaction = time.time()
                 self.buffer(recv_data)
             else:
                 logger.warning(
@@ -186,7 +191,7 @@ class DataConnection(Connection):
     def send_message(self) -> bool:
         """Sends a message if there is a message in the queue.
 
-        @return: False in case an error occured on the socket while sending.
+        @return: False in case an exception occured on the socket while sending.
             True in case a message was successfully sent or nothing was sent
         """
         try:
@@ -196,7 +201,7 @@ class DataConnection(Connection):
         else:
             try:
                 logger.debug(f"send {self.hostname}:{self.port} : message {message.hex()}")
-                self.last_interaction = time.time()
+                self.interact()
                 self.write_message(message)
             except OSError:
                 logger.exception(
@@ -348,16 +353,18 @@ class PeerConnection(DataConnection):
 
     def __init__(
             self, hostname='0.0.0.0', port=None, obfuscated=False,
-            listeners=None, connection_type=PeerConnectionType.PEER,
-            incoming=False):
+            connection_type=PeerConnectionType.PEER,
+            incoming: bool=False, listeners=None):
         super().__init__(hostname, port)
-        self.listeners = listeners
         self.obfuscated: bool = obfuscated
-        self.connection_type = connection_type
         self.incoming: bool = incoming
+        self.connection_type = connection_type
+        self.listeners = [] if listeners is None else listeners
         self.connection_state = PeerConnectionState.AWAITING_INIT
-        self.transfer: Transfer = None
         self.timeout = DEFAULT_PEER_TIMEOUT
+
+        self.transfer = None
+        self.transfer_listeners: List[TransferListener] = []
 
     def set_connection_type(self, connection_type):
         self.connection_type = connection_type
@@ -368,6 +375,7 @@ class PeerConnection(DataConnection):
         self.connection_state = state
 
     def connect(self):
+        self.interact()
         logger.info(f"open {self.hostname}:{self.port} : peer connection")
         self.fileobj = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.fileobj.setblocking(False)
@@ -382,21 +390,21 @@ class PeerConnection(DataConnection):
         return self.fileobj
 
     def write(self) -> bool:
-        is_upload = self.transfer is not None and self.transfer.direction == TransferDirection.UPLOAD
-        if self.connection_state == PeerConnectionState.TRANSFERING and is_upload:
+        is_upload = self.transfer is not None and self.transfer.is_upload()
+        if is_upload and self.connection_state == PeerConnectionState.TRANSFERING:
             return self.send_data()
         else:
             return self.send_message()
 
     def send_data(self) -> bool:
         """Transfers data over the connection"""
-        if self.transfer.state == TransferState.COMPLETE:
+        if self.transfer.is_finalized():
             return True
 
         data = self.transfer.read(self.send_buf_size)
 
         try:
-            self.last_interaction = time.time()
+            self.interact()
             self.fileobj.sendall(data)
         except OSError:
             logger.exception(
@@ -405,7 +413,7 @@ class PeerConnection(DataConnection):
             return False
         else:
             self.bytes_sent += len(data)
-            for listener in self.listeners:
+            for listener in self.transfer_listeners:
                 listener.on_transfer_data_sent(len(data), self)
         return True
 
@@ -424,7 +432,7 @@ class PeerConnection(DataConnection):
             if len(self._buffer) >= struct.calcsize('I'):
                 pos, ticket = messages.parse_int(0, self._buffer)
                 self._buffer = self._buffer[pos:]
-                for listener in self.listeners:
+                for listener in self.transfer_listeners:
                     listener.on_transfer_ticket(ticket, self)
 
         elif self.connection_state == PeerConnectionState.AWAITING_OFFSET:
@@ -432,14 +440,14 @@ class PeerConnection(DataConnection):
             if len(self._buffer) >= struct.calcsize('Q'):
                 pos, ticket = messages.parse_int64(0, self._buffer)
                 self._buffer = self._buffer[pos:]
-                for listener in self.listeners:
+                for listener in self.transfer_listeners:
                     listener.on_transfer_offset(ticket, self)
 
         elif self.connection_state == PeerConnectionState.TRANSFERING:
 
             data = self._buffer
             self._buffer = bytes()
-            for listener in self.listeners:
+            for listener in self.transfer_listeners:
                 listener.on_transfer_data_received(data, self)
 
     def handle_message_data(self, message_data: bytes):
@@ -527,11 +535,10 @@ class NetworkLoop(threading.Thread):
                     if mask & selectors.EVENT_READ:
                         # Listening connection
                         if isinstance(connection, ListeningConnection):
-                            # Accept incoming connections on the listening socket
                             connection.accept(work_socket)
                             continue
 
-                        # Server socket or peer socket
+                        # Data connection (peer/server)
                         if not connection.read():
                             continue
 
@@ -568,7 +575,7 @@ class NetworkLoop(threading.Thread):
                             connection.disconnect(reason=CloseReason.TIMEOUT)
                             continue
 
-        except Exception as exc:
+        except Exception:
             logger.exception("failure inside network loop")
         finally:
             for data in self.selector.get_map().values():
