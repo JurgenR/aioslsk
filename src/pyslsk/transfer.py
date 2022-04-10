@@ -5,21 +5,21 @@ from typing import List, Tuple
 import logging
 import time
 
-from connection import (
+from .connection import (
     ConnectionState,
     PeerConnection,
     PeerConnectionType,
     PeerConnectionState,
 )
-from filemanager import FileManager
-from listeners import TransferListener
-from messages import (
+from .filemanager import FileManager
+from .listeners import TransferListener
+from .messages import (
     pack_int64,
     PeerTransferQueue,
     PeerTransferRequest,
     SendUploadSpeed,
 )
-from state import State
+from .state import State
 
 
 logger = logging.getLogger()

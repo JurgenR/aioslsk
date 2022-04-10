@@ -1,14 +1,14 @@
 import logging
 from typing import Dict, List
 
-from connection import (
+from .connection import (
     PeerConnection,
     PeerConnectionType,
     ConnectionState
 )
-from events import on_message, EventBus
-from filemanager import convert_to_results, FileManager
-from messages import (
+from .events import on_message, EventBus
+from .filemanager import convert_to_results, FileManager
+from .messages import (
     pack_int,
     parse_distributed_message,
     BranchLevel,
@@ -29,10 +29,10 @@ from messages import (
     PeerUserInfoRequest,
     PeerUserInfoReply,
 )
-from network_manager import NetworkManager
-from search import ReceivedSearch, SearchResult
-from state import Parent, State
-from transfer import Transfer, TransferDirection, TransferManager, TransferState
+from .network_manager import NetworkManager
+from .search import ReceivedSearch, SearchResult
+from .state import Parent, State
+from .transfer import Transfer, TransferDirection, TransferManager, TransferState
 
 
 logger = logging.getLogger()

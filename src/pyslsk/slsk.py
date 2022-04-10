@@ -3,16 +3,16 @@ import logging
 import threading
 import time
 
-from events import EventBus
-from filemanager import FileManager
-from network_manager import NetworkManager
-import messages
-from peer import PeerManager
-from server_manager import ServerManager
-from scheduler import Job, Scheduler
-from state import State
-from search import SearchQuery
-from transfer import TransferManager
+from .events import EventBus
+from .filemanager import FileManager
+from .network_manager import NetworkManager
+from . import messages
+from .peer import PeerManager
+from .server_manager import ServerManager
+from .scheduler import Job, Scheduler
+from .state import State
+from .search import SearchQuery
+from .transfer import TransferManager
 
 
 logger = logging.getLogger()

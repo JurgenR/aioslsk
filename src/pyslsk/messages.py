@@ -6,7 +6,7 @@ import struct
 from typing import Callable
 import zlib
 
-from exceptions import UnknownMessageError
+from .exceptions import UnknownMessageError
 
 
 logger = logging.getLogger()
@@ -714,6 +714,20 @@ class CheckPrivileges(Message):
 
     def parse_server(self):
         super().parse()
+
+
+class ServerSearchRequest(Message):
+    MESSAGE_ID = 0x5D
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        distrib_code = self.parse_uchar()
+        unknown = self.parse_int()
+        username = self.parse_string()
+        ticket = self.parse_int()
+        query = self.parse_string()
+        return distrib_code, unknown, username, ticket, query
 
 
 class AcceptChildren(Message):

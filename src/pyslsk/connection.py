@@ -11,10 +11,10 @@ import struct
 import threading
 import time
 
-from events import get_listener_methods
-import obfuscation
-from listeners import TransferListener
-import messages
+from .events import get_listener_methods
+from . import obfuscation
+from .listeners import TransferListener
+from . import messages
 
 
 logger = logging.getLogger()
@@ -510,7 +510,7 @@ class NetworkLoop(threading.Thread):
 
                 events = self.selector.select(timeout=None)
 
-                current_time = time.time()
+                current_time = time.monotonic()
 
                 for key, mask in events:
                     work_socket = key.fileobj
@@ -567,7 +567,8 @@ class NetworkLoop(threading.Thread):
 
                     # Clean up connections that went into timeout
                     if isinstance(connection, PeerConnection):
-                        if connection.last_interaction == 0:
+                        # Ignore connections that haven't had an interaction yet
+                        if not connection.last_interaction:
                             continue
 
                         if connection.last_interaction + connection.timeout < current_time:

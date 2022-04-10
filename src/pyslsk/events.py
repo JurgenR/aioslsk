@@ -4,7 +4,7 @@ import inspect
 import logging
 from typing import Callable, Dict, List, Type
 
-from model import ChatMessage, Room, RoomMessage, User
+from .model import ChatMessage, Room, RoomMessage, User
 
 
 logger = logging.getLogger()

@@ -1,8 +1,8 @@
 import logging
 import time
 
-from connection import PeerConnectionType, ConnectionState
-from events import (
+from .connection import PeerConnectionType, ConnectionState
+from .events import (
     on_message,
     EventBus,
     PrivateMessageEvent,
@@ -13,8 +13,8 @@ from events import (
     UserJoinedRoomEvent,
     UserLeftRoomEvent,
 )
-from filemanager import FileManager
-from messages import (
+from .filemanager import FileManager
+from .messages import (
     AcceptChildren,
     AddUser,
     BranchRoot,
@@ -36,15 +36,16 @@ from messages import (
     Ping,
     PrivilegedUsers,
     RoomList,
+    ServerSearchRequest,
     SetListenPort,
     SetStatus,
     SharedFoldersFiles,
     WishlistInterval,
 )
-from model import ChatMessage, Room, RoomMessage, User, UserState
-from network_manager import NetworkManager
-from scheduler import Job
-from state import State
+from .model import ChatMessage, Room, RoomMessage, User, UserState
+from .network_manager import NetworkManager
+from .scheduler import Job
+from .state import State
 
 
 logger = logging.getLogger()
@@ -229,6 +230,12 @@ class ServerManager:
         )
 
         self._event_bus.emit(PrivateMessageEvent(user, chat_message))
+
+    @on_message(ServerSearchRequest)
+    def on_server_search_request(self, message):
+        contents = message.parse()
+        distrib_code, unk, username, ticket, query = contents
+        logger.info(f"ServerSearchRequest : {contents!r}")
 
     # State related messages
     @on_message(CheckPrivileges)

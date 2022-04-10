@@ -7,7 +7,7 @@ from selectors import EVENT_READ, EVENT_WRITE
 import threading
 from typing import Callable, List
 
-from connection import (
+from .connection import (
     Connection,
     ConnectionState,
     CloseReason,
@@ -18,16 +18,16 @@ from connection import (
     PeerConnectionType,
     ServerConnection,
 )
-from events import on_message
-from messages import (
+from .events import on_message
+from .messages import (
     CannotConnect,
     ConnectToPeer,
     GetPeerAddress,
     PeerInit,
     PeerPierceFirewall,
 )
-import upnp
-from transfer import Transfer, TransferDirection
+from . import upnp
+from .transfer import Transfer, TransferDirection
 
 
 logger = logging.getLogger()

@@ -34,7 +34,7 @@ class TestConnection:
 class TestDataConnection:
     # read
 
-    @patch('connection.DataConnection.process_buffer')
+    @patch('pyslsk.connection.DataConnection.process_buffer')
     def test_whenReadSuccessful_shouldBufferAndReturnTrue(self, process_buffer):
         data = b"050000000095000000"
 
@@ -50,7 +50,7 @@ class TestDataConnection:
         assert conn.last_interaction != 0
         conn.process_buffer.assert_called_once()
 
-    @patch('connection.DataConnection.disconnect')
+    @patch('pyslsk.connection.DataConnection.disconnect')
     def test_whenReadReturnsEmptyData_shouldDisconnectAndReturnFalse(self, disconnect):
         data = b""
 
@@ -66,7 +66,7 @@ class TestDataConnection:
         assert conn.last_interaction != 0
         conn.disconnect.assert_called_once_with(reason=CloseReason.EOF)
 
-    @patch('connection.DataConnection.disconnect')
+    @patch('pyslsk.connection.DataConnection.disconnect')
     def test_whenReadUnsuccessful_shouldCallDisconnectAndReturnFalse(self, disconnect):
 
         conn = DataConnection(hostname='test', port=1234)
@@ -83,7 +83,7 @@ class TestDataConnection:
 
     # buffer
 
-    @patch('connection.DataConnection.process_buffer')
+    @patch('pyslsk.connection.DataConnection.process_buffer')
     def test_whenBuffer_shouldStoreData(self, process_buffer):
         conn = DataConnection(hostname='test', port=1234)
 
@@ -120,7 +120,7 @@ class TestDataConnection:
         assert conn.bytes_sent == len(data_to_send)
         assert conn.last_interaction != 0
 
-    @patch('connection.DataConnection.disconnect')
+    @patch('pyslsk.connection.DataConnection.disconnect')
     def test_whenSendMessageFails_shouldDisconnectAndReturnFalse(self, disconnect):
         conn = DataConnection(hostname='test', port=1234)
         conn.fileobj = Mock()
@@ -145,7 +145,7 @@ class TestPeerConnection:
         assert conn.state == ConnectionState.UNINITIALIZED
         assert conn.connection_state == PeerConnectionState.AWAITING_INIT
 
-    @patch('connection.socket.socket', autospec=True)
+    @patch('pyslsk.connection.socket.socket', autospec=True)
     def test_whenConnect_shouldSetConnectingState(self, sock_mock):
         ip, port = '1.2.3.4', 1234
         conn = PeerConnection(hostname=ip, port=port)

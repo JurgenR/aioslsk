@@ -2,9 +2,9 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Deque, Dict, List
 
-from scheduler import Scheduler
-from model import ChatMessage, Room, User
-from utils import ticket_generator
+from .scheduler import Scheduler
+from .model import ChatMessage, Room, User
+from .utils import ticket_generator
 
 
 @dataclass

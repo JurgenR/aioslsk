@@ -1,4 +1,4 @@
-from pyslsk.transfer import Transfer
+from .transfer import Transfer
 from dataclasses import dataclass
 
 

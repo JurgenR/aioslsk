@@ -18,8 +18,12 @@ Code Structure
 Modules
 -------
 
-- `connection`: everything related to opening and closing connections, it also contains the network loop.
+- `slsk`
+- `connection`: everything related to physical connections. Also contains the network loop
 - `messages`: everything related to parsing and creating of SoulSeek messages
+- `network_manager`: higher level network manager
+- `server_manager`
+-
 
 Connection Management
 ---------------------
