@@ -9,7 +9,6 @@ from pyslsk.connection import (
 from unittest.mock import MagicMock, Mock, patch
 
 
-
 class TestConnection:
 
     def test_whenDisconnect_shouldCallCloseAndSetState(self):

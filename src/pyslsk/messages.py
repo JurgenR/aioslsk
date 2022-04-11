@@ -370,7 +370,6 @@ class GetUserStatus(Message):
         return username, status, privileged
 
 
-
 class ChatRoomMessage(Message):
     MESSAGE_ID = 0x0D
 
@@ -937,6 +936,7 @@ class ChatPrivateRoomRemoveUser(Message):
         user = self.parse_string()
         return room, user
 
+
 class ChatPrivateRoomDropMembership(Message):
     MESSAGE_ID = 0x87
 
@@ -1016,6 +1016,7 @@ class ChatPrivateRoomAddOperator(Message):
         operator = self.parse_string()
         return room, operator
 
+
 class ChatPrivateRoomRemoveOperator(Message):
     MESSAGE_ID = 0x90
 
@@ -1030,6 +1031,7 @@ class ChatPrivateRoomRemoveOperator(Message):
         room = self.parse_string()
         operator = self.parse_string()
         return room, operator
+
 
 class ChatPrivateRoomOperatorAdded(Message):
     MESSAGE_ID = 0x91

@@ -18,7 +18,6 @@ class TestEventBus:
 
         assert bus._events[PrivateMessageEvent] == [listener1, ]
 
-
     def test_whenRegisterExistingEvent_shouldAddListener(self):
         bus = EventBus()
 
