@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "pyslsk"
+version = "0.1.0"
+description = ""
+authors = ["Jurgen <jurgen@mail.com>"]
+
+[tool.poetry.dependencies]
+python = "~3.7"
+upnpclient = "^1.0.3"
+mutagen = "^1.45.1"
+PySide6 = "^6.2.4"
+PyYAML = "^6.0"
+QDarkStyle = "^3.0.3"
+cachetools = "^5.0.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.1.1"
+pytest-cov = "^3.0.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
