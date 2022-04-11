@@ -379,9 +379,14 @@ class PeerConnection(DataConnection):
         logger.info(f"open {self.hostname}:{self.port} : peer connection")
         self.fileobj = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.fileobj.setblocking(False)
-        res = self.fileobj.connect_ex((self.hostname, self.port, ))
+        result_code = self.fileobj.connect_ex((self.hostname, self.port, ))
 
-        logger.info(f"open {self.hostname}:{self.port} : peer connection, result {res} [{errno.errorcode[res]}]")
+        if result_code == 0:
+            result_str = f"success"
+        else:
+            result_str = errno.errorcode.get(result_code, 'unknown')
+
+        logger.info(f"open {self.hostname}:{self.port} : peer connection. result {result_code} [{result_str}]")
         # This can return error code 10035 (WSAEWOULDBLOCK) which can be ignored
         # What to do with other error codes?
 
