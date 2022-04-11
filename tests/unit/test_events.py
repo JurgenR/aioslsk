@@ -4,6 +4,7 @@ from pyslsk.events import EventBus, PrivateMessageEvent
 def listener1():
     pass
 
+
 def listener2():
     pass
 

@@ -63,7 +63,7 @@ def parse_ip(pos: int, data) -> str:
     return pos + length, ip_addr
 
 
-def parse_list(pos: int, data, item_parser: Callable=parse_string) -> list:
+def parse_list(pos: int, data, item_parser: Callable = parse_string) -> list:
     items = []
     pos_after_list_len, list_len = parse_int(pos, data)
     current_item_pos = pos_after_list_len
@@ -126,7 +126,7 @@ def pack_ip(value: str) -> bytes:
     return struct.pack('<4s', bytes(reversed(ip_b)))
 
 
-def pack_list(values, pack_func=pack_string):
+def pack_list(values, pack_func: Callable = pack_string):
     body = pack_int(len(values))
     for value in values:
         body += pack_func(value)
@@ -1310,6 +1310,7 @@ class PeerInit(PeerMessage):
             ticket = self.parse_int64()
         return user, typ, ticket
 
+
 class PeerSharesRequest(PeerMessage):
     MESSAGE_ID = 0x04
 
@@ -1449,7 +1450,7 @@ class PeerTransferRequest(PeerMessage):
     MESSAGE_ID = 0x28
 
     @classmethod
-    def create(cls, direction: int, ticket: int, filename: str, filesize: int=None):
+    def create(cls, direction: int, ticket: int, filename: str, filesize: int = None):
         message_body = (
             pack_int(direction) + pack_int(ticket) + pack_string(filename))
         if filesize is not None:
@@ -1473,7 +1474,7 @@ class PeerTransferReply(PeerMessage):
     MESSAGE_ID = 0x29
 
     @classmethod
-    def create(cls, ticket: int, allowed: bool, filesize: int=None, reason: str=None):
+    def create(cls, ticket: int, allowed: bool, filesize: int = None, reason: str = None):
         message_body = pack_int(ticket) + pack_bool(allowed)
         if filesize is not None:
             message_body += pack_int64(filesize)

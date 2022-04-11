@@ -44,7 +44,7 @@ class TestDataConnection:
 
         result = conn.read()
 
-        assert result == True
+        assert result is True
         assert conn._buffer == data
         assert conn.bytes_received == len(data)
         assert conn.last_interaction != 0
@@ -60,7 +60,7 @@ class TestDataConnection:
 
         result = conn.read()
 
-        assert result == False
+        assert result is False
         assert conn._buffer == b""
         assert conn.bytes_received == 0
         assert conn.last_interaction != 0
@@ -75,7 +75,7 @@ class TestDataConnection:
 
         result = conn.read()
 
-        assert result == False
+        assert result is False
         assert conn._buffer == b""
         assert conn.bytes_received == 0
         assert conn.last_interaction == 0

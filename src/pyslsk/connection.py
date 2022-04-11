@@ -78,12 +78,12 @@ class Connection:
         self.state: ConnectionState = ConnectionState.UNINITIALIZED
         self.listeners = []
 
-    def set_state(self, state: ConnectionState, close_reason=CloseReason.UNKNOWN):
+    def set_state(self, state: ConnectionState, close_reason: CloseReason = CloseReason.UNKNOWN):
         self.state = state
         for listener in self.listeners:
             listener.on_state_changed(state, self, close_reason=close_reason)
 
-    def disconnect(self, reason=CloseReason.UNKNOWN):
+    def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
         logger.debug(f"disconnecting from {self.hostname}:{self.port} reason : {reason.name}")
         try:
             self.fileobj.close()
@@ -103,7 +103,7 @@ class ListeningConnection(Connection):
     accepting incoming connections
     """
 
-    def __init__(self, hostname='0.0.0.0', port=64823, obfuscated=False, listeners=None):
+    def __init__(self, hostname='0.0.0.0', port=64823, obfuscated: bool = False, listeners=None):
         super().__init__(hostname, port)
         self.obfuscated = obfuscated
         self.listeners = listeners
@@ -352,9 +352,9 @@ class ServerConnection(DataConnection):
 class PeerConnection(DataConnection):
 
     def __init__(
-            self, hostname='0.0.0.0', port=None, obfuscated=False,
+            self, hostname='0.0.0.0', port=None, obfuscated: bool = False,
             connection_type=PeerConnectionType.PEER,
-            incoming: bool=False, listeners=None):
+            incoming: bool = False, listeners=None):
         super().__init__(hostname, port)
         self.obfuscated: bool = obfuscated
         self.incoming: bool = incoming
@@ -382,7 +382,7 @@ class PeerConnection(DataConnection):
         result_code = self.fileobj.connect_ex((self.hostname, self.port, ))
 
         if result_code == 0:
-            result_str = f"success"
+            result_str = "success"
         else:
             result_str = errno.errorcode.get(result_code, 'unknown')
 

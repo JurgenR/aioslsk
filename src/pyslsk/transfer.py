@@ -7,6 +7,7 @@ import time
 
 from .connection import (
     ConnectionState,
+    CloseReason,
     PeerConnection,
     PeerConnectionType,
     PeerConnectionState,
@@ -43,7 +44,7 @@ class TransferState(Enum):
 
 class Transfer:
 
-    def __init__(self, username: str, filename: str, direction: TransferDirection, ticket: int=None, listeners=None):
+    def __init__(self, username: str, filename: str, direction: TransferDirection, ticket: int = None, listeners=None):
         self.state = TransferState.VIRGIN
 
         self.username: str = username
@@ -97,7 +98,7 @@ class Transfer:
     def set_offset(self, offset: int):
         self._offset = offset
 
-    def fail(self, reason: str=None):
+    def fail(self, reason: str = None):
         """Sets the internal state to TransferState.FAILED with an optional
         reason for failure
         """
@@ -268,7 +269,7 @@ class TransferManager(TransferListener):
             return 0.0
         return sum(upload_speeds) / len(upload_speeds)
 
-    def queue_transfer(self, transfer: Transfer, state: TransferState=TransferState.QUEUED):
+    def queue_transfer(self, transfer: Transfer, state: TransferState = TransferState.QUEUED):
         for queued_transfer in self._transfers:
             if not queued_transfer.equals(transfer):
                 continue
@@ -446,7 +447,7 @@ class TransferManager(TransferListener):
                 SendUploadSpeed.create(int(self.get_average_upload_speed()))
             )
 
-    def on_transfer_connection_closed(self, connection: PeerConnection, close_reason=None):
+    def on_transfer_connection_closed(self, connection: PeerConnection, close_reason: CloseReason = None):
         # Handle broken downloads
         try:
             transfer = self.get_transfer_by_connection(connection)

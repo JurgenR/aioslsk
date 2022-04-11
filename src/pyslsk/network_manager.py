@@ -126,7 +126,7 @@ class NetworkManager:
         self.network_loop.selector.unregister(fileobj)
 
     # Connection state changes
-    def on_state_changed(self, state: ConnectionState, connection: Connection, close_reason=None):
+    def on_state_changed(self, state: ConnectionState, connection: Connection, close_reason: CloseReason = None):
         """Called when the state of a connection changes. This method calls 3
         private method based on the type of L{connection} that was passed
 
@@ -146,7 +146,7 @@ class NetworkManager:
         elif isinstance(connection, ListeningConnection):
             self._on_listening_connection_state_changed(state, connection)
 
-    def _on_server_connection_state_changed(self, state: ConnectionState, connection: ServerConnection, close_reason=None):
+    def _on_server_connection_state_changed(self, state: ConnectionState, connection: ServerConnection, close_reason: CloseReason = None):
         if state == ConnectionState.CONNECTING:
             self._register_to_network_loop(
                 connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
@@ -161,7 +161,7 @@ class NetworkManager:
         elif state == ConnectionState.CLOSED:
             self._unregister_from_network_loop(connection.fileobj)
 
-    def _on_peer_connection_state_changed(self, state: ConnectionState, connection: PeerConnection, close_reason=None):
+    def _on_peer_connection_state_changed(self, state: ConnectionState, connection: PeerConnection, close_reason: CloseReason = None):
         if state == ConnectionState.CONNECTING:
             self._register_to_network_loop(
                 connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
@@ -208,7 +208,9 @@ class NetworkManager:
         self._register_to_network_loop(
             connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
 
-    def init_peer_connection(self, ticket: int, username: str, typ, ip=None, port=None, transfer: Transfer=None, messages=None, on_failure=None) -> ConnectionRequest:
+    def init_peer_connection(
+            self, ticket: int, username: str, typ, ip: str = None, port: int = None,
+            transfer: Transfer = None, messages=None, on_failure=None) -> ConnectionRequest:
         """Starts the process of peer connection initialization.
 
         The L{ip} and L{port} parameters are optional, in case they are missing

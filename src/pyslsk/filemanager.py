@@ -54,6 +54,7 @@ def extract_attributes(filepath: str):
 
     return attributes
 
+
 def convert_to_result(shared_item):
     file_path = os.path.join(shared_item.root, shared_item.subdir, shared_item.filename)
     file_size = os.path.getsize(file_path)

@@ -4,11 +4,12 @@ import secrets
 KEY_SIZE = 4
 """@var KEY_SIZE: Amount of bytes in the key"""
 
-def generate_key():
+
+def generate_key() -> bytes:
     return secrets.token_bytes(KEY_SIZE)
 
 
-def rotate_key_orig(key, const=31):
+def rotate_key_orig(key: bytes, const: int = 31) -> bytes:
     """Rotate the L{key} to the right by L{const} bits
 
     @type key: C{bytes}
@@ -26,7 +27,7 @@ def rotate_key_orig(key, const=31):
     return key_rot
 
 
-def rotate_key(key: bytes, rot_bits: int=31) -> bytes:
+def rotate_key(key: bytes, rot_bits: int = 31) -> bytes:
     """Rotate the L{key} to the right by L{const} bits
 
     @type key: C{bytes}
@@ -60,7 +61,7 @@ def decode(data: bytes) -> bytes:
     return bytes(dec_message)
 
 
-def encode(data: bytes, key: bytes=None) -> bytes:
+def encode(data: bytes, key: bytes = None) -> bytes:
     """Obfuscate the given L{data} with the provided L{key}, if no key is given
     it will be automatically generated
     """

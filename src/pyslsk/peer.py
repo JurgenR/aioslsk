@@ -32,7 +32,7 @@ from .messages import (
 from .network_manager import NetworkManager
 from .search import ReceivedSearch, SearchResult
 from .state import Parent, State
-from .transfer import Transfer, TransferDirection, TransferManager, TransferState
+from .transfer import Transfer, TransferDirection, TransferManager
 
 
 logger = logging.getLogger()

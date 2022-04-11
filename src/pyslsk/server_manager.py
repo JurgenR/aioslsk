@@ -300,7 +300,7 @@ class ServerManager:
         net_info_list = message.parse()
 
         if not self._settings['debug']['search_for_parent']:
-            logger.debug(f"ignoring NetInfo message : searching for parent is disabled")
+            logger.debug("ignoring NetInfo message : searching for parent is disabled")
             return
 
         for idx, (username, ip, port) in enumerate(net_info_list, 1):
