@@ -1,8 +1,0 @@
-Peer init
-
-19000000 # Len
-01 # code = peer init
-0b000000 # Username len
-72656e746e657232303030 # Username
-0100000050
-00000000
