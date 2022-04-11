@@ -1150,7 +1150,7 @@ class CannotConnect(Message):
         return ticket, username
 
 
-#### Distributed messages
+# Distributed messages
 
 class DistributedMessage(Message):
     pass
@@ -1262,7 +1262,7 @@ class DistributedServerSearchRequest(DistributedMessage):
         return distrib_code, message
 
 
-### Peer messages
+# Peer messages
 # PeerPierceFirewall and PeerInit are the only messages that use a uchar for
 # the message_id. Remainder of the message types use int.
 
@@ -1271,8 +1271,7 @@ class PeerMessage(Message):
     pass
 
 
-
-#### Init messages
+# Init messages
 
 class PeerPierceFirewall(PeerMessage):
     MESSAGE_ID = 0x00

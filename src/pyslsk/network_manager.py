@@ -202,9 +202,7 @@ class NetworkManager:
         elif state == ConnectionState.CLOSED:
             self._unregister_from_network_loop(connection.fileobj)
 
-
     # Peer related
-
     def on_peer_accepted(self, connection: PeerConnection):
         connection.listeners = [self, self.peer_listener, ]
         self._register_to_network_loop(

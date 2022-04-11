@@ -16,6 +16,7 @@ def get_duration(attributes):
             break
     return duration
 
+
 def get_attribute_string(attributes):
     attr_str = []
     for attr, value in attributes:
@@ -29,6 +30,7 @@ def get_attribute_string(attributes):
             attr_str.append(f"{value}ch")
 
     return ' '.join(attr_str)
+
 
 def ticket_generator():
     idx = 1234

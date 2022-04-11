@@ -17,7 +17,7 @@ class UPNP:
 
     def discover_devices(self):
         if self.discovered_devices is None:
-            logging.debug(f"discover UPNP devices")
+            logging.debug("discover UPNP devices")
             self.discovered_devices = upnpclient.discover()
         else:
             logging.debug("using cached UPNP devices")
