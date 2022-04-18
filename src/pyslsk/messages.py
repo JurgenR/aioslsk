@@ -243,11 +243,11 @@ class Login(Message):
     def create(cls, username, password, client_version, minor_version=100):
         md5_hash = calc_md5(username + password)
         message_body = (
-            pack_string(username)
-            + pack_string(password)
-            + pack_int(client_version)
-            + pack_string(md5_hash)
-            + pack_int(minor_version)
+            pack_string(username) +
+            pack_string(password) +
+            pack_int(client_version) +
+            pack_string(md5_hash) +
+            pack_int(minor_version)
         )
         return pack_message(cls.MESSAGE_ID, message_body)
 
@@ -1167,8 +1167,9 @@ class DistributedPing(DistributedMessage):
 
     @warn_on_unparsed_bytes
     def parse(self):
-        length = self.parse_int()
-        message_id = self.parse_uchar()
+        # Parse Length + Message ID
+        self.parse_int()
+        self.parse_uchar()
         # This field is described as 'unknown' in the MuSeek wiki, however it
         # seems to be the ticket number we used when sending our ConnectToPeer
         # message during instantiation of the connection
@@ -1192,9 +1193,9 @@ class DistributedSearchRequest(DistributedMessage):
 
     @warn_on_unparsed_bytes
     def parse(self):
-        # Override super as message_id is a uchar for this function
-        length = self.parse_int()
-        message_id = self.parse_uchar()
+        # Parse Length + Message ID
+        self.parse_int()
+        self.parse_uchar()
         # Contents
         unknown = self.parse_int()
         username = self.parse_string()
@@ -1213,9 +1214,9 @@ class DistributedBranchLevel(DistributedMessage):
 
     @warn_on_unparsed_bytes
     def parse(self):
-        # Override super as message_id is a uchar for this function
-        length = self.parse_int()
-        message_id = self.parse_uchar()
+        # Parse Length + Message ID
+        self.parse_int()
+        self.parse_uchar()
         # Contents
         level = self.parse_int()
         return level
@@ -1231,9 +1232,9 @@ class DistributedBranchRoot(DistributedMessage):
 
     @warn_on_unparsed_bytes
     def parse(self):
-        # Override super as message_id is a uchar for this function
-        length = self.parse_int()
-        message_id = self.parse_uchar()
+        # Parse Length + Message ID
+        self.parse_int()
+        self.parse_uchar()
         # Contents
         root = self.parse_string()
         return root
@@ -1249,9 +1250,9 @@ class DistributedChildDepth(DistributedMessage):
 
     @warn_on_unparsed_bytes
     def parse(self):
-        # Override super as message_id is a uchar for this function
-        length = self.parse_int()
-        message_id = self.parse_uchar()
+        # Parse Length + Message ID
+        self.parse_int()
+        self.parse_uchar()
         # Contents
         child_depth = self.parse_int()
         return child_depth
