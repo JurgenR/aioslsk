@@ -1262,7 +1262,7 @@ class DistributedServerSearchRequest(DistributedMessage):
     MESSAGE_ID = 0x5D
 
     def parse(self):
-        length, _ = super().parse()
+        super().parse()
         distrib_code = self.parse_uchar()
         # This is a list of bytes as is
         message = self.get_unparsed_bytes()
@@ -1289,9 +1289,9 @@ class PeerPierceFirewall(PeerMessage):
 
     @warn_on_unparsed_bytes
     def parse(self):
-        # Override super as message_id is a uchar for this function
-        length = self.parse_int()
-        message_id = self.parse_uchar()
+        # Parse Length + Message ID
+        self.parse_int()
+        self.parse_uchar()
         ticket = self.parse_int()
         return ticket
 
@@ -1306,9 +1306,9 @@ class PeerInit(PeerMessage):
 
     @warn_on_unparsed_bytes
     def parse(self):
-        # Override super as message_id is a uchar for this function
-        length = self.parse_int()
-        message_id = self.parse_uchar()
+        # Parse Length + Message ID
+        self.parse_int()
+        self.parse_uchar()
         user = self.parse_string()
         typ = self.parse_string()
         if len(self.get_unparsed_bytes()) == 4:

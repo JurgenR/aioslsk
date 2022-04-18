@@ -16,4 +16,4 @@ pipelines:
           script:
             # Enforce style consistency across Python projects https://flake8.pycqa.org/en/latest/manpage.html
             - pip install flake8
-            - flake8 . --extend-exclude=dist,build --show-source --statistics --ignore=E501,E261
+            - flake8 . --extend-exclude=dist,build --show-source --statistics --ignore=E501,E261,W503,W504
