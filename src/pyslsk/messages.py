@@ -243,8 +243,12 @@ class Login(Message):
     def create(cls, username, password, client_version, minor_version=100):
         md5_hash = calc_md5(username + password)
         message_body = (
-            pack_string(username) + pack_string(password) +
-            pack_int(client_version) + pack_string(md5_hash) + pack_int(minor_version))
+            pack_string(username)
+            + pack_string(password)
+            + pack_int(client_version)
+            + pack_string(md5_hash)
+            + pack_int(minor_version)
+        )
         return pack_message(cls.MESSAGE_ID, message_body)
 
     @warn_on_unparsed_bytes
@@ -1338,10 +1342,10 @@ class PeerSearchReply(PeerMessage):
         results_body = bytes()
         for result in results:
             results_body += (
-                pack_uchar(1) +
-                pack_string(result['filename']) +
-                pack_int64(result['filesize']) +
-                pack_string(result['extension'])
+                pack_uchar(1)
+                + pack_string(result['filename'])
+                + pack_int64(result['filesize'])
+                + pack_string(result['extension'])
             )
 
             results_body += pack_int(len(result['attributes']))
@@ -1351,9 +1355,9 @@ class PeerSearchReply(PeerMessage):
         message_body += results_body
 
         message_body += (
-            pack_bool(has_slots_free) +
-            pack_int(avg_speed) +
-            pack_int(queue_size)
+            pack_bool(has_slots_free)
+            + pack_int(avg_speed)
+            + pack_int(queue_size)
         )
 
         # Locked results not implemented
@@ -1368,7 +1372,7 @@ class PeerSearchReply(PeerMessage):
         result_count = self.parse_int()
         for _ in range(result_count):
             result = {}
-            one = self.parse_uchar()
+            _ = self.parse_uchar()
             result['filename'] = self.parse_string()
             result['filesize'] = self.parse_int64()
             result['extension'] = self.parse_string()
@@ -1425,11 +1429,11 @@ class PeerUserInfoReply(PeerMessage):
     @classmethod
     def create(cls, description: str, total_upload: int, queue_size: int, has_slots_free: bool) -> bytes:
         message_body = (
-            pack_string(description) +
-            pack_bool(False) +
-            pack_int(total_upload) +
-            pack_int(queue_size) +
-            pack_bool(has_slots_free)
+            pack_string(description)
+            + pack_bool(False)
+            + pack_int(total_upload)
+            + pack_int(queue_size)
+            + pack_bool(has_slots_free)
         )
         return pack_message(cls.MESSAGE_ID, message_body)
 

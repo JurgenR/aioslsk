@@ -33,7 +33,7 @@ class TestFunctions:
 
         attributes = extract_attributes(filepath)
 
-        attributes = [(1, 15), (4, 44100), (5, 16)]
+        assert attributes == [(1, 15), (4, 44100), (5, 16)]
 
 
 class TestFileManager:
@@ -129,10 +129,8 @@ class TestFileManager:
     def test_whenGetDownloadPath_shouldCreateDir(self):
         settings = dict(DEFAULT_SETTINGS)
 
-
         with tempfile.TemporaryDirectory() as temp_dir:
             download_dir = os.path.join(temp_dir, 'downloads')
-
             settings['download'] = download_dir
 
             manager = FileManager(settings)
