@@ -50,7 +50,7 @@ def extract_attributes(filepath: str):
                 ]
 
     except mutagen.MutagenError:
-        logger.exception(f"failed retrieve audio file metadata path={filepath!r}")
+        logger.exception(f"failed retrieve audio file metadata. path={filepath!r}")
 
     return attributes
 
@@ -118,6 +118,19 @@ class FileManager:
         return os.path.getsize(filename)
 
     def query(self, query: str):
+        """Queries the L{shared_items}.
+
+        1. Transform query into terms:
+            - will be split up (whitespace)
+            - lowercased
+            - non-alphanumeric characters stripped
+        2. Shared items:
+            - subdir and filename will be concatenated
+            - will be split up ( seperators can be: -_,./ )
+            - clean up the terms
+        3. Loop over all the terms from the query and check if all match with
+            with the terms in any of the shared items (any order)
+        """
         clean_pattern = re.compile(r"[^\w\d]")
 
         # When looking through files, take -, _ and / as word seperators
@@ -136,6 +149,13 @@ class FileManager:
         return found_items
 
     def get_stats(self) -> Tuple[int, int]:
+        """Gets the total amount of shared directories and files.
+
+        Directory count will include the root directories only if they contain
+        files.
+
+        @return: Directory and file count as a C{tuple}
+        """
         file_count = len(self.shared_items)
         dir_count = len(set([shared_item.subdir for shared_item in self.shared_items]))
         return dir_count, file_count

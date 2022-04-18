@@ -32,10 +32,10 @@ def get_attribute_string(attributes):
     return ' '.join(attr_str)
 
 
-def ticket_generator():
-    idx = 1234
+def ticket_generator(initial=1234):
+    idx = initial
     while True:
         idx += 1
         if idx > 0xFFFFFFFF:
-            idx = 1234
+            idx = initial
         yield idx

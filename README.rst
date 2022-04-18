@@ -42,6 +42,14 @@ All sockets are configured to be non-blocking sockets.
 Running Tests
 =============
 
+Running all tests:
+
 .. code-block:: bash
 
-    pytest tests/
+    poetry run pytest tests/
+
+Running all tests with code coverage report:
+
+.. code-block:: bash
+
+    poetry run pytest --cov=pyslsk --cov-report term-missing tests/
