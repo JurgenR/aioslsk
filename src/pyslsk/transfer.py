@@ -1,7 +1,7 @@
 from __future__ import annotations
 from enum import auto, Enum
 from functools import partial
-from typing import List, Tuple
+from typing import List, Tuple, TYPE_CHECKING
 import logging
 import time
 
@@ -21,6 +21,9 @@ from .messages import (
     SendUploadSpeed,
 )
 from .state import State
+
+if TYPE_CHECKING:
+    from .network_manager import ConnectionRequest, NetworkManager
 
 
 logger = logging.getLogger()
@@ -73,6 +76,8 @@ class Transfer:
         self.connection = None
         self._fileobj = None
 
+        self.last_init_attempt = 0.0
+        """Time of the last init attempt"""
         self.start_time: float = None
         """Time at which the transfer was started. This is the time the transfer
         entered the download or upload state
@@ -102,12 +107,20 @@ class Transfer:
         """Sets the internal state to TransferState.FAILED with an optional
         reason for failure
         """
-        self.set_state(TransferState.FAILED)
         self.fail_reason = reason
+        self.set_state(TransferState.FAILED)
 
-    def queue(self, place_in_queue=None):
+    def fail_init(self):
+        """Called when initialization of the transfer fails. The user might be
+        offline or unable to be connected to at this time and the transfer
+        should be reattempted later on
+        """
+        self.last_init_attempt = time.time()
         self.set_state(TransferState.QUEUED)
+
+    def queue(self, place_in_queue: int = None):
         self.place_in_queue = place_in_queue
+        self.set_state(TransferState.QUEUED)
 
     def get_speed(self) -> float:
         """Retrieve the speed of the transfer
@@ -130,6 +143,12 @@ class Transfer:
         if transfer_duration == 0.0:
             return 0.0
         return self.bytes_transfered / transfer_duration
+
+    def is_upload(self):
+        return self.direction == TransferDirection.UPLOAD
+
+    def is_download(self):
+        return self.direction == TransferDirection.DOWNLOAD
 
     def is_closed(self) -> bool:
         return self.state in (TransferState.COMPLETE, )
@@ -190,7 +209,7 @@ class Transfer:
 
 class TransferManager(TransferListener):
 
-    def __init__(self, state: State, settings, file_manager: FileManager, network_manager: 'NetworkManager'):
+    def __init__(self, state: State, settings, file_manager: FileManager, network_manager: NetworkManager):
         self._state = state
         self.settings = settings
         self.upload_slots: int = settings['sharing']['limits']['upload_slots']
@@ -198,7 +217,7 @@ class TransferManager(TransferListener):
         self._transfers: List[Transfer] = []
 
         self._file_manager: FileManager = file_manager
-        self._network_manager: 'NetworkManager' = network_manager
+        self._network_manager: NetworkManager = network_manager
 
         self._network_manager.transfer_listener = self
 
@@ -312,10 +331,12 @@ class TransferManager(TransferListener):
         to_download, to_upload = self.get_next_transfers()
 
         for download in to_download:
+
             download.set_state(TransferState.INITIALIZING)
             self.initialize_download(download)
 
         for upload in to_upload:
+
             upload.set_state(TransferState.INITIALIZING)
             self.initialize_upload(upload)
 
@@ -340,6 +361,7 @@ class TransferManager(TransferListener):
         return to_download, to_upload
 
     def initialize_download(self, transfer: Transfer):
+        logger.debug(f"initializing download {transfer!r}")
         connection_ticket = next(self._state.ticket_generator)
 
         self._network_manager.init_peer_connection(
@@ -348,10 +370,12 @@ class TransferManager(TransferListener):
             PeerConnectionType.PEER,
             messages=[
                 PeerTransferQueue.create(transfer.filename)
-            ]
+            ],
+            on_failure=self.on_transfer_init_failed
         )
 
     def initialize_upload(self, transfer: Transfer):
+        logger.debug(f"initializing upload {transfer!r}")
         connection_ticket = next(self._state.ticket_generator)
 
         self._network_manager.init_peer_connection(
@@ -365,8 +389,13 @@ class TransferManager(TransferListener):
                     transfer.filename,
                     filesize=transfer.filesize
                 )
-            ]
+            ],
+            on_failure=self.on_transfer_init_failed
         )
+
+    def on_transfer_init_failed(self, connection_request: ConnectionRequest):
+        transfer = connection_request.transfer
+        transfer.fail_init()
 
     def on_transfer_offset(self, offset: int, connection: PeerConnection):
         logger.info(f"received transfer offset (offset={offset})")
@@ -448,7 +477,7 @@ class TransferManager(TransferListener):
             )
 
     def on_transfer_connection_closed(self, connection: PeerConnection, close_reason: CloseReason = None):
-        # Handle broken downloads
+        """Called when a file connection is closed"""
         try:
             transfer = self.get_transfer_by_connection(connection)
         except LookupError:

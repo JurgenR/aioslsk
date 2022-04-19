@@ -82,7 +82,7 @@ class PeerManager:
 
     def download(self, username: str, filename: str) -> Transfer:
         """Initiate downloading of a file"""
-        logger.info(f"initiating download from {username} : {filename}")
+        logger.info(f"queueing download from {username} : {filename}")
         transfer = Transfer(
             username=username,
             filename=filename,

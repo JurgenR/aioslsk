@@ -1,6 +1,6 @@
 from __future__ import annotations
 from enum import auto, Enum
-from typing import List
+from typing import List, TYPE_CHECKING
 import copy
 import errno
 import logging
@@ -15,6 +15,9 @@ from .events import get_listener_methods
 from . import obfuscation
 from .listeners import TransferListener
 from . import messages
+
+if TYPE_CHECKING:
+    from .transfer import Transfer
 
 
 logger = logging.getLogger()
@@ -363,7 +366,7 @@ class PeerConnection(DataConnection):
         self.connection_state = PeerConnectionState.AWAITING_INIT
         self.timeout = DEFAULT_PEER_TIMEOUT
 
-        self.transfer = None
+        self.transfer: Transfer = None
         self.transfer_listeners: List[TransferListener] = []
 
     def set_connection_type(self, connection_type):

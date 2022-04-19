@@ -133,7 +133,7 @@ def pack_list(values, pack_func: Callable = pack_string):
     return body
 
 
-def pack_message(message_id: int, value: bytes, id_as_uchar=False) -> bytes:
+def pack_message(message_id: int, value: bytes, id_as_uchar: bool = False) -> bytes:
     """Adds the header (length + message ID) to a message body
 
     @param id_as_uchar: Packs the L{message_id} as uchar instead of int, used
@@ -149,6 +149,9 @@ def pack_message(message_id: int, value: bytes, id_as_uchar=False) -> bytes:
 
 
 def warn_on_unparsed_bytes(parse_func):
+    """Decorator that logs a warning messages when some bytes haven't been
+    parsed yet after the given L{parse_func} has been executed.
+    """
     @functools.wraps(parse_func)
     def check_for_unparsed_bytes(message):
         results = parse_func(message)

@@ -1,18 +1,24 @@
+from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, List
+from typing import TYPE_CHECKING, Deque, Dict, List
 
 from .scheduler import Scheduler
 from .model import ChatMessage, Room, User
 from .utils import ticket_generator
+
+if TYPE_CHECKING:
+    from .connection import PeerConnection
+    from .peer import Peer
+    from .search import ReceivedSearch, SearchQuery
 
 
 @dataclass
 class Parent:
     branch_level: int = None
     branch_root: str = None
-    peer: 'Peer' = None
-    connection: 'PeerConnection' = None
+    peer: Peer = None
+    connection: PeerConnection = None
 
 
 @dataclass
@@ -32,8 +38,8 @@ class State:
 
     wishlist_interval: int = 0
 
-    received_searches: Deque['ReceivedSearch'] = field(default_factory=lambda: deque(list(), 500))
-    search_queries: Dict[int, 'SearchQuery'] = field(default_factory=dict)
+    received_searches: Deque[ReceivedSearch] = field(default_factory=lambda: deque(list(), 500))
+    search_queries: Dict[int, SearchQuery] = field(default_factory=dict)
 
     scheduler: Scheduler = None
     ticket_generator = ticket_generator()

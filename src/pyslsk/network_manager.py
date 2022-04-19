@@ -355,9 +355,8 @@ class NetworkManager:
         - We sent a ConnectToPeer to the server but didn't get an incoming
           connection in a timely fashion
         """
-
         if connection_request.on_failure is not None:
-            pass
+            connection_request.on_failure(connection_request)
 
     # Server related
 
