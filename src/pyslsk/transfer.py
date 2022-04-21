@@ -398,6 +398,10 @@ class TransferManager(TransferListener):
         transfer.fail_init()
 
     def on_transfer_offset(self, offset: int, connection: PeerConnection):
+        """Called when the transfer offset has been received. This can only
+        occur during upload and denotes from which offset in the file we need
+        to start sending data
+        """
         logger.info(f"received transfer offset (offset={offset})")
 
         transfer = connection.transfer
@@ -411,6 +415,13 @@ class TransferManager(TransferListener):
         connection.set_connection_state(PeerConnectionState.TRANSFERING)
 
     def on_transfer_ticket(self, ticket: int, connection: PeerConnection):
+        """Called when the transfer ticket has been received. This can only
+        occur during download and denotes which transfer is going to be starting
+        on this connection.
+
+        @param ticket: ticket number
+        @param connection: connection on which the ticket was received
+        """
         logger.info(f"got transfer ticket {ticket} on {connection}")
         try:
             transfer = self.get_transfer_by_ticket(ticket)
@@ -455,6 +466,11 @@ class TransferManager(TransferListener):
             transfer.connection = None
 
     def on_transfer_data_sent(self, bytes_sent: int, connection: PeerConnection):
+        """Called when data was sent to the peer during upload
+
+        @param bytes_sent: amount of bytes sent
+        @param connection: connection over which the data was sent
+        """
         transfer = self.get_transfer_by_connection(connection)
 
         if transfer.state != TransferState.UPLOADING:

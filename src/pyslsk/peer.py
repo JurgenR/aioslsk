@@ -27,7 +27,6 @@ from .messages import (
     PeerTransferQueueFailed,
     PeerUploadFailed,
     PeerUserInfoRequest,
-    PeerUserInfoReply,
 )
 from .network_manager import NetworkManager
 from .search import ReceivedSearch, SearchResult
