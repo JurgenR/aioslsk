@@ -1,15 +1,46 @@
+from dataclasses import dataclass, field
 import functools
 import hashlib
 import logging
 import socket
 import struct
-from typing import Callable
+from typing import Callable, List, Tuple
 import zlib
 
 from .exceptions import UnknownMessageError
 
 
 logger = logging.getLogger()
+
+
+@dataclass(frozen=True)
+class FileData:
+    unknown: str
+    filename: str
+    filesize: int
+    extension: str
+    attributes: List[Tuple[int, int]] = field(default_factory=list)
+
+    def pack(self):
+        return (
+            pack_uchar(self.unknown) +
+            pack_string(self.filename) +
+            pack_int64(self.filesize) +
+            pack_string(self.extension) +
+            pack_list(self.attributes, pack_func=pack_attribute)
+        )
+
+
+@dataclass(frozen=True)
+class DirectoryData:
+    name: str
+    files: List[FileData] = field(default_factory=list)
+
+    def pack(self):
+        return (
+            pack_string(self.name) +
+            pack_list(self.files, pack_func=lambda f: f.pack())
+        )
 
 
 def calc_md5(value: bytes):
@@ -73,6 +104,12 @@ def parse_list(pos: int, data, item_parser: Callable = parse_string) -> list:
     return current_item_pos, items
 
 
+def parse_attribute(pos: int, data) -> Tuple[int, Tuple[int, int]]:
+    pos, position = parse_int(pos, data)
+    pos, value = parse_int(pos, data)
+    return pos, (position, value, )
+
+
 def parse_room_list(pos: int, data):
     pos, room_names = parse_list(pos, data, item_parser=parse_string)
     pos, room_user_counts = parse_list(pos, data, item_parser=parse_int)
@@ -94,6 +131,30 @@ def parse_user_data_entry(pos: int, message):
     return pos, (avg_speed, download_num, file_count, dir_count)
 
 
+def parse_file(pos: int, message) -> Tuple[int, FileData]:
+    pos, unknown = parse_uchar(pos, message)
+    pos, filename = parse_string(pos, message)
+    pos, filesize = parse_int64(pos, message)
+    pos, extension = parse_string(pos, message)
+    pos, attributes = parse_list(pos, message, item_parser=parse_attribute)
+
+    file_data = FileData(
+        unknown=unknown,
+        filename=filename,
+        filesize=filesize,
+        extension=extension,
+        attributes=attributes
+    )
+
+    return pos, file_data
+
+
+def parse_directory(pos: int, message) -> Tuple[int, DirectoryData]:
+    pos, name = parse_string(pos, message)
+    pos, files = parse_list(pos, message, item_parser=parse_file)
+    return pos, DirectoryData(name=name, files=files)
+
+
 # Packing functions
 def pack_int(value: int) -> bytes:
     return struct.pack('<I', value)
@@ -107,14 +168,12 @@ def pack_uchar(value: str) -> bytes:
     return struct.pack('<B', value)
 
 
-def pack_string(value: str) -> bytes:
+def pack_string(value: str, encoding='utf-8') -> bytes:
+    if not isinstance(value, bytes):
+        value = value.encode(encoding)
+
     length = len(value)
-    if isinstance(value, bytes):
-        return (
-            pack_int(length) + value)
-    else:
-        return (
-            pack_int(length) + struct.pack('{}s'.format(length), value.encode('utf-8')))
+    return (pack_int(length) + value)
 
 
 def pack_bool(value: bool) -> bytes:
@@ -131,6 +190,10 @@ def pack_list(values, pack_func: Callable = pack_string):
     for value in values:
         body += pack_func(value)
     return body
+
+
+def pack_attribute(value: Tuple[int, int]) -> bytes:
+    return pack_int(value[0]) + pack_int(value[1])
 
 
 def pack_message(message_id: int, value: bytes, id_as_uchar: bool = False) -> bytes:
@@ -373,7 +436,7 @@ class GetUserStatus(Message):
         super().parse()
         username = self.parse_string()
         status = self.parse_int()
-        privileged = self.parse_uchar()
+        privileged = self.parse_bool()
         return username, status, privileged
 
 
@@ -407,7 +470,7 @@ class ChatJoinRoom(Message):
         users = self.parse_list(parse_string)
         users_status = self.parse_list(parse_int)
         users_data = self.parse_list(parse_user_data_entry)
-        users_has_slots_free = self.parse_list(parse_int)
+        users_slots_free = self.parse_list(parse_int)
         users_countries = self.parse_list(parse_string)
 
         if self.has_unparsed_bytes():
@@ -417,7 +480,7 @@ class ChatJoinRoom(Message):
             owner = None
             operators = []
 
-        return room, users, users_status, users_data, users_has_slots_free, users_countries, owner, operators
+        return room, users, users_status, users_data, users_slots_free, users_countries, owner, operators
 
 
 class ChatLeaveRoom(Message):
@@ -467,8 +530,8 @@ class ConnectToPeer(Message):
     MESSAGE_ID = 0x12
 
     @classmethod
-    def create(cls, token: int, username: str, typ: str) -> bytes:
-        message_body = pack_int(token) + pack_string(username) + pack_string(typ)
+    def create(cls, ticket: int, username: str, typ: str) -> bytes:
+        message_body = pack_int(ticket) + pack_string(username) + pack_string(typ)
         return pack_message(cls.MESSAGE_ID, message_body)
 
     @warn_on_unparsed_bytes
@@ -478,7 +541,7 @@ class ConnectToPeer(Message):
         typ = self.parse_string()
         ip_addr = self.parse_ip()
         port = self.parse_int()
-        token = self.parse_int()
+        ticket = self.parse_int()
         privileged = self.parse_uchar()
 
         # The following 2 integers aren't described in the Museek documentation:
@@ -489,16 +552,16 @@ class ConnectToPeer(Message):
         if self.has_unparsed_bytes():
             unknown = self.parse_int()
             obfuscated_port = self.parse_int()
-            return username, typ, ip_addr, port, token, privileged, unknown, obfuscated_port
+            return username, typ, ip_addr, port, ticket, privileged, unknown, obfuscated_port
         else:
-            return username, typ, ip_addr, port, token, privileged, None, None
+            return username, typ, ip_addr, port, ticket, privileged, None, None
 
     def parse_server(self):
         super().parse()
-        token = self.parse_int()
+        ticket = self.parse_int()
         username = self.parse_string()
         typ = self.parse_string()
-        return token, username, typ
+        return ticket, username, typ
 
 
 class ChatPrivateMessage(Message):
@@ -659,7 +722,7 @@ class PrivilegedUsers(Message):
         return self.parse_list(parse_string)
 
 
-class HaveNoParents(Message):
+class HaveNoParent(Message):
     MESSAGE_ID = 0x47
 
     @classmethod
@@ -910,6 +973,17 @@ class ChildDepth(Message):
         super().parse()
         child_depth = self.parse_int()
         return child_depth
+
+
+class ChatPrivateRoomUsers(Message):
+    MESSAGE_ID = 0x85
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        room_name = self.parse_string()
+        usernames = self.parse_list(item_parser=parse_string)
+        return room_name, usernames
 
 
 class ChatPrivateRoomAddUser(Message):
@@ -1165,28 +1239,12 @@ class DistributedMessage(Message):
     pass
 
 
-class DistributedPing(DistributedMessage):
-    MESSAGE_ID = 0x00
-
-    @warn_on_unparsed_bytes
-    def parse(self):
-        # Parse Length + Message ID
-        self.parse_int()
-        self.parse_uchar()
-        # This field is described as 'unknown' in the MuSeek wiki, however it
-        # seems to be the ticket number we used when sending our ConnectToPeer
-        # message during instantiation of the connection
-        if len(self.message[self._pos:]) > 0:
-            ticket = self.parse_int()
-        else:
-            # I don't recall when this occurs again
-            # Perhaps None would be better as 0 would be a valid ticket number
-            ticket = 0
-        return ticket
-
-
 class DistributedSearchRequest(DistributedMessage):
     MESSAGE_ID = 0x03
+
+    @classmethod
+    def create_from_body(cls, body: bytes):
+        return pack_message(cls.MESSAGE_ID, body, id_as_uchar=True)
 
     @classmethod
     def create(cls, username: str, ticket: int, query: str, unknown=0) -> bytes:
@@ -1200,7 +1258,7 @@ class DistributedSearchRequest(DistributedMessage):
         self.parse_int()
         self.parse_uchar()
         # Contents
-        unknown = self.parse_int()
+        unknown = self.parse_int()  # Always 0x31
         username = self.parse_string()
         ticket = self.parse_int()
         query = self.parse_string()
@@ -1263,6 +1321,17 @@ class DistributedChildDepth(DistributedMessage):
 
 class DistributedServerSearchRequest(DistributedMessage):
     MESSAGE_ID = 0x5D
+
+    @classmethod
+    def create(cls, distrib_code: int, username: str, ticket: int, query: str, unknown: int = 49):
+        message_body = (
+            pack_uchar(distrib_code) +
+            pack_int(unknown) +
+            pack_string(username) +
+            pack_int(ticket) +
+            pack_string(query)
+        )
+        return pack_message(cls.MESSAGE_ID, message_body)
 
     def parse(self):
         super().parse()
@@ -1328,66 +1397,46 @@ class PeerSharesRequest(PeerMessage):
 class PeerSharesReply(PeerMessage):
     MESSAGE_ID = 0x05
 
+    @classmethod
+    def create(cls, directories: List[DirectoryData]):
+        body = pack_list(directories, pack_func=lambda d: d.pack())
+        return pack_message(cls.MESSAGE_ID, zlib.compress(body))
+
     @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
-        raise NotImplementedError()
+        shares_message = zlib.decompress(self.message[self._pos:])
+        self._pos = len(self.message)
+        _, directories = parse_list(0, shares_message, item_parser=parse_directory)
+        return directories
 
 
 class PeerSearchReply(PeerMessage):
     MESSAGE_ID = 0x09
 
     @classmethod
-    def create(cls, username: str, ticket: int, results, has_slots_free: bool, avg_speed: int, queue_size: int):
-        message_body = pack_string(username) + pack_int(ticket)
-
-        message_body += pack_int(len(results))
-
-        results_body = bytes()
-        for result in results:
-            results_body += (
-                pack_uchar(1)
-                + pack_string(result['filename'])
-                + pack_int64(result['filesize'])
-                + pack_string(result['extension'])
-            )
-
-            results_body += pack_int(len(result['attributes']))
-            for attr_place, attr_value in result['attributes']:
-                results_body += pack_int(attr_place) + pack_int(attr_value)
-
-        message_body += results_body
-
-        message_body += (
-            pack_bool(has_slots_free)
-            + pack_int(avg_speed)
-            + pack_int(queue_size)
+    def create(
+            cls, username: str, ticket: int, results: List[FileData],
+            has_slots_free: bool, avg_speed: int, queue_size: int,
+            locked_results: List[FileData] = None):
+        message_body = (
+            pack_string(username) +
+            pack_int(ticket) +
+            pack_list(results, pack_func=lambda f: f.pack()) +
+            pack_bool(has_slots_free) +
+            pack_int(avg_speed) +
+            pack_int(queue_size)
         )
 
-        # Locked results not implemented
+        if locked_results:
+            message_body += pack_list(locked_results, pack_func=lambda f: f.pack())
+
+        # Locked results not properly tested
         # TODO: Require some investigation if these locked results actually
         # exist or if the 'one' is actually used to indicate this (could also
         # be both)
 
         return pack_message(cls.MESSAGE_ID, zlib.compress(message_body))
-
-    def parse_result_list(self):
-        results = []
-        result_count = self.parse_int()
-        for _ in range(result_count):
-            result = {}
-            _ = self.parse_uchar()
-            result['filename'] = self.parse_string()
-            result['filesize'] = self.parse_int64()
-            result['extension'] = self.parse_string()
-            result['attributes'] = []
-            attr_count = self.parse_int()
-            for _ in range(attr_count):
-                attr_place = self.parse_int()
-                attr = self.parse_int()
-                result['attributes'].append((attr_place, attr, ))
-            results.append(result)
-        return results
 
     @warn_on_unparsed_bytes
     def parse(self):
@@ -1403,12 +1452,12 @@ class PeerSearchReply(PeerMessage):
 
         username = message.parse_string()
         token = message.parse_int()
-        results = message.parse_result_list()
+        results = message.parse_list(item_parser=parse_file)
         has_free_slots = message.parse_bool()
         avg_speed = message.parse_int()
         queue_size = message.parse_int64()
         if len(message.message[message._pos:]) > 0:
-            locked_results = message.parse_result_list()
+            locked_results = message.parse_list(item_parser=parse_file)
         else:
             locked_results = []
         return username, token, results, has_free_slots, avg_speed, queue_size, locked_results
@@ -1431,13 +1480,18 @@ class PeerUserInfoReply(PeerMessage):
     MESSAGE_ID = 0x10
 
     @classmethod
-    def create(cls, description: str, total_upload: int, queue_size: int, has_slots_free: bool) -> bytes:
-        message_body = (
-            pack_string(description)
-            + pack_bool(False)
-            + pack_int(total_upload)
-            + pack_int(queue_size)
-            + pack_bool(has_slots_free)
+    def create(cls, description: str, upload_slots: int, queue_size: int, has_slots_free: bool, picture: str = None) -> bytes:
+        message_body = pack_string(description)
+
+        has_picture = bool(picture)
+        message_body += pack_bool(has_picture)
+        if has_picture:
+            message_body += pack_string()
+
+        message_body += (
+            pack_int(upload_slots) +
+            pack_int(queue_size) +
+            pack_bool(has_slots_free)
         )
         return pack_message(cls.MESSAGE_ID, message_body)
 
@@ -1450,10 +1504,38 @@ class PeerUserInfoReply(PeerMessage):
             picture = self.parse_string()
         else:
             picture = None
-        total_uploads = self.parse_int()
+        # upload slots = total amount of slots, queue_size = queued uploads,
+        # has_slots_free
+        upload_slots = self.parse_int()
         queue_size = self.parse_int()
         has_slots_free = self.parse_bool()
-        return description, picture, total_uploads, queue_size, has_slots_free
+        return description, picture, upload_slots, queue_size, has_slots_free
+
+
+class PeerDirectoryContentsRequest(PeerMessage):
+    MESSAGE_ID = 0x24
+
+    @classmethod
+    def create(cls, directories: List[str]):
+        message_body = pack_list(directories, pack_func=pack_string)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        directories = self.parse_list(item_parser=parse_string)
+        return directories
+
+
+class PeerDirectoryContentsReply(PeerMessage):
+    MESSAGE_ID = 0x24
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        directories = self.parse_list(item_parser=parse_directory)
+        return directories
+
 
 
 class PeerTransferRequest(PeerMessage):
@@ -1473,11 +1555,15 @@ class PeerTransferRequest(PeerMessage):
         direction = self.parse_int()
         ticket = self.parse_int()
         filename = self.parse_string()
-        if direction == 1:
+        # Museek docs say that if transfer direction is 1 (download) then
+        # the file size will be sent. That's not what I saw, simply check if we
+        # have unparsed bytes instead of checking direction. It is true that the
+        # filesize always seems to be 0 if direction == 0
+        if self.has_unparsed_bytes():
             filesize = self.parse_int64()
-            return direction, ticket, filename, filesize
         else:
-            return direction, ticket, filename, 0
+            filesize = 0
+        return direction, ticket, filename, filesize
 
 
 class PeerTransferReply(PeerMessage):

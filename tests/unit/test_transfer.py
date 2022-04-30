@@ -200,21 +200,24 @@ class TestTransferManager:
     # Retrieval of single transfer
     def test_whenGetTransferExists_shouldReturnTransfer(self):
         manager = TransferManager(State(), self.DEFAULT_SETTINGS, None, Mock())
-        transfer = Transfer(None, "myfile", TransferDirection.UPLOAD)
+        transfer = Transfer("myuser", "myfile", TransferDirection.UPLOAD)
         manager._transfers = [transfer, ]
 
-        assert manager.get_transfer("myfile", TransferDirection.UPLOAD) == transfer
+        assert manager.get_transfer("myuser", "myfile", TransferDirection.UPLOAD) == transfer
 
     def test_whenGetTransferNotExists_shouldRaiseException(self):
         manager = TransferManager(State(), self.DEFAULT_SETTINGS, None, Mock())
-        transfer = Transfer(None, "myfile", TransferDirection.UPLOAD)
+        transfer = Transfer("myuser", "myfile", TransferDirection.UPLOAD)
         manager._transfers = [transfer, ]
 
         with pytest.raises(LookupError):
-            manager.get_transfer("myfile", TransferDirection.DOWNLOAD)
+            manager.get_transfer("myuser", "myfile", TransferDirection.DOWNLOAD)
 
         with pytest.raises(LookupError):
-            manager.get_transfer("mynonfile", TransferDirection.UPLOAD)
+            manager.get_transfer("myuser", "mynonfile", TransferDirection.UPLOAD)
+
+        with pytest.raises(LookupError):
+            manager.get_transfer("mynonuser", "myfile", TransferDirection.UPLOAD)
 
     def test_whenGetTransferByTicketExists_shouldReturnTransfer(self):
         ticket = 1
@@ -260,43 +263,3 @@ class TestTransferManager:
         manager._transfers = [transfer0, transfer1, transfer2, ]
 
         assert manager.get_downloading() == [transfer2, ]
-
-    # Get next downloads/uploads
-
-    def test_whenGetNextTransfers_andMaxSlotsNotReached_shouldReturnListAndInitialize(self):
-        manager = TransferManager(State(), self.DEFAULT_SETTINGS, None, Mock())
-
-        transfer0 = Transfer(None, None, TransferDirection.UPLOAD)
-        transfer0.state = TransferState.INITIALIZING
-        transfer1 = Transfer(None, None, TransferDirection.UPLOAD)
-        transfer1.state = TransferState.QUEUED
-
-        transfer2 = Transfer(None, None, TransferDirection.DOWNLOAD)
-        transfer2.state = TransferState.DOWNLOADING
-        transfer3 = Transfer(None, None, TransferDirection.DOWNLOAD)
-        transfer3.state = TransferState.QUEUED
-
-        manager._transfers = [transfer0, transfer1, transfer2, transfer3, ]
-
-        assert manager.get_next_transfers() == ([transfer3, ], [transfer1, ], )
-
-    def test_whenGetNextTransfers_andMaxSlotsReached_shouldReturnEmptyList(self):
-        manager = TransferManager(State(), self.DEFAULT_SETTINGS, None, Mock())
-
-        transfer0 = Transfer(None, None, TransferDirection.UPLOAD)
-        transfer0.state = TransferState.INITIALIZING
-        transfer1 = Transfer(None, None, TransferDirection.UPLOAD)
-        transfer1.state = TransferState.UPLOADING
-        transfer2 = Transfer(None, None, TransferDirection.UPLOAD)
-        transfer2.state = TransferState.QUEUED
-
-        transfer3 = Transfer(None, None, TransferDirection.DOWNLOAD)
-        transfer3.state = TransferState.INITIALIZING
-        transfer4 = Transfer(None, None, TransferDirection.DOWNLOAD)
-        transfer4.state = TransferState.DOWNLOADING
-        transfer5 = Transfer(None, None, TransferDirection.DOWNLOAD)
-        transfer5.state = TransferState.QUEUED
-
-        manager._transfers = [transfer0, transfer1, transfer2, transfer3, transfer4, transfer5, ]
-
-        assert manager.get_next_transfers() == ([], [], )

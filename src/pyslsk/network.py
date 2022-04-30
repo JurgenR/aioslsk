@@ -1,19 +1,21 @@
 from __future__ import annotations
 from cachetools import TTLCache
 from dataclasses import dataclass, field
+import errno
 from functools import partial
 import logging
-from selectors import EVENT_READ, EVENT_WRITE
-import threading
-from typing import Callable, List
+from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
+import socket
+import time
+from typing import Callable, List, Union
 
 from .connection import (
     Connection,
     ConnectionState,
     CloseReason,
     PeerConnectionState,
+    ProtocolMessage,
     ListeningConnection,
-    NetworkLoop,
     PeerConnection,
     PeerConnectionType,
     ServerConnection,
@@ -27,10 +29,14 @@ from .messages import (
     PeerPierceFirewall,
 )
 from . import upnp
+from .state import State
 from .transfer import Transfer, TransferDirection
 
 
 logger = logging.getLogger()
+
+CONNECT_TIMEOUT = 5
+CONNECT_TO_PEER_TIMEOUT: int = 30
 
 
 @dataclass
@@ -42,45 +48,46 @@ class ConnectionRequest:
     ip: str = None
     port: int = None
     typ: str = None
+    obfuscated: bool = False
     connection: PeerConnection = None
     transfer: Transfer = None
-    messages: List[bytes] = field(default_factory=lambda: [])
+    messages: List[Union[bytes, ProtocolMessage]] = field(default_factory=lambda: [])
     """List of messages to be delivered when connection is established"""
     on_failure: Callable = None
     """Callback called when connection cannot be initialized"""
 
 
-class NetworkManager:
+class Network:
 
-    def __init__(self, settings, stop_event):
+    def __init__(self, state: State, settings):
+        self._state = state
         self._settings = settings
 
-        self.upnp = upnp.UPNP()
+        self._upnp = upnp.UPNP()
 
-        self.stop_event = stop_event
-        self._cache_lock = threading.Lock()
-
-        self.network_loop: NetworkLoop = None
         self.server: ServerConnection = None
         self.listening_connections: List[ListeningConnection] = []
 
-        self.connection_requests = TTLCache(maxsize=1000, ttl=5 * 60)
+        self._connection_requests = TTLCache(maxsize=1000, ttl=5 * 60)
 
         self.peer_listener = None
         self.server_listener = None
         self.transfer_listener = None
 
+        # Selectors
+        self.selector = DefaultSelector()
+        self._last_log_time = 0
+
     def initialize(self):
         logger.info("initializing network")
-
-        # Init connections
-        self.network_loop = NetworkLoop(self._settings, self.stop_event)
 
         self.server = ServerConnection(
             hostname=self._settings['network']['server_hostname'],
             port=self._settings['network']['server_port'],
             listeners=[self, self.server_listener, ]
         )
+        self.server.connect()
+
         self.listening_connections = [
             ListeningConnection(
                 port=self._settings['network']['listening_port'],
@@ -92,38 +99,125 @@ class NetworkManager:
                 listeners=[self, ]
             )
         ]
-
-        # Perform the socket connections and start the network loop
-        self.server.connect()
         for listening_connection in self.listening_connections:
             listening_connection.connect()
 
-        self.network_loop.start()
-
     def get_connections(self):
-        return self.network_loop.get_connections()
+        """Returns a list of currently registered L{Connection} objects"""
+        return [
+            selector_key.data
+            for selector_key in self.selector.get_map().values()
+        ]
 
-    def get_network_loops(self):
-        return [self.network_loop, ]
+    def _log_open_connections(self):
+        """Utility for debugging how many connections are still open every 5
+        seconds
+        """
+        current_time = int(time.monotonic())
+        if current_time % 5 == 0 and current_time > self._last_log_time:
+            self._last_log_time = current_time
+            logger.debug(
+                "Currently {} open connections".format(len(self.selector.get_map())))
+
+    def loop(self):
+        # On Windows an exception will be raised if select is called without any
+        # registered sockets
+        if len(self.selector.get_map()) == 0:
+            time.sleep(0.1)
+            return
+
+        self._log_open_connections()
+
+        current_time = time.monotonic()
+
+        events = self.selector.select(timeout=0.2)
+        for key, mask in events:
+            work_socket = key.fileobj
+            connection = key.data
+
+            socket_err = work_socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
+            if connection.state == ConnectionState.CONNECTING:
+
+                # If this is the first time the connection is selected we should
+                # still be in the CONNECTING state. Check if we are successfully
+                # connected otherwise close the socket
+
+                if socket_err != 0:
+                    logger.warning(
+                        "error connecting {}:{} : {} [{}] : cleaning up"
+                        .format(connection.hostname, connection.port, socket_err, errno.errorcode[socket_err]))
+                    connection.disconnect(reason=CloseReason.CONNECT_FAILED)
+                else:
+                    logger.debug(
+                        "successfully connected {}:{}".format(connection.hostname, connection.port))
+                    connection.set_state(ConnectionState.CONNECTED)
+                continue
+            else:
+                if socket_err != 0:
+                    logger.warning(
+                        "error {}:{} : {} [{}] : cleaning up"
+                        .format(connection.hostname, connection.port, socket_err, errno.errorcode[socket_err]))
+                    connection.disconnect(reason=CloseReason.EOF)
+                    continue
+
+            if mask & EVENT_READ:
+                # Listening connection
+                if isinstance(connection, ListeningConnection):
+                    connection.accept(work_socket)
+                    continue
+
+                # Data connection (peer/server)
+                if not connection.read():
+                    continue
+
+            if mask & EVENT_WRITE:
+
+                if not connection.write():
+                    continue
+
+        # Clean up connections
+        for selector_key in list(self.selector.get_map().values()):
+            connection = selector_key.data
+
+            # Clean up connections we requested to close
+            if connection.state == ConnectionState.SHOULD_CLOSE:
+                connection.disconnect(reason=CloseReason.REQUESTED)
+                continue
+
+            # Clean up connections that went into timeout
+            if isinstance(connection, PeerConnection):
+                # Ignore connections that haven't had an interaction yet
+                if not connection.last_interaction:
+                    continue
+
+                if connection.state == ConnectionState.CONNECTING:
+                    if connection.last_interaction + CONNECT_TIMEOUT < current_time:
+                        logger.warning(f"connection {connection.hostname}:{connection.port}: timeout reached during connecting")
+                        connection.disconnect(reason=CloseReason.CONNECT_FAILED)
+                        continue
+
+                if connection.last_interaction + connection.timeout < current_time:
+                    logger.warning(f"connection {connection.hostname}:{connection.port}: timeout reached")
+                    connection.disconnect(reason=CloseReason.TIMEOUT)
+                    continue
+
+    def exit(self):
+        for data in self.selector.get_map().values():
+            data.fileobj.close()
+
+        self.selector.close()
 
     def enable_upnp(self):
         listening_port = self._settings['network']['listening_port']
         for port in [listening_port, listening_port + 1, ]:
-            self.upnp.map_port(
+            self._upnp.map_port(
                 self.server.get_connecting_ip(),
                 port,
                 self._settings['network']['upnp_lease_duration']
             )
 
     def expire_caches(self):
-        with self._cache_lock:
-            self.connection_requests.expire()
-
-    def _register_to_network_loop(self, fileobj, events, connection):
-        self.network_loop.selector.register(fileobj, events, connection)
-
-    def _unregister_from_network_loop(self, fileobj):
-        self.network_loop.selector.unregister(fileobj)
+        self._connection_requests.expire()
 
     # Connection state changes
     def on_state_changed(self, state: ConnectionState, connection: Connection, close_reason: CloseReason = None):
@@ -148,7 +242,7 @@ class NetworkManager:
 
     def _on_server_connection_state_changed(self, state: ConnectionState, connection: ServerConnection, close_reason: CloseReason = None):
         if state == ConnectionState.CONNECTING:
-            self._register_to_network_loop(
+            self.selector.register(
                 connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
 
         elif state == ConnectionState.CONNECTED:
@@ -159,53 +253,62 @@ class NetworkManager:
                 self.enable_upnp()
 
         elif state == ConnectionState.CLOSED:
-            self._unregister_from_network_loop(connection.fileobj)
+            self.selector.unregister(connection.fileobj)
+
+            if close_reason != CloseReason.REQUESTED:
+                if self.settings['network']['reconnect']['auto']:
+                    logger.info("attempt to reconnect to server")
+                    self.server.connect()
 
     def _on_peer_connection_state_changed(self, state: ConnectionState, connection: PeerConnection, close_reason: CloseReason = None):
         if state == ConnectionState.CONNECTING:
-            self._register_to_network_loop(
+            self.selector.register(
                 connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
 
         elif state == ConnectionState.CLOSED:
-            self._unregister_from_network_loop(connection.fileobj)
+            self.selector.unregister(connection.fileobj)
 
             if close_reason == CloseReason.CONNECT_FAILED:
-                with self._cache_lock:
-                    for ticket, connection_req in self.connection_requests.items():
-                        if connection != connection_req.connection:
-                            continue
+                for request in self._connection_requests.values():
+                    if connection != request.connection:
+                        continue
 
-                        if connection_req.is_requested_by_us:
-                            # In case we want to connect to someone, don't give up just yet
-                            # and send a ConnectToPeer
-                            self.send_server_messages(
-                                ConnectToPeer.create(
-                                    connection_req.ticket,
-                                    connection_req.username,
-                                    connection_req.typ
-                                )
+                    if request.is_requested_by_us:
+                        # In case we want to connect to someone, don't give up just yet
+                        # and send a ConnectToPeer
+                        self.send_server_messages(
+                            ConnectToPeer.create(
+                                request.ticket,
+                                request.username,
+                                request.typ
                             )
-                        else:
-                            # In case we failed to connect to the other after they requested it, give up
-                            self.send_server_messages(
-                                CannotConnect.create(ticket, connection_req.username)
-                            )
-                            self.connection_requests.pop(ticket)
-                            self.fail_peer_connection_request(connection_req)
-                            break
+                        )
+                        self._state.scheduler.add(
+                            CONNECT_TO_PEER_TIMEOUT,
+                            callback=self._check_if_connecttopeer_request_handled,
+                            args=[request.ticket, ],
+                            times=1
+                        )
+                    else:
+                        # In case we failed to connect to the other after they requested it, give up
+                        self.send_server_messages(
+                            CannotConnect.create(request.ticket, request.username)
+                        )
+                        self.fail_peer_connection_request(request)
+                        break
 
     def _on_listening_connection_state_changed(self, state: ConnectionState, connection: ListeningConnection):
         if state == ConnectionState.CONNECTING:
-            self._register_to_network_loop(
+            self.selector.register(
                 connection.fileobj, EVENT_READ, connection)
 
         elif state == ConnectionState.CLOSED:
-            self._unregister_from_network_loop(connection.fileobj)
+            self.selector.unregister(connection.fileobj)
 
     # Peer related
     def on_peer_accepted(self, connection: PeerConnection):
         connection.listeners = [self, self.peer_listener, ]
-        self._register_to_network_loop(
+        self.selector.register(
             connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
 
     def init_peer_connection(
@@ -240,19 +343,17 @@ class NetworkManager:
             on_failure=on_failure
         )
 
-        with self._cache_lock:
-            self.connection_requests[ticket] = connection_request
+        self._connection_requests[ticket] = connection_request
 
         if ip is None and port is None:
             # Request peer address if ip and port are not given
             self.send_server_messages(GetPeerAddress.create(username))
         else:
-            with self._cache_lock:
-                self._connect_to_peer(ticket, connection_request)
+            self._connect_to_peer(connection_request)
 
         return connection_request
 
-    def _connect_to_peer(self, ticket, request: ConnectionRequest) -> PeerConnection:
+    def _connect_to_peer(self, request: ConnectionRequest) -> PeerConnection:
         """Attempts to establish a connection to a peer. This method will create
         the connection object and send a PeerInit or PeerPierceFirewall based
         on the L{request} passed to this method.
@@ -264,24 +365,26 @@ class NetworkManager:
             hostname=request.ip,
             port=request.port,
             connection_type=request.typ,
+            obfuscated=request.obfuscated,
             listeners=[self, self.peer_listener, ]
         )
         request.connection = connection
 
         if request.is_requested_by_us:
-            connection.queue_message(
-                PeerInit.create(
-                    self._settings['credentials']['username'],
-                    request.typ,
-                    request.ticket
-                ),
-                callback=partial(self.finalize_peer_connection, request, connection)
+            message = PeerInit.create(
+                self._settings['credentials']['username'],
+                request.typ,
+                request.ticket
             )
         else:
-            connection.queue_message(
-                PeerPierceFirewall.create(request.ticket),
-                callback=partial(self.finalize_peer_connection, request, connection)
+            message = PeerPierceFirewall.create(request.ticket)
+
+        connection.queue_message(
+            ProtocolMessage(
+                message=message,
+                on_success=partial(self.finalize_peer_connection, request, connection)
             )
+        )
 
         connection.connect()
         return connection
@@ -311,12 +414,16 @@ class NetworkManager:
         if request.transfer is not None:
             request.transfer.connection = connection
 
-        self.peer_listener.create_peer(request.username, connection)
+        peer = self.peer_listener.create_peer(request.username, connection)
 
         # Non-peer connections always go to unobfuscated after initialization
         if request.typ != PeerConnectionType.PEER:
             logger.debug(f"setting obfuscated to false for connection : {connection!r}")
             connection.obfuscated = False
+
+        # Check if this is a child connection
+        if request.typ == PeerConnectionType.DISTRIBUTED:
+            self.peer_listener.add_potential_child(peer, connection)
 
         # File connections should go into AWAITING_TICKET or AWAITING_OFFSET
         # depending on the state of the transfer
@@ -336,17 +443,16 @@ class NetworkManager:
 
         # Remove the connection request
         if request.ticket is not None and request.ticket != 0:
-            with self._cache_lock:
-                try:
-                    self.connection_requests.pop(request.ticket)
-                except KeyError:
-                    logger.warning(
-                        f"finalized a peer connection for an unknown ticket (ticket={request.ticket})")
+            try:
+                self._connection_requests.pop(request.ticket)
+            except KeyError:
+                logger.warning(
+                    f"finalized a peer connection for an unknown ticket (ticket={request.ticket})")
 
         for message in request.messages:
             connection.queue_message(message)
 
-    def fail_peer_connection_request(self, connection_request: ConnectionRequest):
+    def fail_peer_connection_request(self, request: ConnectionRequest):
         """Method called after peer connection could not be established. It is
         called after the following 3 situations:
 
@@ -355,8 +461,23 @@ class NetworkManager:
         - We sent a ConnectToPeer to the server but didn't get an incoming
           connection in a timely fashion
         """
-        if connection_request.on_failure is not None:
-            connection_request.on_failure(connection_request)
+        self._connection_requests.pop(request.ticket)
+        if request.on_failure is not None:
+            request.on_failure(request)
+
+        for message in request.messages:
+            if isinstance(message, ProtocolMessage):
+                if message.on_failure is not None:
+                    message.on_failure()
+
+    def _check_if_connecttopeer_request_handled(self, ticket: int):
+        try:
+            request = self._connection_requests[ticket]
+        except KeyError:
+            pass  # Handled, connection request is no longer present
+        else:
+            logger.warning(f"ConnectToPeer request was not handled in a timely fashion (ticket={ticket})")
+            self.fail_peer_connection_request(request)
 
     # Server related
 
@@ -383,38 +504,35 @@ class NetworkManager:
         logger.debug(f"PeerPierceFirewall : (ticket={ticket})")
 
         try:
-            with self._cache_lock:
-                request = self.connection_requests[ticket]
+            request = self._connection_requests[ticket]
         except KeyError:
             logger.warning(f"PeerPierceFirewall : unknown ticket (ticket={ticket})")
         else:
             self.finalize_peer_connection(request, connection)
 
     @on_message(GetPeerAddress)
-    def on_get_peer_address(self, message):
+    def on_get_peer_address(self, message, connection):
         username, ip, port, _, obfuscated_port = message.parse()
         logger.debug(f"GetPeerAddress : username={username}, ip={ip}, ports={port}/{obfuscated_port}")
 
         if ip == '0.0.0.0':
             logger.warning(f"GetPeerAddress : no address returned for username : {username}")
-            with self._cache_lock:
-                for ticket, request in self.connection_requests.items():
-                    if request.username == username:
-                        self.fail_peer_connection_request(request)
+            for ticket, request in self._connection_requests.items():
+                if request.username == username:
+                    self.fail_peer_connection_request(request)
             return
 
-        with self._cache_lock:
-            for ticket, request in self.connection_requests.items():
-                if request.username == username:
-                    if username.decode('utf-8') == 'Khyle':
-                        request.ip = '192.168.0.158'
-                    else:
-                        request.ip = ip
-                    request.port = port
-                    self._connect_to_peer(ticket, request)
+        for ticket, request in self._connection_requests.items():
+            if request.username == username:
+                if username.decode('utf-8') == 'Khyle':
+                    request.ip = '192.168.0.158'
+                else:
+                    request.ip = ip
+                request.port = port
+                self._connect_to_peer(request)
 
     @on_message(ConnectToPeer)
-    def on_connect_to_peer(self, message):
+    def on_connect_to_peer(self, message, connection):
         contents = message.parse()
         logger.info("ConnectToPeer : {!r}".format(contents))
         username, typ, ip, port, ticket, privileged, _, obfuscated_port = contents
@@ -422,7 +540,7 @@ class NetworkManager:
         if username.decode('utf-8') == 'Khyle':
             ip = '192.168.0.158'
 
-        connection_request = ConnectionRequest(
+        request = ConnectionRequest(
             ticket=ticket,
             username=username,
             typ=typ.decode('utf-8'),
@@ -430,25 +548,38 @@ class NetworkManager:
             ip=ip,
             port=port
         )
-        with self._cache_lock:
-            self.connection_requests[ticket] = connection_request
+        self._connection_requests[ticket] = request
 
-        self._connect_to_peer(ticket, connection_request)
+        self._connect_to_peer(request)
 
     @on_message(CannotConnect)
-    def on_cannot_connect(self, message):
+    def on_cannot_connect(self, message, connection):
         ticket, username = message.parse()
         logger.debug(f"CannotConnect : username={username} (ticket={ticket})")
-        with self._cache_lock:
-            try:
-                request = self.connection_requests.pop(ticket)
-            except KeyError:
-                logger.warning(
-                    f"CannotConnect : ticket {ticket} (username={username}) was not found in cache")
-            else:
-                logger.debug(f"CannotConnect : removed ticket {ticket} (username={username}) from cache")
-                self.fail_peer_connection_request(request)
+        try:
+            request = self._connection_requests[ticket]
+        except KeyError:
+            logger.warning(
+                f"CannotConnect : ticket {ticket} (username={username}) was not found in cache")
+        else:
+            self.fail_peer_connection_request(request)
 
-    def send_server_messages(self, *messages):
+    def send_peer_messages(self, username: str, *messages: List[Union[bytes, ProtocolMessage]]):
+        if username in self.peer_listener.peers:
+            peer = self.peer_listener.peers[username]
+            active_connections = peer.get_active_connections(PeerConnectionType.PEER)
+            if len(active_connections) > 0:
+                active_connections[0].queue_messages(*messages)
+                return
+
+        connection_ticket = next(self._state.ticket_generator)
+        self.init_peer_connection(
+            connection_ticket,
+            username,
+            PeerConnectionType.PEER,
+            messages=messages
+        )
+
+    def send_server_messages(self, *messages: List[Union[bytes, ProtocolMessage]]):
         for message in messages:
             self.server.queue_message(message)

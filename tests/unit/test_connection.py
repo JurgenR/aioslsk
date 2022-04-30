@@ -82,8 +82,7 @@ class TestDataConnection:
 
     # buffer
 
-    @patch('pyslsk.connection.DataConnection.process_buffer')
-    def test_whenBuffer_shouldStoreData(self, process_buffer):
+    def test_whenBuffer_shouldStoreData(self):
         conn = DataConnection(hostname='test', port=1234)
 
         data_to_send = b"abc"
@@ -91,7 +90,6 @@ class TestDataConnection:
 
         assert conn.bytes_received == len(data_to_send)
         assert conn._buffer == data_to_send
-        conn.process_buffer.assert_called_once()
 
     # send_message
 
@@ -110,7 +108,7 @@ class TestDataConnection:
         conn.fileobj = Mock()
 
         data_to_send = b"abc"
-        conn.queue_message(data_to_send, callback=None)
+        conn.queue_message(data_to_send)
 
         res = conn.send_message()
 
@@ -126,7 +124,7 @@ class TestDataConnection:
         conn.fileobj.sendall.side_effect = OSError("write error")
 
         data_to_send = b"abc"
-        conn.queue_message(data_to_send, callback=None)
+        conn.queue_message(data_to_send)
 
         res = conn.send_message()
 

@@ -156,7 +156,7 @@ Request a file download (peer has slotsfree):
 1. Initiate a connection to the Peer
 2. Send: PeerTransferQueue_ message containing the filename
 3. Receive: PeerTransferRequest_ message. Store the ticket and the filesize
-4. Send: PeerTransferReply_ message containing the ticket. (I'm not sure what the allowed flag does but it should obviously be '1', possibly it's only used in upload)
+4. Send: PeerTransferReply_ message containing the ticket. If the `allowed` flag is set the other peer will now attempt to establish a connection for uploading, if it is not set the transfer should be aborted.
 
 
 The peer will create a new file connection to start uploading the file.
@@ -171,13 +171,9 @@ Queue a file download (peer does not have slotsfree):
 
 1. Initiate a connection to the Peer
 2. Send: PeerTransferQueue_ message containing the filename
-3. Send: UserInfoRequest_
-4. Receive: UserInfoReply_ (this contains the slotsfree again)
-5. Send: PeerPlaceInQueueRequest_ containing the filename
-6. Receive: PeerPlaceInQueueReply_ which contains the filename and place in queue
+3. (If after 60s the ticket is not handled) Send: PeerPlaceInQueueRequest_ containing the filename
+4. Receive: PeerPlaceInQueueReply_ which contains the filename and place in queue
 
-
-_Note:_ The other peer does not respond to the PeerTransferQueue_ message , instead 30s after we sent the PeerTransferQueue_ message we send the UserInfoRequest_ message
 
 Distributed Connections
 =======================
@@ -240,11 +236,20 @@ _Note:_ extension is empty for anything but mp3 and flac
 _Note:_ Couldn't find any other than these. Number 3 seems to be missing, could this be something used in the past or maybe for video?
 
 
+Rooms and Chats
+===============
+
+
+After joining a room, we will automatically be receiving GetUserStatus_ updates from the server
+
+
+
 Reference:
 
 .. _Login: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode1
 .. _GetPeerAddress: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode3
 .. _AddUser: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode5
+.. _GetUserStatus: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode7
 .. _ConnectToPeer: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode18
 .. _Ping: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode32
 .. _HaveNoParents: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode71

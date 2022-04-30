@@ -1,7 +1,7 @@
 from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Deque, Dict, List
+from typing import TYPE_CHECKING, Deque, Dict, List, Tuple
 
 from .scheduler import Scheduler
 from .model import ChatMessage, Room, User
@@ -22,6 +22,12 @@ class Parent:
 
 
 @dataclass
+class Child:
+    peer: Peer
+    connection: PeerConnection
+
+
+@dataclass
 class State:
     logged_in = False
 
@@ -32,9 +38,12 @@ class State:
     users: Dict[str, User] = field(default_factory=dict)
     private_messages: Dict[int, ChatMessage] = field(default_factory=dict)
 
+    potential_parents: List[Tuple[str, str, int]] = field(default_factory=list)
+    """List of the last potential parents received by the NetInfo commands (username, ip, port)"""
     parent: Parent = None
     parent_min_speed: int = 0
     parent_speed_ratio: int = 0
+    children: List[Child] = field(default_factory=list)
 
     wishlist_interval: int = 0
 

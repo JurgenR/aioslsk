@@ -1,6 +1,6 @@
-=======
-py-slsk
-=======
+======
+pyslsk
+======
 
 .. contents::
 
@@ -23,7 +23,7 @@ Modules
 - `messages`: everything related to parsing and creating of SoulSeek messages
 - `network_manager`: higher level network manager
 - `server_manager`
--
+
 
 Connection Management
 ---------------------

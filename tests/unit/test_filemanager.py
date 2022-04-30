@@ -6,7 +6,7 @@ import os
 import tempfile
 
 
-RESOURCES = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'resources')
+RESOURCES = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'resources', 'shared')
 
 MP3_FILENAME = 'Kevin_MacLeod-Galway.mp3'
 FLAC_FILENAME = 'Kevin_MacLeod-Galway.flac'
@@ -41,11 +41,11 @@ class TestFileManager:
     def test_whenFetchSharedItems(self):
         manager = FileManager(DEFAULT_SETTINGS)
 
-        assert sorted(manager.shared_items) == sorted([
+        assert manager.shared_items == [
             SharedItem(root=RESOURCES, subdir='', filename='Kevin_MacLeod-Galway.flac'),
             SharedItem(root=RESOURCES, subdir='', filename='Kevin_MacLeod-Galway.mp3'),
             SharedItem(root=RESOURCES, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
-        ])
+        ]
 
     def test_whenGetStats_shouldReturnStats(self):
         manager = FileManager(DEFAULT_SETTINGS)
@@ -117,7 +117,7 @@ class TestFileManager:
 
         results = manager.query(query)
 
-        assert sorted(expected_items) == sorted(results)
+        assert expected_items == results
 
     def test_whenQueryNoMatches_shouldReturnEmptyList(self):
         manager = FileManager(DEFAULT_SETTINGS)

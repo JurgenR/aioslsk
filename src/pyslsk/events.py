@@ -5,6 +5,7 @@ import logging
 from typing import Callable, Dict, List, Type
 
 from .model import ChatMessage, Room, RoomMessage, User
+from .messages import DirectoryData
 
 
 logger = logging.getLogger()
@@ -26,7 +27,7 @@ def on_message(message_class):
 
 def get_listener_methods(obj, message_class) -> List[Callable]:
     """Gets a list of methods from given L{obj} which are registered to listen
-    to L{message_class}
+    to L{message_class} (through the L{on_message} decorator)
 
     @return: List of listening methods
     """
@@ -109,3 +110,9 @@ class UserLeftRoomEvent(BaseEvent):
 class PrivateMessageEvent(BaseEvent):
     user: User
     message: ChatMessage
+
+
+@dataclass(frozen=True)
+class PeerSharesReplyEvent(BaseEvent):
+    username: str
+    directories: List[DirectoryData]

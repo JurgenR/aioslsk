@@ -1,10 +1,12 @@
-from collections import namedtuple
+from dataclasses import dataclass
 import logging
 import mutagen
 from mutagen.mp3 import BitrateMode
 import os
 import re
 from typing import List, Tuple
+
+from .messages import DirectoryData, FileData
 
 logger = logging.getLogger()
 
@@ -20,7 +22,12 @@ _LOSSLESS_FORMATS = [
     'WAVE'
 ]
 
-SharedItem = namedtuple('SharedItem', ['root', 'subdir', 'filename'])
+
+@dataclass(frozen=True)
+class SharedItem:
+    root: str
+    subdir: str
+    filename: str
 
 
 def extract_attributes(filepath: str):
@@ -55,28 +62,41 @@ def extract_attributes(filepath: str):
     return attributes
 
 
-def convert_to_result(shared_item):
+def convert_item_to_file_data(shared_item: SharedItem, use_full_path=True) -> FileData:
+    """Convert a L{SharedItem} object to a L{FileData} object
+
+    @param use_full_path: use the full path of the file as 'filename' if C{True}
+        otherwise use just the filename
+    """
     file_path = os.path.join(shared_item.root, shared_item.subdir, shared_item.filename)
     file_size = os.path.getsize(file_path)
     file_ext = os.path.splitext(shared_item.filename)[-1]
-    attributes = extract_attributes(file_path)
+    # attributes = extract_attributes(file_path)
 
-    return {
-        'filename': file_path,
-        'filesize': file_size,
-        'extension': file_ext,
-        'attributes': attributes
-    }
+    return FileData(
+        unknown=1,
+        filename=file_path if use_full_path else shared_item.filename,
+        filesize=file_size,
+        extension=file_ext,
+        attributes=[]
+    )
 
 
-def convert_to_results(shared_items):
-    results = []
+def convert_items_to_file_data(shared_items: List[SharedItem], use_full_path=True) -> List[FileData]:
+    """Converts a list of L{SharedItem} instances to a list of L{FileData}
+    instances. If an exception occurs when converting the item an error will be
+    logged and the item will be omitted from the list
+    """
+    file_datas = []
     for shared_item in shared_items:
         try:
-            results.append(convert_to_result(shared_item))
+            file_datas.append(
+                convert_item_to_file_data(shared_item, use_full_path=use_full_path)
+            )
         except OSError:
             logger.exception(f"failed to convert to result : {shared_item!r}")
-    return results
+
+    return file_datas
 
 
 class FileManager:
@@ -117,7 +137,7 @@ class FileManager:
     def get_filesize(self, filename: str) -> int:
         return os.path.getsize(filename)
 
-    def query(self, query: str):
+    def query(self, query: str) -> List[SharedItem]:
         """Queries the L{shared_items}.
 
         1. Transform query into terms:
@@ -167,3 +187,25 @@ class FileManager:
             os.makedirs(download_dir, exist_ok=True)
 
         return os.path.join(download_dir, os.path.basename(filename))
+
+    def create_shares_reply(self) -> List[DirectoryData]:
+        # Sort files under unique directories
+        directories = {}
+        for item in self.shared_items:
+            directory = os.path.join(item.root, item.subdir)
+            if directory in directories:
+                directories[directory].append(item)
+            else:
+                directories[directory] = [item, ]
+
+        # Create shares reply
+        shares_reply = []
+        for directory, files in directories.items():
+            shares_reply.append(
+                DirectoryData(
+                    name=directory,
+                    files=convert_items_to_file_data(files, use_full_path=False)
+                )
+            )
+
+        return shares_reply

@@ -8,14 +8,16 @@ network:
   timeout:
     peer: 10
     distributed: 120
+  reconnect:
+    auto: true
 
 credentials:
   username: Khyle999
   password: Test1234
+  description: No description
 
 sharing:
   limits:
-    download_slots: 2
     upload_slots: 2
   download: H:\pyslsk-downloads
   directories:
