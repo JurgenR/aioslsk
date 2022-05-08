@@ -1,7 +1,8 @@
 import logging
+from os import stat
 import time
 
-from .connection import  ConnectionState, CloseReason, PeerConnectionType
+from .connection import ConnectionState, CloseReason, PeerConnectionType
 from .events import (
     on_message,
     EventBus,
@@ -10,6 +11,9 @@ from .events import (
     RoomListEvent,
     RoomJoinedEvent,
     RoomLeftEvent,
+    RoomTickersEvent,
+    RoomTickerAddedEvent,
+    RoomTickerRemovedEvent,
     UserAddEvent,
     UserJoinedRoomEvent,
     UserLeftRoomEvent,
@@ -27,6 +31,8 @@ from .messages import (
     ChatPrivateMessage,
     ChatAckPrivateMessage,
     ChatRoomTickers,
+    ChatRoomTickerAdd,
+    ChatRoomTickerRemove,
     ChatUserJoinedRoom,
     ChatUserLeftRoom,
     CheckPrivileges,
@@ -47,7 +53,7 @@ from .messages import (
     WishlistInterval,
     DistributedServerSearchRequest,
 )
-from .model import ChatMessage, Room, RoomMessage, User, UserState
+from .model import ChatMessage, Room, RoomMessage, User, UserStatus
 from .network import Network
 from .scheduler import Job
 from .state import State
@@ -64,7 +70,7 @@ class ServerManager:
         self._event_bus: EventBus = event_bus
         self.file_manager: FileManager = file_manager
         self.network: Network = network
-        self.network.server_listener = self
+        self.network.server_listeners.append(self)
 
         self._ping_job = Job(5 * 60, self.send_ping)
 
@@ -127,7 +133,7 @@ class ServerManager:
                 self._settings['network']['listening_port'],
                 self._settings['network']['listening_port'] + 1
             ),
-            SetStatus.create(UserState.ONLINE.value),
+            SetStatus.create(UserStatus.ONLINE.value),
             HaveNoParent.create(True),
             BranchRoot.create(self._settings['credentials']['username']),
             BranchLevel.create(0),
@@ -158,7 +164,7 @@ class ServerManager:
         logger.debug(f"user {username} joined room {room_name}")
 
         user = self._state.get_or_create_user(username)
-        user.status = status
+        user.status = UserStatus(status)
         user.avg_speed = avg_speed
         user.downloads = download_num
         user.files = file_count
@@ -192,17 +198,15 @@ class ServerManager:
         )
         for idx, name in enumerate(users):
             avg_speed, download_num, file_count, dir_count = users_data[idx]
-            new_user = User(
-                name=name,
-                status=users_status[idx],
-                avg_speed=avg_speed,
-                downloads=download_num,
-                files=file_count,
-                directories=dir_count,
-                country=users_countries[idx],
-                has_slots_free=users_has_slots_free[idx]
-            )
-            user = self._state.upsert_user(new_user)
+            user = self._state.get_or_create_user(name)
+            user.status = UserStatus(users_status[idx])
+            user.avg_speed = avg_speed
+            user.downloads = download_num
+            user.files = file_count
+            user.directories = dir_count
+            user.country = users_countries[idx]
+            user.has_slots_free = users_has_slots_free[idx]
+
             room.users.append(user)
         room = self._state.upsert_room(room)
 
@@ -218,8 +222,35 @@ class ServerManager:
 
     @on_message(ChatRoomTickers)
     def on_chat_room_tickers(self, message, connection):
+        room_name, tickers = message.parse()
+        logger.debug(f"room tickers {len(tickers)}")
+
+        room = self._state.get_or_create_room(room_name)
+        tickers = [(self._state.get_or_create_user(username), ticker, )
+                   for username, ticker in tickers]
+        self._event_bus.emit(RoomTickersEvent(room, tickers))
+
+    @on_message(ChatRoomTickerAdd)
+    def on_chat_room_ticker_add(self, message, connection):
         contents = message.parse()
-        logger.debug(f"room tickers {contents!r}")
+        room_name, username, ticker = contents
+        logger.debug(f"room ticker add : {contents!r}")
+
+        room = self._state.get_or_create_room(room_name)
+        user = self._state.get_or_create_user(username)
+
+        self._event_bus.emit(RoomTickerAddedEvent(room, user, ticker))
+
+    @on_message(ChatRoomTickerRemove)
+    def on_chat_room_ticker_removed(self, message, connection):
+        contents = message.parse()
+        room_name, username = contents
+        logger.debug(f"room ticker removed : {contents!r}")
+
+        room = self._state.get_or_create_room(room_name)
+        user = self._state.get_or_create_user(username)
+
+        self._event_bus.emit(RoomTickerRemovedEvent(room, user))
 
     @on_message(ChatPrivateMessage)
     def on_private_message(self, message, connection):
@@ -261,17 +292,17 @@ class ServerManager:
     def on_room_list(self, message, connection):
         room_infos, rooms_private_owned, rooms_private, rooms_private_operated = message.parse()
         for room_name, user_count in room_infos.items():
-            room = self._state.get_or_create_room(room_name=room_name)
+            room = self._state.get_or_create_room(room_name)
             room.user_count = user_count
 
         for room_name, user_count in rooms_private_owned.items():
-            room = self._state.get_or_create_room(room_name=room_name)
+            room = self._state.get_or_create_room(room_name)
             room.user_count = user_count
             room.is_private = True
             room.owner = self._settings['credentials']['username']
 
         for room_name, user_count in rooms_private.items():
-            room = self._state.get_or_create_room(room_name=room_name)
+            room = self._state.get_or_create_room(room_name)
             room.user_count = user_count
             room.is_private = True
 
@@ -291,7 +322,10 @@ class ServerManager:
 
     @on_message(PrivilegedUsers)
     def on_privileged_users(self, message, connection):
-        self._state.privileged_users = message.parse()
+        privileged_users = message.parse()
+        for privileged_user in privileged_users:
+            user = self._state.get_or_create_user(privileged_user)
+            user.privileged = True
 
     @on_message(WishlistInterval)
     def on_wish_list_interval(self, message, connection):
@@ -303,28 +337,37 @@ class ServerManager:
         logger.info(f"AddUser : {add_user_info}")
         name, exists, status, avg_speed, downloads, files, directories, country = add_user_info
         if exists:
-            user = User(
-                name=name,
-                status=status,
-                avg_speed=avg_speed,
-                downloads=downloads,
-                files=files,
-                directories=directories,
-                country=country
-            )
-            self._state.upsert_user(user)
+            user = self._state.get_or_create_user(name)
+            user.name = name
+            user.status = UserStatus(status)
+            user.avg_speed = avg_speed
+            user.downloads = downloads
+            user.files = files
+            user.directories = directories
+            user.country = country
 
-        self._event_bus.emit(UserAddEvent(user))
+            self._event_bus.emit(UserAddEvent(user))
 
     @on_message(GetUserStatus)
     def on_get_user_status(self, message, connection):
         username, status, privileged = message.parse()
         logger.info(f"GetUserStatus : username={username}, status={status}, privileged={privileged}")
 
+        user = self._state.get_or_create_user(username)
+        user.status = UserStatus(status)
+        user.status = privileged
+
     @on_message(GetUserStats)
     def on_get_user_stats(self, message, connection):
         contents = message.parse()
+        username, avg_speed, download_num, files, dirs = contents
         logger.info(f"GetUserStats : {contents}")
+
+        user = self._state.get_or_create_user(username)
+        user.avg_speed = avg_speed
+        user.downloads = download_num
+        user.files = files
+        user.directories = dirs
 
     @on_message(NetInfo)
     def on_net_info(self, message, connection):

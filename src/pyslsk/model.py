@@ -4,7 +4,7 @@ import enum
 from typing import List
 
 
-class UserState(enum.Enum):
+class UserStatus(enum.Enum):
     UNKNOWN = -1
     OFFLINE = 0
     AWAY = 1
@@ -14,13 +14,20 @@ class UserState(enum.Enum):
 @dataclass
 class User:
     name: str
-    status: int = 0
     country: str = None
-    avg_speed: int = 0
-    downloads: int = 0
-    files: int = 0
-    directories: int = 0
+    description: str = None
+    picture: str = None
+
+    status: int = UserStatus.OFFLINE.value
+    privileged: bool = False
+
+    avg_speed: int = None
+    downloads: int = None
+    files: int = None
+    directories: int = None
     has_slots_free: bool = None
+    queue_length: int = None
+    total_uploads: int = None
 
     def update(self, user):
         self.status = user.status
@@ -30,15 +37,6 @@ class User:
         self.files = user.files
         self.directories = user.directories
         self.has_slots_free = user.has_slots_free
-
-
-@dataclass
-class ChatMessage:
-    id: int
-    timestamp: int
-    user: User
-    message: str
-    is_admin: bool
 
 
 @dataclass
@@ -60,6 +58,15 @@ class Room:
         self.messages.extend(room.messages)
         self.joined = room.joined
         self.user_count = room.user_count
+
+
+@dataclass
+class ChatMessage:
+    id: int
+    timestamp: int
+    user: User
+    message: str
+    is_admin: bool
 
 
 @dataclass

@@ -86,7 +86,8 @@ class Connection:
     def set_state(self, state: ConnectionState, close_reason: CloseReason = CloseReason.UNKNOWN):
         self.state = state
         for listener in self.listeners:
-            listener.on_state_changed(state, self, close_reason=close_reason)
+            if hasattr(listener, 'on_state_changed'):
+                listener.on_state_changed(state, self, close_reason=close_reason)
 
     def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
         logger.debug(f"disconnecting from {self.hostname}:{self.port} reason : {reason.name}")
@@ -488,3 +489,46 @@ class PeerConnection(DataConnection):
             super().write_message(obfuscation.encode(message))
         else:
             super().write_message(message)
+
+
+
+class Reader:
+
+    def __init__(self, connection: DataConnection):
+        self._connection = connection
+        self._buffer = bytes()
+
+    def read(self) -> bool:
+        pass
+
+    def _buffer(self, data: bytes):
+        pass
+
+
+class MessageReader(Reader):
+
+    RECV_BUF_SIZE = 4
+
+
+class DataReader(Reader):
+
+    RECV_BUF_SIZE = 1024
+
+
+
+class Writer:
+
+    def __init__(self, connection: DataConnection):
+        self._connection = connection
+
+    def write(self) -> bool:
+        pass
+
+
+class MessageWriter(Writer):
+    pass
+
+
+class DataWriter(Writer):
+    pass
+

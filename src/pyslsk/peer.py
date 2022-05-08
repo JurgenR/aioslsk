@@ -47,8 +47,6 @@ class Peer:
         self.connections: List[PeerConnection] = []
         self.username: str = username
 
-        self.is_potential_parent: bool = False
-
         self.branch_level: int = None
         self.branch_root: str = None
 
@@ -72,7 +70,7 @@ class Peer:
             active_connections.append(connection)
         return active_connections
 
-    def remove_connection(self, connection):
+    def remove_connection(self, connection: PeerConnection):
         self.connections.remove(connection)
 
     def __repr__(self):
@@ -450,6 +448,21 @@ class PeerManager:
             self._state.search_queries[ticket].results.append(search_result)
         except KeyError:
             logger.warning(f"search reply ticket '{ticket}' does not match any search query")
+
+    @on_message(PeerUserInfoReply)
+    def on_peer_user_info_reply(self, message, connection: PeerConnection):
+        contents = message.parse()
+        description, picture, upload_slots, queue_size, has_slots_free = contents
+        logger.info(f"PeerUserInfoReply : {contents!r}")
+
+        peer = self.get_peer_by_connection(connection)
+
+        user = self._state.get_or_create_user(peer.username)
+        user.description = description
+        user.picture = picture
+        user.total_uploads = upload_slots
+        user.queue_length = queue_size
+        user.has_slots_free = has_slots_free
 
     @on_message(PeerUserInfoRequest)
     def on_peer_user_info_request(self, message, connection: PeerConnection):

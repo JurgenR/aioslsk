@@ -21,6 +21,7 @@ from .connection import (
     ServerConnection,
 )
 from .events import on_message
+from .listeners import TransferListener
 from .messages import (
     CannotConnect,
     ConnectToPeer,
@@ -34,6 +35,7 @@ from .transfer import Transfer, TransferDirection
 
 
 logger = logging.getLogger()
+
 
 CONNECT_TIMEOUT = 5
 CONNECT_TO_PEER_TIMEOUT: int = 30
@@ -71,12 +73,14 @@ class Network:
         self._connection_requests = TTLCache(maxsize=1000, ttl=5 * 60)
 
         self.peer_listener = None
-        self.server_listener = None
-        self.transfer_listener = None
+        self.server_listeners = [self, ]
+        self.transfer_listener: TransferListener = None
 
         # Selectors
         self.selector = DefaultSelector()
-        self._last_log_time = 0
+        self._last_log_time: float = 0
+
+        self._server_connect_attempts: int = 0
 
     def initialize(self):
         logger.info("initializing network")
@@ -84,7 +88,7 @@ class Network:
         self.server = ServerConnection(
             hostname=self._settings['network']['server_hostname'],
             port=self._settings['network']['server_port'],
-            listeners=[self, self.server_listener, ]
+            listeners=self.server_listeners
         )
         self.server.connect()
 
@@ -246,6 +250,7 @@ class Network:
                 connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
 
         elif state == ConnectionState.CONNECTED:
+            self._server_connect_attempts = 0
             # For registering with UPNP we need to know our own IP first, we can
             # get this from the server connection but we first need to be
             # fully connected to it before we can request a valid IP
@@ -256,9 +261,10 @@ class Network:
             self.selector.unregister(connection.fileobj)
 
             if close_reason != CloseReason.REQUESTED:
-                if self.settings['network']['reconnect']['auto']:
-                    logger.info("attempt to reconnect to server")
-                    self.server.connect()
+                if self._settings['network']['reconnect']['auto']:
+                    logger.info("scheduling to re-attempting connecting in 5 seconds")
+                    self._server_connect_attempts += 1
+                    self._state.scheduler.add(5, self.server.connect, times=1)
 
     def _on_peer_connection_state_changed(self, state: ConnectionState, connection: PeerConnection, close_reason: CloseReason = None):
         if state == ConnectionState.CONNECTING:

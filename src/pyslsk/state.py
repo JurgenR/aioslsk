@@ -32,7 +32,6 @@ class State:
     logged_in = False
 
     privileges_time_left: int = 0
-    privileged_users: List[str] = field(default_factory=list)
 
     rooms: Dict[str, Room] = field(default_factory=dict)
     users: Dict[str, User] = field(default_factory=dict)
@@ -53,21 +52,11 @@ class State:
     scheduler: Scheduler = None
     ticket_generator = ticket_generator()
 
-    def upsert_user(self, user: User) -> User:
-        try:
-            existing_user = self.users[user.name]
-        except KeyError:
-            self.users[user.name] = user
-            return user
-        else:
-            existing_user.update(user)
-            return existing_user
-
     def upsert_room(self, room: Room) -> Room:
         try:
-            existing_room = self.users[room.name]
+            existing_room = self.rooms[room.name]
         except KeyError:
-            self.users[room.name] = room
+            self.rooms[room.name] = room
             return room
         else:
             existing_room.update(room)

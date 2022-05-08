@@ -2,7 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import inspect
 import logging
-from typing import Callable, Dict, List, Type
+from typing import Callable, Dict, List, Tuple, Type
 
 from .model import ChatMessage, Room, RoomMessage, User
 from .messages import DirectoryData
@@ -62,7 +62,7 @@ class EventBus:
                 try:
                     listener(event)
                 except Exception:
-                    logger.exception("exception notifying listener {listener!r} of event {event!r}")
+                    logger.exception(f"exception notifying listener {listener!r} of event {event!r}")
 
 
 class BaseEvent:
@@ -92,6 +92,25 @@ class RoomJoinedEvent(BaseEvent):
 @dataclass(frozen=True)
 class RoomLeftEvent(BaseEvent):
     room: Room
+
+
+@dataclass(frozen=True)
+class RoomTickersEvent:
+    room: Room
+    tickers: List[Tuple[User, str]]
+
+
+@dataclass(frozen=True)
+class RoomTickerAddedEvent:
+    room: Room
+    user: User
+    ticker: str
+
+
+@dataclass(frozen=True)
+class RoomTickerRemovedEvent:
+    room: Room
+    user: User
 
 
 @dataclass(frozen=True)

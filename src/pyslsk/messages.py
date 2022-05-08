@@ -844,7 +844,7 @@ class ChatRoomTickers(Message):
     MESSAGE_ID = 0x71
 
     @staticmethod
-    def parse_users(pos: int, value: bytes):
+    def parse_ticker(pos: int, value: bytes):
         pos, user = parse_string(pos, value)
         pos, tickers = parse_string(pos, value)
         return pos, (user, tickers)
@@ -853,8 +853,8 @@ class ChatRoomTickers(Message):
     def parse(self):
         super().parse()
         room = self.parse_string()
-        users = self.parse_list(self.parse_users)
-        return room, users
+        tickers = self.parse_list(self.parse_ticker)
+        return room, tickers
 
 
 class ChatRoomTickerAdd(Message):
@@ -1535,7 +1535,6 @@ class PeerDirectoryContentsReply(PeerMessage):
         super().parse()
         directories = self.parse_list(item_parser=parse_directory)
         return directories
-
 
 
 class PeerTransferRequest(PeerMessage):

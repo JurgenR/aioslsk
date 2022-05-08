@@ -2,7 +2,6 @@ from __future__ import annotations
 from enum import auto, Enum
 from functools import partial
 from typing import List, Tuple, TYPE_CHECKING
-from threading import RLock
 import logging
 import time
 
@@ -13,15 +12,18 @@ from .connection import (
     PeerConnectionState,
     ProtocolMessage,
 )
+from .events import on_message
 from .filemanager import FileManager
 from .listeners import TransferListener
 from .messages import (
     pack_int64,
+    GetUserStatus,
     PeerPlaceInQueueRequest,
     PeerTransferQueue,
     PeerTransferRequest,
     SendUploadSpeed,
 )
+from .model import UserStatus
 from .state import State
 
 if TYPE_CHECKING:
@@ -251,8 +253,7 @@ class TransferManager(TransferListener):
         self._network: Network = network
 
         self._network.transfer_listener = self
-
-        self._lock = RLock()
+        self._network.server_listeners.append(self)
 
     @property
     def transfers(self):
@@ -574,3 +575,12 @@ class TransferManager(TransferListener):
             else:
                 if transfer.state != TransferState.COMPLETE:
                     transfer.set_state(TransferState.INCOMPLETE)
+
+    @on_message(GetUserStatus)
+    def on_get_user_status(self, message, connection):
+        username, status, _ = message.parse()
+        status = UserStatus(status)
+        user = self._state.get_or_create_user(username)
+        if status in (UserStatus.ONLINE, UserStatus.AWAY, ):
+            # Do something with the users queued uploads
+            pass
