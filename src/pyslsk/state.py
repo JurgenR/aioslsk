@@ -40,9 +40,13 @@ class State:
     potential_parents: List[Tuple[str, str, int]] = field(default_factory=list)
     """List of the last potential parents received by the NetInfo commands (username, ip, port)"""
     parent: Parent = None
+    children: List[Child] = field(default_factory=list)
+
     parent_min_speed: int = 0
     parent_speed_ratio: int = 0
-    children: List[Child] = field(default_factory=list)
+    min_parents_in_cache: int = 0
+    search_inactivity_timeout: int = 0
+    distributed_alive_interval: int = 0
 
     wishlist_interval: int = 0
 

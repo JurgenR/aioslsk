@@ -21,6 +21,7 @@ from .events import (
 from .filemanager import FileManager
 from .messages import (
     AcceptChildren,
+    AddPrivilegedUser,
     AddUser,
     BranchRoot,
     BranchLevel,
@@ -36,16 +37,19 @@ from .messages import (
     ChatUserJoinedRoom,
     ChatUserLeftRoom,
     CheckPrivileges,
+    DistributedAliveInterval,
     GetUserStatus,
     GetUserStats,
     HaveNoParent,
     Login,
+    MinParentsInCache,
     NetInfo,
     ParentMinSpeed,
     ParentSpeedRatio,
     Ping,
     PrivilegedUsers,
     RoomList,
+    SearchInactivityTimeout,
     ServerSearchRequest,
     SetListenPort,
     SetStatus,
@@ -320,12 +324,30 @@ class ServerManager:
     def on_parent_speed_ratio(self, message, connection):
         self._state.parent_speed_ratio = message.parse()
 
+    @on_message(MinParentsInCache)
+    def on_min_parents_in_cache(self, message, connection):
+        self._state.min_parents_in_cache = message.parse()
+
+    @on_message(DistributedAliveInterval)
+    def on_ditributed_alive_interval(self, message, connection):
+        self._state.distributed_alive_interval = message.parse()
+
+    @on_message(SearchInactivityTimeout)
+    def on_search_inactivity_timeout(self, message, connection):
+        self._state.search_inactivity_timeout = message.parse()
+
     @on_message(PrivilegedUsers)
     def on_privileged_users(self, message, connection):
         privileged_users = message.parse()
         for privileged_user in privileged_users:
             user = self._state.get_or_create_user(privileged_user)
             user.privileged = True
+
+    @on_message(AddPrivilegedUser)
+    def on_add_privileged_user(self, message, connection):
+        privileged_user = message.parse()
+        user = self._state.get_or_create_user(privileged_user)
+        user.privileged = True
 
     @on_message(WishlistInterval)
     def on_wish_list_interval(self, message, connection):

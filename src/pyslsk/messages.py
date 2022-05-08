@@ -155,6 +155,21 @@ def parse_directory(pos: int, message) -> Tuple[int, DirectoryData]:
     return pos, DirectoryData(name=name, files=files)
 
 
+def parse_similar_user(pos: int, message):
+    pos, username = parse_string(pos, message)
+    pos, status = parse_int(pos, message)
+    return pos, (username, status, )
+
+
+def parse_item_recommendation(pos: int, message):
+    pos, recommendation = parse_string(pos, message)
+    # FIXME: The museek docs say this can be negative, however we are parsing
+    # everything as unsigned. (I actually don't know what this number means
+    # right now)
+    pos, recommendation_num = parse_int(pos, message)
+    return pos, (recommendation, recommendation_num, )
+
+
 # Packing functions
 def pack_int(value: int) -> bytes:
     return struct.pack('<I', value)
@@ -768,6 +783,42 @@ class ParentSpeedRatio(Message):
         return self.parse_int()
 
 
+class SearchInactivityTimeout(Message):
+    MESSAGE_ID = 0x57
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        return self.parse_int()
+
+
+class MinParentsInCache(Message):
+    MESSAGE_ID = 0x58
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        return self.parse_int()
+
+
+class DistributedAliveInterval(Message):
+    MESSAGE_ID = 0x5A
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        return self.parse_int()
+
+
+class AddPrivilegedUser(Message):
+    MESSAGE_ID = 0x5B
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        return self.parse_string()
+
+
 class CheckPrivileges(Message):
     MESSAGE_ID = 0x5C
 
@@ -840,6 +891,30 @@ class WishlistInterval(Message):
         return self.parse_int()
 
 
+class SimilarUsers(Message):
+    MESSAGE_ID = 0x6E
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        return self.parse_list(item_parser=parse_similar_user)
+
+
+class ItemRecommendations(Message):
+    MESSAGE_ID = 0x6F
+
+    @classmethod
+    def create(cls, recommendation: str):
+        return pack_message(cls.MESSAGE_ID, pack_string(recommendation))
+
+    @warn_on_unparsed_bytes
+    def parse(self):
+        super().parse()
+        item = self.parse_string()
+        recommendations = self.parse_list(item_parser=parse_item_recommendation)
+        return item, recommendations
+
+
 class ChatRoomTickers(Message):
     MESSAGE_ID = 0x71
 
@@ -907,30 +982,39 @@ class SendUploadSpeed(Message):
         return pack_message(cls.MESSAGE_ID, message_body)
 
 
-class PrivilegeNotification(Message):
+class GivePrivileges(Message):
+    MESSAGE_ID = 0x7B
+
+    @classmethod
+    def create(cls, username, days):
+        message_body = pack_string(username) + pack_int(days)
+        return pack_message(cls.MESSAGE_ID, message_body)
+
+
+class PrivilegesNotification(Message):
     MESSAGE_ID = 0x7C
 
     @classmethod
-    def create(cls, token: int, username: str):
+    def create(cls, ticket: int, username: str):
         message_body = (
-            pack_int(token) + pack_string(username))
+            pack_int(ticket) + pack_string(username))
         return pack_message(cls.MESSAGE_ID, message_body)
 
     def parse_server(self):
         super().parse()
-        token = self.parse_int()
+        ticket = self.parse_int()
         username = self.parse_string()
-        return token, username
+        return ticket, username
 
 
-class AckPrivilegeNotification(Message):
+class PrivilegesNotificationAck(Message):
     MESSAGE_ID = 0x7D
 
     @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
-        token = self.parse_int()
-        return token
+        ticket = self.parse_int()
+        return ticket
 
 
 class BranchLevel(Message):
@@ -1157,17 +1241,9 @@ class ChatMessageUsers(Message):
 class ChatEnablePublic(Message):
     MESSAGE_ID = 0x96
 
-    @classmethod
-    def create(cls):
-        return pack_message(cls.MESSAGE_ID, bytes())
-
 
 class ChatDisablePublic(Message):
     MESSAGE_ID = 0x97
-
-    @classmethod
-    def create(cls):
-        return pack_message(cls.MESSAGE_ID, bytes())
 
 
 class ChatServerMessage(Message):
@@ -1176,10 +1252,10 @@ class ChatServerMessage(Message):
     @warn_on_unparsed_bytes
     def parse(self):
         super().parse()
-        room = self.parse_string()
-        user = self.parse_string()
+        room_name = self.parse_string()
+        username = self.parse_string()
         message = self.parse_string()
-        return room, user, message
+        return room_name, username, message
 
 
 class FileSearchEx(Message):
