@@ -33,38 +33,32 @@ class State:
 
     privileges_time_left: int = 0
 
+    # Chat related
     rooms: Dict[str, Room] = field(default_factory=dict)
     users: Dict[str, User] = field(default_factory=dict)
     private_messages: Dict[int, ChatMessage] = field(default_factory=dict)
 
+    # Distributed network related
     potential_parents: List[Tuple[str, str, int]] = field(default_factory=list)
     """List of the last potential parents received by the NetInfo commands (username, ip, port)"""
     parent: Parent = None
     children: List[Child] = field(default_factory=list)
 
+    # Server vars
     parent_min_speed: int = 0
     parent_speed_ratio: int = 0
     min_parents_in_cache: int = 0
     search_inactivity_timeout: int = 0
     distributed_alive_interval: int = 0
-
     wishlist_interval: int = 0
 
+    # Search related
     received_searches: Deque[ReceivedSearch] = field(default_factory=lambda: deque(list(), 500))
     search_queries: Dict[int, SearchQuery] = field(default_factory=dict)
 
+    # Global state
     scheduler: Scheduler = None
     ticket_generator = ticket_generator()
-
-    def upsert_room(self, room: Room) -> Room:
-        try:
-            existing_room = self.rooms[room.name]
-        except KeyError:
-            self.rooms[room.name] = room
-            return room
-        else:
-            existing_room.update(room)
-            return existing_room
 
     def get_or_create_user(self, username) -> User:
         try:

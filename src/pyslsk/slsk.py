@@ -101,19 +101,6 @@ class SoulSeek(threading.Thread):
     def transfers(self):
         return self.transfer_manager._transfers
 
-    def login(self):
-        """Perform a login request with the username and password found in
-        L{self.settings} and waits until L{self.state.logged_in} is set.
-        """
-        username = self.settings['credentials']['username']
-        password = self.settings['credentials']['password']
-        logger.info(f"Logging on with credentials: {username}:{password}")
-        self._network.send_server_messages(
-            messages.Login.create(username, password, CLIENT_VERSION)
-        )
-        while not self.state.logged_in:
-            time.sleep(1)
-
     def download(self, username: str, filename: str):
         return self.transfer_manager.queue_download(username, filename)
 

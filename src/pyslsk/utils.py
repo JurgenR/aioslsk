@@ -1,8 +1,18 @@
-def try_decoding(value):
+import logging
+
+
+logger = logging.getLogger()
+
+
+def try_decoding(value: bytes):
     try:
         return value.decode('utf-8')
     except UnicodeDecodeError:
-        return value.decode('cp1252')
+        try:
+            return value.decode('cp1252')
+        except Exception:
+            logger.warning(f"failed to decode string {value!r}")
+            raise
 
 
 def get_duration(attributes):
@@ -12,7 +22,6 @@ def get_duration(attributes):
             minutes, seconds = divmod(value, 60)
             hours, minutes = divmod(minutes, 60)
             duration = f"{hours}h {minutes}m {seconds}s"
-
             break
     return duration
 

@@ -7,7 +7,12 @@ from .connection import (
     PeerConnectionType,
     PeerConnectionState,
 )
-from .events import on_message, EventBus, PeerSharesReplyEvent
+from .events import (
+    on_message,
+    EventBus,
+    PeerSharesReplyEvent,
+    SearchResultEvent,
+)
 from .filemanager import convert_items_to_file_data, FileManager
 from .messages import (
     pack_int,
@@ -445,9 +450,12 @@ class PeerManager:
             locked_results=locked_results
         )
         try:
-            self._state.search_queries[ticket].results.append(search_result)
+            query = self._state.search_queries[ticket]
         except KeyError:
             logger.warning(f"search reply ticket '{ticket}' does not match any search query")
+        else:
+            query.results.append(search_result)
+            self._event_bus.emit(SearchResultEvent(query, search_result))
 
     @on_message(PeerUserInfoReply)
     def on_peer_user_info_reply(self, message, connection: PeerConnection):

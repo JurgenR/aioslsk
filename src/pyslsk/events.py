@@ -6,6 +6,7 @@ from typing import Callable, Dict, List, Tuple, Type
 
 from .model import ChatMessage, Room, RoomMessage, User
 from .messages import DirectoryData
+from .search import SearchQuery, SearchResult
 
 
 logger = logging.getLogger()
@@ -126,9 +127,25 @@ class UserLeftRoomEvent(BaseEvent):
 
 
 @dataclass(frozen=True)
+class UserJoinedPrivateRoomEvent(BaseEvent):
+    room: Room
+
+
+@dataclass(frozen=True)
+class UserLeftPrivateRoomEvent(BaseEvent):
+    room: Room
+
+
+@dataclass(frozen=True)
 class PrivateMessageEvent(BaseEvent):
     user: User
     message: ChatMessage
+
+
+@dataclass(frozen=True)
+class SearchResultEvent(BaseEvent):
+    query: SearchQuery
+    result: SearchResult
 
 
 @dataclass(frozen=True)

@@ -44,9 +44,7 @@ class DirectoryData:
 
 
 def calc_md5(value: bytes):
-    enc = hashlib.md5()
-    enc.update(value.encode('ascii'))
-    return enc.hexdigest()
+    return hashlib.md5(value.encode('utf-8')).hexdigest()
 
 
 # Parsing functions
@@ -215,7 +213,7 @@ def pack_message(message_id: int, value: bytes, id_as_uchar: bool = False) -> by
     """Adds the header (length + message ID) to a message body
 
     @param id_as_uchar: Packs the L{message_id} as uchar instead of int, used
-        for L{PeerInit} and L{PierceFirewall}
+        for L{PeerInit}, L{PierceFirewall} and distributed messages
     """
     # Add message ID
     if id_as_uchar:
@@ -1059,7 +1057,7 @@ class ChildDepth(Message):
         return child_depth
 
 
-class ChatPrivateRoomUsers(Message):
+class PrivateRoomUsers(Message):
     MESSAGE_ID = 0x85
 
     @warn_on_unparsed_bytes
@@ -1070,7 +1068,7 @@ class ChatPrivateRoomUsers(Message):
         return room_name, usernames
 
 
-class ChatPrivateRoomAddUser(Message):
+class PrivateRoomAddUser(Message):
     MESSAGE_ID = 0x86
 
     @classmethod
@@ -1102,7 +1100,7 @@ class ChatPrivateRoomRemoveUser(Message):
         return room, user
 
 
-class ChatPrivateRoomDropMembership(Message):
+class PrivateRoomDropMembership(Message):
     MESSAGE_ID = 0x87
 
     @classmethod
@@ -1110,7 +1108,7 @@ class ChatPrivateRoomDropMembership(Message):
         return pack_message(cls.MESSAGE_ID, pack_string(room))
 
 
-class ChatPrivateRoomDropOwnership(Message):
+class PrivateRoomDropOwnership(Message):
     MESSAGE_ID = 0x88
 
     @classmethod
@@ -1166,7 +1164,7 @@ class NewPassword(Message):
         return password
 
 
-class ChatPrivateRoomAddOperator(Message):
+class PrivateRoomAddOperator(Message):
     MESSAGE_ID = 0x8F
 
     @classmethod
@@ -1182,7 +1180,7 @@ class ChatPrivateRoomAddOperator(Message):
         return room, operator
 
 
-class ChatPrivateRoomRemoveOperator(Message):
+class PrivateRoomRemoveOperator(Message):
     MESSAGE_ID = 0x90
 
     @classmethod
@@ -1198,7 +1196,7 @@ class ChatPrivateRoomRemoveOperator(Message):
         return room, operator
 
 
-class ChatPrivateRoomOperatorAdded(Message):
+class PrivateRoomOperatorAdded(Message):
     MESSAGE_ID = 0x91
 
     @warn_on_unparsed_bytes
@@ -1208,7 +1206,7 @@ class ChatPrivateRoomOperatorAdded(Message):
         return room
 
 
-class ChatPrivateRoomOperatorRemoved(Message):
+class PrivateRoomOperatorRemoved(Message):
     MESSAGE_ID = 0x92
 
     @warn_on_unparsed_bytes
@@ -1218,7 +1216,7 @@ class ChatPrivateRoomOperatorRemoved(Message):
         return room
 
 
-class ChatPrivateRoomOperators(Message):
+class PrivateRoomOperators(Message):
     MESSAGE_ID = 0x94
 
     @warn_on_unparsed_bytes
@@ -1821,16 +1819,3 @@ def parse_peer_messages(message):
         # Set current message to the unparsed bytes
         current_message = unparsed_bytes
     return message_objects
-
-
-def attempt_unpack(data):
-    pos = 0
-    msgs = []
-    while pos < len(data):
-        new_pos, msg_len = parse_int(pos, data)
-        _, msg_type = parse_int(new_pos, data)
-        msg = data[pos:new_pos + msg_len]
-        msgs.append(msg)
-        print("Length {}, message type {}, msg {}".format(msg_len, msg_type, msg.hex()))
-        pos = new_pos + msg_len
-    return msgs

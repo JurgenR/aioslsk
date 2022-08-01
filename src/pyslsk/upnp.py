@@ -69,7 +69,6 @@ class UPNP:
         @param duration: Lease duration in seconds
         """
         devices = self.discover_devices()
-        # import pdb; pdb.set_trace()
 
         for device in devices:
             map_action = device.find_action(ADD_PORT_MAPPING_ACTION)

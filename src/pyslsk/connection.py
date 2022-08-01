@@ -504,10 +504,95 @@ class Reader:
     def _buffer(self, data: bytes):
         pass
 
+    def read(self) -> bool:
+        """Attempts to read data from the socket. When data is received the
+        L{buffer} method of this object will be called with the received data
+        """
+        try:
+            recv_data = self.fileobj.recv(self.recv_buf_size)
+        except OSError:
+            logger.exception(f"exception receiving data on connection {self.fileobj}")
+            # Only remove the peer connections?
+            logger.info(f"close {self.hostname}:{self.port} : exception while reading")
+            self.disconnect(reason=CloseReason.READ_ERROR)
+            return False
+        else:
+            self.interact()
+            if recv_data:
+                self.buffer(recv_data)
+                self.process_buffer()
+            else:
+                logger.warning(
+                    f"close {self.hostname}:{self.port} : no data received")
+                self.disconnect(reason=CloseReason.EOF)
+                return False
+        return True
+
 
 class MessageReader(Reader):
 
     RECV_BUF_SIZE = 4
+
+    def process_unobfuscated_message(self):
+        """Helper method for the unobfuscated buffer.
+
+        This method will look at the first 4-bytes of the L{_buffer} to
+        determine the total length of the message. Once the length has been
+        reached the L{parse_message} message will be called with the L{_buffer}
+        contents based on the message length.
+
+        This method won't clear the buffer entirely but will remove the message
+        from the _buffer and keep the rest.
+        """
+        if len(self._buffer) < struct.calcsize('I'):
+            return
+
+        _, msg_len = messages.parse_int(0, self._buffer)
+        # Calculate total message length (message length + length indicator)
+        total_msg_len = struct.calcsize('I') + msg_len
+        if len(self._buffer) >= total_msg_len:
+            message = self._buffer[:total_msg_len]
+            logger.debug(
+                "recv message {}:{} : {!r}"
+                .format(self.hostname, self.port, message.hex()))
+            self._buffer = self._buffer[total_msg_len:]
+
+            parsed_message = self.parse_message(message)
+            self.notify_message_received(parsed_message)
+
+    def process_obfuscated_message(self):
+        # Require at least 8 bytes (4 bytes key, 4 bytes length)
+        if len(self._buffer) < (obfuscation.KEY_SIZE + struct.calcsize('I')):
+            return
+
+        decoded_buffer = obfuscation.decode(self._buffer)
+
+        _, msg_len = messages.parse_int(0, decoded_buffer)
+        # Calculate total message length (message length + length indicator)
+        total_msg_len = struct.calcsize('I') + msg_len
+        if len(decoded_buffer) >= total_msg_len:
+            message = decoded_buffer[:total_msg_len]
+            logger.debug(
+                "recv obfuscated message {}:{} : {!r}"
+                .format(self.hostname, self.port, decoded_buffer.hex()))
+            # Difference between buffer_unobfuscated, the key size is included
+            self._buffer = self._buffer[total_msg_len + obfuscation.KEY_SIZE:]
+
+            parsed_message = self.parse_message(message)
+            self.notify_message_received(parsed_message)
+
+    def parse_message(self, message_data: bytes):
+        try:
+            if self.connection_state == PeerConnectionState.AWAITING_INIT:
+                return messages.parse_peer_message(message_data)
+            else:
+                if self.connection_type == PeerConnectionType.DISTRIBUTED:
+                    return messages.parse_distributed_message(message_data)
+                else:
+                    return messages.parse_peer_message(message_data)
+        except Exception:
+            logger.exception(f"failed to parse peer message : {message_data!r}")
+            return
 
 
 class DataReader(Reader):
@@ -526,9 +611,55 @@ class Writer:
 
 
 class MessageWriter(Writer):
-    pass
+
+    def write_message(self, message: bytes):
+        self.fileobj.sendall(message)
+
+    def send_message(self) -> bool:
+        """Sends a message if there is a message in the queue.
+
+        @return: False in case an exception occured on the socket while sending.
+            True in case a message was successfully sent or nothing was sent
+        """
+        try:
+            message: ProtocolMessage = self._messages.get(block=False)
+        except queue.Empty:
+            pass
+        else:
+            try:
+                logger.debug(f"send {self.hostname}:{self.port} : message {message.message.hex()}")
+                self.interact()
+                self.write_message(message.message)
+            except OSError:
+                logger.exception(
+                    f"close {self.hostname}:{self.port} : exception while sending")
+                self.disconnect(reason=CloseReason.WRITE_ERROR)
+                return False
+            else:
+                self.bytes_sent += len(message.message)
+                self.notify_message_sent(message)
+        return True
 
 
 class DataWriter(Writer):
-    pass
+    def send_data(self) -> bool:
+        """Transfers data over the connection"""
+        if self.transfer.is_all_data_transfered():
+            return True
+
+        data = self.transfer.read(self.send_buf_size)
+
+        try:
+            self.interact()
+            self.fileobj.sendall(data)
+        except OSError:
+            logger.exception(
+                f"close {self.hostname}:{self.port} : exception while sending")
+            self.disconnect(reason=CloseReason.WRITE_ERROR)
+            return False
+        else:
+            self.bytes_sent += len(data)
+            for listener in self.transfer_listeners:
+                listener.on_transfer_data_sent(len(data), self)
+        return True
 
