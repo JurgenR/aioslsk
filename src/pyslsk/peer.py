@@ -489,7 +489,7 @@ class PeerManager:
     @on_message(DistributedSearchRequest)
     def on_distributed_search_request(self, message, connection: PeerConnection):
         _, username, search_ticket, query = message.parse()
-        logger.info(f"search request from {username!r}, query: {query!r}")
+        # logger.info(f"search request from {username!r}, query: {query!r}")
         results = self.file_manager.query(query.decode('utf-8'))
 
         self._state.received_searches.append(
@@ -499,7 +499,7 @@ class PeerManager:
         if len(results) == 0:
             return
 
-        logger.debug(f"got {len(results)} results for query {query}")
+        logger.info(f"got {len(results)} results for query {query}")
 
         self.network.send_peer_messages(
             username,

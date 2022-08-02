@@ -150,6 +150,9 @@ class ListeningConnection(Connection):
             listener.on_peer_accepted(peer_connection)
         return peer_connection
 
+    def has_data_to_write(self) -> bool:
+        return False
+
 
 class DataConnection(Connection):
 
@@ -324,6 +327,9 @@ class DataConnection(Connection):
             parsed_message = self.parse_message(message)
             self.notify_message_received(parsed_message)
 
+    def has_data_to_write(self):
+        return not self._messages.empty()
+
 
 class ServerConnection(DataConnection):
 
@@ -410,16 +416,28 @@ class PeerConnection(DataConnection):
 
         return self.fileobj
 
-    def write(self) -> bool:
+    def has_data_to_write(self) -> bool:
+        if self.is_uploading():
+            return not self.transfer.is_transfered()
+        else:
+            return super().has_data_to_write()
+
+    def is_uploading(self) -> bool:
+        """Returns whether this connection is currently in the process of
+        uploading
+        """
         is_upload = self.transfer is not None and self.transfer.is_upload()
-        if is_upload and self.connection_state == PeerConnectionState.TRANSFERING:
+        return is_upload and self.connection_state == PeerConnectionState.TRANSFERING
+
+    def write(self) -> bool:
+        if self.is_uploading():
             return self.send_data()
         else:
             return self.send_message()
 
     def send_data(self) -> bool:
         """Transfers data over the connection"""
-        if self.transfer.is_all_data_transfered():
+        if self.transfer.is_transfered():
             return True
 
         data = self.transfer.read(self.send_buf_size)
@@ -644,7 +662,7 @@ class MessageWriter(Writer):
 class DataWriter(Writer):
     def send_data(self) -> bool:
         """Transfers data over the connection"""
-        if self.transfer.is_all_data_transfered():
+        if self.transfer.is_transfered():
             return True
 
         data = self.transfer.read(self.send_buf_size)
@@ -662,4 +680,3 @@ class DataWriter(Writer):
             for listener in self.transfer_listeners:
                 listener.on_transfer_data_sent(len(data), self)
         return True
-

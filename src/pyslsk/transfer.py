@@ -172,7 +172,7 @@ class Transfer:
     def is_processing(self) -> bool:
         return self.state in (TransferState.DOWNLOADING, TransferState.UPLOADING, TransferState.INITIALIZING, )
 
-    def is_all_data_transfered(self) -> bool:
+    def is_transfered(self) -> bool:
         return self.filesize == self.bytes_transfered
 
     def read(self, bytes_amount: int) -> bytes:
@@ -206,7 +206,7 @@ class Transfer:
         bytes_written = self._fileobj.write(data)
         self.bytes_written += bytes_written
 
-        return self.is_all_data_transfered()
+        return self.is_transfered()
 
     def abort(self):
         # Don't bother if the transfer was already completed
@@ -530,7 +530,7 @@ class TransferManager(TransferListener):
 
         transfer.write(data)
 
-        if transfer.is_all_data_transfered():
+        if transfer.is_transfered():
             transfer.complete()
             transfer.connection = None
             logger.info(f"completed downloading of {transfer.filename} from {transfer.username} to {transfer.target_path}")
@@ -556,7 +556,7 @@ class TransferManager(TransferListener):
             logger.warning(
                 f"couldn't find transfer associated with closed connection (connection={connection!r})")
         else:
-            if transfer.is_all_data_transfered():
+            if transfer.is_transfered():
                 if transfer.is_upload():
                     # Complete the upload
                     transfer.complete()

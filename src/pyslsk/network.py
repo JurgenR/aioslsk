@@ -7,6 +7,7 @@ import logging
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 import socket
 import time
+from threading import Lock
 from typing import Callable, List, Union
 
 from .connection import (
@@ -82,6 +83,8 @@ class Network:
 
         self._server_connect_attempts: int = 0
 
+        self._lock = Lock()
+
     def initialize(self):
         logger.info("initializing network")
 
@@ -134,7 +137,7 @@ class Network:
 
         current_time = time.monotonic()
 
-        events = self.selector.select(timeout=0.2)
+        events = self.selector.select(timeout=0.05)
         for key, mask in events:
             work_socket = key.fileobj
             connection = key.data
@@ -204,6 +207,42 @@ class Network:
                     logger.warning(f"connection {connection.hostname}:{connection.port}: timeout reached")
                     connection.disconnect(reason=CloseReason.TIMEOUT)
                     continue
+
+        # Set write event
+        with self._lock:
+            for key in list(self.selector.get_map().values()):
+                connection = key.data
+                # Connection needs to stay in write mode to detect whether we
+                # have completed connecting or error occurred. If we were to
+                # just keep that connection in READ then the select would only
+                # trigger when there is data to read, which is not necesserily
+                # what we want
+                if connection.state == ConnectionState.CONNECTING and not isinstance(connection, ListeningConnection):
+                    if not (key.events & EVENT_WRITE):
+                        logger.info(f"enable write for {connection.hostname}:{connection.port}")
+                        self.selector.modify(
+                            key.fileobj,
+                            EVENT_READ | EVENT_WRITE,
+                            data=connection
+                        )
+
+                elif connection.has_data_to_write():
+                    if not (key.events & EVENT_WRITE):
+                        logger.info(f"enable write for {connection.hostname}:{connection.port}")
+                        self.selector.modify(
+                            key.fileobj,
+                            EVENT_READ | EVENT_WRITE,
+                            data=connection
+                        )
+
+                else:
+                    if (key.events & EVENT_WRITE):
+                        logger.info(f"disable write for {connection.hostname}:{connection.port}")
+                        self.selector.modify(
+                            key.fileobj,
+                            EVENT_READ,
+                            data=connection
+                        )
 
     def exit(self):
         for data in self.selector.get_map().values():
@@ -385,12 +424,13 @@ class Network:
         else:
             message = PeerPierceFirewall.create(request.ticket)
 
-        connection.queue_message(
-            ProtocolMessage(
-                message=message,
-                on_success=partial(self.finalize_peer_connection, request, connection)
+        with self._lock:
+            connection.queue_message(
+                ProtocolMessage(
+                    message=message,
+                    on_success=partial(self.finalize_peer_connection, request, connection)
+                )
             )
-        )
 
         connection.connect()
         return connection
@@ -456,7 +496,8 @@ class Network:
                     f"finalized a peer connection for an unknown ticket (ticket={request.ticket})")
 
         for message in request.messages:
-            connection.queue_message(message)
+            with self._lock:
+                connection.queue_message(message)
 
     def fail_peer_connection_request(self, request: ConnectionRequest):
         """Method called after peer connection could not be established. It is
@@ -571,12 +612,13 @@ class Network:
             self.fail_peer_connection_request(request)
 
     def send_peer_messages(self, username: str, *messages: List[Union[bytes, ProtocolMessage]]):
-        if username in self.peer_listener.peers:
-            peer = self.peer_listener.peers[username]
-            active_connections = peer.get_active_connections(PeerConnectionType.PEER)
-            if len(active_connections) > 0:
-                active_connections[0].queue_messages(*messages)
-                return
+        with self._lock:
+            if username in self.peer_listener.peers:
+                peer = self.peer_listener.peers[username]
+                active_connections = peer.get_active_connections(PeerConnectionType.PEER)
+                if len(active_connections) > 0:
+                    active_connections[0].queue_messages(*messages)
+                    return
 
         connection_ticket = next(self._state.ticket_generator)
         self.init_peer_connection(
@@ -587,5 +629,6 @@ class Network:
         )
 
     def send_server_messages(self, *messages: List[Union[bytes, ProtocolMessage]]):
-        for message in messages:
-            self.server.queue_message(message)
+        with self._lock:
+            for message in messages:
+                self.server.queue_message(message)

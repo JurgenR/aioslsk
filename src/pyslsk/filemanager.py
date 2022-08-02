@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 import mutagen
 from mutagen.mp3 import BitrateMode
@@ -21,13 +21,26 @@ _LOSSLESS_FORMATS = [
     'FLAC',
     'WAVE'
 ]
+_QUERY_CLEAN_PATTERN = re.compile(r"[^\w\d]")
+"""Pattern to remove all non-word/digit characters from a string"""
+_QUERY_WORD_SEPERATORS = re.compile(r"[\-_\/\.,]")
+"""Word seperators used to seperate terms in a query"""
 
 
-@dataclass(frozen=True)
+@dataclass
 class SharedItem:
     root: str
     subdir: str
     filename: str
+    query_components: List[str] = field(init=False)
+    """The shared item split up into components to make it more performant to
+    query
+    """
+
+    def __post_init__(self):
+        path = (self.subdir + "/" + self.filename).lower()
+        path = re.sub(_QUERY_WORD_SEPERATORS, ' ', path)
+        self.query_components = path.split()
 
 
 def extract_attributes(filepath: str):
@@ -116,7 +129,9 @@ class FileManager:
                     subdir = ''
 
                 for filename in files:
-                    shared_items.append(SharedItem(shared_dir_abs, subdir, filename))
+                    shared_items.append(
+                        SharedItem(shared_dir_abs, subdir, filename)
+                    )
         return shared_items
 
     def get_shared_item(self, filename: str) -> SharedItem:
@@ -151,19 +166,11 @@ class FileManager:
         3. Loop over all the terms from the query and check if all match with
             with the terms in any of the shared items (any order)
         """
-        clean_pattern = re.compile(r"[^\w\d]")
-
-        # When looking through files, take -, _ and / as word seperators
-        word_seperators = re.compile(r"[\-_\/\.,]")
-
-        terms = [re.sub(clean_pattern, '', term.lower()) for term in query.split()]
+        terms = [re.sub(_QUERY_CLEAN_PATTERN, '', term.lower()) for term in query.split()]
 
         found_items = []
         for shared_item in self.shared_items:
-            path = (shared_item.subdir + "/" + shared_item.filename).lower()
-            path = re.sub(word_seperators, ' ', path)
-            path_components = path.split()
-            if all([term in path_components for term in terms]):
+            if all(term in shared_item.query_components for term in terms):
                 found_items.append(shared_item)
 
         return found_items
