@@ -1,9 +1,11 @@
 from __future__ import annotations
 import logging
 import threading
+from typing import Union
 
 from .events import EventBus
 from .filemanager import FileManager
+from .model import Room, User
 from .network import Network
 from . import messages
 from .peer import PeerManager
@@ -22,13 +24,13 @@ logger = logging.getLogger()
 
 class SoulSeek(threading.Thread):
 
-    def __init__(self, settings):
+    def __init__(self, settings, event_bus: EventBus = None):
         super().__init__()
         self.settings = settings
 
         self._stop_event = threading.Event()
 
-        self.events: EventBus = EventBus()
+        self.events: EventBus = event_bus or EventBus()
 
         self.state: State = State()
         self.state.scheduler = Scheduler()
@@ -100,22 +102,40 @@ class SoulSeek(threading.Thread):
     def transfers(self):
         return self.transfer_manager._transfers
 
-    def download(self, username: str, filename: str):
-        return self.transfer_manager.queue_download(username, filename)
+    def download(self, user: Union[str, User], filename: str):
+        if isinstance(user, User):
+            return self.transfer_manager.queue_download(user.name, filename)
+        else:
+            return self.transfer_manager.queue_download(user, filename)
 
-    def join_room(self, name: str):
-        self.server_manager.join_room(name)
+    def join_room(self, room: Union[str, Room]):
+        if isinstance(room, Room):
+            self.server_manager.join_room(room.name)
+        else:
+            self.server_manager.join_room(room)
 
-    def leave_room(self, name: str):
-        self.server_manager.leave_room(name)
+    def get_room_list(self):
+        self.server_manager.get_room_list()
 
-    def send_private_message(self, username: str, message: str):
-        self.server_manager.send_private_message(username, message)
+    def leave_room(self, room: Union[str, Room]):
+        if isinstance(room, Room):
+            self.server_manager.leave_room(room.name)
+        else:
+            self.server_manager.leave_room(room)
 
-    def send_room_message(self, room_name: str, message: str):
-        self.server_manager.send_room_message(room_name, message)
+    def send_private_message(self, user: Union[str, User], message: str):
+        if isinstance(user, User):
+            self.server_manager.send_private_message(user.name, message)
+        else:
+            self.server_manager.send_private_message(user, message)
 
-    def search(self, query):
+    def send_room_message(self, room: Union[str, Room], message: str):
+        if isinstance(room, Room):
+            self.server_manager.send_room_message(room.name, message)
+        else:
+            self.server_manager.send_room_message(room, message)
+
+    def search(self, query: str):
         logger.info(f"Starting search for query: {query}")
         ticket = next(self.state.ticket_generator)
         self._network.send_server_messages(
@@ -126,3 +146,16 @@ class SoulSeek(threading.Thread):
 
     def get_search_results_by_ticket(self, ticket):
         return self.state.search_queries[ticket]
+
+    # Peer requests
+    def get_user_info(self, user: Union[str, User]):
+        if isinstance(user, User):
+            self.peer_manager.get_user_info(user.name)
+        else:
+            self.peer_manager.get_user_info(user)
+
+    def get_user_shares(self, user: Union[str, User]):
+        if isinstance(user, User):
+            self.peer_manager.get_user_shares(user.name)
+        else:
+            self.peer_manager.get_user_shares(user)

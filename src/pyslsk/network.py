@@ -406,6 +406,7 @@ class Network:
         The connection will automatically be attached to the network loop based
         on the state of the connection
         """
+        logger.debug(f"attempting to connect to peer : {request!r}")
         connection = PeerConnection(
             hostname=request.ip,
             port=request.port,
@@ -538,7 +539,7 @@ class Network:
             # connecting to us
             ConnectionRequest(
                 ticket=ticket,
-                typ=typ.decode('utf-8'),
+                typ=typ,
                 username=username,
                 is_requested_by_us=False
             ),
@@ -571,8 +572,8 @@ class Network:
 
         for ticket, request in self._connection_requests.items():
             if request.username == username:
-                if username.decode('utf-8') == 'Khyle':
-                    request.ip = '192.168.0.158'
+                if username == 'Khyle':
+                    request.ip = '192.168.0.152'
                 else:
                     request.ip = ip
                 request.port = port
@@ -584,13 +585,13 @@ class Network:
         logger.info("ConnectToPeer : {!r}".format(contents))
         username, typ, ip, port, ticket, privileged, _, obfuscated_port = contents
 
-        if username.decode('utf-8') == 'Khyle':
-            ip = '192.168.0.158'
+        if username == 'Khyle':
+            ip = '192.168.0.152'
 
         request = ConnectionRequest(
             ticket=ticket,
             username=username,
-            typ=typ.decode('utf-8'),
+            typ=typ,
             is_requested_by_us=False,
             ip=ip,
             port=port

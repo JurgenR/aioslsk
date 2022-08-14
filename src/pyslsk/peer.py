@@ -10,7 +10,8 @@ from .connection import (
 from .events import (
     on_message,
     EventBus,
-    PeerSharesReplyEvent,
+    UserInfoReplyEvent,
+    UserSharesReplyEvent,
     SearchResultEvent,
 )
 from .filemanager import convert_items_to_file_data, FileManager
@@ -99,6 +100,20 @@ class PeerManager:
 
         self.peers: Dict[str, Peer] = {}
 
+    # External methods
+    def get_user_info(self, username: str):
+        self.network.send_peer_messages(
+            username,
+            PeerUserInfoRequest.create()
+        )
+
+    def get_user_shares(self, username: str):
+        self.network.send_peer_messages(
+            username,
+            PeerSharesRequest.create()
+        )
+
+    # Internal methods
     def create_peer(self, username: str, connection: PeerConnection) -> Peer:
         """Creates a new peer object and adds it to our list of peers, if a peer
         already exists with the given L{username} the connection will be added
@@ -248,7 +263,7 @@ class PeerManager:
         )
 
         try:
-            self.file_manager.get_shared_item(filename.decode('utf-8'))
+            self.file_manager.get_shared_item(filename)
         except LookupError:
             self.transfer_manager.queue_transfer(transfer, state=None)
             transfer.fail(reason="File not shared.")
@@ -256,7 +271,7 @@ class PeerManager:
                 PeerTransferQueueFailed.create(filename, transfer.fail_reason)
             )
         else:
-            transfer.filesize = self.file_manager.get_filesize(filename.decode('utf-8'))
+            transfer.filesize = self.file_manager.get_filesize(filename)
             self.transfer_manager.queue_transfer(transfer)
 
     @on_message(PeerTransferRequest)
@@ -433,7 +448,8 @@ class PeerManager:
 
         logger.info(f"PeerSharesReply : from username {peer.username}, got {len(directories)} directories")
 
-        self._event_bus.emit(PeerSharesReplyEvent(peer.username, directories))
+        user = self._state.get_or_create_user(peer.username)
+        self._event_bus.emit(UserSharesReplyEvent(user, directories))
 
     @on_message(PeerSearchReply)
     def on_peer_search_reply(self, message, connection: PeerConnection):
@@ -472,6 +488,8 @@ class PeerManager:
         user.queue_length = queue_size
         user.has_slots_free = has_slots_free
 
+        self._event_bus.emit(UserInfoReplyEvent(user))
+
     @on_message(PeerUserInfoRequest)
     def on_peer_user_info_request(self, message, connection: PeerConnection):
         logger.info("PeerUserInfoRequest")
@@ -490,7 +508,7 @@ class PeerManager:
     def on_distributed_search_request(self, message, connection: PeerConnection):
         _, username, search_ticket, query = message.parse()
         # logger.info(f"search request from {username!r}, query: {query!r}")
-        results = self.file_manager.query(query.decode('utf-8'))
+        results = self.file_manager.query(query)
 
         self._state.received_searches.append(
             ReceivedSearch(username=username, query=query, matched_files=len(results))

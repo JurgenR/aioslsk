@@ -71,6 +71,11 @@ class BaseEvent:
 
 
 @dataclass(frozen=True)
+class ServerDisconnectedEvent(BaseEvent):
+    pass
+
+
+@dataclass(frozen=True)
 class UserAddEvent(BaseEvent):
     user: User
 
@@ -147,8 +152,14 @@ class SearchResultEvent(BaseEvent):
     query: SearchQuery
     result: SearchResult
 
+# Peer
 
 @dataclass(frozen=True)
-class PeerSharesReplyEvent(BaseEvent):
-    username: str
+class UserInfoReplyEvent(BaseEvent):
+    user: User
+
+
+@dataclass(frozen=True)
+class UserSharesReplyEvent(BaseEvent):
+    user: User
     directories: List[DirectoryData]

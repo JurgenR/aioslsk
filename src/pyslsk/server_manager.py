@@ -13,6 +13,7 @@ from .events import (
     RoomTickersEvent,
     RoomTickerAddedEvent,
     RoomTickerRemovedEvent,
+    ServerDisconnectedEvent,
     UserAddEvent,
     UserJoinedRoomEvent,
     UserJoinedPrivateRoomEvent,
@@ -111,6 +112,10 @@ class ServerManager:
             AddUser.create(username)
         )
 
+    def get_room_list(self):
+        logger.info("sending request for room list")
+        self.network.send_server_messages(RoomList.create())
+
     def join_room(self, name: str):
         logger.info(f"sending request to join room with name {name}")
         self.network.send_server_messages(
@@ -196,7 +201,7 @@ class ServerManager:
     @on_message(ChatUserJoinedRoom)
     def on_user_joined_room(self, message, connection):
         room_name, username, status, avg_speed, download_num, file_count, dir_count, slots_free, country = message.parse()
-        logger.debug(f"user {username} joined room {room_name}")
+        logger.info(f"user {username} joined room {room_name}")
 
         user = self._state.get_or_create_user(username)
         user.status = UserStatus(status)
@@ -528,3 +533,4 @@ class ServerManager:
         elif state == ConnectionState.CLOSED:
             self._state.logged_in = False
             self._state.scheduler.remove(self._ping_job)
+            self._event_bus.emit(ServerDisconnectedEvent())

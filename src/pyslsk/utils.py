@@ -5,6 +5,8 @@ logger = logging.getLogger()
 
 
 def try_decoding(value: bytes):
+    if isinstance(value, str):
+        return value
     try:
         return value.decode('utf-8')
     except UnicodeDecodeError:

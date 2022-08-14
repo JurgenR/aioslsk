@@ -81,7 +81,7 @@ def parse_string(pos: int, data) -> str:
     data_type = '<{}s'.format(length)
     value = struct.unpack(
         data_type, data[pos_after_len:pos_after_len + length])[0]
-    return pos_after_len + length, value
+    return pos_after_len + length, decode_string(value)
 
 
 def parse_ip(pos: int, data) -> str:

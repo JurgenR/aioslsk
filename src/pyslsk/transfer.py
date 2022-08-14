@@ -524,7 +524,7 @@ class TransferManager(TransferListener):
         transfer.set_state(TransferState.DOWNLOADING)
 
         if transfer.target_path is None:
-            download_path = self._file_manager.get_download_path(transfer.filename.decode('utf-8'))
+            download_path = self._file_manager.get_download_path(transfer.filename)
             transfer.target_path = download_path
             logger.info(f"started receiving transfer data, download path : {download_path}")
 
