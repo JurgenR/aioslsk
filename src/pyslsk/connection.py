@@ -398,7 +398,7 @@ class PeerConnection(DataConnection):
 
     def connect(self):
         self.interact()
-        logger.info(f"open {self.hostname}:{self.port} : peer connection")
+        # logger.info(f"open {self.hostname}:{self.port} : peer connection")
         self.fileobj = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.fileobj.setblocking(False)
 

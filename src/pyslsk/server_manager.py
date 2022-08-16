@@ -19,6 +19,8 @@ from .events import (
     UserJoinedPrivateRoomEvent,
     UserLeftRoomEvent,
     UserLeftPrivateRoomEvent,
+    UserStatsEvent,
+    UserStatusEvent,
 )
 from .filemanager import FileManager
 from .messages import (
@@ -61,6 +63,7 @@ from .messages import (
     PrivateRoomDropMembership,
     PrivateRoomDropOwnership,
     PrivilegedUsers,
+    RemoveUser,
     RoomList,
     SearchInactivityTimeout,
     ServerSearchRequest,
@@ -108,8 +111,27 @@ class ServerManager:
         )
 
     def add_user(self, username: str):
-        self.network.send_peer_messages(
+        logger.info(f"adding user {username}")
+        self.network.send_server_messages(
             AddUser.create(username)
+        )
+
+    def remove_user(self, username: str):
+        logger.info(f"removing user {username}")
+        self.network.send_server_messages(
+            RemoveUser.create(username)
+        )
+
+    def get_user_stats(self, username: str):
+        logger.info(f"getting user stats {username}")
+        self.network.send_server_messages(
+            GetUserStats.create(username)
+        )
+
+    def get_user_status(self, username: str):
+        logger.info(f"getting user status {username}")
+        self.network.send_server_messages(
+            GetUserStatus.create(username)
         )
 
     def get_room_list(self):
@@ -487,6 +509,8 @@ class ServerManager:
         user.status = UserStatus(status)
         user.privileged = privileged
 
+        self._event_bus.emit(UserStatusEvent(user))
+
     @on_message(GetUserStats)
     def on_get_user_stats(self, message, connection):
         contents = message.parse()
@@ -498,6 +522,8 @@ class ServerManager:
         user.downloads = download_num
         user.files = files
         user.directories = dirs
+
+        self._event_bus.emit(UserStatsEvent(user))
 
     @on_message(NetInfo)
     def on_net_info(self, message, connection):

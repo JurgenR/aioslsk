@@ -81,6 +81,21 @@ class UserAddEvent(BaseEvent):
 
 
 @dataclass(frozen=True)
+class UserStatsEvent(BaseEvent):
+    user: User
+
+
+@dataclass(frozen=True)
+class UserStatusEvent(BaseEvent):
+    user: User
+
+
+@dataclass(frozen=True)
+class UserModifiedEvent(BaseEvent):
+    user: User
+
+
+@dataclass(frozen=True)
 class RoomListEvent(BaseEvent):
     rooms: List[Room]
 

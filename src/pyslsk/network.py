@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import errno
 from functools import partial
 import logging
+import platform
 from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 import socket
 import time
@@ -40,6 +41,12 @@ logger = logging.getLogger()
 
 CONNECT_TIMEOUT = 5
 CONNECT_TO_PEER_TIMEOUT: int = 30
+
+CONNECTION_LIMITS = {
+    'Windows': 512,
+    'Linux': 1024
+}
+DEFAULT_CONNECTION_LIMIT = 512
 
 
 @dataclass
@@ -79,6 +86,10 @@ class Network:
 
         # Selectors
         self.selector = DefaultSelector()
+        self._connection_limit = CONNECTION_LIMITS.get(
+            platform.system(), DEFAULT_CONNECTION_LIMIT
+        )
+        self._selector_queue = []
         self._last_log_time: float = 0
 
         self._server_connect_attempts: int = 0
@@ -123,8 +134,16 @@ class Network:
         current_time = int(time.monotonic())
         if current_time % 5 == 0 and current_time > self._last_log_time:
             self._last_log_time = current_time
-            logger.debug(
-                "Currently {} open connections".format(len(self.selector.get_map())))
+            logger.info(
+                "currently {} open connections".format(len(self.selector.get_map())))
+
+    def _register_connection(self, fileobj, events, connection: Connection):
+        if len(self.selector.get_map()) >= self._connection_limit:
+            self._selector_queue.append(
+                (fileobj, events, connection)
+            )
+        else:
+            self.selector.register(fileobj, events, data=connection)
 
     def loop(self):
         # On Windows an exception will be raised if select is called without any
@@ -137,7 +156,7 @@ class Network:
 
         current_time = time.monotonic()
 
-        events = self.selector.select(timeout=0.05)
+        events = self.selector.select(timeout=0.10)
         for key, mask in events:
             work_socket = key.fileobj
             connection = key.data
@@ -208,6 +227,14 @@ class Network:
                     connection.disconnect(reason=CloseReason.TIMEOUT)
                     continue
 
+        # Pull from queue
+        if self._selector_queue and len(self.selector.get_map()) < self._connection_limit:
+            to_queue = self._connection_limit - len(self.selector.get_map())
+            logger.info(f"removing {to_queue} connections from queue ({len(self._selector_queue)})")
+            for fileobj, events, connection in self._selector_queue[:to_queue]:
+                self.selector.register(fileobj, events, connection)
+            self._selector_queue = self._selector_queue[to_queue:]
+
         # Set write event
         with self._lock:
             for key in list(self.selector.get_map().values()):
@@ -228,7 +255,6 @@ class Network:
 
                 elif connection.has_data_to_write():
                     if not (key.events & EVENT_WRITE):
-                        logger.info(f"enable write for {connection.hostname}:{connection.port}")
                         self.selector.modify(
                             key.fileobj,
                             EVENT_READ | EVENT_WRITE,
@@ -237,7 +263,6 @@ class Network:
 
                 else:
                     if (key.events & EVENT_WRITE):
-                        logger.info(f"disable write for {connection.hostname}:{connection.port}")
                         self.selector.modify(
                             key.fileobj,
                             EVENT_READ,
@@ -285,7 +310,7 @@ class Network:
 
     def _on_server_connection_state_changed(self, state: ConnectionState, connection: ServerConnection, close_reason: CloseReason = None):
         if state == ConnectionState.CONNECTING:
-            self.selector.register(
+            self._register_connection(
                 connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
 
         elif state == ConnectionState.CONNECTED:
@@ -307,7 +332,7 @@ class Network:
 
     def _on_peer_connection_state_changed(self, state: ConnectionState, connection: PeerConnection, close_reason: CloseReason = None):
         if state == ConnectionState.CONNECTING:
-            self.selector.register(
+            self._register_connection(
                 connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
 
         elif state == ConnectionState.CLOSED:
@@ -344,7 +369,7 @@ class Network:
 
     def _on_listening_connection_state_changed(self, state: ConnectionState, connection: ListeningConnection):
         if state == ConnectionState.CONNECTING:
-            self.selector.register(
+            self._register_connection(
                 connection.fileobj, EVENT_READ, connection)
 
         elif state == ConnectionState.CLOSED:
@@ -353,7 +378,7 @@ class Network:
     # Peer related
     def on_peer_accepted(self, connection: PeerConnection):
         connection.listeners = [self, self.peer_listener, ]
-        self.selector.register(
+        self._register_connection(
             connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
 
     def init_peer_connection(

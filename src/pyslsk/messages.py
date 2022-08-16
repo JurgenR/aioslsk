@@ -437,6 +437,19 @@ class AddUser(Message):
         return username
 
 
+class RemoveUser(Message):
+    MESSAGE_ID = 0x06
+
+    @classmethod
+    def create(cls, username: str) -> bytes:
+        return pack_message(cls.MESSAGE_ID, pack_string(username))
+
+    def parse_server(self):
+        super().parse()
+        username = self.parse_string()
+        return username
+
+
 class GetUserStatus(Message):
     MESSAGE_ID = 0x07
 
@@ -494,6 +507,11 @@ class ChatJoinRoom(Message):
             operators = []
 
         return room, users, users_status, users_data, users_slots_free, users_countries, owner, operators
+
+    def parse_server(self):
+        super().parse()
+        room_name = self.parse_string()
+        return room_name
 
 
 class ChatLeaveRoom(Message):

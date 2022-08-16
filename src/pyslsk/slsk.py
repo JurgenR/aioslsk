@@ -136,6 +136,8 @@ class SoulSeek(threading.Thread):
             self.server_manager.send_room_message(room, message)
 
     def search(self, query: str):
+        """Performs a search, returns the generated ticket number for the search
+        """
         logger.info(f"Starting search for query: {query}")
         ticket = next(self.state.ticket_generator)
         self._network.send_server_messages(
@@ -144,8 +146,36 @@ class SoulSeek(threading.Thread):
         self.state.search_queries[ticket] = SearchQuery(ticket=ticket, query=query)
         return ticket
 
-    def get_search_results_by_ticket(self, ticket):
+    def get_search_results_by_ticket(self, ticket: int):
+        """Returns all search results for given ticket"""
         return self.state.search_queries[ticket]
+
+    def remove_search_results_by_ticket(self, ticket: int):
+        return self.state.search_queries.pop(ticket)
+
+    def get_user_stats(self, user: Union[str, User]):
+        if isinstance(user, User):
+            self.server_manager.get_user_stats(user.name)
+        else:
+            self.server_manager.get_user_stats(user)
+
+    def get_user_status(self, user: Union[str, User]):
+        if isinstance(user, User):
+            self.server_manager.get_user_status(user.name)
+        else:
+            self.server_manager.get_user_status(user)
+
+    def add_user(self, user: Union[str, User]):
+        if isinstance(user, User):
+            self.server_manager.add_user(user.name)
+        else:
+            self.server_manager.add_user(user)
+
+    def remove_user(self, user: Union[str, User]):
+        if isinstance(user, User):
+            self.server_manager.remove_user(user.name)
+        else:
+            self.server_manager.remove_user(user)
 
     # Peer requests
     def get_user_info(self, user: Union[str, User]):
