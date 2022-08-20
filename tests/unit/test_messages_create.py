@@ -1,6 +1,3 @@
-from email import message
-from re import L
-from urllib.parse import uses_relative
 from pyslsk.messages import (
     AcceptChildren,
     AddUser,
@@ -46,6 +43,8 @@ from pyslsk.messages import (
     UserSearch,
     WishlistSearch,
 )
+
+
 class TestServerMessages:
 
     def test_create_Login(self):
