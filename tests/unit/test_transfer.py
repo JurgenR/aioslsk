@@ -86,6 +86,9 @@ class TestTransferManager:
                 'download_slots': 2,
                 'upload_slots': 2
             }
+        },
+        'database': {
+            'name': 'unittest.db'
         }
     }
     DEFAULT_FILENAME = "myfile.mp3"
