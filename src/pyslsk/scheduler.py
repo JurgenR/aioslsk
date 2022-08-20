@@ -41,11 +41,11 @@ class Scheduler:
         self.add_job(job)
         return job
 
-    def add_job(self, job):
+    def add_job(self, job: Job):
         job_meta = JobMeta(job)
         self._jobs.append(job_meta)
 
-    def remove(self, job):
+    def remove(self, job: Job):
         for job_meta in self._jobs:
             if job_meta.job == job:
                 self._jobs.remove(job_meta)

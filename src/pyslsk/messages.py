@@ -319,7 +319,7 @@ class Login(Message):
     MESSAGE_ID = 0x01
 
     @classmethod
-    def create(cls, username, password, client_version, minor_version=100):
+    def create(cls, username: str, password: str, client_version: int, minor_version: int = 100):
         md5_hash = calc_md5(username + password)
         message_body = (
             pack_string(username) +
@@ -985,7 +985,8 @@ class ChatRoomSearch(Message):
 
     @classmethod
     def create(cls, room: str, ticket: str, query: str):
-        message_body = pack_string(room) + pack_string(ticket) + pack_string(query)
+        # TODO: To be verified, museek says ticket is string
+        message_body = pack_string(room) + pack_int(ticket) + pack_string(query)
         return pack_message(cls.MESSAGE_ID, message_body)
 
 
@@ -1102,7 +1103,7 @@ class PrivateRoomAddUser(Message):
         return room, user
 
 
-class ChatPrivateRoomRemoveUser(Message):
+class PrivateRoomRemoveUser(Message):
     MESSAGE_ID = 0x87
 
     @classmethod
