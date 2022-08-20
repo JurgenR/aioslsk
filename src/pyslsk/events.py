@@ -169,6 +169,7 @@ class SearchResultEvent(BaseEvent):
 
 # Peer
 
+
 @dataclass(frozen=True)
 class UserInfoReplyEvent(BaseEvent):
     user: User

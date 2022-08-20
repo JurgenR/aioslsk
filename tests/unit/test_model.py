@@ -1,5 +1,6 @@
 from pyslsk.model import Room, User
 
+
 class TestModel:
 
     def test_whenAddUserToRoomAndUserExists_shouldNotAddUser(self):

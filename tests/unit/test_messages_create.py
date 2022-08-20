@@ -6,7 +6,6 @@ from pyslsk.messages import (
     CannotConnect,
     ChatAckPrivateMessage,
     ChatJoinRoom,
-    ChatJoinRoom,
     ChatLeaveRoom,
     ChatPrivateMessage,
     ChatRoomMessage,

@@ -73,7 +73,7 @@ from .messages import (
     WishlistInterval,
     DistributedServerSearchRequest,
 )
-from .model import ChatMessage, Room, RoomMessage, User, UserStatus
+from .model import ChatMessage, RoomMessage, UserStatus
 from .network import Network
 from .scheduler import Job
 from .state import State
