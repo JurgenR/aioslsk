@@ -1579,7 +1579,7 @@ class PeerUserInfoReply(PeerMessage):
         has_picture = bool(picture)
         message_body += pack_bool(has_picture)
         if has_picture:
-            message_body += pack_string()
+            message_body += pack_string(picture)
 
         message_body += (
             pack_int(upload_slots) +

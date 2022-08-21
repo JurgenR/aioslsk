@@ -1,9 +1,11 @@
 from __future__ import annotations
 from enum import auto, Enum
 from functools import partial
-from typing import List, Tuple, TYPE_CHECKING
+import hashlib
 import logging
 import time
+import shelve
+from typing import List, Tuple, TYPE_CHECKING
 
 from .connection import (
     ConnectionState,
@@ -12,7 +14,7 @@ from .connection import (
     PeerConnectionState,
     ProtocolMessage,
 )
-from .events import on_message
+from .events import on_message, EventBus
 from .filemanager import FileManager
 from .listeners import TransferListener
 from .messages import (
@@ -65,6 +67,7 @@ class TransferState(Enum):
 
 
 class Transfer:
+    _UNPICKABLE_FIELDS = ('_fileobj', 'connection', 'listeners')
 
     def __init__(self, username: str, filename: str, direction: TransferDirection, ticket: int = None, listeners=None):
         self.state = TransferState.VIRGIN
@@ -88,13 +91,11 @@ class Transfer:
         self.target_path: str = None
         """Path to download the file to or upload the file from"""
         self.bytes_transfered: int = 0
-        """Amount of bytes transfered"""
+        """Amount of bytes transfered (uploads and downloads)"""
         self.bytes_written: int = 0
-        """Amount of bytes written to file"""
+        """Amount of bytes written to file (downloads)"""
         self.bytes_read: int = 0
-        self.connection: PeerConnection = None
-        """Connection related to the transfer (connection type 'F')"""
-        self._fileobj = None
+        """Amount of bytes read from file (uploads)"""
 
         self.queue_attempts: int = 0
         self.last_queue_request: float = 0.0
@@ -111,7 +112,24 @@ class Transfer:
         transfer entered the complete or incomplete state
         """
 
-        self.state_listeners = [] if listeners is None else listeners
+        self.connection: PeerConnection = None
+        """Connection related to the transfer (connection type 'F')"""
+        self._fileobj = None
+        self.listeners = [] if listeners is None else listeners
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+
+        self._fileobj = None
+        self.listeners = []
+        self.connection = None
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        for unpickable_field in self._UNPICKABLE_FIELDS:
+            del state[unpickable_field]
+
+        return state
 
     def set_state(self, state: TransferState):
         if state == self.state:
@@ -127,7 +145,7 @@ class Transfer:
         elif state in (TransferState.COMPLETE, TransferState.INCOMPLETE, TransferState.ABORTED):
             self.complete_time = time.time()
 
-        for listener in self.state_listeners:
+        for listener in self.listeners:
             listener.on_transfer_state_changed(self, state)
 
     def set_offset(self, offset: int):
@@ -243,11 +261,11 @@ class Transfer:
 
 class TransferManager(TransferListener):
 
-    def __init__(self, state: State, settings, file_manager: FileManager, network: Network):
+    def __init__(self, state: State, settings, event_bus: EventBus, file_manager: FileManager, network: Network):
         self._state = state
         self.settings = settings
+        self._event_bus: EventBus = event_bus
         self.upload_slots: int = settings['sharing']['limits']['upload_slots']
-        self._transfers: List[Transfer] = []
 
         self._file_manager: FileManager = file_manager
         self._network: Network = network
@@ -255,9 +273,46 @@ class TransferManager(TransferListener):
         self._network.transfer_listener = self
         self._network.server_listeners.append(self)
 
+        self._transfers: List[Transfer] = []
+
+    def read_database(self):
+        with shelve.open(self.settings['database']['name'], flag='cr') as database:
+            for key, transfer in database.items():
+                self.queue_transfer(transfer, state=None)
+
+    def write_database(self):
+        with shelve.open(self.settings['database']['name'], flag='w') as database:
+            for transfer in self._transfers:
+                key = hashlib.sha256(
+                    (
+                        transfer.username +
+                        transfer.filename +
+                        str(transfer.direction.value)
+                    ).encode('utf-8')
+                ).hexdigest()
+                database[key] = transfer
+
     @property
     def transfers(self):
         return self._transfers
+
+    def remove(self, transfer: Transfer):
+        try:
+            self._transfers.remove(transfer)
+        except ValueError:
+            return
+
+    def get_uploads(self):
+        return [
+            transfer for transfer in self._transfers
+            if transfer.is_upload()
+        ]
+
+    def get_downloads(self):
+        return [
+            transfer for transfer in self._transfers
+            if transfer.is_download()
+        ]
 
     def has_slots_free(self) -> bool:
         return self.get_free_upload_slots() > 0
@@ -266,7 +321,7 @@ class TransferManager(TransferListener):
         """Get the amount of free upload slots"""
         uploading_transfers = []
         for transfer in self._transfers:
-            if transfer.direction == TransferDirection.UPLOAD and transfer.is_processing():
+            if transfer.is_upload() and transfer.is_processing():
                 uploading_transfers.append(transfer)
 
         available_slots = self.upload_slots - len(uploading_transfers)
@@ -282,13 +337,13 @@ class TransferManager(TransferListener):
     def get_downloading(self) -> List[Transfer]:
         return [
             transfer for transfer in self._transfers
-            if transfer.state == TransferState.DOWNLOADING
+            if transfer.is_download() and transfer.is_processing()
         ]
 
     def get_uploading(self) -> List[Transfer]:
         return [
             transfer for transfer in self._transfers
-            if transfer.state == TransferState.UPLOADING
+            if transfer.is_upload() and transfer.is_processing()
         ]
 
     def get_download_speed(self) -> float:
@@ -307,7 +362,7 @@ class TransferManager(TransferListener):
         """Returns average upload speed (in bytes/second)"""
         upload_speeds = [
             transfer.get_speed() for transfer in self._transfers
-            if transfer.state == TransferState.COMPLETE and transfer.direction == TransferDirection.UPLOAD
+            if transfer.state == TransferState.COMPLETE and transfer.is_upload()
         ]
         if len(upload_speeds) == 0:
             return 0.0
@@ -332,7 +387,8 @@ class TransferManager(TransferListener):
                 return queued_transfer
 
         self._transfers.append(transfer)
-        transfer.state_listeners.append(self)
+
+        transfer.listeners.append(self)
         if state is not None:
             transfer.set_state(state)
 

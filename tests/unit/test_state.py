@@ -21,7 +21,6 @@ class TestState:
 
         assert user == state.get_or_create_user(username)
 
-
     def test_whenMissingRoom_shouldCreateAndReturnRoom(self):
         state = State()
         room_name = 'myroom'

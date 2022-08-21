@@ -24,6 +24,10 @@ from pyslsk.messages import (
     Login,
     NewPassword,
     ParentIP,
+    PeerInit,
+    PeerPierceFirewall,
+    PeerUserInfoReply,
+    PeerTransferRequest,
     Ping,
     PrivateRoomAddOperator,
     PrivateRoomAddUser,
@@ -217,3 +221,26 @@ class TestServerMessages:
     def test_create_WishlistSearch(self):
         message = WishlistSearch.create(1234, 'query')
         assert message.hex() == '1100000067000000d2040000050000007175657279'
+
+
+class TestPeerMessages:
+
+    def test_create_PeerInit(self):
+        message = PeerInit.create('user', 'F', 1234)
+        assert message.hex() == '120000000104000000757365720100000046d2040000'
+
+    def test_create_PeerPierceFirewall(self):
+        message = PeerPierceFirewall.create(1234)
+        assert message.hex() == '0500000000d2040000'
+
+    def test_create_PeerUserInfoReply_withPicture(self):
+        message = PeerUserInfoReply.create(description='description', upload_slots=2, queue_size=100, has_slots_free=True, picture='http://test.com/test.png')
+        assert message.hex() == '39000000100000000b0000006465736372697074696f6e0118000000687474703a2f2f746573742e636f6d2f746573742e706e67020000006400000001'
+
+    def test_create_PeerUserInfoReply_withoutPicture(self):
+        message = PeerUserInfoReply.create(description='description', upload_slots=2, queue_size=100, has_slots_free=True)
+        assert message.hex() == '1d000000100000000b0000006465736372697074696f6e00020000006400000001'
+
+    def test_create_PeerTransferRequest(self):
+        message = PeerTransferRequest.create(direction=1, ticket=1234, filename='file.mp3', filesize=1000000)
+        assert message.hex() == '200000002800000001000000d20400000800000066696c652e6d703340420f0000000000'

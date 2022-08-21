@@ -2,11 +2,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 import inspect
 import logging
-from typing import Callable, Dict, List, Tuple, Type
+from typing import Callable, Dict, List, Tuple, Type, TYPE_CHECKING
 
 from .model import ChatMessage, Room, RoomMessage, User
 from .messages import DirectoryData
 from .search import SearchQuery, SearchResult
+
+if TYPE_CHECKING:
+    from .transfer import Transfer
 
 
 logger = logging.getLogger()
@@ -179,3 +182,10 @@ class UserInfoReplyEvent(BaseEvent):
 class UserSharesReplyEvent(BaseEvent):
     user: User
     directories: List[DirectoryData]
+
+
+# Transfer
+
+@dataclass(frozen=True)
+class TransferAddedEvent(BaseEvent):
+    transfer: Transfer

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 import threading
-from typing import Union
+from typing import List, Union
 
 from .events import EventBus
 from .filemanager import FileManager
@@ -13,7 +13,7 @@ from .server_manager import ServerManager
 from .scheduler import Job, Scheduler
 from .state import State
 from .search import SearchQuery
-from .transfer import TransferManager
+from .transfer import Transfer, TransferManager
 
 
 CLIENT_VERSION = 157
@@ -47,9 +47,11 @@ class SoulSeek(threading.Thread):
         self.transfer_manager: TransferManager = TransferManager(
             self.state,
             settings,
+            self.events,
             self.file_manager,
             self._network
         )
+        self.transfer_manager.read_database()
 
         self.peer_manager: PeerManager = PeerManager(
             self.state,
@@ -94,6 +96,8 @@ class SoulSeek(threading.Thread):
         if self.is_alive():
             logger.warning(f"thread is still alive after 30s : {self!r}")
 
+        self.transfer_manager.write_database()
+
     @property
     def connections(self):
         return self._network.get_connections()
@@ -107,6 +111,12 @@ class SoulSeek(threading.Thread):
             return self.transfer_manager.queue_download(user.name, filename)
         else:
             return self.transfer_manager.queue_download(user, filename)
+
+    def get_uploads(self) -> List[Transfer]:
+        return self.transfer_manager.get_uploads()
+
+    def get_downloads(self) -> List[Transfer]:
+        return self.transfer_manager.get_downloads()
 
     def join_room(self, room: Union[str, Room]):
         if isinstance(room, Room):

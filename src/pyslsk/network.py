@@ -72,13 +72,12 @@ class Network:
     def __init__(self, state: State, settings):
         self._state = state
         self._settings = settings
-
         self._upnp = upnp.UPNP()
+        self._connection_requests = TTLCache(maxsize=1000, ttl=5 * 60)
 
+        # List of connections
         self.server: ServerConnection = None
         self.listening_connections: List[ListeningConnection] = []
-
-        self._connection_requests = TTLCache(maxsize=1000, ttl=5 * 60)
 
         self.peer_listener = None
         self.server_listeners = [self, ]
@@ -138,6 +137,9 @@ class Network:
                 "currently {} open connections".format(len(self.selector.get_map())))
 
     def _register_connection(self, fileobj, events, connection: Connection):
+        """Register a connection the selector, in case we have reached the
+        connection limit then add it to the selector queue
+        """
         if len(self.selector.get_map()) >= self._connection_limit:
             self._selector_queue.append(
                 (fileobj, events, connection)
@@ -459,7 +461,6 @@ class Network:
             )
 
         connection.connect()
-        return connection
 
     def finalize_peer_connection(self, request: ConnectionRequest, connection: PeerConnection):
         """Method to be called after initialization of the peer connection has
@@ -533,6 +534,11 @@ class Network:
         - We received a CannotConnect from the server
         - We sent a ConnectToPeer to the server but didn't get an incoming
           connection in a timely fashion
+
+        This method will remove the request from the list of requests and call
+        the necessary failure callbacks on:
+        - The request itself
+        - Each message in the request
         """
         self._connection_requests.pop(request.ticket)
         if request.on_failure is not None:
@@ -590,12 +596,12 @@ class Network:
 
         if ip == '0.0.0.0':
             logger.warning(f"GetPeerAddress : no address returned for username : {username}")
-            for ticket, request in self._connection_requests.items():
+            for _, request in self._connection_requests.items():
                 if request.username == username:
                     self.fail_peer_connection_request(request)
             return
 
-        for ticket, request in self._connection_requests.items():
+        for _, request in self._connection_requests.items():
             if request.username == username:
                 if username == 'Khyle':
                     request.ip = '192.168.0.152'
