@@ -1,0 +1,37 @@
+---
+network:
+  server_hostname: server.slsknet.org
+  server_port: 2416
+  listening_port: 61000
+  use_upnp: true
+  upnp_lease_duration: 0
+  timeout:
+    peer: 10
+    distributed: 120
+  reconnect:
+    auto: true
+
+credentials:
+  username: null
+  password: null
+  description: null
+
+sharing:
+  limits:
+    upload_slots: 2
+  download: null
+  directories: []
+
+chats:
+  auto_join: true
+  private_room_invites: true
+
+users:
+  friends: []
+  blocked: []
+
+database:
+  name: transfers
+
+debug:
+  search_for_parent: true

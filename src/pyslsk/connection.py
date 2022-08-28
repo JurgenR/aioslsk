@@ -90,6 +90,8 @@ class Connection:
                 listener.on_state_changed(state, self, close_reason=close_reason)
 
     def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
+        """Performs the closing of the connection and sets the state to CLOSED
+        """
         logger.debug(f"disconnecting from {self.hostname}:{self.port} reason : {reason.name}")
         try:
             self.fileobj.close()

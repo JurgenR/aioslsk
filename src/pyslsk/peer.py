@@ -40,6 +40,7 @@ from .messages import (
 )
 from .network import Network
 from .search import ReceivedSearch, SearchResult
+from .settings import Settings
 from .state import Child, Parent, State
 from .transfer import Transfer, TransferDirection, TransferManager, TransferState
 
@@ -89,9 +90,9 @@ class Peer:
 
 class PeerManager:
 
-    def __init__(self, state: State, settings, event_bus: EventBus, file_manager: FileManager, transfer_manager: TransferManager, network: Network):
+    def __init__(self, state: State, settings: Settings, event_bus: EventBus, file_manager: FileManager, transfer_manager: TransferManager, network: Network):
         self._state: State = state
-        self._settings = settings
+        self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self.file_manager: FileManager = file_manager
         self.transfer_manager: TransferManager = transfer_manager
@@ -220,7 +221,7 @@ class PeerManager:
 
         self.network.send_server_messages(
             BranchLevel.create(0),
-            BranchRoot.create(self._settings['credentials']['username']),
+            BranchRoot.create(self._settings.get('credentials.username')),
             HaveNoParent.create(True)
         )
 
@@ -308,7 +309,7 @@ class PeerManager:
                 # manager to re-asses the tranfers and possibly immediatly start
                 # the upload
                 connection.queue_message(
-                    PeerTransferReply(ticket, False, reason='Queued')
+                    PeerTransferReply.create(ticket, False, reason='Queued')
                 )
                 self.transfer_manager.queue_transfer(transfer)
             else:
@@ -318,14 +319,14 @@ class PeerManager:
                 # - COMPLETE : Should go back to QUEUED (reset values for transfer)?
                 # - INCOMPLETE : Should go back to QUEUED?
                 connection.queue_message(
-                    PeerTransferReply(ticket, False, reason='Queued')
+                    PeerTransferReply.create(ticket, False, reason='Queued')
                 )
 
         else:
             if transfer is None:
-                # A download which we don't have in queue, assume we cancelled it
+                # A download which we don't have in queue, assume we removed it
                 connection.queue_message(
-                    PeerTransferReply(ticket, False, reason='Cancelled')
+                    PeerTransferReply.create(ticket, False, reason='Cancelled')
                 )
             else:
                 # All clear to upload
@@ -522,7 +523,7 @@ class PeerManager:
         self.network.send_peer_messages(
             username,
             PeerSearchReply.create(
-                self._settings['credentials']['username'],
+                self._settings.get('credentials.username'),
                 search_ticket,
                 convert_items_to_file_data(results, use_full_path=True),
                 self.transfer_manager.has_slots_free(),

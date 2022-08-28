@@ -76,6 +76,7 @@ from .messages import (
 from .model import ChatMessage, RoomMessage, UserStatus
 from .network import Network
 from .scheduler import Job
+from .settings import Settings
 from .state import State
 
 
@@ -87,9 +88,9 @@ LOGIN_TIMEOUT = 30
 
 class ServerManager:
 
-    def __init__(self, state: State, settings, event_bus: EventBus, file_manager: FileManager, network: Network):
+    def __init__(self, state: State, settings: Settings, event_bus: EventBus, file_manager: FileManager, network: Network):
         self._state: State = state
-        self._settings = settings
+        self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self.file_manager: FileManager = file_manager
         self.network: Network = network
@@ -191,16 +192,16 @@ class ServerManager:
         self.network.send_server_messages(
             CheckPrivileges.create(),
             SetListenPort.create(
-                self._settings['network']['listening_port'],
-                self._settings['network']['listening_port'] + 1
+                self._settings.get('network.listening_port'),
+                self._settings.get('network.listening_port') + 1
             ),
             SetStatus.create(UserStatus.ONLINE.value),
             HaveNoParent.create(True),
-            BranchRoot.create(self._settings['credentials']['username']),
+            BranchRoot.create(self._settings.get('credentials.username')),
             BranchLevel.create(0),
             AcceptChildren.create(False),
             SharedFoldersFiles.create(dir_count, file_count),
-            AddUser.create(self._settings['credentials']['username']),
+            AddUser.create(self._settings.get('credentials.username')),
             PrivateRoomToggle.create(True)
         )
 
@@ -432,7 +433,7 @@ class ServerManager:
             room = self._state.get_or_create_room(room_name)
             room.user_count = user_count
             room.is_private = True
-            room.owner = self._settings['credentials']['username']
+            room.owner = self._settings.get('credentials.username')
 
         for room_name, user_count in rooms_private.items():
             room = self._state.get_or_create_room(room_name)
@@ -529,7 +530,7 @@ class ServerManager:
     def on_net_info(self, message, connection):
         net_info_list = message.parse()
 
-        if not self._settings['debug']['search_for_parent']:
+        if not self._settings.get('debug.search_for_parent'):
             logger.debug("ignoring NetInfo message : searching for parent is disabled")
             return
 
@@ -551,8 +552,8 @@ class ServerManager:
     def on_state_changed(self, state, connection, close_reason: CloseReason = None):
         if state == ConnectionState.CONNECTED:
             self.login(
-                self._settings['credentials']['username'],
-                self._settings['credentials']['password']
+                self._settings.get('credentials.username'),
+                self._settings.get('credentials.password')
             )
             self._state.scheduler.add_job(self._ping_job)
 

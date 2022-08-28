@@ -4,9 +4,10 @@ import mutagen
 from mutagen.mp3 import BitrateMode
 import os
 import re
-from typing import List, Tuple
+from typing import List, Set, Tuple
 
 from .messages import DirectoryData, FileData
+from .settings import Settings
 
 logger = logging.getLogger()
 
@@ -32,7 +33,7 @@ class SharedItem:
     root: str
     subdir: str
     filename: str
-    query_components: List[str] = field(init=False)
+    query_components: Set[str] = field(init=False)
     """The shared item split up into components to make it more performant to
     query
     """
@@ -40,7 +41,7 @@ class SharedItem:
     def __post_init__(self):
         path = (self.subdir + "/" + self.filename).lower()
         path = re.sub(_QUERY_WORD_SEPERATORS, ' ', path)
-        self.query_components = path.split()
+        self.query_components = set(path.split())
 
 
 def extract_attributes(filepath: str):
@@ -114,13 +115,13 @@ def convert_items_to_file_data(shared_items: List[SharedItem], use_full_path=Tru
 
 class FileManager:
 
-    def __init__(self, settings):
-        self.settings = settings
-        self.shared_items = self.fetch_shared_items()
+    def __init__(self, settings: Settings):
+        self._settings: Settings = settings
+        self.shared_items: List[SharedItem] = self.fetch_shared_items()
 
     def fetch_shared_items(self) -> List[SharedItem]:
         shared_items = []
-        for shared_dir in self.settings['directories']:
+        for shared_dir in self._settings.get('sharing.directories'):
             shared_dir_abs = os.path.abspath(shared_dir)
 
             for directory, _, files in os.walk(shared_dir):
@@ -166,11 +167,11 @@ class FileManager:
         3. Loop over all the terms from the query and check if all match with
             with the terms in any of the shared items (any order)
         """
-        terms = [re.sub(_QUERY_CLEAN_PATTERN, '', term.lower()) for term in query.split()]
+        terms = set(re.sub(_QUERY_CLEAN_PATTERN, '', term.lower()) for term in query.split())
 
         found_items = []
         for shared_item in self.shared_items:
-            if all(term in shared_item.query_components for term in terms):
+            if terms.issubset(shared_item.query_components):
                 found_items.append(shared_item)
 
         return found_items
@@ -189,7 +190,7 @@ class FileManager:
 
     def get_download_path(self, filename: str):
         """Gets the download path for a filename returned by another peer"""
-        download_dir = self.settings['download']
+        download_dir = self._settings.get('sharing.download')
         if not os.path.exists(download_dir):
             os.makedirs(download_dir, exist_ok=True)
 

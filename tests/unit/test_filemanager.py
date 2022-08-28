@@ -1,4 +1,5 @@
 from pyslsk.filemanager import extract_attributes, FileManager, SharedItem
+from pyslsk.settings import Settings
 
 import pytest
 
@@ -13,10 +14,17 @@ FLAC_FILENAME = 'Kevin_MacLeod-Galway.flac'
 
 
 DEFAULT_SETTINGS = {
-    'directories': [
-        RESOURCES
-    ]
+    'sharing': {
+        'directories': [
+            RESOURCES
+        ]
+    }
 }
+
+
+@pytest.fixture
+def manager():
+    return FileManager(Settings(DEFAULT_SETTINGS))
 
 
 class TestFunctions:
@@ -38,42 +46,32 @@ class TestFunctions:
 
 class TestFileManager:
 
-    def test_whenFetchSharedItems(self):
-        manager = FileManager(DEFAULT_SETTINGS)
-
+    def test_whenFetchSharedItems(self, manager):
         assert manager.shared_items == [
             SharedItem(root=RESOURCES, subdir='', filename='Kevin_MacLeod-Galway.flac'),
             SharedItem(root=RESOURCES, subdir='', filename='Kevin_MacLeod-Galway.mp3'),
             SharedItem(root=RESOURCES, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
         ]
 
-    def test_whenGetStats_shouldReturnStats(self):
-        manager = FileManager(DEFAULT_SETTINGS)
-
+    def test_whenGetStats_shouldReturnStats(self, manager):
         dirs, files = manager.get_stats()
 
         assert dirs == 2
         assert files == 3
 
-    def test_whenGetSharedItemMatches_shouldReturnSharedItem(self):
-        manager = FileManager(DEFAULT_SETTINGS)
-
+    def test_whenGetSharedItemMatches_shouldReturnSharedItem(self, manager):
         filepath = os.path.join(RESOURCES, 'Cool_Test_Album', 'Strange_Drone_Impact.mp3')
         item = manager.get_shared_item(filepath)
 
         assert item == SharedItem(root=RESOURCES, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
 
-    def test_whenGetSharedItemDoesNotMatch_shouldRaiseException(self):
-        manager = FileManager(DEFAULT_SETTINGS)
-
+    def test_whenGetSharedItemDoesNotMatch_shouldRaiseException(self, manager):
         filepath = os.path.join(RESOURCES, 'Cool_Test_Album', 'nonexistant.mp3')
 
         with pytest.raises(LookupError):
             manager.get_shared_item(filepath)
 
-    def test_whenGetSharedItemDoesNotExistOnDisk_shouldRaiseException(self):
-        manager = FileManager(DEFAULT_SETTINGS)
-
+    def test_whenGetSharedItemDoesNotExistOnDisk_shouldRaiseException(self, manager):
         item_not_on_disk = SharedItem(RESOURCES, '', 'InItemsButNotOnDisk.mp3')
         manager.shared_items.append(item_not_on_disk)
         filepath = os.path.join(RESOURCES, '', 'InItemsButNotOnDisk.mp3')
@@ -112,31 +110,22 @@ class TestFileManager:
             )
         ]
     )
-    def test_whenQuery_shouldReturnMatches(self, query, expected_items):
-        manager = FileManager(DEFAULT_SETTINGS)
-
+    def test_whenQuery_shouldReturnMatches(self, query, expected_items, manager):
         results = manager.query(query)
 
         assert expected_items == results
 
-    def test_whenQueryNoMatches_shouldReturnEmptyList(self):
-        manager = FileManager(DEFAULT_SETTINGS)
-
+    def test_whenQueryNoMatches_shouldReturnEmptyList(self, manager):
         results = manager.query("something")
 
         assert results == []
 
-    def test_whenGetDownloadPath_shouldCreateDir(self):
-        settings = dict(DEFAULT_SETTINGS)
+    def test_whenGetDownloadPath_shouldCreateDir(self, manager, tmpdir):
+        download_dir = os.path.join(tmpdir, 'downloads')
+        manager._settings.set('sharing.download', download_dir)
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            download_dir = os.path.join(temp_dir, 'downloads')
-            settings['download'] = download_dir
+        to_download_file = os.path.join(RESOURCES, 'Cool_Test_Album', 'Strange_Drone_Impact.mp3')
+        download_path = manager.get_download_path(to_download_file)
 
-            manager = FileManager(settings)
-
-            to_download_file = os.path.join(RESOURCES, 'Cool_Test_Album', 'Strange_Drone_Impact.mp3')
-            download_path = manager.get_download_path(to_download_file)
-
-            assert os.path.exists(download_dir)
-            assert os.path.join(download_dir, 'Strange_Drone_Impact.mp3') == download_path
+        assert os.path.exists(download_dir)
+        assert os.path.join(download_dir, 'Strange_Drone_Impact.mp3') == download_path

@@ -7,6 +7,7 @@ import time
 import shelve
 from typing import List, Tuple, TYPE_CHECKING
 
+from .configuration import Configuration
 from .connection import (
     ConnectionState,
     CloseReason,
@@ -14,7 +15,7 @@ from .connection import (
     PeerConnectionState,
     ProtocolMessage,
 )
-from .events import on_message, EventBus
+from .events import on_message, EventBus, TransferAddedEvent
 from .filemanager import FileManager
 from .listeners import TransferListener
 from .messages import (
@@ -26,6 +27,7 @@ from .messages import (
     SendUploadSpeed,
 )
 from .model import UserStatus
+from .settings import Settings
 from .state import State
 
 if TYPE_CHECKING:
@@ -228,7 +230,7 @@ class Transfer:
 
     def abort(self):
         # Don't bother if the transfer was already completed
-        if self.state == TransferState.COMPLETE:
+        if self.state in (TransferState.COMPLETE, TransferState.ABORTED, TransferState.INCOMPLETE, ):
             return
 
         # Terminate the connection (file-connection)
@@ -261,11 +263,11 @@ class Transfer:
 
 class TransferManager(TransferListener):
 
-    def __init__(self, state: State, settings, event_bus: EventBus, file_manager: FileManager, network: Network):
+    def __init__(self, state: State, configuration: Configuration, settings: Settings, event_bus: EventBus, file_manager: FileManager, network: Network):
         self._state = state
-        self.settings = settings
+        self._configuration: Configuration = configuration
+        self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
-        self.upload_slots: int = settings['sharing']['limits']['upload_slots']
 
         self._file_manager: FileManager = file_manager
         self._network: Network = network
@@ -276,12 +278,13 @@ class TransferManager(TransferListener):
         self._transfers: List[Transfer] = []
 
     def read_database(self):
-        with shelve.open(self.settings['database']['name'], flag='cr') as database:
-            for key, transfer in database.items():
+        with shelve.open(self._settings['database']['name'], flag='cr') as database:
+            for _, transfer in database.items():
                 self.queue_transfer(transfer, state=None)
 
     def write_database(self):
-        with shelve.open(self.settings['database']['name'], flag='w') as database:
+        with shelve.open(self._settings['database']['name'], flag='rw') as database:
+            # Update/add transfers
             for transfer in self._transfers:
                 key = hashlib.sha256(
                     (
@@ -292,15 +295,29 @@ class TransferManager(TransferListener):
                 ).hexdigest()
                 database[key] = transfer
 
+            # Remove non existing transfers
+            keys_to_delete = []
+            for key, db_transfer in database.items():
+                if not any(transfer.equals(db_transfer) for transfer in self._transfers):
+                    keys_to_delete.append(key)
+            for key_to_delete in keys_to_delete:
+                database.pop(key_to_delete)
+
     @property
     def transfers(self):
         return self._transfers
+
+    @property
+    def upload_slots(self):
+        return self._settings.get('sharing.limits.upload_slots')
 
     def remove(self, transfer: Transfer):
         try:
             self._transfers.remove(transfer)
         except ValueError:
             return
+        else:
+            transfer.abort()
 
     def get_uploads(self):
         return [
@@ -318,7 +335,6 @@ class TransferManager(TransferListener):
         return self.get_free_upload_slots() > 0
 
     def get_free_upload_slots(self) -> int:
-        """Get the amount of free upload slots"""
         uploading_transfers = []
         for transfer in self._transfers:
             if transfer.is_upload() and transfer.is_processing():
@@ -387,6 +403,7 @@ class TransferManager(TransferListener):
                 return queued_transfer
 
         self._transfers.append(transfer)
+        self._event_bus.emit(TransferAddedEvent(transfer))
 
         transfer.listeners.append(self)
         if state is not None:

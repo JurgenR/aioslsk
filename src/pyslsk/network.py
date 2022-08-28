@@ -33,6 +33,7 @@ from .messages import (
 )
 from . import upnp
 from .state import State
+from .settings import Settings
 from .transfer import Transfer, TransferDirection
 
 
@@ -69,9 +70,9 @@ class ConnectionRequest:
 
 class Network:
 
-    def __init__(self, state: State, settings):
+    def __init__(self, state: State, settings: Settings):
         self._state = state
-        self._settings = settings
+        self._settings: Settings = settings
         self._upnp = upnp.UPNP()
         self._connection_requests = TTLCache(maxsize=1000, ttl=5 * 60)
 
@@ -99,19 +100,19 @@ class Network:
         logger.info("initializing network")
 
         self.server = ServerConnection(
-            hostname=self._settings['network']['server_hostname'],
-            port=self._settings['network']['server_port'],
+            hostname=self._settings.get('network.server_hostname'),
+            port=self._settings.get('network.server_port'),
             listeners=self.server_listeners
         )
         self.server.connect()
 
         self.listening_connections = [
             ListeningConnection(
-                port=self._settings['network']['listening_port'],
+                port=self._settings.get('network.listening_port'),
                 listeners=[self, ]
             ),
             ListeningConnection(
-                port=self._settings['network']['listening_port'] + 1,
+                port=self._settings.get('network.listening_port') + 1,
                 obfuscated=True,
                 listeners=[self, ]
             )
@@ -278,12 +279,12 @@ class Network:
         self.selector.close()
 
     def enable_upnp(self):
-        listening_port = self._settings['network']['listening_port']
+        listening_port = self._settings.get('network.listening_port')
         for port in [listening_port, listening_port + 1, ]:
             self._upnp.map_port(
                 self.server.get_connecting_ip(),
                 port,
-                self._settings['network']['upnp_lease_duration']
+                self._settings.get('network.upnp_lease_duration')
             )
 
     def expire_caches(self):
@@ -320,14 +321,14 @@ class Network:
             # For registering with UPNP we need to know our own IP first, we can
             # get this from the server connection but we first need to be
             # fully connected to it before we can request a valid IP
-            if self._settings['network']['use_upnp']:
+            if self._settings.get('network.use_upnp'):
                 self.enable_upnp()
 
         elif state == ConnectionState.CLOSED:
             self.selector.unregister(connection.fileobj)
 
             if close_reason != CloseReason.REQUESTED:
-                if self._settings['network']['reconnect']['auto']:
+                if self._settings.get('network.reconnect.auto'):
                     logger.info("scheduling to re-attempting connecting in 5 seconds")
                     self._server_connect_attempts += 1
                     self._state.scheduler.add(5, self.server.connect, times=1)
@@ -445,7 +446,7 @@ class Network:
 
         if request.is_requested_by_us:
             message = PeerInit.create(
-                self._settings['credentials']['username'],
+                self._settings.get('credentials.username'),
                 request.typ,
                 request.ticket
             )

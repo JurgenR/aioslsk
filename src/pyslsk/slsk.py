@@ -3,6 +3,7 @@ import logging
 import threading
 from typing import List, Union
 
+from .configuration import Configuration
 from .events import EventBus
 from .filemanager import FileManager
 from .model import Room, User
@@ -13,6 +14,7 @@ from .server_manager import ServerManager
 from .scheduler import Job, Scheduler
 from .state import State
 from .search import SearchQuery
+from .settings import Settings
 from .transfer import Transfer, TransferManager
 
 
@@ -24,9 +26,10 @@ logger = logging.getLogger()
 
 class SoulSeek(threading.Thread):
 
-    def __init__(self, settings, event_bus: EventBus = None):
+    def __init__(self, configuration: Configuration, event_bus: EventBus = None):
         super().__init__()
-        self.settings = settings
+        self.configuration: Configuration = configuration
+        self.settings: Settings = configuration.load_settings('pyslsk')
 
         self._stop_event = threading.Event()
 
@@ -37,16 +40,17 @@ class SoulSeek(threading.Thread):
 
         self._network: Network = Network(
             self.state,
-            settings
+            self.settings
         )
 
         self._cache_expiration_job = Job(60, self._network.expire_caches)
         self.state.scheduler.add_job(self._cache_expiration_job)
 
-        self.file_manager: FileManager = FileManager(settings['sharing'])
+        self.file_manager: FileManager = FileManager(self.settings)
         self.transfer_manager: TransferManager = TransferManager(
             self.state,
-            settings,
+            self.configuration,
+            self.settings,
             self.events,
             self.file_manager,
             self._network
@@ -55,7 +59,7 @@ class SoulSeek(threading.Thread):
 
         self.peer_manager: PeerManager = PeerManager(
             self.state,
-            settings,
+            self.settings,
             self.events,
             self.file_manager,
             self.transfer_manager,
@@ -63,13 +67,13 @@ class SoulSeek(threading.Thread):
         )
         self.server_manager: ServerManager = ServerManager(
             self.state,
-            settings,
+            self.settings,
             self.events,
             self.file_manager,
             self._network
         )
 
-        self.loops = [
+        self._loops = [
             self._network,
             self.state.scheduler
         ]
@@ -79,13 +83,13 @@ class SoulSeek(threading.Thread):
 
         self._network.initialize()
         while not self._stop_event.is_set():
-            for loop in self.loops:
+            for loop in self._loops:
                 try:
                     loop.loop()
                 except Exception:
                     logger.exception(f"exception running loop {loop!r}")
 
-        for loop in self.loops:
+        for loop in self._loops:
             loop.exit()
 
     def stop(self):
@@ -117,6 +121,12 @@ class SoulSeek(threading.Thread):
 
     def get_downloads(self) -> List[Transfer]:
         return self.transfer_manager.get_downloads()
+
+    def remove_transfer(self, transfer: Transfer):
+        self.transfer_manager.remove(transfer)
+
+    def abort_transfer(self, transfer: Transfer):
+        transfer.abort()
 
     def join_room(self, room: Union[str, Room]):
         if isinstance(room, Room):

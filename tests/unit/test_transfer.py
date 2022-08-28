@@ -2,8 +2,37 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from pyslsk.configuration import Configuration
 from pyslsk.transfer import Transfer, TransferDirection, TransferState, TransferManager
+from pyslsk.settings import Settings
 from pyslsk.state import State
+
+
+DEFAULT_SETTINGS = {
+    'sharing': {
+        'limits': {
+            'download_slots': 2,
+            'upload_slots': 2
+        }
+    },
+    'database': {
+        'name': 'unittest.db'
+    }
+}
+DEFAULT_FILENAME = "myfile.mp3"
+DEFAULT_USERNAME = "username"
+
+
+@pytest.fixture
+def manager(tmpdir):
+    return TransferManager(
+        State(),
+        Configuration(tmpdir, tmpdir),
+        Settings(DEFAULT_SETTINGS),
+        Mock(),
+        None,
+        Mock()
+    )
 
 
 class DummyListener:
@@ -80,29 +109,11 @@ class TestTransfer:
 
 
 class TestTransferManager:
-    DEFAULT_SETTINGS = {
-        'sharing': {
-            'limits': {
-                'download_slots': 2,
-                'upload_slots': 2
-            }
-        },
-        'database': {
-            'name': 'unittest.db'
-        }
-    }
-    DEFAULT_FILENAME = "myfile.mp3"
-    DEFAULT_USERNAME = "username"
 
-    def _create_transfer_manager(self) -> TransferManager:
-        return TransferManager(State(), self.DEFAULT_SETTINGS, Mock(), None, Mock())
-
-    def test_whenQueueTransfer_shouldAddTransferAndSetState(self):
-        manager = self._create_transfer_manager()
-
+    def test_whenQueueTransfer_shouldAddTransferAndSetState(self, manager):
         manager.on_transfer_state_changed = Mock()
 
-        transfer = Transfer(self.DEFAULT_FILENAME, self.DEFAULT_USERNAME, TransferDirection.DOWNLOAD)
+        transfer = Transfer(DEFAULT_FILENAME, DEFAULT_USERNAME, TransferDirection.DOWNLOAD)
         transfer.state = TransferState.VIRGIN
 
         manager.queue_transfer(transfer)
@@ -113,9 +124,7 @@ class TestTransferManager:
         manager.on_transfer_state_changed.assert_called_once_with(transfer, TransferState.QUEUED)
 
     # Speed calculations
-    def test_whenGetUploadSpeed_returnsUploadSpeed(self):
-        manager = self._create_transfer_manager()
-
+    def test_whenGetUploadSpeed_returnsUploadSpeed(self, manager):
         transfer1 = Transfer(None, None, TransferDirection.UPLOAD)
         transfer1.state = TransferState.UPLOADING
         transfer2 = Transfer(None, None, TransferDirection.UPLOAD)
@@ -130,9 +139,7 @@ class TestTransferManager:
 
         assert manager.get_upload_speed() == 3.0
 
-    def test_whenGetUploadSpeedAndNothingUploading_returnsZero(self):
-        manager = self._create_transfer_manager()
-
+    def test_whenGetUploadSpeedAndNothingUploading_returnsZero(self, manager):
         transfer1 = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer1.state = TransferState.DOWNLOADING
         transfer1.get_speed = MagicMock(return_value=1.0)
@@ -141,9 +148,7 @@ class TestTransferManager:
 
         assert manager.get_upload_speed() == 0.0
 
-    def test_whenGetDownloadSpeed_returnsDownloadSpeed(self):
-        manager = self._create_transfer_manager()
-
+    def test_whenGetDownloadSpeed_returnsDownloadSpeed(self, manager):
         transfer1 = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer1.state = TransferState.DOWNLOADING
         transfer2 = Transfer(None, None, TransferDirection.DOWNLOAD)
@@ -158,9 +163,7 @@ class TestTransferManager:
 
         assert manager.get_download_speed() == 3.0
 
-    def test_whenGetDownloadSpeedAndNothingDownloading_returnsZero(self):
-        manager = self._create_transfer_manager()
-
+    def test_whenGetDownloadSpeedAndNothingDownloading_returnsZero(self, manager):
         transfer1 = Transfer(None, None, TransferDirection.UPLOAD)
         transfer1.state = TransferState.UPLOADING
         transfer1.get_speed = MagicMock(return_value=1.0)
@@ -169,9 +172,7 @@ class TestTransferManager:
 
         assert manager.get_download_speed() == 0.0
 
-    def test_whenGetAverageUploadSpeed_shouldReturnSpeed(self):
-        manager = self._create_transfer_manager()
-
+    def test_whenGetAverageUploadSpeed_shouldReturnSpeed(self, manager):
         transfer1 = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer1.state = TransferState.COMPLETE
         transfer2 = Transfer(None, None, TransferDirection.DOWNLOAD)
@@ -192,9 +193,7 @@ class TestTransferManager:
 
         assert manager.get_average_upload_speed() == 15.0
 
-    def test_whenGetAverageUploadSpeedNoCompleteUploads_shouldReturnZero(self):
-        manager = self._create_transfer_manager()
-
+    def test_whenGetAverageUploadSpeedNoCompleteUploads_shouldReturnZero(self, manager):
         transfer1 = Transfer(None, None, TransferDirection.UPLOAD)
         transfer1.state = TransferState.UPLOADING
         transfer1.get_speed = MagicMock(return_value=100.0)
@@ -204,15 +203,13 @@ class TestTransferManager:
         assert manager.get_average_upload_speed() == 0.0
 
     # Retrieval of single transfer
-    def test_whenGetTransferExists_shouldReturnTransfer(self):
-        manager = self._create_transfer_manager()
+    def test_whenGetTransferExists_shouldReturnTransfer(self, manager):
         transfer = Transfer("myuser", "myfile", TransferDirection.UPLOAD)
         manager._transfers = [transfer, ]
 
         assert manager.get_transfer("myuser", "myfile", TransferDirection.UPLOAD) == transfer
 
-    def test_whenGetTransferNotExists_shouldRaiseException(self):
-        manager = self._create_transfer_manager()
+    def test_whenGetTransferNotExists_shouldRaiseException(self, manager):
         transfer = Transfer("myuser", "myfile", TransferDirection.UPLOAD)
         manager._transfers = [transfer, ]
 
@@ -225,17 +222,15 @@ class TestTransferManager:
         with pytest.raises(LookupError):
             manager.get_transfer("mynonuser", "myfile", TransferDirection.UPLOAD)
 
-    def test_whenGetTransferByTicketExists_shouldReturnTransfer(self):
+    def test_whenGetTransferByTicketExists_shouldReturnTransfer(self, manager):
         ticket = 1
-        manager = self._create_transfer_manager()
         transfer = Transfer(None, None, TransferDirection.UPLOAD, ticket=ticket)
         manager._transfers = [transfer, ]
 
         assert manager.get_transfer_by_ticket(ticket) == transfer
 
-    def test_whenGetTransferByTicketNotExists_shouldRaiseException(self):
+    def test_whenGetTransferByTicketNotExists_shouldRaiseException(self, manager):
         ticket = 1
-        manager = self._create_transfer_manager()
         transfer = Transfer(None, None, TransferDirection.UPLOAD, ticket=ticket)
         manager._transfers = [transfer, ]
 
@@ -244,9 +239,7 @@ class TestTransferManager:
 
     # Retrieval of multiple transfers
 
-    def test_whenGetUploading_shouldReturnUploading(self):
-        manager = self._create_transfer_manager()
-
+    def test_whenGetUploading_shouldReturnUploading(self, manager):
         transfer0 = Transfer(None, None, TransferDirection.UPLOAD)
         transfer0.state = TransferState.INITIALIZING
         transfer1 = Transfer(None, None, TransferDirection.UPLOAD)
@@ -257,9 +250,7 @@ class TestTransferManager:
 
         assert manager.get_uploading() == [transfer0, transfer1, ]
 
-    def test_whenGetDownloading_shouldReturnDownloading(self):
-        manager = self._create_transfer_manager()
-
+    def test_whenGetDownloading_shouldReturnDownloading(self, manager):
         transfer0 = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer0.state = TransferState.INITIALIZING
         transfer1 = Transfer(None, None, TransferDirection.UPLOAD)
@@ -270,8 +261,7 @@ class TestTransferManager:
 
         assert manager.get_downloading() == [transfer0, transfer2, ]
 
-    def test_whenGetUploads_shouldReturnUploads(self):
-        manager = self._create_transfer_manager()
+    def test_whenGetUploads_shouldReturnUploads(self, manager):
         transfer1 = Transfer(None, None, TransferDirection.UPLOAD)
         transfer2 = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer3 = Transfer(None, None, TransferDirection.UPLOAD)
@@ -279,8 +269,7 @@ class TestTransferManager:
 
         assert manager.get_uploads() == [transfer1, transfer3]
 
-    def test_whenGetDownloads_shouldReturnDownloads(self):
-        manager = self._create_transfer_manager()
+    def test_whenGetDownloads_shouldReturnDownloads(self, manager):
         transfer1 = Transfer(None, None, TransferDirection.UPLOAD)
         transfer2 = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer3 = Transfer(None, None, TransferDirection.UPLOAD)

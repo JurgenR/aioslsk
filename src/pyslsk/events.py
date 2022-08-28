@@ -9,7 +9,7 @@ from .messages import DirectoryData
 from .search import SearchQuery, SearchResult
 
 if TYPE_CHECKING:
-    from .transfer import Transfer
+    from .transfer import Transfer, TransferState
 
 
 logger = logging.getLogger()
@@ -189,3 +189,9 @@ class UserSharesReplyEvent(BaseEvent):
 @dataclass(frozen=True)
 class TransferAddedEvent(BaseEvent):
     transfer: Transfer
+
+
+@dataclass(frozen=True)
+class TransferStateChanged(BaseEvent):
+    transfer: Transfer
+    state: TransferState
