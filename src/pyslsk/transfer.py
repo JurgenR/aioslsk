@@ -3,6 +3,7 @@ from enum import auto, Enum
 from functools import partial
 import hashlib
 import logging
+import os
 import time
 import shelve
 from typing import List, Tuple, TYPE_CHECKING
@@ -278,12 +279,16 @@ class TransferManager(TransferListener):
         self._transfers: List[Transfer] = []
 
     def read_database(self):
-        with shelve.open(self._settings['database']['name'], flag='cr') as database:
+        db_path = os.path.join(self._configuration.data_directory, 'transfers')
+
+        with shelve.open(db_path, flag='cr') as database:
             for _, transfer in database.items():
                 self.queue_transfer(transfer, state=None)
 
     def write_database(self):
-        with shelve.open(self._settings['database']['name'], flag='rw') as database:
+        db_path = os.path.join(self._configuration.data_directory, 'transfers')
+
+        with shelve.open(db_path, flag='rw') as database:
             # Update/add transfers
             for transfer in self._transfers:
                 key = hashlib.sha256(

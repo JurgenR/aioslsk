@@ -110,6 +110,9 @@ class SoulSeek(threading.Thread):
     def transfers(self):
         return self.transfer_manager._transfers
 
+    def save_settings(self):
+        self.configuration.save_settings('pyslsk', self.settings)
+
     def download(self, user: Union[str, User], filename: str):
         if isinstance(user, User):
             return self.transfer_manager.queue_download(user.name, filename)
