@@ -190,7 +190,7 @@ class DataConnection(Connection):
         except OSError:
             logger.exception(f"exception receiving data on connection {self.fileobj}")
             # Only remove the peer connections?
-            logger.info(f"close {self.hostname}:{self.port} : exception while reading")
+            logger.debug(f"close {self.hostname}:{self.port} : exception while reading")
             self.disconnect(reason=CloseReason.READ_ERROR)
             return False
         else:
@@ -199,7 +199,7 @@ class DataConnection(Connection):
                 self.buffer(recv_data)
                 self.process_buffer()
             else:
-                logger.warning(
+                logger.debug(
                     f"close {self.hostname}:{self.port} : no data received")
                 self.disconnect(reason=CloseReason.EOF)
                 return False

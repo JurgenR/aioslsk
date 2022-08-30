@@ -202,7 +202,14 @@ class ServerManager:
             AcceptChildren.create(False),
             SharedFoldersFiles.create(dir_count, file_count),
             AddUser.create(self._settings.get('credentials.username')),
-            PrivateRoomToggle.create(True)
+            PrivateRoomToggle.create(self._settings.get('chats.private_room_invites'))
+        )
+
+        self.network.send_server_messages(
+            *[
+                AddUser.create(friend)
+                for friend in self._settings.get('users.friends')
+            ]
         )
 
     @on_message(ChatRoomMessage)

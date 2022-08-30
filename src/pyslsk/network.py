@@ -172,7 +172,7 @@ class Network:
                 # connected otherwise close the socket
 
                 if socket_err != 0:
-                    logger.warning(
+                    logger.debug(
                         "error connecting {}:{} : {} [{}] : cleaning up"
                         .format(connection.hostname, connection.port, socket_err, errno.errorcode[socket_err]))
                     connection.disconnect(reason=CloseReason.CONNECT_FAILED)
@@ -183,7 +183,7 @@ class Network:
                 continue
             else:
                 if socket_err != 0:
-                    logger.warning(
+                    logger.debug(
                         "error {}:{} : {} [{}] : cleaning up"
                         .format(connection.hostname, connection.port, socket_err, errno.errorcode[socket_err]))
                     connection.disconnect(reason=CloseReason.EOF)
@@ -221,12 +221,12 @@ class Network:
 
                 if connection.state == ConnectionState.CONNECTING:
                     if connection.last_interaction + CONNECT_TIMEOUT < current_time:
-                        logger.warning(f"connection {connection.hostname}:{connection.port}: timeout reached during connecting")
+                        logger.debug(f"connection {connection.hostname}:{connection.port}: timeout reached during connecting")
                         connection.disconnect(reason=CloseReason.CONNECT_FAILED)
                         continue
 
                 if connection.last_interaction + connection.timeout < current_time:
-                    logger.warning(f"connection {connection.hostname}:{connection.port}: timeout reached")
+                    logger.debug(f"connection {connection.hostname}:{connection.port}: timeout reached")
                     connection.disconnect(reason=CloseReason.TIMEOUT)
                     continue
 
