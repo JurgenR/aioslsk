@@ -25,6 +25,7 @@ sharing:
 chats:
   auto_join: true
   private_room_invites: true
+  rooms: []
 
 users:
   friends: []
