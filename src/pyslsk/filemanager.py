@@ -85,14 +85,14 @@ def convert_item_to_file_data(shared_item: SharedItem, use_full_path=True) -> Fi
     file_path = os.path.join(shared_item.root, shared_item.subdir, shared_item.filename)
     file_size = os.path.getsize(file_path)
     file_ext = os.path.splitext(shared_item.filename)[-1]
-    # attributes = extract_attributes(file_path)
+    attributes = extract_attributes(file_path)
 
     return FileData(
         unknown=1,
         filename=file_path if use_full_path else shared_item.filename,
         filesize=file_size,
         extension=file_ext,
-        attributes=[]
+        attributes=attributes
     )
 
 

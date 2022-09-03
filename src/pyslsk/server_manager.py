@@ -400,7 +400,7 @@ class ServerManager:
         chat_message = ChatMessage(
             id=chat_id,
             timestamp=timestamp,
-            user=username,
+            user=user,
             message=chat_msg,
             is_admin=is_admin
         )

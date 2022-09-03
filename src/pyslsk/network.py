@@ -204,8 +204,13 @@ class Network:
                 if not connection.write():
                     continue
 
-        # Clean up connections
-        for selector_key in list(self.selector.get_map().values()):
+        # Post loop actions
+
+        connections_map = self.selector.get_map()
+        selector_keys = list(connections_map.values())
+
+        ### Clean up connections
+        for selector_key in selector_keys:
             connection = selector_key.data
 
             # Clean up connections we requested to close
@@ -230,17 +235,17 @@ class Network:
                     connection.disconnect(reason=CloseReason.TIMEOUT)
                     continue
 
-        # Pull from queue
-        if self._selector_queue and len(self.selector.get_map()) < self._connection_limit:
-            to_queue = self._connection_limit - len(self.selector.get_map())
+        ### Pull from queue
+        if self._selector_queue and len(connections_map) < self._connection_limit:
+            to_queue = self._connection_limit - len(connections_map)
             logger.info(f"removing {to_queue} connections from queue ({len(self._selector_queue)})")
             for fileobj, events, connection in self._selector_queue[:to_queue]:
                 self.selector.register(fileobj, events, connection)
             self._selector_queue = self._selector_queue[to_queue:]
 
-        # Set write event
+        ### Set write event
         with self._lock:
-            for key in list(self.selector.get_map().values()):
+            for key in selector_keys:
                 connection = key.data
                 # Connection needs to stay in write mode to detect whether we
                 # have completed connecting or error occurred. If we were to

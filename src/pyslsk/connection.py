@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger()
 
 DEFAULT_PEER_TIMEOUT = 30
-DEFAULT_RECV_BUF_SIZE = 4
+DEFAULT_RECV_BUF_SIZE = 8
 """Default amount of bytes to recv from the socket"""
 TRANSFER_RECV_BUF_SIZE = 1024 * 8
 """Default amount of bytes to recv during file transfer"""
@@ -158,6 +158,9 @@ class ListeningConnection(Connection):
 
 class DataConnection(Connection):
 
+    HEADER_SIZE_OBFUSCATED: int = obfuscation.KEY_SIZE + struct.calcsize('I')
+    HEADER_SIZE_UNOBFUSCATED: int = struct.calcsize('I')
+
     def __init__(self, hostname, port):
         super().__init__(hostname, port)
         self._buffer = bytes()
@@ -292,12 +295,12 @@ class DataConnection(Connection):
         This method won't clear the buffer entirely but will remove the message
         from the _buffer and keep the rest.
         """
-        if len(self._buffer) < struct.calcsize('I'):
+        if len(self._buffer) < self.HEADER_SIZE_UNOBFUSCATED:
             return
 
         _, msg_len = messages.parse_int(0, self._buffer)
         # Calculate total message length (message length + length indicator)
-        total_msg_len = struct.calcsize('I') + msg_len
+        total_msg_len = self.HEADER_SIZE_UNOBFUSCATED + msg_len
         if len(self._buffer) >= total_msg_len:
             message = self._buffer[:total_msg_len]
             logger.debug(
@@ -310,21 +313,20 @@ class DataConnection(Connection):
 
     def process_obfuscated_message(self):
         # Require at least 8 bytes (4 bytes key, 4 bytes length)
-        if len(self._buffer) < (obfuscation.KEY_SIZE + struct.calcsize('I')):
+        if len(self._buffer) < self.HEADER_SIZE_OBFUSCATED:
             return
 
-        decoded_buffer = obfuscation.decode(self._buffer)
+        decoded_buffer = obfuscation.decode(self._buffer[:self.HEADER_SIZE_OBFUSCATED])
 
         _, msg_len = messages.parse_int(0, decoded_buffer)
-        # Calculate total message length (message length + length indicator)
-        total_msg_len = struct.calcsize('I') + msg_len
-        if len(decoded_buffer) >= total_msg_len:
-            message = decoded_buffer[:total_msg_len]
+        # Calculate total message length (key length + message length + length indicator)
+        total_msg_len = self.HEADER_SIZE_OBFUSCATED + msg_len
+        if len(self._buffer) >= total_msg_len:
+            message = obfuscation.decode(self._buffer[:total_msg_len])
             logger.debug(
                 "recv obfuscated message {}:{} : {!r}"
-                .format(self.hostname, self.port, decoded_buffer.hex()))
-            # Difference between buffer_unobfuscated, the key size is included
-            self._buffer = self._buffer[total_msg_len + obfuscation.KEY_SIZE:]
+                .format(self.hostname, self.port, message.hex()))
+            self._buffer = self._buffer[total_msg_len:]
 
             parsed_message = self.parse_message(message)
             self.notify_message_received(parsed_message)
