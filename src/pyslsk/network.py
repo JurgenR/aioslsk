@@ -40,7 +40,8 @@ from .transfer import Transfer, TransferDirection
 logger = logging.getLogger()
 
 
-CONNECT_TIMEOUT = 5
+CONNECT_TIMEOUT: int = 5
+CONNECT_INIT_TIMEOUT: int = 3
 CONNECT_TO_PEER_TIMEOUT: int = 30
 
 CONNECTION_LIMITS = {
@@ -157,8 +158,6 @@ class Network:
 
         self._log_open_connections()
 
-        current_time = time.monotonic()
-
         events = self.selector.select(timeout=0.10)
         for key, mask in events:
             work_socket = key.fileobj
@@ -205,10 +204,16 @@ class Network:
                     continue
 
         # Post loop actions
+        current_time = time.monotonic()
 
         connections_map = self.selector.get_map()
         selector_keys = list(connections_map.values())
 
+        self._set_write_event(selector_keys)
+        self._clean_up_connections(selector_keys, current_time)
+        self._pull_from_queue(selector_keys)
+
+    def _clean_up_connections(self, selector_keys, current_time):
         ### Clean up connections
         for selector_key in selector_keys:
             connection = selector_key.data
@@ -221,6 +226,7 @@ class Network:
             # Clean up connections that went into timeout
             if isinstance(connection, PeerConnection):
                 # Ignore connections that haven't had an interaction yet
+                # TODO: Is this still needed?
                 if not connection.last_interaction:
                     continue
 
@@ -230,19 +236,27 @@ class Network:
                         connection.disconnect(reason=CloseReason.CONNECT_FAILED)
                         continue
 
+                if connection.connection_state == PeerConnectionState.AWAITING_INIT:
+                    if connection.last_interaction + CONNECT_INIT_TIMEOUT < current_time:
+                        logger.debug(f"connection {connection.hostname}:{connection.port}: timeout reached awaiting init message")
+                        connection.disconnect(reason=CloseReason.CONNECT_FAILED)
+                        continue
+
                 if connection.last_interaction + connection.timeout < current_time:
                     logger.debug(f"connection {connection.hostname}:{connection.port}: timeout reached")
                     connection.disconnect(reason=CloseReason.TIMEOUT)
                     continue
 
+    def _pull_from_queue(self, selector_keys):
         ### Pull from queue
-        if self._selector_queue and len(connections_map) < self._connection_limit:
-            to_queue = self._connection_limit - len(connections_map)
+        if self._selector_queue and len(selector_keys) < self._connection_limit:
+            to_queue = self._connection_limit - len(selector_keys)
             logger.info(f"removing {to_queue} connections from queue ({len(self._selector_queue)})")
             for fileobj, events, connection in self._selector_queue[:to_queue]:
                 self.selector.register(fileobj, events, connection)
             self._selector_queue = self._selector_queue[to_queue:]
 
+    def _set_write_event(self, selector_keys):
         ### Set write event
         with self._lock:
             for key in selector_keys:

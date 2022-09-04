@@ -540,6 +540,8 @@ class ServerManager:
         if not self._settings.get('debug.search_for_parent'):
             logger.debug("ignoring NetInfo message : searching for parent is disabled")
             return
+        else:
+            logger.info("received NetInfo list")
 
         self._state.potential_parents = net_info_list
 

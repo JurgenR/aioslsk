@@ -5,7 +5,6 @@ from typing import Callable, List, TYPE_CHECKING, Union
 import copy
 import errno
 import logging
-import queue
 import socket
 import struct
 import time
@@ -161,21 +160,26 @@ class DataConnection(Connection):
     HEADER_SIZE_OBFUSCATED: int = obfuscation.KEY_SIZE + struct.calcsize('I')
     HEADER_SIZE_UNOBFUSCATED: int = struct.calcsize('I')
 
-    def __init__(self, hostname, port):
+    def __init__(self, hostname: str, port: int):
         super().__init__(hostname, port)
         self._buffer = bytes()
-        self._messages = queue.Queue()
+        self._messages: List[ProtocolMessage] = []
 
-        self.last_interaction = 0
+        self.last_interaction: float = 0
         self.bytes_received: int = 0
         self.bytes_sent: int = 0
         self.recv_buf_size: int = DEFAULT_RECV_BUF_SIZE
         self.send_buf_size: int = TRANSFER_RECV_BUF_SIZE
 
+    def set_state(self, state: ConnectionState, close_reason: CloseReason = CloseReason.UNKNOWN):
+        if state == ConnectionState.CONNECTED:
+            self.interact()
+        super().set_state(state, close_reason)
+
     def queue_message(self, message: Union[bytes, ProtocolMessage]):
         if isinstance(message, bytes):
             message = ProtocolMessage(message)
-        self._messages.put(message)
+        self._messages.append(message)
 
     def queue_messages(self, *messages: List[Union[bytes, ProtocolMessage]]):
         for message in messages:
@@ -218,11 +222,7 @@ class DataConnection(Connection):
         @return: False in case an exception occured on the socket while sending.
             True in case a message was successfully sent or nothing was sent
         """
-        try:
-            message: ProtocolMessage = self._messages.get(block=False)
-        except queue.Empty:
-            pass
-        else:
+        for message in self._messages:
             try:
                 logger.debug(f"send {self.hostname}:{self.port} : message {message.message.hex()}")
                 self.interact()
@@ -235,6 +235,7 @@ class DataConnection(Connection):
             else:
                 self.bytes_sent += len(message.message)
                 self.notify_message_sent(message)
+        self._messages = []
         return True
 
     def write_message(self, message: bytes):
@@ -298,46 +299,56 @@ class DataConnection(Connection):
         if len(self._buffer) < self.HEADER_SIZE_UNOBFUSCATED:
             return
 
-        _, msg_len = messages.parse_int(0, self._buffer)
         # Calculate total message length (message length + length indicator)
+        _, msg_len = messages.parse_int(0, self._buffer)
         total_msg_len = self.HEADER_SIZE_UNOBFUSCATED + msg_len
+
         if len(self._buffer) >= total_msg_len:
             message = self._buffer[:total_msg_len]
             logger.debug(
                 "recv message {}:{} : {!r}"
                 .format(self.hostname, self.port, message.hex()))
+
             self._buffer = self._buffer[total_msg_len:]
+            self.recv_buf_size = DEFAULT_RECV_BUF_SIZE
 
             parsed_message = self.parse_message(message)
             self.notify_message_received(parsed_message)
+        else:
+            self.recv_buf_size = total_msg_len - len(self._buffer)
 
     def process_obfuscated_message(self):
         # Require at least 8 bytes (4 bytes key, 4 bytes length)
         if len(self._buffer) < self.HEADER_SIZE_OBFUSCATED:
             return
 
-        decoded_buffer = obfuscation.decode(self._buffer[:self.HEADER_SIZE_OBFUSCATED])
+        decoded_header = obfuscation.decode(self._buffer[:self.HEADER_SIZE_OBFUSCATED])
 
-        _, msg_len = messages.parse_int(0, decoded_buffer)
         # Calculate total message length (key length + message length + length indicator)
+        _, msg_len = messages.parse_int(0, decoded_header)
         total_msg_len = self.HEADER_SIZE_OBFUSCATED + msg_len
+
         if len(self._buffer) >= total_msg_len:
             message = obfuscation.decode(self._buffer[:total_msg_len])
             logger.debug(
                 "recv obfuscated message {}:{} : {!r}"
                 .format(self.hostname, self.port, message.hex()))
+
             self._buffer = self._buffer[total_msg_len:]
+            self.recv_buf_size = DEFAULT_RECV_BUF_SIZE
 
             parsed_message = self.parse_message(message)
             self.notify_message_received(parsed_message)
+        else:
+            self.recv_buf_size = total_msg_len - len(self._buffer)
 
     def has_data_to_write(self):
-        return not self._messages.empty()
+        return bool(self._messages)
 
 
 class ServerConnection(DataConnection):
 
-    def __init__(self, hostname='server.slsknet.org', port=2416, listeners=None):
+    def __init__(self, hostname: str = 'server.slsknet.org', port: int = 2416, listeners=None):
         super().__init__(hostname, port)
         self.listeners = [] if listeners is None else listeners
 
