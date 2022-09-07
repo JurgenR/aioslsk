@@ -95,10 +95,11 @@ class SoulSeek(threading.Thread):
     def stop(self):
         logging.info("signaling client to exit")
         self._stop_event.set()
-        logger.debug(f"wait for thread {self!r} to finish")
-        self.join(timeout=30)
         if self.is_alive():
-            logger.warning(f"thread is still alive after 30s : {self!r}")
+            logger.debug(f"wait for thread {self!r} to finish")
+            self.join(timeout=30)
+            if self.is_alive():
+                logger.warning(f"thread is still alive after 30s : {self!r}")
 
         self.transfer_manager.write_database()
 
