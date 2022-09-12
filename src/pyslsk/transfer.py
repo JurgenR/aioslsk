@@ -72,12 +72,14 @@ class TransferState(Enum):
 class Transfer:
     _UNPICKABLE_FIELDS = ('_fileobj', 'connection', 'listeners')
 
-    def __init__(self, username: str, filename: str, direction: TransferDirection, ticket: int = None, listeners=None):
+    def __init__(self, username: str, remote_path: str, direction: TransferDirection, ticket: int = None, listeners=None):
         self.state = TransferState.VIRGIN
 
         self.username: str = username
-        self.filename: str = filename
-        """Remote filename in case of download, local path in case of upload"""
+        self.remote_path: str = remote_path
+        """Remote path, this is the path that is shared between peers"""
+        self.local_path: str = None
+        """Absolute path to the file on disk"""
         self.direction: TransferDirection = direction
         self.place_in_queue: int = None
         """Place in queue, only applicable for downloads"""
@@ -91,8 +93,6 @@ class Transfer:
         reset by the L{read} method of this object
         """
 
-        self.target_path: str = None
-        """Path to download the file to or upload the file from"""
         self.bytes_transfered: int = 0
         """Amount of bytes transfered (uploads and downloads)"""
         self.bytes_written: int = 0
@@ -199,7 +199,7 @@ class Transfer:
     def read(self, bytes_amount: int) -> bytes:
         """Read the given amount of bytes from the file object"""
         if self._fileobj is None:
-            self._fileobj = open(self.filename, 'rb')
+            self._fileobj = open(self.local_path, 'rb')
 
         if self._offset is not None:
             self._fileobj.seek(self._offset)
@@ -222,7 +222,7 @@ class Transfer:
         """
         self.bytes_transfered += len(data)
         if self._fileobj is None:
-            self._fileobj = open(self.target_path, 'wb')
+            self._fileobj = open(self.local_path, 'wb')
 
         bytes_written = self._fileobj.write(data)
         self.bytes_written += bytes_written
@@ -251,13 +251,13 @@ class Transfer:
             self._fileobj = None
 
     def equals(self, transfer):
-        other = (transfer.filename, transfer.username, transfer.direction, )
-        own = (self.filename, self.username, self.direction, )
+        other = (transfer.remote_path, transfer.username, transfer.direction, )
+        own = (self.remote_path, self.username, self.direction, )
         return other == own
 
     def __repr__(self):
         return (
-            f"Transfer(username={self.username!r}, filename={self.filename!r}, "
+            f"Transfer(username={self.username!r}, remote_path={self.remote_path!r}, "
             f"direction={self.direction}, ticket={self.ticket})"
         )
 
@@ -294,7 +294,7 @@ class TransferManager(TransferListener):
                 key = hashlib.sha256(
                     (
                         transfer.username +
-                        transfer.filename +
+                        transfer.remote_path +
                         str(transfer.direction.value)
                     ).encode('utf-8')
                 ).hexdigest()
@@ -389,11 +389,11 @@ class TransferManager(TransferListener):
             return 0.0
         return sum(upload_speeds) / len(upload_speeds)
 
-    def queue_download(self, username: str, filename: str) -> Transfer:
-        logger.info(f"queueing download from {username} : {filename}")
+    def queue_download(self, username: str, remote_path: str) -> Transfer:
+        logger.info(f"queueing download from {username} : {remote_path}")
         transfer = Transfer(
             username=username,
-            filename=filename,
+            remote_path=remote_path,
             direction=TransferDirection.DOWNLOAD
         )
         self.queue_transfer(transfer)
@@ -441,13 +441,13 @@ class TransferManager(TransferListener):
                 return transfer
         raise LookupError(f"transfer with ticket {ticket} not found")
 
-    def get_transfer(self, username: str, filename: str, direction: TransferDirection) -> Transfer:
-        req_transfer = Transfer(username, filename, direction)
+    def get_transfer(self, username: str, remote_path: str, direction: TransferDirection) -> Transfer:
+        req_transfer = Transfer(username, remote_path, direction)
         for transfer in self._transfers:
             if transfer.equals(req_transfer):
                 return transfer
         raise LookupError(
-            f"transfer for user {username} and filename {filename} (direction={direction}) not found")
+            f"transfer for user {username} and remote_path {remote_path} (direction={direction}) not found")
 
     def on_transfer_state_changed(self, transfer: Transfer, state: TransferState):
         downloads, uploads = self._get_queued_transfers()
@@ -482,7 +482,7 @@ class TransferManager(TransferListener):
 
         self._network.send_peer_messages(
             transfer.username,
-            PeerPlaceInQueueRequest.create(transfer.filename)
+            PeerPlaceInQueueRequest.create(transfer.remote_path)
         )
 
     def _initialize_download(self, transfer: Transfer):
@@ -491,7 +491,7 @@ class TransferManager(TransferListener):
         self._network.send_peer_messages(
             transfer.username,
             ProtocolMessage(
-                PeerTransferQueue.create(transfer.filename),
+                PeerTransferQueue.create(transfer.remote_path),
                 on_success=partial(self.on_transfer_queue_success, transfer)
             )
         )
@@ -504,7 +504,7 @@ class TransferManager(TransferListener):
             PeerTransferRequest.create(
                 TransferDirection.DOWNLOAD.value,
                 transfer.ticket,
-                transfer.filename,
+                transfer.remote_path,
                 filesize=transfer.filesize
             )
         )
@@ -560,7 +560,7 @@ class TransferManager(TransferListener):
             return
 
         transfer.set_offset(offset)
-        transfer.filesize = self._file_manager.get_filesize(transfer.filename)
+        transfer.filesize = self._file_manager.get_filesize(transfer.local_path)
 
         connection.set_connection_state(PeerConnectionState.TRANSFERING)
 
@@ -601,9 +601,9 @@ class TransferManager(TransferListener):
 
         transfer.set_state(TransferState.DOWNLOADING)
 
-        if transfer.target_path is None:
-            download_path = self._file_manager.get_download_path(transfer.filename)
-            transfer.target_path = download_path
+        if transfer.local_path is None:
+            download_path = self._file_manager.get_download_path(transfer.remote_path)
+            transfer.local_path = download_path
             logger.info(f"started receiving transfer data, download path : {download_path}")
 
         transfer.write(data)
@@ -611,7 +611,7 @@ class TransferManager(TransferListener):
         if transfer.is_transfered():
             transfer.complete()
             transfer.connection = None
-            logger.info(f"completed downloading of {transfer.filename} from {transfer.username} to {transfer.target_path}")
+            logger.info(f"completed downloading of {transfer.remote_path} from {transfer.username} to {transfer.local_path}")
             connection.set_state(ConnectionState.SHOULD_CLOSE)
 
     def on_transfer_data_sent(self, bytes_sent: int, connection: PeerConnection):
@@ -640,7 +640,7 @@ class TransferManager(TransferListener):
                     transfer.complete()
                     transfer.connection = None
                     logger.info(
-                        f"completed uploading of {transfer.filename} to {transfer.username}. "
+                        f"completed uploading of {transfer.remote_path} to {transfer.username}. "
                         f"filesize={transfer.filesize}, transfered={transfer.bytes_transfered}, read={transfer.bytes_read}")
 
                     # NOT closing connection here, this the responsibility of the

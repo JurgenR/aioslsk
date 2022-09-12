@@ -1,10 +1,12 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import logging
 import mutagen
 from mutagen.mp3 import BitrateMode
 import os
 import re
-from typing import List, Set, Tuple
+import sys
+from typing import Dict, List, Tuple
+import uuid
 
 from .messages import DirectoryData, FileData
 from .settings import Settings
@@ -28,20 +30,18 @@ _QUERY_WORD_SEPERATORS = re.compile(r"[\-_\/\.,]")
 """Word seperators used to seperate terms in a query"""
 
 
-@dataclass
+@dataclass(eq=True, frozen=True)
 class SharedItem:
     root: str
     subdir: str
     filename: str
-    query_components: Set[str] = field(init=False)
-    """The shared item split up into components to make it more performant to
-    query
-    """
+    # attributes: bytes = field(init=False, compare=False)
 
-    def __post_init__(self):
-        path = (self.subdir + "/" + self.filename).lower()
-        path = re.sub(_QUERY_WORD_SEPERATORS, ' ', path)
-        self.query_components = set(path.split())
+    def get_remote_path(self):
+        return '@@' + os.path.join(self.root, self.subdir, self.filename)
+
+    def get_remote_directory_path(self):
+        return '@@' + os.path.join(self.root, self.subdir)
 
 
 def extract_attributes(filepath: str):
@@ -76,64 +76,55 @@ def extract_attributes(filepath: str):
     return attributes
 
 
-def convert_item_to_file_data(shared_item: SharedItem, use_full_path=True) -> FileData:
-    """Convert a L{SharedItem} object to a L{FileData} object
-
-    @param use_full_path: use the full path of the file as 'filename' if C{True}
-        otherwise use just the filename
-    """
-    file_path = os.path.join(shared_item.root, shared_item.subdir, shared_item.filename)
-    file_size = os.path.getsize(file_path)
-    file_ext = os.path.splitext(shared_item.filename)[-1]
-    attributes = extract_attributes(file_path)
-
-    return FileData(
-        unknown=1,
-        filename=file_path if use_full_path else shared_item.filename,
-        filesize=file_size,
-        extension=file_ext,
-        attributes=attributes
-    )
-
-
-def convert_items_to_file_data(shared_items: List[SharedItem], use_full_path=True) -> List[FileData]:
-    """Converts a list of L{SharedItem} instances to a list of L{FileData}
-    instances. If an exception occurs when converting the item an error will be
-    logged and the item will be omitted from the list
-    """
-    file_datas = []
-    for shared_item in shared_items:
-        try:
-            file_datas.append(
-                convert_item_to_file_data(shared_item, use_full_path=use_full_path)
-            )
-        except OSError:
-            logger.exception(f"failed to convert to result : {shared_item!r}")
-
-    return file_datas
-
-
 class FileManager:
+    _ALIAS_LENGTH = 5
 
     def __init__(self, settings: Settings):
         self._settings: Settings = settings
-        self.shared_items: List[SharedItem] = self.fetch_shared_items()
+        self.term_map: Dict[str, List[SharedItem]] = {}
+        self.shared_items: List[SharedItem] = []
+        self.directory_aliases: Dict[str, str] = {}
+        self.load_from_settings()
+        self.build_term_map()
 
-    def fetch_shared_items(self) -> List[SharedItem]:
-        shared_items = []
-        for shared_dir in self._settings.get('sharing.directories'):
-            shared_dir_abs = os.path.abspath(shared_dir)
+    def generate_alias(self, path: str, offset=0):
+        path_bytes = path.encode('utf8')
+        unique_id = uuid.getnode().to_bytes(6, sys.byteorder)
 
-            for directory, _, files in os.walk(shared_dir):
-                subdir = os.path.relpath(directory, shared_dir_abs)
-                if subdir == '.':
-                    subdir = ''
+        alias_bytes = bytearray(
+            [unique_id[-1] | offset for _ in range(self._ALIAS_LENGTH)])
 
-                for filename in files:
-                    shared_items.append(
-                        SharedItem(shared_dir_abs, subdir, filename)
-                    )
-        return shared_items
+        # Chunk the path into pieces of 5
+        for c_idx in range(0, len(path_bytes), self._ALIAS_LENGTH):
+            chunk = path_bytes[c_idx:c_idx + self._ALIAS_LENGTH]
+            # previous_iter_byte XOR unique_id XOR current_iter_byte
+            for b_idx, byte in enumerate(chunk):
+                alias_bytes[b_idx] ^= byte ^ unique_id[b_idx]
+
+        # To lowercase
+        alias_bytes = bytes([(byte % 26) + 0x61 for byte in alias_bytes])
+        alias_string = alias_bytes.decode('utf8')
+
+        # Check if alias exists, otherwise try to append an offset and run again
+        if alias_string in self.directory_aliases:
+            return self.generate_alias(path, offset=offset + 1)
+        return alias_string
+
+    def load_from_settings(self):
+        for shared_directory in self._settings.get('sharing.directories'):
+            self.add_shared_directory(shared_directory)
+
+    def build_term_map(self):
+        for item in self.shared_items:
+            path = (item.subdir + "/" + item.filename).lower()
+            path = re.sub(_QUERY_WORD_SEPERATORS, ' ', path)
+            terms = path.split()
+            for term in terms:
+                term = re.sub(_QUERY_CLEAN_PATTERN, '', term)
+                if term in self.term_map:
+                    self.term_map[term].append(item)
+                else:
+                    self.term_map[term] = [item, ]
 
     def get_shared_item(self, filename: str) -> SharedItem:
         """Gets a shared item from the cache based on the given file path. If
@@ -143,12 +134,43 @@ class FileManager:
         This method should be called when an upload is requested from the user
         """
         for item in self.shared_items:
-            if os.path.join(item.root, item.subdir, item.filename) == filename:
-                if not os.path.exists(filename):
+            if item.get_remote_path() == filename:
+                local_path = self.resolve_path(item)
+                if not os.path.exists(local_path):
                     raise LookupError(f"file name {filename} found in cache but not on disk")
                 return item
         else:
             raise LookupError(f"file name {filename} not found in shared items")
+
+    def add_shared_directory(self, shared_directory: str):
+        # Calc absolute path, generate an alias and store it
+        shared_dir_abs = os.path.abspath(shared_directory)
+        shared_dir_alias = self.generate_alias(shared_dir_abs)
+        self.directory_aliases[shared_dir_alias] = shared_dir_abs
+
+        for directory, _, files in os.walk(shared_directory):
+            subdir = os.path.relpath(directory, shared_dir_abs)
+            if subdir == '.':
+                subdir = ''
+
+            for filename in files:
+                self.shared_items.append(
+                    SharedItem(shared_dir_alias, subdir, filename)
+                )
+
+    def remove_shared_directory(self, shared_directory: str):
+        shared_dir_abs = os.path.abspath(shared_directory)
+
+        aliases_rev = {v: k for k, v in self.directory_aliases.items()}
+        alias = aliases_rev[shared_dir_abs]
+        self.shared_items = [
+            item for item in self.shared_items
+            if item.root != alias
+        ]
+
+    def resolve_path(self, item: SharedItem) -> str:
+        root_path = self.directory_aliases[item.root]
+        return os.path.join(root_path, item.subdir, item.filename)
 
     def get_filesize(self, filename: str) -> int:
         return os.path.getsize(filename)
@@ -160,21 +182,31 @@ class FileManager:
             - will be split up (whitespace)
             - lowercased
             - non-alphanumeric characters stripped
-        2. Shared items:
-            - subdir and filename will be concatenated
-            - will be split up ( seperators can be: -_,./ )
-            - clean up the terms
-        3. Loop over all the terms from the query and check if all match with
-            with the terms in any of the shared items (any order)
+
+        2. For each of the terms get the shared items that are available for the
+            first term. Continue to the next term and eliminate all shared items
+            that do not match the second term. Continue until we found all shared
+            items (if any)
         """
-        terms = set(re.sub(_QUERY_CLEAN_PATTERN, '', term.lower()) for term in query.split())
+        terms = query.split()
 
-        found_items = []
-        for shared_item in self.shared_items:
-            if terms.issubset(shared_item.query_components):
-                found_items.append(shared_item)
+        found_items = None
+        for term in terms:
+            clean_term = re.sub(_QUERY_CLEAN_PATTERN, '', term.lower())
+            if clean_term not in self.term_map:
+                return []
 
-        return found_items
+            term_items = set(self.term_map[clean_term])
+
+            if not found_items:
+                found_items = term_items
+            else:
+                found_items = found_items.intersection(term_items)
+
+            if not found_items:
+                return []
+
+        return list(found_items)
 
     def get_stats(self) -> Tuple[int, int]:
         """Gets the total amount of shared directories and files.
@@ -185,7 +217,7 @@ class FileManager:
         @return: Directory and file count as a C{tuple}
         """
         file_count = len(self.shared_items)
-        dir_count = len(set([shared_item.subdir for shared_item in self.shared_items]))
+        dir_count = len(set(shared_item.subdir for shared_item in self.shared_items))
         return dir_count, file_count
 
     def get_download_path(self, filename: str):
@@ -200,7 +232,7 @@ class FileManager:
         # Sort files under unique directories
         directories = {}
         for item in self.shared_items:
-            directory = os.path.join(item.root, item.subdir)
+            directory = item.get_remote_directory_path()
             if directory in directories:
                 directories[directory].append(item)
             else:
@@ -212,8 +244,44 @@ class FileManager:
             shares_reply.append(
                 DirectoryData(
                     name=directory,
-                    files=convert_items_to_file_data(files, use_full_path=False)
+                    files=self.convert_items_to_file_data(files, use_full_path=False)
                 )
             )
 
         return shares_reply
+
+    def convert_item_to_file_data(self, shared_item: SharedItem, use_full_path=True) -> FileData:
+        """Convert a L{SharedItem} object to a L{FileData} object
+
+        @param use_full_path: use the full path of the file as 'filename' if C{True}
+            otherwise use just the filename
+        """
+        file_path = self.resolve_path(shared_item)
+        file_size = os.path.getsize(file_path)
+        file_ext = os.path.splitext(shared_item.filename)[-1]
+        attributes = extract_attributes(file_path)
+
+        return FileData(
+            unknown=1,
+            filename=shared_item.get_remote_path() if use_full_path else shared_item.filename,
+            filesize=file_size,
+            extension=file_ext,
+            attributes=attributes
+        )
+
+
+    def convert_items_to_file_data(self, shared_items: List[SharedItem], use_full_path=True) -> List[FileData]:
+        """Converts a list of L{SharedItem} instances to a list of L{FileData}
+        instances. If an exception occurs when converting the item an error will be
+        logged and the item will be omitted from the list
+        """
+        file_datas = []
+        for shared_item in shared_items:
+            try:
+                file_datas.append(
+                    self.convert_item_to_file_data(shared_item, use_full_path=use_full_path)
+                )
+            except OSError:
+                logger.exception(f"failed to convert to result : {shared_item!r}")
+
+        return file_datas

@@ -236,11 +236,12 @@ class Network:
                         connection.disconnect(reason=CloseReason.CONNECT_FAILED)
                         continue
 
-                if connection.connection_state == PeerConnectionState.AWAITING_INIT:
-                    if connection.last_interaction + CONNECT_INIT_TIMEOUT < current_time:
-                        logger.debug(f"connection {connection.hostname}:{connection.port}: timeout reached awaiting init message")
-                        connection.disconnect(reason=CloseReason.CONNECT_FAILED)
-                        continue
+                elif connection.state == ConnectionState.CONNECTED:
+                    if connection.connection_state == PeerConnectionState.AWAITING_INIT:
+                        if connection.last_interaction + CONNECT_INIT_TIMEOUT < current_time:
+                            logger.debug(f"connection {connection.hostname}:{connection.port}: timeout reached awaiting init message")
+                            connection.disconnect(reason=CloseReason.CONNECT_FAILED)
+                            continue
 
                 if connection.last_interaction + connection.timeout < current_time:
                     logger.debug(f"connection {connection.hostname}:{connection.port}: timeout reached")

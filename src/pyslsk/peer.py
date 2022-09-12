@@ -14,7 +14,7 @@ from .events import (
     UserSharesReplyEvent,
     SearchResultEvent,
 )
-from .filemanager import convert_items_to_file_data, FileManager
+from .filemanager import FileManager
 from .messages import (
     pack_int,
     AcceptChildren,
@@ -248,7 +248,7 @@ class PeerManager:
     @on_message(PeerTransferQueue)
     def on_peer_transfer_queue(self, message, connection: PeerConnection):
         """Initial message received in the transfer process. The peer is
-        requesting to download a file from us here.
+        requesting to download a file from us.
         """
         filename = message.parse()
         logger.info(f"PeerTransferQueue : {filename}")
@@ -258,13 +258,15 @@ class PeerManager:
         transfer_ticket = next(self._state.ticket_generator)
         transfer = Transfer(
             username=peer.username,
-            filename=filename,
+            remote_path=filename,
             ticket=transfer_ticket,
             direction=TransferDirection.UPLOAD
         )
 
         try:
-            self.file_manager.get_shared_item(filename)
+            shared_item = self.file_manager.get_shared_item(filename)
+            transfer.local_path = self.file_manager.resolve_path(shared_item)
+            transfer.filesize = self.file_manager.get_filesize(transfer.local_path)
         except LookupError:
             self.transfer_manager.queue_transfer(transfer, state=None)
             transfer.fail(reason="File not shared.")
@@ -272,7 +274,6 @@ class PeerManager:
                 PeerTransferQueueFailed.create(filename, transfer.fail_reason)
             )
         else:
-            transfer.filesize = self.file_manager.get_filesize(filename)
             self.transfer_manager.queue_transfer(transfer)
 
     @on_message(PeerTransferRequest)
@@ -525,7 +526,7 @@ class PeerManager:
             PeerSearchReply.create(
                 self._settings.get('credentials.username'),
                 search_ticket,
-                convert_items_to_file_data(results, use_full_path=True),
+                self.file_manager.convert_items_to_file_data(results, use_full_path=True),
                 self.transfer_manager.has_slots_free(),
                 int(self.transfer_manager.get_average_upload_speed()),
                 self.transfer_manager.get_queue_size()
