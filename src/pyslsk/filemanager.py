@@ -8,6 +8,7 @@ import sys
 from typing import Dict, List, Tuple
 import uuid
 
+from .exceptions import FileNotSharedError
 from .messages import DirectoryData, FileData
 from .settings import Settings
 
@@ -167,6 +168,7 @@ class FileManager:
             item for item in self.shared_items
             if item.root != alias
         ]
+        del self.directory_aliases[alias]
 
     def resolve_path(self, item: SharedItem) -> str:
         root_path = self.directory_aliases[item.root]

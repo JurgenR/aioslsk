@@ -8,3 +8,7 @@ class UnknownMessageError(PySlskException):
         self.message_id = message_id
         self.data = data
         self.message = message
+
+
+class FileNotSharedError(PySlskException):
+    pass
