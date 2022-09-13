@@ -1,3 +1,4 @@
+from operator import itemgetter
 from pyslsk.filemanager import extract_attributes, FileManager, SharedItem
 from pyslsk.settings import Settings
 
@@ -5,7 +6,6 @@ import pytest
 
 import os
 import tempfile
-
 
 RESOURCES = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'resources', 'shared')
 
@@ -20,6 +20,11 @@ DEFAULT_SETTINGS = {
         ]
     }
 }
+
+
+# A bit of a hacky way to get the alias
+RESOURCES_ALIAS = list(
+    FileManager(Settings(DEFAULT_SETTINGS)).directory_aliases.keys())[0]
 
 
 @pytest.fixture
@@ -46,12 +51,28 @@ class TestFunctions:
 
 class TestFileManager:
 
-    def test_whenFetchSharedItems(self, manager):
+    def test_whenLoadFromSettings(self, manager):
         assert manager.shared_items == [
-            SharedItem(root=RESOURCES, subdir='', filename='Kevin_MacLeod-Galway.flac'),
-            SharedItem(root=RESOURCES, subdir='', filename='Kevin_MacLeod-Galway.mp3'),
-            SharedItem(root=RESOURCES, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
+            SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.flac'),
+            SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.mp3'),
+            SharedItem(root=RESOURCES_ALIAS, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
         ]
+
+    def test_whenAddDirectory_shouldAddDirectory(self):
+        manager = FileManager(Settings({'sharing': {'directories': []}}))
+        manager.add_shared_directory(RESOURCES)
+        assert manager.shared_items == [
+            SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.flac'),
+            SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.mp3'),
+            SharedItem(root=RESOURCES_ALIAS, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
+        ]
+        assert RESOURCES_ALIAS in manager.directory_aliases
+        assert manager.directory_aliases[RESOURCES_ALIAS] == RESOURCES
+
+    def test_whenRemoveDirectory_shouldRemoveSharedFilesAndAlias(self, manager: FileManager):
+        manager.remove_shared_directory(RESOURCES)
+        assert len(manager.directory_aliases) == 0
+        assert len(manager.shared_items) == 0
 
     def test_whenGetStats_shouldReturnStats(self, manager):
         dirs, files = manager.get_stats()
@@ -60,21 +81,21 @@ class TestFileManager:
         assert files == 3
 
     def test_whenGetSharedItemMatches_shouldReturnSharedItem(self, manager):
-        filepath = os.path.join(RESOURCES, 'Cool_Test_Album', 'Strange_Drone_Impact.mp3')
+        filepath = os.path.join('@@' + RESOURCES_ALIAS, 'Cool_Test_Album', 'Strange_Drone_Impact.mp3')
         item = manager.get_shared_item(filepath)
 
-        assert item == SharedItem(root=RESOURCES, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
+        assert item == SharedItem(root=RESOURCES_ALIAS, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
 
     def test_whenGetSharedItemDoesNotMatch_shouldRaiseException(self, manager):
-        filepath = os.path.join(RESOURCES, 'Cool_Test_Album', 'nonexistant.mp3')
+        filepath = os.path.join('@@' + RESOURCES_ALIAS, 'Cool_Test_Album', 'nonexistant.mp3')
 
         with pytest.raises(LookupError):
             manager.get_shared_item(filepath)
 
     def test_whenGetSharedItemDoesNotExistOnDisk_shouldRaiseException(self, manager):
-        item_not_on_disk = SharedItem(RESOURCES, '', 'InItemsButNotOnDisk.mp3')
+        item_not_on_disk = SharedItem(RESOURCES_ALIAS, '', 'InItemsButNotOnDisk.mp3')
         manager.shared_items.append(item_not_on_disk)
-        filepath = os.path.join(RESOURCES, '', 'InItemsButNotOnDisk.mp3')
+        filepath = os.path.join('@@' + RESOURCES_ALIAS, '', 'InItemsButNotOnDisk.mp3')
 
         with pytest.raises(LookupError):
             manager.get_shared_item(filepath)
@@ -89,23 +110,23 @@ class TestFileManager:
             (
                 'Kevin',
                 [
-                    SharedItem(root=RESOURCES, subdir='', filename='Kevin_MacLeod-Galway.flac'),
-                    SharedItem(root=RESOURCES, subdir='', filename='Kevin_MacLeod-Galway.mp3')
+                    SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.flac'),
+                    SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.mp3')
                 ]
             ),
             # Words in different order
             (
                 'Galway Kevin',
                 [
-                    SharedItem(root=RESOURCES, subdir='', filename='Kevin_MacLeod-Galway.flac'),
-                    SharedItem(root=RESOURCES, subdir='', filename='Kevin_MacLeod-Galway.mp3')
+                    SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.flac'),
+                    SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.mp3')
                 ]
             ),
             # Subdir name + case sensitivity
             (
                 'cOOL iMPACT',
                 [
-                    SharedItem(root=RESOURCES, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
+                    SharedItem(root=RESOURCES_ALIAS, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
                 ]
             )
         ]
@@ -113,10 +134,19 @@ class TestFileManager:
     def test_whenQuery_shouldReturnMatches(self, query, expected_items, manager):
         results = manager.query(query)
 
-        assert expected_items == results
+        assert expected_items == sorted(results, key=lambda i: i.filename)
 
-    def test_whenQueryNoMatches_shouldReturnEmptyList(self, manager):
-        results = manager.query("something")
+    @pytest.mark.parametrize(
+        "query",
+        [
+            # None matching at all
+            ('something'),
+            # Partial match
+            ('kevin bacon')
+        ]
+    )
+    def test_whenQueryNoMatches_shouldReturnEmptyList(self, query, manager):
+        results = manager.query(query)
 
         assert results == []
 
