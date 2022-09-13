@@ -191,6 +191,8 @@ class FileManager:
             items (if any)
         """
         terms = query.split()
+        if not terms:
+            return []
 
         found_items = None
         for term in terms:
@@ -252,7 +254,8 @@ class FileManager:
 
         return shares_reply
 
-    def convert_item_to_file_data(self, shared_item: SharedItem, use_full_path=True) -> FileData:
+    def convert_item_to_file_data(
+            self, shared_item: SharedItem, use_full_path=True, include_attributes=True) -> FileData:
         """Convert a L{SharedItem} object to a L{FileData} object
 
         @param use_full_path: use the full path of the file as 'filename' if C{True}
@@ -261,7 +264,10 @@ class FileManager:
         file_path = self.resolve_path(shared_item)
         file_size = os.path.getsize(file_path)
         file_ext = os.path.splitext(shared_item.filename)[-1]
-        attributes = extract_attributes(file_path)
+        if include_attributes:
+            attributes = extract_attributes(file_path)
+        else:
+            attributes = []
 
         return FileData(
             unknown=1,
@@ -270,7 +276,6 @@ class FileManager:
             extension=file_ext,
             attributes=attributes
         )
-
 
     def convert_items_to_file_data(self, shared_items: List[SharedItem], use_full_path=True) -> List[FileData]:
         """Converts a list of L{SharedItem} instances to a list of L{FileData}

@@ -1,11 +1,9 @@
-from operator import itemgetter
 from pyslsk.filemanager import extract_attributes, FileManager, SharedItem
 from pyslsk.settings import Settings
 
 import pytest
-
 import os
-import tempfile
+
 
 RESOURCES = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'resources', 'shared')
 
@@ -139,6 +137,8 @@ class TestFileManager:
     @pytest.mark.parametrize(
         "query",
         [
+            # Just spaces
+            ('  '),
             # None matching at all
             ('something'),
             # Partial match
