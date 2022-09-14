@@ -88,7 +88,21 @@ class FileManager:
         self.load_from_settings()
         self.build_term_map()
 
-    def generate_alias(self, path: str, offset=0):
+    def generate_alias(self, path: str, offset=0) -> str:
+        """Generates a directory alias for the given path, this method will be
+        called recursively increasing the offset in case the alias is already
+        found in the directory_aliases.
+
+        The hardware address is mixed in to avoid getting the same alias for the
+        same directory on different machines. Admittedly this is a lousy
+        security measure but hopefully this will prevent easy leaking of files
+        in case such issue would occur. Example: `abcde` is always generated for
+        `C:\` so the attacker could guess where a file is located.
+
+        :param path: the path for which to generate an alias
+        :param offset: offset for the value of the initial 5 bytes (default=0)
+        :return: a string of 5 alphabetic characters all lowercased
+        """
         path_bytes = path.encode('utf8')
         unique_id = uuid.getnode().to_bytes(6, sys.byteorder)
 
@@ -115,7 +129,11 @@ class FileManager:
         for shared_directory in self._settings.get('sharing.directories'):
             self.add_shared_directory(shared_directory)
 
-    def build_term_map(self):
+    def build_term_map(self, rebuild=True):
+        """Builds a list of valid terms for the current list of shared items"""
+        if rebuild:
+            self.term_map = {}
+
         for item in self.shared_items:
             path = (item.subdir + "/" + item.filename).lower()
             path = re.sub(_QUERY_WORD_SEPERATORS, ' ', path)
@@ -144,6 +162,16 @@ class FileManager:
             raise LookupError(f"file name {filename} not found in shared items")
 
     def add_shared_directory(self, shared_directory: str):
+        """Adds a shared directory. This method will:
+            - call `generate_alias` and append the directory to the list of
+              `directory_aliases`
+            - recurse down the given path and add the items to the shared items
+              list
+            - rebuild the `term_map`
+
+        :param shared_directory: path of the shared directory, the absolute path
+            will be calculated before performing the rest of the functions
+        """
         # Calc absolute path, generate an alias and store it
         shared_dir_abs = os.path.abspath(shared_directory)
         shared_dir_alias = self.generate_alias(shared_dir_abs)
@@ -158,8 +186,17 @@ class FileManager:
                 self.shared_items.append(
                     SharedItem(shared_dir_alias, subdir, filename)
                 )
+        self.build_term_map(rebuild=True)
 
     def remove_shared_directory(self, shared_directory: str):
+        """Removes a shared directory. This method will
+            - remove the alias from `directory_aliases`
+            - remove all shared items with the `root` as the alias
+            - rebuild the `term_map`
+
+        :param shared_directory: path of the shared directory to be removed (
+            not the alias)
+        """
         shared_dir_abs = os.path.abspath(shared_directory)
 
         aliases_rev = {v: k for k, v in self.directory_aliases.items()}
@@ -170,7 +207,15 @@ class FileManager:
         ]
         del self.directory_aliases[alias]
 
+        # Fully generate term map
+        self.build_term_map(rebuild=True)
+
     def resolve_path(self, item: SharedItem) -> str:
+        """Resolves the absolute path of the given `item`
+
+        :param item: `SharedItem` instance to be resolved
+        :return: absolute path
+        """
         root_path = self.directory_aliases[item.root]
         return os.path.join(root_path, item.subdir, item.filename)
 
@@ -218,7 +263,7 @@ class FileManager:
         Directory count will include the root directories only if they contain
         files.
 
-        @return: Directory and file count as a C{tuple}
+        :return: Directory and file count as a C{tuple}
         """
         file_count = len(self.shared_items)
         dir_count = len(set(shared_item.subdir for shared_item in self.shared_items))
@@ -233,6 +278,7 @@ class FileManager:
         return os.path.join(download_dir, os.path.basename(filename))
 
     def create_shares_reply(self) -> List[DirectoryData]:
+        """Creates a complete list of the currently shared items"""
         # Sort files under unique directories
         directories = {}
         for item in self.shared_items:
