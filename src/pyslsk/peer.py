@@ -1,10 +1,11 @@
 import logging
-from typing import List
+from typing import List, Union
 
 from .connection import (
     ConnectionState,
     PeerConnection,
     PeerConnectionType,
+    ProtocolMessage,
 )
 from .events import (
     on_message,
@@ -93,34 +94,25 @@ class PeerManager:
             AcceptChildren.create(True)
         )
 
-        # Remove all other distributed connections
+        # Remove all other distributed connections except for children and the
+        # current
         # Even the distributed connections from the parent should be removed
-        distributed_peers_to_remove = []
-        for distributed_peer in self._distributed_peers:
-            if distributed_peer not in [self._state.parent, ] + self._state.children:
-                distributed_peers_to_remove.append(distributed_peer)
+        distributed_peers_to_remove = [
+            distributed_peer for distributed_peer in self._distributed_peers
+            if distributed_peer not in [self._state.parent, ] + self._state.children
+        ]
 
         for distributed_peer in distributed_peers_to_remove:
             distributed_peer.connection.set_state(ConnectionState.SHOULD_CLOSE)
             self._distributed_peers.remove(distributed_peer)
 
-        # for potential_parent_peer in self.peers.values():
-        #     connections = potential_parent_peer.get_connections(PeerConnectionType.DISTRIBUTED)
-        #     # Reset branch values
-        #     # NOTE: I saw a situation where a parent stopped sending us anything
-        #     # for a while. Then suddenly readvertised its branch level, we
-        #     # never unset branch root so it kind of messed up because we already
-        #     # had a value for this peer and passed through the _check_if_parent.
-        #     # Therefor we also unset the branch values for the parent itself
-        #     for connection in connections:
-        #         if connection != parent_connection:
-        #             connection.set_state(ConnectionState.SHOULD_CLOSE)
+        # Notify children of new parent
+        self.send_messages_to_children(
+            DistributedBranchLevel.create(peer.branch_level + 1),
+            DistributedBranchRoot.create(peer.branch_root),
+        )
 
-        #             # TODO: There might be a possibility that we still read
-        #             # some data before closing the connections
-        #             potential_parent_peer.reset_branch_values()
-
-    def _check_if_parent(self, peer: DistributedPeer):
+    def _check_if_new_parent(self, peer: DistributedPeer):
         """Called after BranchRoot or BranchLevel, checks if all information is
         complete for this peer/connection to become a parent and makes it a
         parent if we don't have one, otherwise just close the connection.
@@ -137,10 +129,18 @@ class PeerManager:
 
         self._state.parent = None
 
+        username = self._settings.get('credentials.username')
         self.network.send_server_messages(
             BranchLevel.create(0),
-            BranchRoot.create(self._settings.get('credentials.username')),
+            BranchRoot.create(username),
             HaveNoParent.create(True)
+        )
+
+        # TODO: What happens to the children when we lose our parent is still
+        # unclear
+        self.send_messages_to_children(
+            DistributedBranchLevel.create(0),
+            DistributedBranchRoot.create(username)
         )
 
     def add_potential_child(self, peer: DistributedPeer):
@@ -474,7 +474,10 @@ class PeerManager:
         if level == 0:
             peer.branch_root = peer.username
 
-        self._check_if_parent(peer)
+        if peer != self._state.parent:
+            self._check_if_new_parent(peer)
+        else:
+            self.send_messages_to_children(DistributedBranchLevel.create(level + 1))
 
     @on_message(DistributedBranchRoot)
     def on_distributed_branch_root(self, message, connection: PeerConnection):
@@ -485,7 +488,10 @@ class PeerManager:
         peer = self.get_distributed_peer(username, connection)
         peer.branch_root = root
 
-        self._check_if_parent(peer)
+        if peer != self._state.parent:
+            self._check_if_new_parent(peer)
+        else:
+            self.send_messages_to_children(DistributedBranchRoot.create(root))
 
     @on_message(DistributedServerSearchRequest)
     def on_distributed_server_search_request(self, message, connection: PeerConnection):
@@ -534,3 +540,7 @@ class PeerManager:
             # Check if it was a file transfer
             elif connection.connection_type == PeerConnectionType.FILE:
                 self.transfer_manager.on_transfer_connection_closed(connection, close_reason=close_reason)
+
+    def send_messages_to_children(self, *messages: Union[ProtocolMessage, bytes]):
+        for child in self._state.children:
+            child.connection.queue_messages(*messages)
