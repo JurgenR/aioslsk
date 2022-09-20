@@ -14,17 +14,11 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class Parent:
-    branch_level: int = None
-    branch_root: str = None
-    peer: Peer = None
-    connection: PeerConnection = None
-
-
-@dataclass
-class Child:
-    peer: Peer
+class DistributedPeer:
+    username: str
     connection: PeerConnection
+    branch_level: int = None
+    branch_root: int = None
 
 
 @dataclass
@@ -39,10 +33,10 @@ class State:
     private_messages: Dict[int, ChatMessage] = field(default_factory=dict)
 
     # Distributed network related
-    potential_parents: List[Tuple[str, str, int]] = field(default_factory=list)
-    """List of the last potential parents received by the NetInfo commands (username, ip, port)"""
-    parent: Parent = None
-    children: List[Child] = field(default_factory=list)
+    potential_parents: List[str] = field(default_factory=list)
+    """List of the last potential parents received by the NetInfo commands"""
+    parent: DistributedPeer = None
+    children: List[DistributedPeer] = field(default_factory=list)
 
     # Server vars
     parent_min_speed: int = 0

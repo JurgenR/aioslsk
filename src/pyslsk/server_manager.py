@@ -77,7 +77,7 @@ from .model import ChatMessage, RoomMessage, UserStatus
 from .network import Network
 from .scheduler import Job
 from .settings import Settings
-from .state import State
+from .state import DistributedPeer, State
 
 
 logger = logging.getLogger()
@@ -205,12 +205,22 @@ class ServerManager:
             PrivateRoomToggle.create(self._settings.get('chats.private_room_invites'))
         )
 
+        # Perform AddUser for all in the friendlist
         self.network.send_server_messages(
             *[
                 AddUser.create(friend)
                 for friend in self._settings.get('users.friends')
             ]
         )
+
+        # Auto-join rooms
+        if self._settings.get('chats.auto_join'):
+            self.network.send_server_messages(
+                *[
+                    ChatJoinRoom.create(room_name)
+                    for room_name in self._settings.get('chats.rooms')
+                ]
+            )
 
     @on_message(ChatRoomMessage)
     def on_chat_room_message(self, message, connection):
@@ -540,14 +550,15 @@ class ServerManager:
         if not self._settings.get('debug.search_for_parent'):
             logger.debug("ignoring NetInfo message : searching for parent is disabled")
             return
-        else:
-            logger.info("received NetInfo list")
 
-        self._state.potential_parents = net_info_list
+        logger.info(f"received NetInfo list : {net_info_list!r}")
 
-        for idx, (username, ip, port) in enumerate(net_info_list, 1):
+        self._state.potential_parents = [
+            username for username, _, _ in net_info_list
+        ]
+
+        for username, ip, port in net_info_list:
             ticket = next(self._state.ticket_generator)
-            logger.debug(f"netinfo user {idx}: {username!r} : {ip}:{port} (ticket={ticket})")
 
             self.network.init_peer_connection(
                 ticket,
