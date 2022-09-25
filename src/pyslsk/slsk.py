@@ -82,7 +82,6 @@ class SoulSeek(threading.Thread):
             self._network,
             self.state.scheduler
         ]
-        import pdb; pdb.set_trace()
 
     def run(self):
         super().run()
@@ -123,13 +122,15 @@ class SoulSeek(threading.Thread):
     def download(self, user: Union[str, User], filename: str):
         if isinstance(user, User):
             user = user.name
-        return self.transfer_manager.queue_transfer(
+        transfer = self.transfer_manager.add(
             Transfer(
                 user,
                 filename,
                 TransferDirection.DOWNLOAD
             )
         )
+        self.transfer_manager.queue(transfer)
+        return transfer
 
     def get_uploads(self) -> List[Transfer]:
         return self.transfer_manager.get_uploads()
@@ -141,7 +142,7 @@ class SoulSeek(threading.Thread):
         self.transfer_manager.remove(transfer)
 
     def abort_transfer(self, transfer: Transfer):
-        transfer.abort()
+        self.transfer_manager.abort(transfer)
 
     def join_room(self, room: Union[str, Room]):
         if isinstance(room, Room):

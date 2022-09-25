@@ -2,7 +2,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import auto, Enum
 from typing import Callable, List, TYPE_CHECKING, Union
-import copy
 import errno
 import logging
 import socket
@@ -20,6 +19,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger()
 
 DEFAULT_PEER_TIMEOUT = 30
+DEFAULT_PEER_TRANSFER_TIMEOUT = 10 * 60
+"""Increase the timeout in case we are transfering"""
 DEFAULT_RECV_BUF_SIZE = 8
 """Default amount of bytes to recv from the socket"""
 TRANSFER_RECV_BUF_SIZE = 1024 * 8
@@ -391,6 +392,7 @@ class PeerConnection(DataConnection):
 
     def set_connection_state(self, state: PeerConnectionState):
         if state == PeerConnectionState.TRANSFERING:
+            self.timeout = DEFAULT_PEER_TRANSFER_TIMEOUT
             self.recv_buf_size = TRANSFER_RECV_BUF_SIZE
 
         # Set non-peer connections to non-obfuscated
