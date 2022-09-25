@@ -88,7 +88,7 @@ class FileManager:
         self.load_from_settings()
         self.build_term_map()
 
-    def generate_alias(self, path: str, offset=0) -> str:
+    def generate_alias(self, path: str, offset: int = 0) -> str:
         """Generates a directory alias for the given path, this method will be
         called recursively increasing the offset in case the alias is already
         found in the directory_aliases.

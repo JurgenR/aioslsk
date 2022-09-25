@@ -9,12 +9,11 @@ import socket
 import struct
 import time
 
-from .events import get_listener_methods
 from . import obfuscation
-from .listeners import TransferListener
 from . import messages
 
 if TYPE_CHECKING:
+    from .network import Network
     from .transfer import Transfer
 
 
@@ -62,31 +61,29 @@ class CloseReason(Enum):
 
 class PeerConnectionState(Enum):
     AWAITING_INIT = auto()
-    """Connection is open, but no init message has been received yet"""
+    """No init message has been received yet (PeerInit, PeerPierceFirewall)"""
+    ESTABLISHED = auto()
+    """Message connections: ready to receive / send data"""
     AWAITING_TICKET = auto()
     """Transfer connections: awaiting the transfer ticket"""
     AWAITING_OFFSET = auto()
     """Transfer connections: awaiting the transfer offset"""
-    ESTABLISHED = auto()
-    """Message connections: ready to receive / send data"""
     TRANSFERING = auto()
     """Transfer connections: ready to receive / send data"""
 
 
 class Connection:
 
-    def __init__(self, hostname: str, port: int):
+    def __init__(self, hostname: str, port: int, network: Network):
         self.hostname: str = hostname
         self.port: int = port
+        self.network = network
         self.fileobj = None
         self.state: ConnectionState = ConnectionState.UNINITIALIZED
-        self.listeners = []
 
     def set_state(self, state: ConnectionState, close_reason: CloseReason = CloseReason.UNKNOWN):
         self.state = state
-        for listener in self.listeners:
-            if hasattr(listener, 'on_state_changed'):
-                listener.on_state_changed(state, self, close_reason=close_reason)
+        self.network.on_state_changed(state, self, close_reason=close_reason)
 
     def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
         """Performs the closing of the connection and sets the state to CLOSED
@@ -110,10 +107,9 @@ class ListeningConnection(Connection):
     accepting incoming connections
     """
 
-    def __init__(self, hostname='0.0.0.0', port=64823, obfuscated: bool = False, listeners=None):
-        super().__init__(hostname, port)
+    def __init__(self, hostname: str, port: int, network: Network, obfuscated: bool = False):
+        super().__init__(hostname, port, network)
         self.obfuscated = obfuscated
-        self.listeners = listeners
 
         self.connections_accepted = 0
 
@@ -136,10 +132,11 @@ class ListeningConnection(Connection):
         fileobj, addr = sock.accept()
         hostname, port = addr
         logger.info(f"accepted {hostname}:{port} on {self.hostname}:{self.port} (obfuscated={self.obfuscated})")
+
         fileobj.setblocking(False)
 
         peer_connection = PeerConnection(
-            hostname=hostname, port=port,
+            hostname, port, self.network,
             obfuscated=self.obfuscated,
             connection_type=PeerConnectionType.PEER,
             incoming=True
@@ -147,8 +144,7 @@ class ListeningConnection(Connection):
         peer_connection.fileobj = fileobj
         peer_connection.state = ConnectionState.CONNECTED
 
-        for listener in self.listeners:
-            listener.on_peer_accepted(peer_connection)
+        self.network.on_peer_accepted(peer_connection)
         return peer_connection
 
     def has_data_to_write(self) -> bool:
@@ -160,8 +156,8 @@ class DataConnection(Connection):
     HEADER_SIZE_OBFUSCATED: int = obfuscation.KEY_SIZE + struct.calcsize('I')
     HEADER_SIZE_UNOBFUSCATED: int = struct.calcsize('I')
 
-    def __init__(self, hostname: str, port: int):
-        super().__init__(hostname, port)
+    def __init__(self, hostname: str, port: int, network: Network):
+        super().__init__(hostname, port, network)
         self._buffer = bytes()
         self._messages: List[ProtocolMessage] = []
 
@@ -176,14 +172,11 @@ class DataConnection(Connection):
             self.interact()
         super().set_state(state, close_reason)
 
-    def queue_message(self, message: Union[bytes, ProtocolMessage]):
-        if isinstance(message, bytes):
-            message = ProtocolMessage(message)
-        self._messages.append(message)
-
     def queue_messages(self, *messages: List[Union[bytes, ProtocolMessage]]):
         for message in messages:
-            self.queue_message(message)
+            if isinstance(message, bytes):
+                message = ProtocolMessage(message)
+            self._messages.append(message)
 
     def interact(self):
         self.last_interaction = time.monotonic()
@@ -191,6 +184,8 @@ class DataConnection(Connection):
     def read(self) -> bool:
         """Attempts to read data from the socket. When data is received the
         L{buffer} method of this object will be called with the received data
+
+        :return: False if an error occured on the socket during reading
         """
         try:
             recv_data = self.fileobj.recv(self.recv_buf_size)
@@ -213,7 +208,10 @@ class DataConnection(Connection):
         return True
 
     def write(self) -> bool:
-        """Attempts to write data to the socket"""
+        """Attempts to write data to the socket
+
+        :return: False if an error occured on the socket during writing
+        """
         return self.send_message()
 
     def send_message(self) -> bool:
@@ -249,22 +247,12 @@ class DataConnection(Connection):
                 logger.exception(f"exception calling callback {message.on_success!r} (message={message!r})")
 
     def notify_message_received(self, message):
-        """Notify all listeners that the given message was received"""
-        logger.debug(f"notifying listeners of message : {message!r}")
-        listeners_called = 0
-        for listener in self.listeners:
-            methods = get_listener_methods(listener, message.__class__)
-            for method in methods:
-                listeners_called += 1
-                message_copy = copy.deepcopy(message)
-                try:
-                    method(message_copy, self)
-                except Exception:
-                    logger.exception(
-                        f"error during callback : {message_copy!r} (listener={listener!r}, method={method!r})")
-
-        if listeners_called == 0:
-            logger.warning(f"no listeners registered for message : {message!r}")
+        """Notify the network that the given message was received"""
+        logger.debug(f"received message of type : {message.__class__.__name__!r}")
+        try:
+            self.network.on_message(message, self)
+        except Exception:
+            logger.exception(f"error during callback : {message!r}")
 
     def parse_message(self, message_data: bytes):
         """Should be called after a full message has been received. This method
@@ -318,7 +306,6 @@ class DataConnection(Connection):
             self.recv_buf_size = total_msg_len - len(self._buffer)
 
     def process_obfuscated_message(self):
-        # Require at least 8 bytes (4 bytes key, 4 bytes length)
         if len(self._buffer) < self.HEADER_SIZE_OBFUSCATED:
             return
 
@@ -347,10 +334,6 @@ class DataConnection(Connection):
 
 
 class ServerConnection(DataConnection):
-
-    def __init__(self, hostname: str = 'server.slsknet.org', port: int = 2416, listeners=None):
-        super().__init__(hostname, port)
-        self.listeners = [] if listeners is None else listeners
 
     def get_connecting_ip(self):
         """Gets the IP address being used to connect to the SoulSeek server.
@@ -382,7 +365,7 @@ class ServerConnection(DataConnection):
 
     def parse_message(self, message_data: bytes):
         try:
-            return messages.parse_message(message_data)
+            return messages.parse_server_message(message_data)
         except Exception:
             logger.exception(
                 f"failed to parse server message data {message_data}")
@@ -392,23 +375,29 @@ class ServerConnection(DataConnection):
 class PeerConnection(DataConnection):
 
     def __init__(
-            self, hostname='0.0.0.0', port=None, obfuscated: bool = False,
-            connection_type=PeerConnectionType.PEER,
-            incoming: bool = False, listeners=None):
-        super().__init__(hostname, port)
+            self, hostname: str, port: int, network: Network, obfuscated: bool = False,
+            username: str = None, connection_type: str = PeerConnectionType.PEER,
+            incoming: bool = False):
+        super().__init__(hostname, port, network)
         self.obfuscated: bool = obfuscated
         self.incoming: bool = incoming
-        self.connection_type = connection_type
-        self.listeners = [] if listeners is None else listeners
         self.connection_state = PeerConnectionState.AWAITING_INIT
         self.timeout: int = DEFAULT_PEER_TIMEOUT
 
+        self.username: str = username
+        self.connection_type: str = connection_type
+
         self.transfer: Transfer = None
-        self.transfer_listeners: List[TransferListener] = []
 
     def set_connection_state(self, state: PeerConnectionState):
         if state == PeerConnectionState.TRANSFERING:
             self.recv_buf_size = TRANSFER_RECV_BUF_SIZE
+
+        # Set non-peer connections to non-obfuscated
+        if state != PeerConnectionState.AWAITING_INIT:
+            if self.connection_type != PeerConnectionType.PEER:
+                self.obfuscated = False
+
         self.connection_state = state
 
     def connect(self):
@@ -451,7 +440,9 @@ class PeerConnection(DataConnection):
             return self.send_message()
 
     def send_data(self) -> bool:
-        """Transfers data over the connection"""
+        """Transfers data over the connection. This is to be used only for
+        transfers
+        """
         if self.transfer.is_transfered():
             return True
 
@@ -467,11 +458,13 @@ class PeerConnection(DataConnection):
             return False
         else:
             self.bytes_sent += len(data)
-            for listener in self.transfer_listeners:
-                listener.on_transfer_data_sent(len(data), self)
+            self.network.on_transfer_data_sent(len(data), self)
         return True
 
     def process_buffer(self):
+        """Attempts to process the buffer depending on the current
+        connection_state. Called after we have received some data
+        """
         if self.connection_state in (PeerConnectionState.AWAITING_INIT, PeerConnectionState.ESTABLISHED, ):
 
             if self.obfuscated:
@@ -486,28 +479,25 @@ class PeerConnection(DataConnection):
             if len(self._buffer) >= struct.calcsize('I'):
                 pos, ticket = messages.parse_int(0, self._buffer)
                 self._buffer = self._buffer[pos:]
-                for listener in self.transfer_listeners:
-                    listener.on_transfer_ticket(ticket, self)
+                self.network.on_transfer_ticket(ticket, self)
 
         elif self.connection_state == PeerConnectionState.AWAITING_OFFSET:
 
             if len(self._buffer) >= struct.calcsize('Q'):
                 pos, ticket = messages.parse_int64(0, self._buffer)
                 self._buffer = self._buffer[pos:]
-                for listener in self.transfer_listeners:
-                    listener.on_transfer_offset(ticket, self)
+                self.network.on_transfer_offset(ticket, self)
 
         elif self.connection_state == PeerConnectionState.TRANSFERING:
 
             data = self._buffer
             self._buffer = bytes()
-            for listener in self.transfer_listeners:
-                listener.on_transfer_data_received(data, self)
+            self.network.on_transfer_data_received(data, self)
 
     def parse_message(self, message_data: bytes):
         try:
             if self.connection_state == PeerConnectionState.AWAITING_INIT:
-                return messages.parse_peer_message(message_data)
+                return messages.parse_peer_initialization_message(message_data)
             else:
                 if self.connection_type == PeerConnectionType.DISTRIBUTED:
                     return messages.parse_distributed_message(message_data)

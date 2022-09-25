@@ -315,7 +315,7 @@ class ServerMessage(Message):
     pass
 
 
-class Login(Message):
+class Login(ServerMessage):
     MESSAGE_ID = 0x01
 
     @classmethod
@@ -354,7 +354,7 @@ class Login(Message):
         return username, password, version_number, md5_hash, minor_version
 
 
-class SetListenPort(Message):
+class SetListenPort(ServerMessage):
     MESSAGE_ID = 0x02
 
     @classmethod
@@ -378,7 +378,7 @@ class SetListenPort(Message):
         return port, unknown, obfuscated_port
 
 
-class GetPeerAddress(Message):
+class GetPeerAddress(ServerMessage):
     MESSAGE_ID = 0x03
 
     @classmethod
@@ -406,7 +406,7 @@ class GetPeerAddress(Message):
         return username
 
 
-class AddUser(Message):
+class AddUser(ServerMessage):
     MESSAGE_ID = 0x05
 
     @classmethod
@@ -437,7 +437,7 @@ class AddUser(Message):
         return username
 
 
-class RemoveUser(Message):
+class RemoveUser(ServerMessage):
     MESSAGE_ID = 0x06
 
     @classmethod
@@ -450,7 +450,7 @@ class RemoveUser(Message):
         return username
 
 
-class GetUserStatus(Message):
+class GetUserStatus(ServerMessage):
     MESSAGE_ID = 0x07
 
     @classmethod
@@ -466,7 +466,7 @@ class GetUserStatus(Message):
         return username, status, privileged
 
 
-class ChatRoomMessage(Message):
+class ChatRoomMessage(ServerMessage):
     MESSAGE_ID = 0x0D
 
     @classmethod
@@ -482,7 +482,7 @@ class ChatRoomMessage(Message):
         return room, username, message
 
 
-class ChatJoinRoom(Message):
+class ChatJoinRoom(ServerMessage):
     MESSAGE_ID = 0x0E
 
     @classmethod
@@ -514,7 +514,7 @@ class ChatJoinRoom(Message):
         return room_name
 
 
-class ChatLeaveRoom(Message):
+class ChatLeaveRoom(ServerMessage):
     MESSAGE_ID = 0x0F
 
     @classmethod
@@ -528,7 +528,7 @@ class ChatLeaveRoom(Message):
         return room
 
 
-class ChatUserJoinedRoom(Message):
+class ChatUserJoinedRoom(ServerMessage):
     MESSAGE_ID = 0x10
 
     @warn_on_unparsed_bytes
@@ -546,7 +546,7 @@ class ChatUserJoinedRoom(Message):
         return room, username, status, avg_speed, download_num, file_count, dir_count, slots_free, country
 
 
-class ChatUserLeftRoom(Message):
+class ChatUserLeftRoom(ServerMessage):
     MESSAGE_ID = 0x11
 
     @warn_on_unparsed_bytes
@@ -557,7 +557,7 @@ class ChatUserLeftRoom(Message):
         return room, username
 
 
-class ConnectToPeer(Message):
+class ConnectToPeer(ServerMessage):
     MESSAGE_ID = 0x12
 
     @classmethod
@@ -595,7 +595,7 @@ class ConnectToPeer(Message):
         return ticket, username, typ
 
 
-class ChatPrivateMessage(Message):
+class ChatPrivateMessage(ServerMessage):
     MESSAGE_ID = 0x16
 
     @classmethod
@@ -617,7 +617,7 @@ class ChatPrivateMessage(Message):
         return chat_id, timestamp, username, message, is_admin
 
 
-class ChatAckPrivateMessage(Message):
+class ChatAckPrivateMessage(ServerMessage):
     MESSAGE_ID = 0x17
 
     @classmethod
@@ -625,7 +625,7 @@ class ChatAckPrivateMessage(Message):
         return pack_message(cls.MESSAGE_ID, pack_int(chat_id))
 
 
-class FileSearch(Message):
+class FileSearch(ServerMessage):
     MESSAGE_ID = 0x1A
 
     @classmethod
@@ -649,7 +649,7 @@ class FileSearch(Message):
         return ticket, query
 
 
-class SetStatus(Message):
+class SetStatus(ServerMessage):
     MESSAGE_ID = 0x1C
 
     @classmethod
@@ -664,7 +664,7 @@ class SetStatus(Message):
         return status
 
 
-class Ping(Message):
+class Ping(ServerMessage):
     MESSAGE_ID = 0x20
 
     @classmethod
@@ -675,7 +675,7 @@ class Ping(Message):
         super().parse()
 
 
-class SharedFoldersFiles(Message):
+class SharedFoldersFiles(ServerMessage):
     MESSAGE_ID = 0x23
 
     @classmethod
@@ -690,7 +690,7 @@ class SharedFoldersFiles(Message):
         return dir_count, file_count
 
 
-class GetUserStats(Message):
+class GetUserStats(ServerMessage):
     MESSAGE_ID = 0x24
 
     @classmethod
@@ -714,7 +714,7 @@ class GetUserStats(Message):
         return username
 
 
-class UserSearch(Message):
+class UserSearch(ServerMessage):
     MESSAGE_ID = 0x2A
 
     @classmethod
@@ -731,7 +731,7 @@ class UserSearch(Message):
         return username, ticket, query
 
 
-class RoomList(Message):
+class RoomList(ServerMessage):
     MESSAGE_ID = 0x40
 
     @warn_on_unparsed_bytes
@@ -744,7 +744,7 @@ class RoomList(Message):
         return rooms, rooms_private_owned, rooms_private, rooms_private_operated
 
 
-class PrivilegedUsers(Message):
+class PrivilegedUsers(ServerMessage):
     MESSAGE_ID = 0x45
 
     @warn_on_unparsed_bytes
@@ -753,7 +753,7 @@ class PrivilegedUsers(Message):
         return self.parse_list(parse_string)
 
 
-class HaveNoParent(Message):
+class HaveNoParent(ServerMessage):
     MESSAGE_ID = 0x47
 
     @classmethod
@@ -767,7 +767,7 @@ class HaveNoParent(Message):
         return have_parents
 
 
-class ParentIP(Message):
+class ParentIP(ServerMessage):
     MESSAGE_ID = 0x49
 
     @classmethod
@@ -781,7 +781,7 @@ class ParentIP(Message):
         return ip_addr
 
 
-class ParentMinSpeed(Message):
+class ParentMinSpeed(ServerMessage):
     MESSAGE_ID = 0x53
 
     @warn_on_unparsed_bytes
@@ -790,7 +790,7 @@ class ParentMinSpeed(Message):
         return self.parse_int()
 
 
-class ParentSpeedRatio(Message):
+class ParentSpeedRatio(ServerMessage):
     MESSAGE_ID = 0x54
 
     @warn_on_unparsed_bytes
@@ -799,7 +799,7 @@ class ParentSpeedRatio(Message):
         return self.parse_int()
 
 
-class SearchInactivityTimeout(Message):
+class SearchInactivityTimeout(ServerMessage):
     MESSAGE_ID = 0x57
 
     @warn_on_unparsed_bytes
@@ -808,7 +808,7 @@ class SearchInactivityTimeout(Message):
         return self.parse_int()
 
 
-class MinParentsInCache(Message):
+class MinParentsInCache(ServerMessage):
     MESSAGE_ID = 0x58
 
     @warn_on_unparsed_bytes
@@ -817,7 +817,7 @@ class MinParentsInCache(Message):
         return self.parse_int()
 
 
-class DistributedAliveInterval(Message):
+class DistributedAliveInterval(ServerMessage):
     MESSAGE_ID = 0x5A
 
     @warn_on_unparsed_bytes
@@ -826,7 +826,7 @@ class DistributedAliveInterval(Message):
         return self.parse_int()
 
 
-class AddPrivilegedUser(Message):
+class AddPrivilegedUser(ServerMessage):
     MESSAGE_ID = 0x5B
 
     @warn_on_unparsed_bytes
@@ -835,7 +835,7 @@ class AddPrivilegedUser(Message):
         return self.parse_string()
 
 
-class CheckPrivileges(Message):
+class CheckPrivileges(ServerMessage):
     MESSAGE_ID = 0x5C
 
     @classmethod
@@ -852,7 +852,7 @@ class CheckPrivileges(Message):
         super().parse()
 
 
-class ServerSearchRequest(Message):
+class ServerSearchRequest(ServerMessage):
     MESSAGE_ID = 0x5D
 
     @warn_on_unparsed_bytes
@@ -866,7 +866,7 @@ class ServerSearchRequest(Message):
         return distrib_code, unknown, username, ticket, query
 
 
-class AcceptChildren(Message):
+class AcceptChildren(ServerMessage):
     MESSAGE_ID = 0x64
 
     @classmethod
@@ -880,7 +880,7 @@ class AcceptChildren(Message):
         return accept
 
 
-class NetInfo(Message):
+class NetInfo(ServerMessage):
     MESSAGE_ID = 0x66
 
     @warn_on_unparsed_bytes
@@ -889,7 +889,7 @@ class NetInfo(Message):
         return self.parse_list(item_parser=parse_net_info_entry)
 
 
-class WishlistSearch(Message):
+class WishlistSearch(ServerMessage):
     MESSAGE_ID = 0x67
 
     @classmethod
@@ -898,7 +898,7 @@ class WishlistSearch(Message):
         return pack_message(cls.MESSAGE_ID, message_body)
 
 
-class WishlistInterval(Message):
+class WishlistInterval(ServerMessage):
     MESSAGE_ID = 0x68
 
     @warn_on_unparsed_bytes
@@ -907,7 +907,7 @@ class WishlistInterval(Message):
         return self.parse_int()
 
 
-class SimilarUsers(Message):
+class SimilarUsers(ServerMessage):
     MESSAGE_ID = 0x6E
 
     @warn_on_unparsed_bytes
@@ -916,7 +916,7 @@ class SimilarUsers(Message):
         return self.parse_list(item_parser=parse_similar_user)
 
 
-class ItemRecommendations(Message):
+class ItemRecommendations(ServerMessage):
     MESSAGE_ID = 0x6F
 
     @classmethod
@@ -931,7 +931,7 @@ class ItemRecommendations(Message):
         return item, recommendations
 
 
-class ChatRoomTickers(Message):
+class ChatRoomTickers(ServerMessage):
     MESSAGE_ID = 0x71
 
     @staticmethod
@@ -948,7 +948,7 @@ class ChatRoomTickers(Message):
         return room, tickers
 
 
-class ChatRoomTickerAdd(Message):
+class ChatRoomTickerAdd(ServerMessage):
     MESSAGE_ID = 0x72
 
     @warn_on_unparsed_bytes
@@ -960,7 +960,7 @@ class ChatRoomTickerAdd(Message):
         return room, user, ticker
 
 
-class ChatRoomTickerRemove(Message):
+class ChatRoomTickerRemove(ServerMessage):
     MESSAGE_ID = 0x73
 
     @warn_on_unparsed_bytes
@@ -971,7 +971,7 @@ class ChatRoomTickerRemove(Message):
         return room, user
 
 
-class ChatRoomTickerSet(Message):
+class ChatRoomTickerSet(ServerMessage):
     MESSAGE_ID = 0x74
 
     @classmethod
@@ -980,7 +980,7 @@ class ChatRoomTickerSet(Message):
         return pack_message(cls.MESSAGE_ID, message_body)
 
 
-class ChatRoomSearch(Message):
+class ChatRoomSearch(ServerMessage):
     MESSAGE_ID = 0x78
 
     @classmethod
@@ -990,7 +990,7 @@ class ChatRoomSearch(Message):
         return pack_message(cls.MESSAGE_ID, message_body)
 
 
-class SendUploadSpeed(Message):
+class SendUploadSpeed(ServerMessage):
     MESSAGE_ID = 0x79
 
     @classmethod
@@ -999,7 +999,7 @@ class SendUploadSpeed(Message):
         return pack_message(cls.MESSAGE_ID, message_body)
 
 
-class GivePrivileges(Message):
+class GivePrivileges(ServerMessage):
     MESSAGE_ID = 0x7B
 
     @classmethod
@@ -1008,7 +1008,7 @@ class GivePrivileges(Message):
         return pack_message(cls.MESSAGE_ID, message_body)
 
 
-class PrivilegesNotification(Message):
+class PrivilegesNotification(ServerMessage):
     MESSAGE_ID = 0x7C
 
     @classmethod
@@ -1024,7 +1024,7 @@ class PrivilegesNotification(Message):
         return ticket, username
 
 
-class PrivilegesNotificationAck(Message):
+class PrivilegesNotificationAck(ServerMessage):
     MESSAGE_ID = 0x7D
 
     @warn_on_unparsed_bytes
@@ -1034,7 +1034,7 @@ class PrivilegesNotificationAck(Message):
         return ticket
 
 
-class BranchLevel(Message):
+class BranchLevel(ServerMessage):
     MESSAGE_ID = 0x7E
 
     @classmethod
@@ -1048,7 +1048,7 @@ class BranchLevel(Message):
         return level
 
 
-class BranchRoot(Message):
+class BranchRoot(ServerMessage):
     MESSAGE_ID = 0x7F
 
     @classmethod
@@ -1062,7 +1062,7 @@ class BranchRoot(Message):
         return root
 
 
-class ChildDepth(Message):
+class ChildDepth(ServerMessage):
     MESSAGE_ID = 0x81
 
     @classmethod
@@ -1076,7 +1076,7 @@ class ChildDepth(Message):
         return child_depth
 
 
-class PrivateRoomUsers(Message):
+class PrivateRoomUsers(ServerMessage):
     MESSAGE_ID = 0x85
 
     @warn_on_unparsed_bytes
@@ -1087,7 +1087,7 @@ class PrivateRoomUsers(Message):
         return room_name, usernames
 
 
-class PrivateRoomAddUser(Message):
+class PrivateRoomAddUser(ServerMessage):
     MESSAGE_ID = 0x86
 
     @classmethod
@@ -1103,7 +1103,7 @@ class PrivateRoomAddUser(Message):
         return room, user
 
 
-class PrivateRoomRemoveUser(Message):
+class PrivateRoomRemoveUser(ServerMessage):
     MESSAGE_ID = 0x87
 
     @classmethod
@@ -1119,7 +1119,7 @@ class PrivateRoomRemoveUser(Message):
         return room, user
 
 
-class PrivateRoomDropMembership(Message):
+class PrivateRoomDropMembership(ServerMessage):
     MESSAGE_ID = 0x87
 
     @classmethod
@@ -1127,7 +1127,7 @@ class PrivateRoomDropMembership(Message):
         return pack_message(cls.MESSAGE_ID, pack_string(room))
 
 
-class PrivateRoomDropOwnership(Message):
+class PrivateRoomDropOwnership(ServerMessage):
     MESSAGE_ID = 0x88
 
     @classmethod
@@ -1135,7 +1135,7 @@ class PrivateRoomDropOwnership(Message):
         return pack_message(cls.MESSAGE_ID, pack_string(room))
 
 
-class PrivateRoomAdded(Message):
+class PrivateRoomAdded(ServerMessage):
     MESSAGE_ID = 0x8B
 
     @warn_on_unparsed_bytes
@@ -1145,7 +1145,7 @@ class PrivateRoomAdded(Message):
         return room
 
 
-class PrivateRoomRemoved(Message):
+class PrivateRoomRemoved(ServerMessage):
     MESSAGE_ID = 0x8C
 
     @warn_on_unparsed_bytes
@@ -1155,7 +1155,7 @@ class PrivateRoomRemoved(Message):
         return room
 
 
-class PrivateRoomToggle(Message):
+class PrivateRoomToggle(ServerMessage):
     MESSAGE_ID = 0x8D
 
     @classmethod
@@ -1169,7 +1169,7 @@ class PrivateRoomToggle(Message):
         return enable
 
 
-class NewPassword(Message):
+class NewPassword(ServerMessage):
     MESSAGE_ID = 0x8E
 
     @classmethod
@@ -1183,7 +1183,7 @@ class NewPassword(Message):
         return password
 
 
-class PrivateRoomAddOperator(Message):
+class PrivateRoomAddOperator(ServerMessage):
     MESSAGE_ID = 0x8F
 
     @classmethod
@@ -1199,7 +1199,7 @@ class PrivateRoomAddOperator(Message):
         return room, operator
 
 
-class PrivateRoomRemoveOperator(Message):
+class PrivateRoomRemoveOperator(ServerMessage):
     MESSAGE_ID = 0x90
 
     @classmethod
@@ -1215,7 +1215,7 @@ class PrivateRoomRemoveOperator(Message):
         return room, operator
 
 
-class PrivateRoomOperatorAdded(Message):
+class PrivateRoomOperatorAdded(ServerMessage):
     MESSAGE_ID = 0x91
 
     @warn_on_unparsed_bytes
@@ -1225,7 +1225,7 @@ class PrivateRoomOperatorAdded(Message):
         return room
 
 
-class PrivateRoomOperatorRemoved(Message):
+class PrivateRoomOperatorRemoved(ServerMessage):
     MESSAGE_ID = 0x92
 
     @warn_on_unparsed_bytes
@@ -1235,7 +1235,7 @@ class PrivateRoomOperatorRemoved(Message):
         return room
 
 
-class PrivateRoomOperators(Message):
+class PrivateRoomOperators(ServerMessage):
     MESSAGE_ID = 0x94
 
     @warn_on_unparsed_bytes
@@ -1246,7 +1246,7 @@ class PrivateRoomOperators(Message):
         return room, operators
 
 
-class ChatMessageUsers(Message):
+class ChatMessageUsers(ServerMessage):
     MESSAGE_ID = 0x95
 
     @classmethod
@@ -1255,15 +1255,15 @@ class ChatMessageUsers(Message):
         return pack_message(cls.MESSAGE_ID, message_body)
 
 
-class ChatEnablePublic(Message):
+class ChatEnablePublic(ServerMessage):
     MESSAGE_ID = 0x96
 
 
-class ChatDisablePublic(Message):
+class ChatDisablePublic(ServerMessage):
     MESSAGE_ID = 0x97
 
 
-class ChatServerMessage(Message):
+class ChatServerMessage(ServerMessage):
     MESSAGE_ID = 0x98
 
     @warn_on_unparsed_bytes
@@ -1275,7 +1275,7 @@ class ChatServerMessage(Message):
         return room_name, username, message
 
 
-class FileSearchEx(Message):
+class FileSearchEx(ServerMessage):
     """File search sent by SoulSeekQT, the message received from the server
     seems to be some kind of acknowledgement. The query is repeated and what
     looks like an integer (always seems to be 0)
@@ -1300,7 +1300,7 @@ class FileSearchEx(Message):
         return query
 
 
-class CannotConnect(Message):
+class CannotConnect(ServerMessage):
     MESSAGE_ID = 0x3E9
 
     @classmethod
@@ -1434,18 +1434,19 @@ class DistributedServerSearchRequest(DistributedMessage):
         return distrib_code, message
 
 
-# Peer messages
-# PeerPierceFirewall and PeerInit are the only messages that use a uchar for
-# the message_id. Remainder of the message types use int.
+# Peer initialization messages
 
-class PeerMessage(Message):
+class PeerInitializationMessage(Message):
 
-    pass
+    def parse(self):
+        length = self.parse_int()
+        message_id = self.parse_uchar()
+        return length, message_id
 
 
-# Init messages
+# Peer Init messages
 
-class PeerPierceFirewall(PeerMessage):
+class PeerPierceFirewall(PeerInitializationMessage):
     MESSAGE_ID = 0x00
 
     @classmethod
@@ -1454,14 +1455,12 @@ class PeerPierceFirewall(PeerMessage):
 
     @warn_on_unparsed_bytes
     def parse(self):
-        # Parse Length + Message ID
-        self.parse_int()
-        self.parse_uchar()
+        super().parse()
         ticket = self.parse_int()
         return ticket
 
 
-class PeerInit(PeerMessage):
+class PeerInit(PeerInitializationMessage):
     MESSAGE_ID = 0x01
 
     @classmethod
@@ -1471,9 +1470,7 @@ class PeerInit(PeerMessage):
 
     @warn_on_unparsed_bytes
     def parse(self):
-        # Parse Length + Message ID
-        self.parse_int()
-        self.parse_uchar()
+        super().parse()
         user = self.parse_string()
         typ = self.parse_string()
         if len(self.get_unparsed_bytes()) == 4:
@@ -1481,6 +1478,15 @@ class PeerInit(PeerMessage):
         else:
             ticket = self.parse_int64()
         return user, typ, ticket
+
+
+# Peer messages
+# PeerPierceFirewall and PeerInit are the only messages that use a uchar for
+# the message_id. Remainder of the message types use int.
+
+class PeerMessage(Message):
+
+    pass
 
 
 class PeerSharesRequest(PeerMessage):
@@ -1766,11 +1772,11 @@ class PeerPlaceInQueueRequest(PeerMessage):
         return filename
 
 
-def parse_message(message):
+def parse_server_message(message):
     """Attempts to parse a server message"""
     pos, length = parse_int(0, message)
     pos, message_id = parse_int(pos, message)
-    for msg_class in Message.__subclasses__():
+    for msg_class in ServerMessage.__subclasses__():
         if msg_class.MESSAGE_ID == message_id:
             return msg_class(message)
     raise UnknownMessageError(message_id, message, "Failed to parse server message")
@@ -1781,7 +1787,7 @@ def parse_server_messages(message):
     current_message = message
     message_objects = []
     while len(current_message) > 0:
-        message_object = parse_message(current_message)
+        message_object = parse_server_message(current_message)
         # Call parse to get unparsed bytes, remove the unparsed bytes from the
         # current message object
         message_object.parse()
@@ -1808,10 +1814,20 @@ def parse_distributed_message(message):
     raise UnknownMessageError(message_id, message, "Failed to parse distributed message")
 
 
-def parse_peer_message(message):
+def parse_peer_initialization_message(message):
     """Attempts to parse a peer message"""
     pos, length = parse_int(0, message)
     pos, message_id = parse_uchar(pos, message)
+    for msg_class in PeerInitializationMessage.__subclasses__():
+        if msg_class.MESSAGE_ID == message_id:
+            return msg_class(message)
+    raise UnknownMessageError(message_id, message, "Failed to parse peer init message")
+
+
+def parse_peer_message(message):
+    """Attempts to parse a peer message"""
+    pos, length = parse_int(0, message)
+    pos, message_id = parse_int(pos, message)
     for msg_class in PeerMessage.__subclasses__():
         if msg_class.MESSAGE_ID == message_id:
             return msg_class(message)

@@ -3,7 +3,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .connection import PeerConnection
+    from .connection import Connection, DataConnection, PeerConnection
+    from .messages import Message
 
 
 class TransferListener(ABC):
@@ -22,4 +23,22 @@ class TransferListener(ABC):
 
     @abstractmethod
     def on_transfer_data_sent(self, bytes_sent: int, connection: PeerConnection):
+        pass
+
+
+class ConnectionStateListener(ABC):
+
+    def on_state_changed(self, connection: Connection, close_reason=None):
+        pass
+
+
+class MessageListener(ABC):
+
+    def on_message(self, message: Message, connection: DataConnection):
+        pass
+
+
+class ListeningConnectionListener(ABC):
+
+    def on_peer_accepted(self, connection: PeerConnection):
         pass

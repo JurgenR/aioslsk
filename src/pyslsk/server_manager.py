@@ -1,10 +1,14 @@
+import copy
 import logging
 import time
 
-from .connection import ConnectionState, CloseReason, PeerConnectionType
+from .connection import ConnectionState, PeerConnectionType, ServerConnection
 from .events import (
+    build_message_map,
     on_message,
+    ConnectionStateChangedEvent,
     EventBus,
+    InternalEventBus,
     PrivateMessageEvent,
     RoomMessageEvent,
     RoomListEvent,
@@ -14,6 +18,7 @@ from .events import (
     RoomTickerAddedEvent,
     RoomTickerRemovedEvent,
     ServerDisconnectedEvent,
+    ServerMessageEvent,
     UserAddEvent,
     UserJoinedRoomEvent,
     UserJoinedPrivateRoomEvent,
@@ -77,7 +82,7 @@ from .model import ChatMessage, RoomMessage, UserStatus
 from .network import Network
 from .scheduler import Job
 from .settings import Settings
-from .state import DistributedPeer, State
+from .state import State
 
 
 logger = logging.getLogger()
@@ -88,15 +93,22 @@ LOGIN_TIMEOUT = 30
 
 class ServerManager:
 
-    def __init__(self, state: State, settings: Settings, event_bus: EventBus, file_manager: FileManager, network: Network):
+    def __init__(self, state: State, settings: Settings, event_bus: EventBus, internal_event_bus: InternalEventBus, file_manager: FileManager, network: Network):
         self._state: State = state
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
+        self._internal_event_bus: InternalEventBus = internal_event_bus
         self.file_manager: FileManager = file_manager
         self.network: Network = network
-        self.network.server_listeners.append(self)
 
         self._ping_job = Job(5 * 60, self.send_ping)
+
+        self.MESSAGE_MAP = build_message_map(self)
+
+        self._internal_event_bus.register(
+            ServerMessageEvent, self.on_server_message)
+        self._internal_event_bus.register(
+            ConnectionStateChangedEvent, self.on_state_changed)
 
     @property
     def connection_state(self) -> ConnectionState:
@@ -432,7 +444,7 @@ class ServerManager:
             code, username, ticket, query, unknown=unknown
         )
         for child in self._state.children:
-            child.connection.queue_message(message_to_send)
+            child.connection.queue_messages(message_to_send)
 
     # State related messages
     @on_message(CheckPrivileges)
@@ -568,16 +580,24 @@ class ServerManager:
                 port=port
             )
 
+    def on_server_message(self, event: ServerMessageEvent):
+        message = copy.deepcopy(event.message)
+        if message.__class__ in self.MESSAGE_MAP:
+            self.MESSAGE_MAP[message.__class__](message, event.connection)
+
     # Connection state listeners
-    def on_state_changed(self, state, connection, close_reason: CloseReason = None):
-        if state == ConnectionState.CONNECTED:
+    def on_state_changed(self, event: ConnectionStateChangedEvent):
+        if not isinstance(event.connection, ServerConnection):
+            return
+
+        if event.state == ConnectionState.CONNECTED:
             self.login(
                 self._settings.get('credentials.username'),
                 self._settings.get('credentials.password')
             )
             self._state.scheduler.add_job(self._ping_job)
 
-        elif state == ConnectionState.CLOSED:
+        elif event.state == ConnectionState.CLOSED:
             self._state.logged_in = False
             self._state.scheduler.remove(self._ping_job)
             self._event_bus.emit(ServerDisconnectedEvent())

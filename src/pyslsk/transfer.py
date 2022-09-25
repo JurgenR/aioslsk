@@ -1,4 +1,5 @@
 from __future__ import annotations
+import copy
 from enum import auto, Enum
 from functools import partial
 import hashlib
@@ -16,7 +17,18 @@ from .connection import (
     PeerConnectionState,
     ProtocolMessage,
 )
-from .events import on_message, EventBus, TransferAddedEvent
+from .events import (
+    build_message_map,
+    on_message,
+    EventBus,
+    InternalEventBus,
+    ServerMessageEvent,
+    TransferAddedEvent,
+    TransferOffsetEvent,
+    TransferTicketEvent,
+    TransferDataSentEvent,
+    TransferDataReceivedEvent,
+)
 from .filemanager import FileManager
 from .listeners import TransferListener
 from .messages import (
@@ -26,13 +38,14 @@ from .messages import (
     PeerTransferQueue,
     PeerTransferRequest,
     SendUploadSpeed,
+    PeerUploadFailed,
 )
 from .model import UserStatus
 from .settings import Settings
 from .state import State
 
 if TYPE_CHECKING:
-    from .network import ConnectionRequest, Network
+    from .network import Network
 
 
 logger = logging.getLogger()
@@ -121,6 +134,7 @@ class Transfer:
         self.listeners = [] if listeners is None else listeners
 
     def __setstate__(self, state):
+        """Called when unpickling"""
         self.__dict__.update(state)
 
         self._fileobj = None
@@ -128,6 +142,9 @@ class Transfer:
         self.connection = None
 
     def __getstate__(self):
+        """Called when pickling, removes unpickable fields from the fields to
+        store
+        """
         state = self.__dict__.copy()
         for unpickable_field in self._UNPICKABLE_FIELDS:
             del state[unpickable_field]
@@ -135,19 +152,45 @@ class Transfer:
         return state
 
     def set_state(self, state: TransferState):
+        # Avoid triggering a state changed if it is already in that state
         if state == self.state:
             return
 
-        if self.state == TransferState.COMPLETE and state == TransferState.INCOMPLETE:
-            return
+        if state == TransferState.QUEUED:
+            pass
 
-        self.state = state
+        elif state == TransferState.INITIALIZING:
+            pass
 
-        if state in (TransferState.DOWNLOADING, TransferState.UPLOADING):
+        elif state in (TransferState.DOWNLOADING, TransferState.UPLOADING):
             self.start_time = time.time()
-        elif state in (TransferState.COMPLETE, TransferState.INCOMPLETE, TransferState.ABORTED):
-            self.complete_time = time.time()
 
+        elif state == TransferState.ABORTED:
+            # Aborting on a complete state does nothing
+            if state in (TransferState.COMPLETE, TransferState.INCOMPLETE):
+                return
+            else:
+                self.complete_time = time.time()
+                self.close_file()
+                self.close_connection()
+
+        elif state == TransferState.FAILED:
+            self.complete_time = time.time()
+            self.close_file()
+            self.close_connection()
+
+        elif state == TransferState.COMPLETE:
+            self.complete_time = time.time()
+            self.close_file()
+            self.close_connection()
+
+        elif state == TransferState.INCOMPLETE:
+            self.complete_time = time.time()
+            self.close_file()
+            self.close_connection()
+
+        # Set state and notify listeners
+        self.state = state
         for listener in self.listeners:
             listener.on_transfer_state_changed(self, state)
 
@@ -229,26 +272,15 @@ class Transfer:
 
         return self.is_transfered()
 
-    def abort(self):
-        # Don't bother if the transfer was already completed
-        if self.state in (TransferState.COMPLETE, TransferState.ABORTED, TransferState.INCOMPLETE, ):
-            return
-
-        # Terminate the connection (file-connection)
-        if self.connection is not None:
-            self.connection.set_state(ConnectionState.SHOULD_CLOSE)
-            self.connection = None
-
-        self.set_state(TransferState.ABORTED)
-
-    def complete(self):
-        self.set_state(TransferState.COMPLETE)
-        self.close()
-
-    def close(self):
+    def close_file(self):
         if self._fileobj is not None:
             self._fileobj.close()
             self._fileobj = None
+
+    def close_connection(self):
+        if self.connection is not None:
+            self.connection.set_state(ConnectionState.SHOULD_CLOSE)
+            self.connection = None
 
     def equals(self, transfer):
         other = (transfer.remote_path, transfer.username, transfer.direction, )
@@ -264,26 +296,38 @@ class Transfer:
 
 class TransferManager(TransferListener):
 
-    def __init__(self, state: State, configuration: Configuration, settings: Settings, event_bus: EventBus, file_manager: FileManager, network: Network):
+    def __init__(
+            self, state: State, configuration: Configuration, settings: Settings,
+            event_bus: EventBus, internal_event_bus: InternalEventBus,
+            file_manager: FileManager, network: Network):
         self._state = state
         self._configuration: Configuration = configuration
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
+        self._internal_event_bus: InternalEventBus = internal_event_bus
 
         self._file_manager: FileManager = file_manager
         self._network: Network = network
 
-        self._network.transfer_listener = self
-        self._network.server_listeners.append(self)
-
         self._transfers: List[Transfer] = []
+
+        self.MESSAGE_MAP = build_message_map(self)
+        self._internal_event_bus.register(ServerMessageEvent, self.on_server_message)
+        self._internal_event_bus.register(TransferOffsetEvent, self.on_transfer_offset)
+        self._internal_event_bus.register(TransferTicketEvent, self.on_transfer_ticket)
+        self._internal_event_bus.register(TransferDataReceivedEvent, self.on_transfer_data_received)
+        self._internal_event_bus.register(TransferDataSentEvent, self.on_transfer_data_sent)
 
     def read_database(self):
         db_path = os.path.join(self._configuration.data_directory, 'transfers')
 
         with shelve.open(db_path, flag='cr') as database:
             for _, transfer in database.items():
-                self.queue_transfer(transfer, state=None)
+                if transfer.is_processing():
+                    transfer.state = TransferState.QUEUED
+
+                self._transfers.append(transfer)
+                self._event_bus.emit(TransferAddedEvent(transfer))
 
     def write_database(self):
         db_path = os.path.join(self._configuration.data_directory, 'transfers')
@@ -315,6 +359,10 @@ class TransferManager(TransferListener):
     @property
     def upload_slots(self):
         return self._settings.get('sharing.limits.upload_slots')
+
+    def abort(self, transfer: Transfer):
+        """Abort the given transfer"""
+        transfer.set_state(TransferState.ABORTED)
 
     def remove(self, transfer: Transfer):
         try:
@@ -389,20 +437,11 @@ class TransferManager(TransferListener):
             return 0.0
         return sum(upload_speeds) / len(upload_speeds)
 
-    def queue_download(self, username: str, remote_path: str) -> Transfer:
-        logger.info(f"queueing download from {username} : {remote_path}")
-        transfer = Transfer(
-            username=username,
-            remote_path=remote_path,
-            direction=TransferDirection.DOWNLOAD
-        )
-        self.queue_transfer(transfer)
-        return transfer
-
     def queue_transfer(self, transfer: Transfer, state: TransferState = TransferState.QUEUED):
         """Queue a transfer or return the existing transfer in case it already
         exists
         """
+        logger.info(f"queuing transfer : {transfer!r}")
         for queued_transfer in self._transfers:
             if queued_transfer.equals(transfer):
                 return queued_transfer
@@ -413,6 +452,8 @@ class TransferManager(TransferListener):
         transfer.listeners.append(self)
         if state is not None:
             transfer.set_state(state)
+
+        return transfer
 
     def get_place_in_queue(self, transfer: Transfer) -> int:
         """Gets the place of the given upload in the transfer queue
@@ -461,6 +502,9 @@ class TransferManager(TransferListener):
             upload.set_state(TransferState.INITIALIZING)
             self._initialize_upload(upload)
 
+    def on_file_connection_failed(self, transfer: Transfer):
+        transfer.fail(reason='Failed')
+
     def _get_queued_transfers(self) -> Tuple[List[Transfer], List[Transfer]]:
         queued_downloads = []
         queued_uploads = []
@@ -492,7 +536,8 @@ class TransferManager(TransferListener):
             transfer.username,
             ProtocolMessage(
                 PeerTransferQueue.create(transfer.remote_path),
-                on_success=partial(self.on_transfer_queue_success, transfer)
+                on_success=partial(self.on_transfer_queue_success, transfer),
+                on_failure=partial(self.on_transfer_queue_failed, transfer)
             )
         )
 
@@ -521,7 +566,7 @@ class TransferManager(TransferListener):
             times=1
         )
 
-    def on_transfer_queue_failed(self, transfer: Transfer, connection_request: ConnectionRequest):
+    def on_transfer_queue_failed(self, transfer: Transfer):
         """Called when we attempted to queue a download but it failed because we
         couldn't deliver the message to the peer (peer was offline,
         connection failed, ...).
@@ -546,25 +591,28 @@ class TransferManager(TransferListener):
 
         transfer.set_state(TransferState.QUEUED)
 
+    def on_upload_request_success(self, transfer: Transfer):
+        pass
+
     # Events coming from the connection (connection type 'F')
-    def on_transfer_offset(self, offset: int, connection: PeerConnection):
+    def on_transfer_offset(self, event: TransferOffsetEvent):
         """Called when the transfer offset has been received. This can only
         occur during upload and denotes from which offset in the file we need
         to start sending data
         """
-        logger.info(f"received transfer offset (offset={offset})")
+        logger.info(f"received transfer offset (offset={event.offset})")
 
-        transfer = connection.transfer
+        transfer = event.connection.transfer
         if transfer is None:
-            logger.error(f"got a transfer offset for a connection without transfer. connection={connection!r}")
+            logger.error(f"got a transfer offset for a connection without transfer. connection={event.connection!r}")
             return
 
-        transfer.set_offset(offset)
+        transfer.set_offset(event.offset)
         transfer.filesize = self._file_manager.get_filesize(transfer.local_path)
 
-        connection.set_connection_state(PeerConnectionState.TRANSFERING)
+        event.connection.set_connection_state(PeerConnectionState.TRANSFERING)
 
-    def on_transfer_ticket(self, ticket: int, connection: PeerConnection):
+    def on_transfer_ticket(self, event: TransferTicketEvent):
         """Called when the transfer ticket has been received. This can only
         occur during download and denotes which transfer is going to be starting
         on this connection.
@@ -572,32 +620,32 @@ class TransferManager(TransferListener):
         @param ticket: ticket number
         @param connection: connection on which the ticket was received
         """
-        logger.info(f"got transfer ticket {ticket} on {connection}")
+        logger.info(f"got transfer ticket event {event}")
         try:
-            transfer = self.get_transfer_by_ticket(ticket)
+            transfer = self.get_transfer_by_ticket(event.ticket)
         except LookupError:
-            logger.exception(f"got a ticket for a transfer that does not exist (ticket={ticket})")
+            logger.exception(f"got a ticket for a transfer that does not exist (ticket={event.ticket})")
             return
 
         # We can only know the connection when we get the ticket
-        transfer.connection = connection
-        connection.transfer = transfer
+        transfer.connection = event.connection
+        event.connection.transfer = transfer
 
         # Send the offset (for now always 0)
-        connection.queue_message(
+        event.connection.queue_messages(
             ProtocolMessage(
                 pack_int64(0),
-                on_success=partial(connection.set_connection_state, PeerConnectionState.TRANSFERING)
+                on_success=partial(event.connection.set_connection_state, PeerConnectionState.TRANSFERING)
             )
         )
 
-    def on_transfer_data_received(self, data: bytes, connection: PeerConnection):
+    def on_transfer_data_received(self, event: TransferDataReceivedEvent):
         """Called when data has been received in the context of a transfer.
         If the download path hasn't been set yet (ie. it is the first data we
         received for this transfer) it will be determined and data will start to
         be written.
         """
-        transfer = self.get_transfer_by_connection(connection)
+        transfer = self.get_transfer_by_connection(event.connection)
 
         transfer.set_state(TransferState.DOWNLOADING)
 
@@ -606,53 +654,56 @@ class TransferManager(TransferListener):
             transfer.local_path = download_path
             logger.info(f"started receiving transfer data, download path : {download_path}")
 
-        transfer.write(data)
+        transfer.write(event.data)
 
         if transfer.is_transfered():
-            transfer.complete()
-            transfer.connection = None
             logger.info(f"completed downloading of {transfer.remote_path} from {transfer.username} to {transfer.local_path}")
-            connection.set_state(ConnectionState.SHOULD_CLOSE)
+            transfer.set_state(TransferState.COMPLETE)
 
-    def on_transfer_data_sent(self, bytes_sent: int, connection: PeerConnection):
+    def on_transfer_data_sent(self, event: TransferDataSentEvent):
         """Called when data was sent to the peer during upload
 
         @param bytes_sent: amount of bytes sent
         @param connection: connection over which the data was sent
         """
-        transfer = self.get_transfer_by_connection(connection)
+        transfer = self.get_transfer_by_connection(event.connection)
 
         transfer.set_state(TransferState.UPLOADING)
 
-        transfer.bytes_transfered += bytes_sent
+        transfer.bytes_transfered += event.bytes_sent
 
     def on_transfer_connection_closed(self, connection: PeerConnection, close_reason: CloseReason = None):
         """Called when a file connection is closed"""
-        try:
-            transfer = self.get_transfer_by_connection(connection)
-        except LookupError:
+        transfer = connection.transfer
+        if transfer is None:
             logger.warning(
                 f"couldn't find transfer associated with closed connection (connection={connection!r})")
+
+        if transfer.is_transfered():
+            if transfer.is_upload():
+                # An upload is only complete when the other side confirms it by
+                # closing the connection
+                logger.info(
+                    f"completed uploading of {transfer.remote_path} to {transfer.username}. "
+                    f"filesize={transfer.filesize}, transfered={transfer.bytes_transfered}, read={transfer.bytes_read}")
+                transfer.set_state(TransferState.COMPLETE)
+
+                self._network.send_server_messages(
+                    SendUploadSpeed.create(int(self.get_average_upload_speed()))
+                )
         else:
-            if transfer.is_transfered():
-                if transfer.is_upload():
-                    # Complete the upload
-                    transfer.complete()
-                    transfer.connection = None
-                    logger.info(
-                        f"completed uploading of {transfer.remote_path} to {transfer.username}. "
-                        f"filesize={transfer.filesize}, transfered={transfer.bytes_transfered}, read={transfer.bytes_read}")
+            if transfer.is_upload():
+                # Inform downloader that upload has failed
+                self._network.send_peer_messages(
+                    transfer.username,
+                    PeerUploadFailed.create(transfer.remote_path)
+                )
+            transfer.set_state(TransferState.INCOMPLETE)
 
-                    # NOT closing connection here, this the responsibility of the
-                    # downloading side. Closing here would cause the download to be
-                    # incomplete
-
-                    self._network.send_server_messages(
-                        SendUploadSpeed.create(int(self.get_average_upload_speed()))
-                    )
-            else:
-                if transfer.state != TransferState.COMPLETE:
-                    transfer.set_state(TransferState.INCOMPLETE)
+    def on_server_message(self, event: ServerMessageEvent):
+        message = copy.deepcopy(event.message)
+        if message.__class__ in self.MESSAGE_MAP:
+            self.MESSAGE_MAP[message.__class__](message, event.connection)
 
     @on_message(GetUserStatus)
     def on_get_user_status(self, message, connection):

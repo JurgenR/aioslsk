@@ -4,7 +4,7 @@ import threading
 from typing import List, Union
 
 from .configuration import Configuration
-from .events import EventBus
+from .events import EventBus, InternalEventBus
 from .filemanager import FileManager
 from .model import Room, User
 from .network import Network
@@ -15,7 +15,7 @@ from .scheduler import Job, Scheduler
 from .state import State
 from .search import SearchQuery
 from .settings import Settings
-from .transfer import Transfer, TransferManager
+from .transfer import Transfer, TransferDirection, TransferManager
 
 
 CLIENT_VERSION = 157
@@ -34,13 +34,15 @@ class SoulSeek(threading.Thread):
         self._stop_event = threading.Event()
 
         self.events: EventBus = event_bus or EventBus()
+        self.internal_events: InternalEventBus = InternalEventBus()
 
         self.state: State = State()
         self.state.scheduler = Scheduler()
 
         self._network: Network = Network(
             self.state,
-            self.settings
+            self.settings,
+            self.internal_events
         )
 
         self._cache_expiration_job = Job(60, self._network.expire_caches)
@@ -52,6 +54,7 @@ class SoulSeek(threading.Thread):
             self.configuration,
             self.settings,
             self.events,
+            self.internal_events,
             self.file_manager,
             self._network
         )
@@ -61,6 +64,7 @@ class SoulSeek(threading.Thread):
             self.state,
             self.settings,
             self.events,
+            self.internal_events,
             self.file_manager,
             self.transfer_manager,
             self._network
@@ -69,6 +73,7 @@ class SoulSeek(threading.Thread):
             self.state,
             self.settings,
             self.events,
+            self.internal_events,
             self.file_manager,
             self._network
         )
@@ -77,6 +82,7 @@ class SoulSeek(threading.Thread):
             self._network,
             self.state.scheduler
         ]
+        import pdb; pdb.set_trace()
 
     def run(self):
         super().run()
@@ -116,9 +122,14 @@ class SoulSeek(threading.Thread):
 
     def download(self, user: Union[str, User], filename: str):
         if isinstance(user, User):
-            return self.transfer_manager.queue_download(user.name, filename)
-        else:
-            return self.transfer_manager.queue_download(user, filename)
+            user = user.name
+        return self.transfer_manager.queue_transfer(
+            Transfer(
+                user,
+                filename,
+                TransferDirection.DOWNLOAD
+            )
+        )
 
     def get_uploads(self) -> List[Transfer]:
         return self.transfer_manager.get_uploads()

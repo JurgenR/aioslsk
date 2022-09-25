@@ -1,5 +1,6 @@
 from __future__ import annotations
 from cachetools import TTLCache
+import copy
 from dataclasses import dataclass, field
 import errno
 from functools import partial
@@ -9,7 +10,7 @@ from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 import socket
 import time
 from threading import Lock
-from typing import Callable, Dict, List, Union
+from typing import Callable, List, Union
 
 from .connection import (
     Connection,
@@ -22,14 +23,32 @@ from .connection import (
     PeerConnectionType,
     ServerConnection,
 )
-from .events import on_message
-from .listeners import TransferListener
+from .events import (
+    build_message_map,
+    on_message,
+    ConnectionStateChangedEvent,
+    InternalEventBus,
+    PeerInitializedEvent,
+    ServerMessageEvent,
+    PeerInitializationMessageEvent,
+    PeerMessageEvent,
+    DistributedMessageEvent,
+    TransferOffsetEvent,
+    TransferTicketEvent,
+    TransferDataSentEvent,
+    TransferDataReceivedEvent,
+)
 from .messages import (
+    Message,
     CannotConnect,
     ConnectToPeer,
+    DistributedMessage,
     GetPeerAddress,
+    PeerInitializationMessage,
     PeerInit,
+    PeerMessage,
     PeerPierceFirewall,
+    ServerMessage,
 )
 from . import upnp
 from .state import State
@@ -49,6 +68,7 @@ CONNECTION_LIMITS = {
     'Linux': 1024
 }
 DEFAULT_CONNECTION_LIMIT = 512
+DEFAULT_LISTENING_HOST: str = '0.0.0.0'
 
 
 @dataclass
@@ -64,6 +84,7 @@ class ConnectionRequest:
     connection: PeerConnection = None
     transfer: Transfer = None
     messages: List[Union[bytes, ProtocolMessage]] = field(default_factory=lambda: [])
+    created: float = field(default_factory=time.monotonic)
     """List of messages to be delivered when connection is established"""
     on_failure: Callable = None
     """Callback called when connection cannot be initialized"""
@@ -71,23 +92,19 @@ class ConnectionRequest:
 
 class Network:
 
-    def __init__(self, state: State, settings: Settings):
+    def __init__(self, state: State, settings: Settings, internal_event_bus: InternalEventBus):
         self._state = state
         self._settings: Settings = settings
+        self._internal_event_bus: InternalEventBus = internal_event_bus
         self._upnp = upnp.UPNP()
         self._connection_requests = TTLCache(maxsize=1000, ttl=5 * 60)
 
         # List of connections
         self.server: ServerConnection = None
         self.listening_connections: List[ListeningConnection] = []
-        self.peer_connections: Dict[str, List[PeerConnection]] = {}
+        self.peer_connections: List[PeerConnection] = []
 
         self.peer_listener = None
-        self.peer_listeners = [self, ]
-        self.peer_message_listeners = []
-        self.server_listeners = [self, ]
-        self.server_message_listeners = [self, ]
-        self.transfer_listener: TransferListener = None
 
         # Selectors
         self.selector = DefaultSelector()
@@ -96,30 +113,35 @@ class Network:
         )
         self._selector_queue = []
         self._last_log_time: float = 0
+        self._last_cleanup_time: float = 0
 
         self._server_connect_attempts: int = 0
 
         self._lock = Lock()
 
+        self.MESSAGE_MAP = build_message_map(self)
+
     def initialize(self):
         logger.info("initializing network")
 
         self.server = ServerConnection(
-            hostname=self._settings.get('network.server_hostname'),
-            port=self._settings.get('network.server_port'),
-            listeners=self.server_listeners
+            self._settings.get('network.server_hostname'),
+            self._settings.get('network.server_port'),
+            self
         )
         self.server.connect()
 
         self.listening_connections = [
             ListeningConnection(
-                port=self._settings.get('network.listening_port'),
-                listeners=[self, ]
+                DEFAULT_LISTENING_HOST,
+                self._settings.get('network.listening_port'),
+                self
             ),
             ListeningConnection(
-                port=self._settings.get('network.listening_port') + 1,
-                obfuscated=True,
-                listeners=[self, ]
+                DEFAULT_LISTENING_HOST,
+                self._settings.get('network.listening_port') + 1,
+                self,
+                obfuscated=True
             )
         ]
         for listening_connection in self.listening_connections:
@@ -218,6 +240,9 @@ class Network:
         self._pull_from_queue(selector_keys)
 
     def _clean_up_connections(self, selector_keys, current_time):
+        if current_time - self._last_cleanup_time < 0.05:
+            return
+
         ### Clean up connections
         for selector_key in selector_keys:
             connection = selector_key.data
@@ -251,6 +276,8 @@ class Network:
                     logger.debug(f"connection {connection.hostname}:{connection.port}: timeout reached")
                     connection.disconnect(reason=CloseReason.TIMEOUT)
                     continue
+
+        self._last_cleanup_time = current_time
 
     def _pull_from_queue(self, selector_keys):
         """This method will remove connection from the _selector_queue if the
@@ -318,76 +345,6 @@ class Network:
     def expire_caches(self):
         self._connection_requests.expire()
 
-    # Connection state changes
-    def on_state_changed(self, state: ConnectionState, connection: Connection, close_reason: CloseReason = None):
-        """Called when the state of a connection changes. This method calls 3
-        private method based on the type of L{connection} that was passed
-
-        :param state: the new state the connection has received
-        :param connection: the connection for which the state changed
-        :param close_reason: in case ConnectionState.CLOSED is passed a reason
-            will be given as well, this is useful when we need to send a
-            CannotConnect to the server after a ConnectToPeer was sent and we
-            failed to connect to that peer
-        """
-        if isinstance(connection, ServerConnection):
-            self._on_server_connection_state_changed(state, connection, close_reason=close_reason)
-
-        elif isinstance(connection, PeerConnection):
-            self._on_peer_connection_state_changed(state, connection, close_reason=close_reason)
-
-        elif isinstance(connection, ListeningConnection):
-            self._on_listening_connection_state_changed(state, connection)
-
-    def _on_server_connection_state_changed(self, state: ConnectionState, connection: ServerConnection, close_reason: CloseReason = None):
-        if state == ConnectionState.CONNECTING:
-            self._register_connection(
-                connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
-
-        elif state == ConnectionState.CONNECTED:
-            self._server_connect_attempts = 0
-            # For registering with UPNP we need to know our own IP first, we can
-            # get this from the server connection but we first need to be
-            # fully connected to it before we can request a valid IP
-            if self._settings.get('network.use_upnp'):
-                self.enable_upnp()
-
-        elif state == ConnectionState.CLOSED:
-            self.selector.unregister(connection.fileobj)
-
-            if close_reason != CloseReason.REQUESTED:
-                if self._settings.get('network.reconnect.auto'):
-                    logger.info("scheduling to re-attempting connecting in 5 seconds")
-                    self._server_connect_attempts += 1
-                    self._state.scheduler.add(5, self.server.connect, times=1)
-
-    def _on_peer_connection_state_changed(self, state: ConnectionState, connection: PeerConnection, close_reason: CloseReason = None):
-        if state == ConnectionState.CONNECTING:
-            self._register_connection(
-                connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
-
-        elif state == ConnectionState.CLOSED:
-            self.selector.unregister(connection.fileobj)
-
-            if close_reason == CloseReason.CONNECT_FAILED:
-                self.on_peer_connection_failed(connection)
-
-            self.remove_peer_connection(connection)
-
-    def _on_listening_connection_state_changed(self, state: ConnectionState, connection: ListeningConnection):
-        if state == ConnectionState.CONNECTING:
-            self._register_connection(
-                connection.fileobj, EVENT_READ, connection)
-
-        elif state == ConnectionState.CLOSED:
-            self.selector.unregister(connection.fileobj)
-
-    # Peer related
-    def on_peer_accepted(self, connection: PeerConnection):
-        connection.listeners = [self, self.peer_listener, ]
-        self._register_connection(
-            connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
-
     def init_peer_connection(
             self, ticket: int, username: str, typ, ip: str = None, port: int = None,
             transfer: Transfer = None, messages=None, on_failure=None) -> ConnectionRequest:
@@ -407,6 +364,7 @@ class Network:
 
         :return: created L{ConnectionRequest} object
         """
+        logger.debug(f"starting initialization of peer connection (ticket={ticket}, username={username}, type={typ})")
         messages = [] if messages is None else messages
         connection_request = ConnectionRequest(
             ticket=ticket,
@@ -440,11 +398,11 @@ class Network:
         """
         logger.debug(f"attempting to connect to peer : {request!r}")
         connection = PeerConnection(
-            hostname=request.ip,
-            port=request.port,
+            request.ip,
+            request.port,
+            self,
             connection_type=request.typ,
-            obfuscated=request.obfuscated,
-            listeners=[self, self.peer_listener, ]
+            obfuscated=request.obfuscated
         )
         request.connection = connection
 
@@ -458,7 +416,7 @@ class Network:
             message = PeerPierceFirewall.create(request.ticket)
 
         with self._lock:
-            connection.queue_message(
+            connection.queue_messages(
                 ProtocolMessage(
                     message=message,
                     on_success=partial(self.complete_peer_connection_request, request, connection)
@@ -518,33 +476,36 @@ class Network:
         - PeerConnectionState: AWAITING_INIT
 
         This method will decide the following PeerConnectionState depending on
-        the values from the request.
+        the values from the request:
 
-        It will also remove the connection request from the cache and queue any
-        messages that are set in the connection request.
+        - For distributed + peer connections: ESTABLISHED
+        - For file connections: AWAITING_TICKET or AWAITING_OFFSET depending on
+            the type of transfer (upload vs download)
+
+        All messages which we were present in the request will be queued for
+        transfer.
+
+        The connection request will be removed from the cache
 
         :param request: the associated L{ConnectionRequest} object
         :param connection: the associated L{PeerConnection} object
         """
         logger.debug(f"finalizing peer connection : {request!r}")
 
+        # Set basic variables
+        connection.username = request.username
         connection.connection_type = request.typ
-        # A bit overkill
-        connection.transfer = request.transfer
+
+        # Set transfer if present
         if request.transfer is not None:
+            connection.transfer = request.transfer
             request.transfer.connection = connection
 
-        self.add_peer_connection(request.username, connection)
-
-        # Non-peer connections always go to unobfuscated after initialization
-        if request.typ != PeerConnectionType.PEER:
-            logger.debug(f"setting obfuscated to false for connection : {connection!r}")
-            connection.obfuscated = False
+        self.add_peer_connection(connection)
 
         # File connections should go into AWAITING_TICKET or AWAITING_OFFSET
         # depending on the state of the transfer
         if request.typ == PeerConnectionType.FILE:
-            connection.transfer_listeners.append(self.transfer_listener)
             # The transfer for the request will be none if the peer is connecting
             # to us. We don't know for which transfer he is connecting to us yet
             # so we wait for the transfer ticket
@@ -570,11 +531,10 @@ class Network:
         # Dump all messages from the request
         for message in request.messages:
             with self._lock:
-                connection.queue_message(message)
+                connection.queue_messages(message)
 
-        # Notify the peer manager that a new connection was complete
-        self.peer_listener.on_peer_connection_initialized(
-            request.username, connection)
+        # Notify that a new connection was completed
+        self._internal_event_bus.emit(PeerInitializedEvent(connection))
 
     def fail_peer_connection_request(self, request: ConnectionRequest):
         """Method called after peer connection could not be established. It is
@@ -590,6 +550,7 @@ class Network:
         - The request itself
         - Each message in the request
         """
+        logger.info(f"failing peer connection request : {request}")
         self._connection_requests.pop(request.ticket)
         if request.on_failure is not None:
             request.on_failure(request)
@@ -608,24 +569,13 @@ class Network:
             logger.warning(f"ConnectToPeer request was not handled in a timely fashion (ticket={ticket})")
             self.fail_peer_connection_request(request)
 
-    def get_peer_by_connection(self, connection: PeerConnection) -> str:
-        for username, connections in self.peer_connections.items():
-            if connection in connections:
-                return username
-        raise LookupError(f"no peer found for connection : {connection!r}")
-
     def get_peer_connections(self, username: str, typ: str) -> List[PeerConnection]:
         """Returns all connections for peer with given username and peer
         connection types.
         """
-        try:
-            connections = self.peer_connections[username]
-        except KeyError:
-            return []
-
         return [
-            connection for connection in connections
-            if connection.connection_type == typ
+            connection for connection in self.peer_connections
+            if connection.username == username and connection.connection_type == typ
         ]
 
     def get_active_peer_connections(self, username: str, typ: str) -> List[PeerConnection]:
@@ -637,14 +587,8 @@ class Network:
         :return: list of PeerConnection instances
         """
         active_connections = []
-        try:
-            connections = self.peer_connections[username]
-        except KeyError:
-            return active_connections
 
-        for connection in connections:
-            if connection.connection_type != typ:
-                continue
+        for connection in self.get_peer_connections(username, typ):
             if connection.state != ConnectionState.CONNECTED:
                 continue
             if connection.connection_state != PeerConnectionState.ESTABLISHED:
@@ -652,7 +596,7 @@ class Network:
             active_connections.append(connection)
         return active_connections
 
-    def add_peer_connection(self, username: str, connection: PeerConnection):
+    def add_peer_connection(self, connection: PeerConnection):
         """Creates a new peer object and adds it to our list of peers, if a peer
         already exists with the given L{username} the connection will be added
         to the existing peer
@@ -660,21 +604,12 @@ class Network:
         :rtype: L{Peer}
         :return: created/updated L{Peer} object
         """
-        if username in self.peer_connections:
-            self.peer_connections[username].append(connection)
-        else:
-            self.peer_connections[username] = [connection, ]
-
-        # if connection.connection_type == PeerConnectionType.PEER:
-        #     # Need to check if we already have a connection of this type, request
-        #     # to close that connection
-        #     # peer_connections = peer.get_connections(PeerConnectionType.PEER)
-        #     for peer_connection in peer_connections:
-        #         peer_connection.set_state(ConnectionState.SHOULD_CLOSE)
+        if connection not in self.peer_connections:
+            self.peer_connections.append(connection)
 
     def remove_peer_connection(self, connection: PeerConnection):
-        for _, connections in self.peer_connections.items():
-            connections.remove(connection)
+        if connection in self.peer_connections:
+            self.peer_connections.remove(connection)
 
     # Server related
 
@@ -792,4 +727,118 @@ class Network:
     def send_server_messages(self, *messages: List[Union[bytes, ProtocolMessage]]):
         with self._lock:
             for message in messages:
-                self.server.queue_message(message)
+                self.server.queue_messages(message)
+
+    # Methods called by connections
+
+    # Connection state changes
+    def on_state_changed(self, state: ConnectionState, connection: Connection, close_reason: CloseReason = None):
+        """Called when the state of a connection changes. This method calls 3
+        private method based on the type of L{connection} that was passed
+
+        :param state: the new state the connection has received
+        :param connection: the connection for which the state changed
+        :param close_reason: in case ConnectionState.CLOSED is passed a reason
+            will be given as well, this is useful when we need to send a
+            CannotConnect to the server after a ConnectToPeer was sent and we
+            failed to connect to that peer
+        """
+        if isinstance(connection, ServerConnection):
+            self._on_server_connection_state_changed(state, connection, close_reason=close_reason)
+
+        elif isinstance(connection, PeerConnection):
+            self._on_peer_connection_state_changed(state, connection, close_reason=close_reason)
+
+        elif isinstance(connection, ListeningConnection):
+            self._on_listening_connection_state_changed(state, connection)
+
+        self._internal_event_bus.emit(
+            ConnectionStateChangedEvent(connection, state, close_reason)
+        )
+
+    def _on_server_connection_state_changed(self, state: ConnectionState, connection: ServerConnection, close_reason: CloseReason = None):
+        if state == ConnectionState.CONNECTING:
+            self._register_connection(
+                connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
+
+        elif state == ConnectionState.CONNECTED:
+            self._server_connect_attempts = 0
+            # For registering with UPNP we need to know our own IP first, we can
+            # get this from the server connection but we first need to be
+            # fully connected to it before we can request a valid IP
+            if self._settings.get('network.use_upnp'):
+                self.enable_upnp()
+
+        elif state == ConnectionState.CLOSED:
+            self.selector.unregister(connection.fileobj)
+
+            if close_reason != CloseReason.REQUESTED:
+                if self._settings.get('network.reconnect.auto'):
+                    logger.info("scheduling to re-attempting connecting in 5 seconds")
+                    self._server_connect_attempts += 1
+                    self._state.scheduler.add(5, self.server.connect, times=1)
+
+    def _on_peer_connection_state_changed(self, state: ConnectionState, connection: PeerConnection, close_reason: CloseReason = None):
+        if state == ConnectionState.CONNECTING:
+            self._register_connection(
+                connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
+
+        elif state == ConnectionState.CLOSED:
+            self.selector.unregister(connection.fileobj)
+
+            if close_reason == CloseReason.CONNECT_FAILED:
+                self.on_peer_connection_failed(connection)
+
+            self.remove_peer_connection(connection)
+
+    def _on_listening_connection_state_changed(self, state: ConnectionState, connection: ListeningConnection):
+        if state == ConnectionState.CONNECTING:
+            self._register_connection(
+                connection.fileobj, EVENT_READ, connection)
+
+        elif state == ConnectionState.CLOSED:
+            self.selector.unregister(connection.fileobj)
+
+    # Peer related
+    def on_peer_accepted(self, connection: PeerConnection):
+        self._register_connection(
+            connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
+
+    def on_message(self, message: Message, connection: Connection):
+        message = copy.deepcopy(message)
+        if message.__class__ in self.MESSAGE_MAP:
+            self.MESSAGE_MAP[message.__class__](message, connection)
+
+        msg_event_cls = None
+        if isinstance(message, ServerMessage):
+            msg_event_cls = ServerMessageEvent
+        elif isinstance(message, PeerMessage):
+            msg_event_cls = PeerMessageEvent
+        elif isinstance(message, PeerInitializationMessage):
+            msg_event_cls = PeerInitializationMessageEvent
+        elif isinstance(message, DistributedMessage):
+            msg_event_cls = DistributedMessageEvent
+
+        self._internal_event_bus.emit(msg_event_cls(message, connection))
+
+    # Transfer related
+
+    def on_transfer_offset(self, offset: int, connection: PeerConnection):
+        self._internal_event_bus.emit(
+            TransferOffsetEvent(connection, offset)
+        )
+
+    def on_transfer_ticket(self, ticket: int, connection: PeerConnection):
+        self._internal_event_bus.emit(
+            TransferTicketEvent(connection, ticket)
+        )
+
+    def on_transfer_data_received(self, data: bytes, connection: PeerConnection):
+        self._internal_event_bus.emit(
+            TransferDataReceivedEvent(connection, data)
+        )
+
+    def on_transfer_data_sent(self, bytes_sent: int, connection: PeerConnection):
+        self._internal_event_bus.emit(
+            TransferDataSentEvent(connection, bytes_sent)
+        )
