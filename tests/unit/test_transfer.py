@@ -29,9 +29,10 @@ def manager(tmpdir):
         State(),
         Configuration(tmpdir, tmpdir),
         Settings(DEFAULT_SETTINGS),
-        Mock(),
-        None,
-        Mock()
+        Mock(), # event bus
+        Mock(), # internal event bus
+        None, # file manager
+        Mock() # network
     )
 
 
@@ -92,36 +93,24 @@ class TestTransfer:
         assert transfer.start_time == 2.0
         assert transfer.state == state
 
-    def test_whenListenerSet_shouldCallListener(self):
-        transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
-        listener1 = DummyListener()
-        listener2 = DummyListener()
-        listener1.on_transfer_state_changed = MagicMock()
-        listener2.on_transfer_state_changed = MagicMock()
-        transfer.listeners = [listener1, listener2, ]
-
-        new_state = TransferState.FAILED
-        transfer.set_state(new_state)
-
-        assert transfer.state == new_state
-        listener1.on_transfer_state_changed.assert_called_once_with(transfer, new_state)
-        listener2.on_transfer_state_changed.assert_called_once_with(transfer, new_state)
-
 
 class TestTransferManager:
 
-    def test_whenQueueTransfer_shouldAddTransferAndSetState(self, manager):
-        manager.on_transfer_state_changed = Mock()
-
+    def test_whenAddTransfer_shouldAddTransfer(self, manager):
         transfer = Transfer(DEFAULT_FILENAME, DEFAULT_USERNAME, TransferDirection.DOWNLOAD)
-        transfer.state = TransferState.VIRGIN
+        manager.add(transfer)
 
-        manager.queue_transfer(transfer)
+        assert transfer.state == TransferState.VIRGIN
+        assert transfer in manager.transfers
 
-        assert manager in transfer.listeners
+    def test_whenQueueTransfer_shouldSetQueuedState(self, manager):
+        transfer = Transfer(DEFAULT_FILENAME, DEFAULT_USERNAME, TransferDirection.DOWNLOAD)
+        manager.add(transfer)
+
+        manager.queue(transfer)
+
         assert transfer in manager.transfers
         assert transfer.state == TransferState.QUEUED
-        manager.on_transfer_state_changed.assert_called_once_with(transfer, TransferState.QUEUED)
 
     # Speed calculations
     def test_whenGetUploadSpeed_returnsUploadSpeed(self, manager):

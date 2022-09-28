@@ -250,6 +250,7 @@ class Transfer:
             self._fileobj.seek(self._offset)
             self._offset = None
 
+        self._fileobj.seek(self.bytes_transfered)
         data = self._fileobj.read(bytes_amount)
         self.bytes_read += len(data)
 
@@ -379,10 +380,11 @@ class TransferManager:
         self._set_transfer_state(transfer, TransferState.COMPLETE)
 
     def abort(self, transfer: Transfer):
-        logger.info(f"")
+        logger.info(f"aborting transfer : {transfer!r}")
         self._set_transfer_state(transfer, TransferState.ABORTED)
 
     def fail(self, transfer: Transfer, reason: str = None):
+        logger.info(f"failing transfer, reason = {reason!r} : {transfer!r}")
         self._set_transfer_state(
             transfer,
             TransferState.FAILED,
@@ -390,13 +392,18 @@ class TransferManager:
         )
 
     def queue(self, transfer: Transfer):
-        """Set the transfer state for given transfer"""
-        logger.debug(f"queueing transfer : {transfer}")
+        logger.debug(f"queueing transfer : {transfer!r}")
         self._set_transfer_state(transfer, TransferState.QUEUED)
 
     def add(self, transfer: Transfer) -> Transfer:
         """Adds a transfer if it does not already exist, otherwise it returns
         the already existing transfer.
+
+        This will emit a TransferAddedEvent but only if the transfer did not
+        exist. This will also add the user.
+
+        :return: either the transfer we have passed or the already existing
+            transfer
         """
         logger.info(f"adding transfer : {transfer!r}")
         for queued_transfer in self._transfers:
@@ -404,10 +411,16 @@ class TransferManager:
                 return queued_transfer
 
         self._transfers.append(transfer)
+        self._network.send_server_messages(
+
+        )
         self._event_bus.emit(TransferAddedEvent(transfer))
         return transfer
 
     def remove(self, transfer: Transfer):
+        """Remove a transfer from the list of transfers. This will attempt to
+        abort the transfer.
+        """
         try:
             self._transfers.remove(transfer)
         except ValueError:
@@ -944,7 +957,8 @@ class TransferManager:
         logger.info(f"PeerTransferQueueFailed : transfer failed for {filename}, reason={reason}")
 
         try:
-            transfer = self.get_transfer_by_connection(connection)
+            transfer = self.get_transfer(
+                connection.username, filename, TransferDirection.DOWNLOAD)
         except LookupError:
             logger.error(f"PeerTransferQueueFailed : could not find transfer for {filename} from {connection.username}")
         else:

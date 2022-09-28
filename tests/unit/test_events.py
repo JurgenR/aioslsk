@@ -1,4 +1,4 @@
-from pyslsk.events import on_message, get_listener_methods, EventBus, UserAddEvent
+from pyslsk.events import on_message, EventBus, UserAddEvent
 from pyslsk.messages import Login, Ping
 from pyslsk.model import User
 
@@ -22,13 +22,7 @@ class DummyMessageListener:
 
 class TestFunctions:
 
-    def test_whenGetListenerMethods_shouldReturnMethods(self):
-        listener = DummyMessageListener()
-        assert get_listener_methods(listener, Ping)[0] == listener.on_ping
-
-    def test_whenGetListenerMethodsNoMatch_shouldReturnEmptyList(self):
-        listener = DummyMessageListener()
-        assert get_listener_methods(listener, Login) == []
+    pass
 
 
 class TestEventBus:
