@@ -24,6 +24,8 @@ class Configuration:
         if not os.path.exists(self._get_settings_path(name)):
             if auto_create:
                 self.create_settings(name)
+            else:
+                raise Exception(f"settings with name {name} does not exist")
 
         with open(self._get_settings_path(name), 'r') as fh:
             return Settings(yaml.safe_load(fh))
