@@ -8,14 +8,20 @@ authors = ["Jurgen <jurgen@mail.com>"]
 python = "~3.7"
 upnpclient = "^1.0.3"
 mutagen = "^1.45.1"
-PySide6 = "^6.2.4"
 PyYAML = "^6.0"
 QDarkStyle = "^3.0.3"
 cachetools = "^5.0.0"
+PySide6 = "^6.3.1"
+appdirs = "^1.4.4"
+qtvscodestyle = "^0.1.1"
+yappi = "^1.3.6"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.1.1"
 pytest-cov = "^3.0.0"
+pyshark = "^0.4.5"
+pyinstaller = "^5.3"
+pytest-unordered = "^0.5.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

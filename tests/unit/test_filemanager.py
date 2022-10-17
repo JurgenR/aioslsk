@@ -2,6 +2,7 @@ from pyslsk.filemanager import extract_attributes, FileManager, SharedItem
 from pyslsk.settings import Settings
 
 import pytest
+from pytest_unordered import unordered
 import os
 
 
@@ -49,21 +50,21 @@ class TestFunctions:
 
 class TestFileManager:
 
-    def test_whenLoadFromSettings(self, manager):
-        assert manager.shared_items == [
+    def test_whenLoadFromSettings(self, manager: FileManager):
+        assert manager.shared_items == unordered([
             SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.flac'),
             SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.mp3'),
             SharedItem(root=RESOURCES_ALIAS, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
-        ]
+        ])
 
     def test_whenAddDirectory_shouldAddDirectory(self):
         manager = FileManager(Settings({'sharing': {'directories': []}}))
         manager.add_shared_directory(RESOURCES)
-        assert manager.shared_items == [
+        assert manager.shared_items == unordered([
             SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.flac'),
             SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.mp3'),
             SharedItem(root=RESOURCES_ALIAS, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
-        ]
+        ])
         assert RESOURCES_ALIAS in manager.directory_aliases
         assert manager.directory_aliases[RESOURCES_ALIAS] == RESOURCES
 
@@ -78,19 +79,19 @@ class TestFileManager:
         assert dirs == 2
         assert files == 3
 
-    def test_whenGetSharedItemMatches_shouldReturnSharedItem(self, manager):
+    def test_whenGetSharedItemMatches_shouldReturnSharedItem(self, manager: FileManager):
         filepath = os.path.join('@@' + RESOURCES_ALIAS, 'Cool_Test_Album', 'Strange_Drone_Impact.mp3')
         item = manager.get_shared_item(filepath)
 
         assert item == SharedItem(root=RESOURCES_ALIAS, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
 
-    def test_whenGetSharedItemDoesNotMatch_shouldRaiseException(self, manager):
+    def test_whenGetSharedItemDoesNotMatch_shouldRaiseException(self, manager: FileManager):
         filepath = os.path.join('@@' + RESOURCES_ALIAS, 'Cool_Test_Album', 'nonexistant.mp3')
 
         with pytest.raises(LookupError):
             manager.get_shared_item(filepath)
 
-    def test_whenGetSharedItemDoesNotExistOnDisk_shouldRaiseException(self, manager):
+    def test_whenGetSharedItemDoesNotExistOnDisk_shouldRaiseException(self, manager: FileManager):
         item_not_on_disk = SharedItem(RESOURCES_ALIAS, '', 'InItemsButNotOnDisk.mp3')
         manager.shared_items.append(item_not_on_disk)
         filepath = os.path.join('@@' + RESOURCES_ALIAS, '', 'InItemsButNotOnDisk.mp3')
@@ -129,10 +130,10 @@ class TestFileManager:
             )
         ]
     )
-    def test_whenQuery_shouldReturnMatches(self, query, expected_items, manager):
+    def test_whenQuery_shouldReturnMatches(self, query, expected_items, manager: FileManager):
         results = manager.query(query)
 
-        assert expected_items == sorted(results, key=lambda i: i.filename)
+        assert expected_items == unordered(results)
 
     @pytest.mark.parametrize(
         "query",
@@ -145,12 +146,12 @@ class TestFileManager:
             ('kevin bacon')
         ]
     )
-    def test_whenQueryNoMatches_shouldReturnEmptyList(self, query, manager):
+    def test_whenQueryNoMatches_shouldReturnEmptyList(self, query, manager: FileManager):
         results = manager.query(query)
 
         assert results == []
 
-    def test_whenGetDownloadPath_shouldCreateDir(self, manager, tmpdir):
+    def test_whenGetDownloadPath_shouldCreateDir(self, manager: FileManager, tmpdir):
         download_dir = os.path.join(tmpdir, 'downloads')
         manager._settings.set('sharing.download', download_dir)
 
