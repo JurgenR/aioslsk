@@ -5,12 +5,7 @@ import yaml
 from .settings import Settings
 
 
-RESOURCES_DIRECTORY: str = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), 'resources')
-
-
 class Configuration:
-    DEFAULT_SETTINGS: str = os.path.join(RESOURCES_DIRECTORY, 'default_settings.yaml')
 
     def __init__(self, settings_directory: str, data_directory: str):
         self.settings_directory: str = settings_directory
@@ -23,7 +18,7 @@ class Configuration:
         return os.path.join(self.settings_directory, 'settings_{}.yaml'.format(name))
 
     def create_settings(self, name: str):
-        shutil.copy2(self.DEFAULT_SETTINGS, self._get_settings_path(name))
+        shutil.copy2(Settings.DEFAULT_SETTINGS, self._get_settings_path(name))
 
     def load_settings(self, name: str, auto_create: bool = True) -> Settings:
         if not os.path.exists(self._get_settings_path(name)):

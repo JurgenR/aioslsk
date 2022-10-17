@@ -1,7 +1,26 @@
+import os
+
+
+RESOURCES_DIRECTORY: str = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), 'resources')
+
+
 class Settings:
+    DEFAULT_SETTINGS: str = os.path.join(RESOURCES_DIRECTORY, 'default_settings.yaml')
 
     def __init__(self, settings):
         self._settings = settings
+        self.listeners = {}
+
+    def add_listener(self, key, callback):
+        if key in self.listeners:
+            self.listeners[key].append(callback)
+        else:
+            self.listeners[key] = [callback, ]
+
+    def call_listeners(self, key, value):
+        for listener in self.listeners.get(key, []):
+            listener(value)
 
     def set(self, key: str, value):
         parts = key.split('.')
@@ -12,6 +31,8 @@ class Settings:
                 old_value[part] = value
             else:
                 old_value = old_value[part]
+
+        self.call_listeners(key, value)
 
     def get(self, key: str):
         parts = key.split('.')

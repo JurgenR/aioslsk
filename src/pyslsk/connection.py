@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger()
 
+
 DEFAULT_PEER_TIMEOUT = 30
 DEFAULT_PEER_TRANSFER_TIMEOUT = 10 * 60
 """Increase the timeout in case we are transfering"""
@@ -143,13 +144,10 @@ class ListeningConnection(Connection):
             incoming=True
         )
         peer_connection.fileobj = fileobj
-        peer_connection.state = ConnectionState.CONNECTED
+        peer_connection.set_state(ConnectionState.CONNECTED)
 
         self.network.on_peer_accepted(peer_connection)
         return peer_connection
-
-    def has_data_to_write(self) -> bool:
-        return False
 
 
 class DataConnection(Connection):
@@ -169,8 +167,14 @@ class DataConnection(Connection):
         self.send_buf_size: int = TRANSFER_RECV_BUF_SIZE
 
     def set_state(self, state: ConnectionState, close_reason: CloseReason = CloseReason.UNKNOWN):
+        # if state == ConnectionState.CONNECTING:
+            # self.network.enable_write(self)
+
         if state == ConnectionState.CONNECTED:
             self.interact()
+            if not self._messages:
+                self.network.disable_write(self)
+
         super().set_state(state, close_reason)
 
     def queue_messages(self, *messages: List[Union[bytes, ProtocolMessage]]):
@@ -178,6 +182,9 @@ class DataConnection(Connection):
             if isinstance(message, bytes):
                 message = ProtocolMessage(message)
             self._messages.append(message)
+
+        if self._messages:
+            self.network.enable_write(self)
 
     def interact(self):
         self.last_interaction = time.monotonic()
@@ -188,24 +195,31 @@ class DataConnection(Connection):
 
         :return: False if an error occured on the socket during reading
         """
+        return self.receive_message()
+
+    def receive_message(self) -> bool:
         try:
             recv_data = self.fileobj.recv(self.recv_buf_size)
+
         except OSError:
             logger.exception(f"exception receiving data on connection {self.fileobj}")
             # Only remove the peer connections?
             logger.debug(f"close {self.hostname}:{self.port} : exception while reading")
             self.disconnect(reason=CloseReason.READ_ERROR)
             return False
+
         else:
             self.interact()
             if recv_data:
                 self.buffer(recv_data)
                 self.process_buffer()
+
             else:
                 logger.debug(
                     f"close {self.hostname}:{self.port} : no data received")
                 self.disconnect(reason=CloseReason.EOF)
                 return False
+
         return True
 
     def write(self) -> bool:
@@ -226,6 +240,7 @@ class DataConnection(Connection):
                 logger.debug(f"send {self.hostname}:{self.port} : message {message.message.hex()}")
                 self.interact()
                 self.write_message(message.message)
+
             except OSError:
                 logger.exception(
                     f"close {self.hostname}:{self.port} : exception while sending")
@@ -234,24 +249,25 @@ class DataConnection(Connection):
             else:
                 self.bytes_sent += len(message.message)
                 self.notify_message_sent(message)
+
         self._messages = []
+        self.network.disable_write(self)
         return True
 
     def write_message(self, message: bytes):
         self.fileobj.sendall(message)
 
     def notify_message_sent(self, message: ProtocolMessage):
-        if message.on_success is not None:
-            try:
-                message.on_success()
-            except Exception:
-                logger.exception(f"exception calling callback {message.on_success!r} (message={message!r})")
+        try:
+            self.network.on_message_sent(message, self)
+        except Exception:
+            logger.exception(f"error during message sent callback: {message!r}")
 
     def notify_message_received(self, message):
         """Notify the network that the given message was received"""
         logger.debug(f"received message of type : {message.__class__.__name__!r}")
         try:
-            self.network.on_message(message, self)
+            self.network.on_message_received(message, self)
         except Exception:
             logger.exception(f"error during callback : {message!r}")
 
@@ -330,9 +346,6 @@ class DataConnection(Connection):
         else:
             self.recv_buf_size = total_msg_len - len(self._buffer)
 
-    def has_data_to_write(self):
-        return bool(self._messages)
-
 
 class ServerConnection(DataConnection):
 
@@ -392,8 +405,12 @@ class PeerConnection(DataConnection):
 
     def set_connection_state(self, state: PeerConnectionState):
         if state == PeerConnectionState.TRANSFERING:
+            self.fileobj.setsockopt(socket.SOL_SOCKET, socket.TCP_NODELAY, 1)
+            self.fileobj.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 0)
             self.timeout = DEFAULT_PEER_TRANSFER_TIMEOUT
             self.recv_buf_size = TRANSFER_RECV_BUF_SIZE
+            if self.is_uploading():
+                self.network.enable_write(self)
 
         # Set non-peer connections to non-obfuscated
         if state != PeerConnectionState.AWAITING_INIT:
@@ -422,17 +439,11 @@ class PeerConnection(DataConnection):
 
         return self.fileobj
 
-    def has_data_to_write(self) -> bool:
-        if self.is_uploading():
-            return not self.transfer.is_transfered()
-        else:
-            return super().has_data_to_write()
-
     def is_uploading(self) -> bool:
         """Returns whether this connection is currently in the process of
         uploading
         """
-        is_upload = self.transfer is not None and self.transfer.is_upload()
+        is_upload = self.transfer and self.transfer.is_upload()
         return is_upload and self.connection_state == PeerConnectionState.TRANSFERING
 
     def write(self) -> bool:
@@ -442,30 +453,76 @@ class PeerConnection(DataConnection):
             return self.send_message()
 
     def send_data(self) -> bool:
-        """Transfers data over the connection. This is to be used only for
-        transfers
+        """Send data over the connection. This is to be used only for transfers.
         """
         if self.transfer.is_transfered():
             return True
 
-        data = self.transfer.read(self.send_buf_size)
+        # Take tokens from the rate limiter
+        tokens_taken = self.network.upload_rate_limiter.take_tokens()
+        if tokens_taken == 0:
+            return True
+
+        data = self.transfer.read(tokens_taken)
 
         try:
             self.interact()
-            self.fileobj.sendall(data)
+            bytes_sent = self.fileobj.send(data)
+
         except OSError:
             logger.exception(
                 f"close {self.hostname}:{self.port} : exception while sending")
             self.disconnect(reason=CloseReason.WRITE_ERROR)
             return False
+
         else:
-            self.bytes_sent += len(data)
-            self.network.on_transfer_data_sent(len(data), self)
+            self.bytes_sent += bytes_sent
+            self.network.on_transfer_data_sent(tokens_taken, bytes_sent, self)
+
         return True
 
-    def process_buffer(self):
+    def read(self) -> bool:
+        if self.connection_state == PeerConnectionState.TRANSFERING:
+            return self.receive_data()
+        else:
+            return self.receive_message()
+
+    def receive_data(self) -> bool:
+        # Take some tokens to receive from the buffer
+        tokens_taken = self.network.download_rate_limiter.take_tokens()
+        if tokens_taken == 0:
+            return True
+
+        try:
+            recv_data = self.fileobj.recv(tokens_taken)
+
+        except OSError:
+            logger.exception(f"exception receiving data on connection {self.fileobj}")
+            # Only remove the peer connections?
+            logger.debug(f"close {self.hostname}:{self.port} : exception while reading")
+            self.disconnect(reason=CloseReason.READ_ERROR)
+            return False
+
+        else:
+            self.interact()
+            if recv_data:
+                self.buffer(recv_data)
+                self.process_buffer(tokens_taken=tokens_taken)
+
+            else:
+                logger.debug(
+                    f"close {self.hostname}:{self.port} : no data received")
+                self.disconnect(reason=CloseReason.EOF)
+                return False
+
+        return True
+
+    def process_buffer(self, tokens_taken: int = 0):
         """Attempts to process the buffer depending on the current
         connection_state. Called after we have received some data
+
+        :param tokens_taken: only applicable when receiving transfer data, the
+            amount of tokens taken for the download RateLimiter
         """
         if self.connection_state in (PeerConnectionState.AWAITING_INIT, PeerConnectionState.ESTABLISHED, ):
 
@@ -494,20 +551,21 @@ class PeerConnection(DataConnection):
 
             data = self._buffer
             self._buffer = bytes()
-            self.network.on_transfer_data_received(data, self)
+            self.network.on_transfer_data_received(tokens_taken, data, self)
 
     def parse_message(self, message_data: bytes):
         try:
             if self.connection_state == PeerConnectionState.AWAITING_INIT:
                 return messages.parse_peer_initialization_message(message_data)
+
             else:
-                if self.connection_type == PeerConnectionType.DISTRIBUTED:
-                    return messages.parse_distributed_message(message_data)
-                else:
+                if self.connection_type == PeerConnectionType.PEER:
                     return messages.parse_peer_message(message_data)
+                else:
+                    return messages.parse_distributed_message(message_data)
+
         except Exception:
             logger.exception(f"failed to parse peer message : {message_data!r}")
-            return
 
     def write_message(self, message):
         if self.obfuscated:

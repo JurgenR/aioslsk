@@ -10,7 +10,7 @@ from selectors import DefaultSelector, EVENT_READ, EVENT_WRITE
 import socket
 import time
 from threading import Lock
-from typing import Callable, List, Union
+from typing import Callable, Dict, List, Union, Type
 
 from .connection import (
     Connection,
@@ -54,6 +54,7 @@ from . import upnp
 from .state import State
 from .settings import Settings
 from .transfer import Transfer, TransferDirection
+from .utils import ticket_generator
 
 
 logger = logging.getLogger()
@@ -90,6 +91,98 @@ class ConnectionRequest:
     """Callback called when connection cannot be initialized"""
 
 
+
+class RateLimiter:
+
+    @classmethod
+    def create_limiter(cls, limit_kbps: int) -> Type[RateLimiter]:
+        if limit_kbps == 0:
+            return UnlimitedRateLimiter()
+        else:
+            return LimitedRateLimiter(limit_kbps)
+
+    def is_empty(self) -> bool:
+        raise NotImplementedError("method 'is_empty' should be overridden in a subclass")
+
+    def refill(self) -> bool:
+        raise NotImplementedError("method 'refill' should be overridden in a subclass")
+
+    def take_tokens(self) -> int:
+        raise NotImplementedError("method 'take_tokens' should be overridden in a subclass")
+
+    def add_tokens(self, token_amount: int):
+        raise NotImplementedError("method 'add_tokens' should be overridden in a subclass")
+
+
+class UnlimitedRateLimiter(RateLimiter):
+    UPPER_LIMIT = 8192
+
+    def __init__(self):
+        self.limit_bps: int = 0
+        self.bucket: int = 0
+        self.transfer_amount: int = 0
+        self.last_refill: float = 0.0
+
+    def is_empty(self) -> bool:
+        return False
+
+    def refill(self) -> bool:
+        return False
+
+    def take_tokens(self) -> int:
+        return self.UPPER_LIMIT
+
+    def add_tokens(self, token_amount: int):
+        pass
+
+
+class LimitedRateLimiter(RateLimiter):
+    LOWER_LIMIT = 128
+    UPPER_LIMIT = 1024
+
+    def __init__(self, limit_kbps: int):
+        self.limit_bps: int = limit_kbps * 1024
+        self.bucket: int = 0
+        self.transfer_amount: int = 0
+        self.last_refill: float = 0.0
+
+    def is_empty(self) -> bool:
+        return self.bucket < self.LOWER_LIMIT
+
+    def refill(self) -> bool:
+        if self.limit_bps == self.bucket:
+            return
+
+        current_time = time.monotonic()
+        if self.bucket < self.limit_bps:
+            time_passed = current_time - self.last_refill
+            new_tokens = (self.limit_bps - self.bucket) * time_passed
+            self.add_tokens(int(new_tokens))
+
+        self.last_refill = current_time
+
+        return self.is_empty()
+
+    def take_tokens(self):
+        if self.limit_bps == 0:
+            return self.UPPER_LIMIT
+
+        # Take some tokens
+        if self.bucket < self.LOWER_LIMIT:
+            return 0
+        else:
+            self.bucket -= self.LOWER_LIMIT
+            return self.LOWER_LIMIT
+
+    def add_tokens(self, token_amount: int):
+        if self.limit_bps == 0:
+            return
+
+        self.bucket += token_amount
+        if self.bucket > self.limit_bps:
+            self.bucket = self.limit_bps
+
+
 class Network:
 
     def __init__(self, state: State, settings: Settings, internal_event_bus: InternalEventBus):
@@ -98,6 +191,7 @@ class Network:
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._upnp = upnp.UPNP()
         self._connection_requests = TTLCache(maxsize=1000, ttl=5 * 60)
+        self._ticket_generator = ticket_generator()
 
         # List of connections
         self.server: ServerConnection = None
@@ -120,6 +214,19 @@ class Network:
         self._lock = Lock()
 
         self.MESSAGE_MAP = build_message_map(self)
+
+        self.upload_rate_limiter: RateLimiter = RateLimiter.create_limiter(
+            self._settings.get('sharing.limits.upload_speed_kbps'))
+        self.download_rate_limiter: RateLimiter = RateLimiter.create_limiter(
+            self._settings.get('sharing.limits.download_speed_kbps'))
+
+        self._settings.add_listener(
+            'sharing.limits.upload_speed_kbps', self.on_upload_speed_changed)
+        self._settings.add_listener(
+            'sharing.limits.download_speed_kbps', self.on_download_speed_changed)
+
+        # Debugging
+        self._user_ip_overrides: Dict[str, str] = self._settings.get('debug.user_ip_overrides')
 
     def initialize(self):
         logger.info("initializing network")
@@ -169,9 +276,7 @@ class Network:
         connection limit then add it to the selector queue
         """
         if len(self.selector.get_map()) >= self._connection_limit:
-            self._selector_queue.append(
-                (fileobj, events, connection)
-            )
+            self._selector_queue.append((fileobj, events, connection))
         else:
             self.selector.register(fileobj, events, data=connection)
 
@@ -206,6 +311,7 @@ class Network:
                         "successfully connected {}:{}".format(connection.hostname, connection.port))
                     connection.set_state(ConnectionState.CONNECTED)
                 continue
+
             else:
                 if socket_err != 0:
                     logger.debug(
@@ -214,6 +320,7 @@ class Network:
                     connection.disconnect(reason=CloseReason.EOF)
                     continue
 
+            # Check actual events
             if mask & EVENT_READ:
                 # Listening connection
                 if isinstance(connection, ListeningConnection):
@@ -235,15 +342,14 @@ class Network:
         connections_map = self.selector.get_map()
         selector_keys = list(connections_map.values())
 
-        self._set_write_event(selector_keys)
         self._clean_up_connections(selector_keys, current_time)
         self._pull_from_queue(selector_keys)
+        self._refill_buckets()
 
     def _clean_up_connections(self, selector_keys, current_time):
-        if current_time - self._last_cleanup_time < 0.05:
+        if current_time - self._last_cleanup_time < 0.02:
             return
 
-        ### Clean up connections
         for selector_key in selector_keys:
             connection = selector_key.data
 
@@ -292,44 +398,26 @@ class Network:
                 self.selector.register(fileobj, events, connection)
             self._selector_queue = self._selector_queue[to_queue:]
 
-    def _set_write_event(self, selector_keys):
-        """Loops over the current connection and sets/unsets the write flag in
-        the selector
-        """
-        with self._lock:
-            for key in selector_keys:
-                connection = key.data
-                # Connection needs to stay in write mode to detect whether we
-                # have completed connecting or error occurred. If we were to
-                # just keep that connection in READ then the select would only
-                # trigger when there is data to read and not on errors
-                if connection.state == ConnectionState.CONNECTING and not isinstance(connection, ListeningConnection):
-                    if not (key.events & EVENT_WRITE):
-                        self.selector.modify(
-                            key.fileobj,
-                            EVENT_READ | EVENT_WRITE,
-                            data=connection
-                        )
+    def _refill_buckets(self):
+        is_empty = self.upload_rate_limiter.refill()
+        self.download_rate_limiter.refill()
 
-                elif connection.has_data_to_write():
-                    if not (key.events & EVENT_WRITE):
-                        self.selector.modify(
-                            key.fileobj,
-                            EVENT_READ | EVENT_WRITE,
-                            data=connection
-                        )
+        for connection in self.peer_connections:
+            if not connection.is_uploading():
+                continue
 
-                else:
-                    if (key.events & EVENT_WRITE):
-                        self.selector.modify(
-                            key.fileobj,
-                            EVENT_READ,
-                            data=connection
-                        )
+            if is_empty:
+                self.disable_write(connection)
+            else:
+                self.enable_write(connection)
 
     def exit(self):
-        for data in self.selector.get_map().values():
-            data.fileobj.close()
+        connections_map = self.selector.get_map()
+        selector_keys = list(connections_map.values())
+        for key in selector_keys:
+            key.data.set_state(ConnectionState.SHOULD_CLOSE)
+
+        self._clean_up_connections(selector_keys, 0.0)
 
         self.selector.close()
 
@@ -346,7 +434,7 @@ class Network:
         self._connection_requests.expire()
 
     def init_peer_connection(
-            self, ticket: int, username: str, typ, ip: str = None, port: int = None,
+            self, username: str, typ, ip: str = None, port: int = None,
             transfer: Transfer = None, messages=None, on_failure=None) -> ConnectionRequest:
         """Starts the process of peer connection initialization.
 
@@ -364,6 +452,7 @@ class Network:
 
         :return: created L{ConnectionRequest} object
         """
+        ticket = next(self._ticket_generator)
         logger.debug(f"starting initialization of peer connection (ticket={ticket}, username={username}, type={typ})")
         messages = [] if messages is None else messages
         connection_request = ConnectionRequest(
@@ -405,7 +494,24 @@ class Network:
             obfuscated=request.obfuscated
         )
         request.connection = connection
+        connection.connect()
 
+    def on_peer_connection_established(self, connection: PeerConnection):
+        """Called after a peer connection goes into CONNECTED state"""
+        # Skip connections that we accepted through the listening connection.
+        # It's up to the other peer to send us the init message
+        if connection.incoming:
+            return
+
+        requests = [
+            req for req in self._connection_requests.values()
+            if req.connection == connection
+        ]
+        if not requests:
+            logger.warn(f"connection {connection!r} was connected but associated with a request")
+            return
+
+        request = requests[0]
         if request.is_requested_by_us:
             message = PeerInit.create(
                 self._settings.get('credentials.username'),
@@ -422,8 +528,6 @@ class Network:
                     on_success=partial(self.complete_peer_connection_request, request, connection)
                 )
             )
-
-        connection.connect()
 
     def on_peer_connection_failed(self, connection: PeerConnection):
         """Method to be called when we failed to establish a connection to the
@@ -469,8 +573,8 @@ class Network:
 
     def complete_peer_connection_request(self, request: ConnectionRequest, connection: PeerConnection):
         """Method to be called after initialization of the peer connection has
-        complete. In summary this would mean the connection should currently be
-        in the following state:
+        completed successfully. This would mean the connection should currently
+        be in the following state:
 
         - ConnectionState: CONNECTED
         - PeerConnectionState: AWAITING_INIT
@@ -529,9 +633,8 @@ class Network:
                     f"finalized a peer connection for an unknown ticket (ticket={request.ticket})")
 
         # Dump all messages from the request
-        for message in request.messages:
-            with self._lock:
-                connection.queue_messages(message)
+        with self._lock:
+            connection.queue_messages(*request.messages)
 
         # Notify that a new connection was completed
         self._internal_event_bus.emit(PeerInitializedEvent(connection))
@@ -656,10 +759,7 @@ class Network:
 
         for _, request in self._connection_requests.items():
             if request.username == username:
-                if username == 'Khyle':
-                    request.ip = '192.168.0.152'
-                else:
-                    request.ip = ip
+                request.ip = self._user_ip_overrides.get(username, ip)
                 request.port = port
                 self._connect_to_peer(request)
 
@@ -669,8 +769,7 @@ class Network:
         logger.info("ConnectToPeer : {!r}".format(contents))
         username, typ, ip, port, ticket, privileged, _, obfuscated_port = contents
 
-        if username == 'Khyle':
-            ip = '192.168.0.152'
+        ip = self._user_ip_overrides.get(username, ip)
 
         request = ConnectionRequest(
             ticket=ticket,
@@ -716,9 +815,7 @@ class Network:
                 connections[0].queue_messages(*messages)
                 return
 
-        connection_ticket = next(self._state.ticket_generator)
         self.init_peer_connection(
-            connection_ticket,
             username,
             PeerConnectionType.PEER,
             messages=messages
@@ -783,6 +880,9 @@ class Network:
             self._register_connection(
                 connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
 
+        elif state == ConnectionState.CONNECTED:
+            self.on_peer_connection_established(connection)
+
         elif state == ConnectionState.CLOSED:
             self.selector.unregister(connection.fileobj)
 
@@ -804,11 +904,13 @@ class Network:
         self._register_connection(
             connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
 
-    def on_message(self, message: Message, connection: Connection):
+    def on_message_received(self, message: Message, connection: Connection):
+        # Call the message callbacks for this object
         message = copy.deepcopy(message)
         if message.__class__ in self.MESSAGE_MAP:
             self.MESSAGE_MAP[message.__class__](message, connection)
 
+        # Emit an event for the message
         msg_event_cls = None
         if isinstance(message, ServerMessage):
             msg_event_cls = ServerMessageEvent
@@ -820,6 +922,13 @@ class Network:
             msg_event_cls = DistributedMessageEvent
 
         self._internal_event_bus.emit(msg_event_cls(message, connection))
+
+    def on_message_sent(self, message: ProtocolMessage, connection: Connection):
+        if message.on_success is not None:
+            try:
+                message.on_success()
+            except Exception:
+                logger.exception(f"exception calling callback {message.on_success!r} (message={message!r})")
 
     # Transfer related
 
@@ -833,12 +942,42 @@ class Network:
             TransferTicketEvent(connection, ticket)
         )
 
-    def on_transfer_data_received(self, data: bytes, connection: PeerConnection):
+    def on_transfer_data_received(self, tokens_taken: int, data: bytes, connection: PeerConnection):
+        self.download_rate_limiter.add_tokens(tokens_taken - len(data))
         self._internal_event_bus.emit(
-            TransferDataReceivedEvent(connection, data)
+            TransferDataReceivedEvent(connection, tokens_taken, data)
         )
 
-    def on_transfer_data_sent(self, bytes_sent: int, connection: PeerConnection):
+    def on_transfer_data_sent(self, tokens_taken: int, bytes_sent: int, connection: PeerConnection):
+        self.upload_rate_limiter.add_tokens(tokens_taken - bytes_sent)
         self._internal_event_bus.emit(
-            TransferDataSentEvent(connection, bytes_sent)
+            TransferDataSentEvent(connection, tokens_taken, bytes_sent)
         )
+
+    def disable_write(self, connection: Connection):
+        self.selector.modify(connection.fileobj, EVENT_READ, data=connection)
+
+    def enable_write(self, connection: Connection):
+        self.selector.modify(connection.fileobj, EVENT_READ | EVENT_WRITE, data=connection)
+
+    # Settings listeners
+
+    def on_upload_speed_changed(self, limit_kbps: int):
+        new_limiter = RateLimiter.create_limiter(limit_kbps)
+        if isinstance(new_limiter, UnlimitedRateLimiter):
+            self.upload_rate_limiter = new_limiter
+        else:
+            # Transfer the tokens we had to the new limiter
+            new_limiter.add_tokens(self.upload_rate_limiter.bucket)
+            new_limiter.last_refill = self.upload_rate_limiter.last_refill
+            self.upload_rate_limiter = new_limiter
+
+    def on_download_speed_changed(self, limit_kbps: int):
+        new_limiter = RateLimiter.create_limiter(limit_kbps)
+        if isinstance(new_limiter, UnlimitedRateLimiter):
+            self.download_rate_limiter = new_limiter
+        else:
+            # Transfer the tokens we had to the new limiter
+            new_limiter.add_tokens(self.download_rate_limiter.bucket)
+            new_limiter.last_refill = self.download_rate_limiter.last_refill
+            self.download_rate_limiter = new_limiter

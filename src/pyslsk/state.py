@@ -1,15 +1,13 @@
 from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Deque, Dict, List, Tuple
+from typing import TYPE_CHECKING, Deque, Dict, List
 
 from .scheduler import Scheduler
 from .model import ChatMessage, Room, User
-from .utils import ticket_generator
 
 if TYPE_CHECKING:
     from .connection import PeerConnection
-    from .peer import Peer
     from .search import ReceivedSearch, SearchQuery
 
 
@@ -52,7 +50,6 @@ class State:
 
     # Global state
     scheduler: Scheduler = None
-    ticket_generator = ticket_generator()
 
     def get_or_create_user(self, username) -> User:
         try:

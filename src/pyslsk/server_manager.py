@@ -9,6 +9,7 @@ from .events import (
     ConnectionStateChangedEvent,
     EventBus,
     InternalEventBus,
+    LoginEvent,
     PrivateMessageEvent,
     RoomMessageEvent,
     RoomListEvent,
@@ -233,6 +234,8 @@ class ServerManager:
                     for room_name in self._settings.get('chats.rooms')
                 ]
             )
+
+        self._internal_event_bus.emit(LoginEvent(success=success))
 
     @on_message(ChatRoomMessage)
     def on_chat_room_message(self, message, connection):
@@ -570,10 +573,7 @@ class ServerManager:
         ]
 
         for username, ip, port in net_info_list:
-            ticket = next(self._state.ticket_generator)
-
             self.network.init_peer_connection(
-                ticket,
                 username,
                 PeerConnectionType.DISTRIBUTED,
                 ip=ip,

@@ -351,10 +351,6 @@ class PeerManager:
                     if peer.connection != event.connection
                 ]
 
-            # Check if it was a file transfer
-            elif event.connection.connection_type == PeerConnectionType.FILE:
-                self.transfer_manager.on_transfer_connection_closed(event.connection, close_reason=event.close_reason)
-
     def send_messages_to_children(self, *messages: Union[ProtocolMessage, bytes]):
         for child in self._state.children:
             child.connection.queue_messages(*messages)

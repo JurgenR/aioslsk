@@ -16,6 +16,7 @@ from .state import State
 from .search import SearchQuery
 from .settings import Settings
 from .transfer import Transfer, TransferDirection, TransferManager
+from .utils import ticket_generator
 
 
 CLIENT_VERSION = 157
@@ -31,6 +32,7 @@ class SoulSeek(threading.Thread):
         self.configuration: Configuration = configuration
         self.settings: Settings = configuration.load_settings('pyslsk')
 
+        self._ticket_generator = ticket_generator()
         self._stop_event = threading.Event()
 
         self.events: EventBus = event_bus or EventBus()
@@ -106,6 +108,8 @@ class SoulSeek(threading.Thread):
             if self.is_alive():
                 logger.warning(f"thread is still alive after 30s : {self!r}")
 
+        # Writing database needs to be last, as transfers need to go into the
+        # incomplete state if they were still transfering
         self.transfer_manager.write_database()
 
     @property
@@ -144,6 +148,9 @@ class SoulSeek(threading.Thread):
     def abort_transfer(self, transfer: Transfer):
         self.transfer_manager.abort(transfer)
 
+    def queue_transfer(self, transfer: Transfer):
+        self.transfer_manager.queue(transfer)
+
     def join_room(self, room: Union[str, Room]):
         if isinstance(room, Room):
             self.server_manager.join_room(room.name)
@@ -175,7 +182,7 @@ class SoulSeek(threading.Thread):
         """Performs a search, returns the generated ticket number for the search
         """
         logger.info(f"Starting search for query: {query}")
-        ticket = next(self.state.ticket_generator)
+        ticket = next(self._ticket_generator)
         self._network.send_server_messages(
             messages.FileSearch.create(ticket, query)
         )

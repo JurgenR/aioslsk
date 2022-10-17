@@ -19,6 +19,8 @@ credentials:
 sharing:
   limits:
     upload_slots: 2
+    upload_speed_kbps: 0
+    download_speed_kbps: 0
   download: null
   directories: []
 
@@ -33,3 +35,4 @@ users:
 
 debug:
   search_for_parent: true
+  user_ip_overrides: {}

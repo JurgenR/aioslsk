@@ -43,7 +43,7 @@ def get_attribute_string(attributes):
     return ' '.join(attr_str)
 
 
-def ticket_generator(initial=1234):
+def ticket_generator(initial: int = 1234) -> int:
     idx = initial
     while True:
         idx += 1

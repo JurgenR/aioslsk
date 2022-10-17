@@ -213,7 +213,7 @@ class TransferStateChanged(Event):
     state: TransferState
 
 
-# Low level events
+# Internal Events
 
 class InternalEvent(Event):
     pass
@@ -289,10 +289,17 @@ class TransferTicketEvent(InternalEvent):
 @dataclass(frozen=True)
 class TransferDataSentEvent(InternalEvent):
     connection: PeerConnection
+    tokens_taken: int
     bytes_sent: int
 
 
 @dataclass(frozen=True)
 class TransferDataReceivedEvent(InternalEvent):
     connection: PeerConnection
+    tokens_taken: int
     data: bytes
+
+
+@dataclass(frozen=True)
+class LoginEvent(InternalEvent):
+    success: bool
