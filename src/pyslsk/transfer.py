@@ -874,7 +874,7 @@ class TransferManager:
     def on_get_user_status(self, message, connection):
         username, status, _ = message.parse()
         status = UserStatus(status)
-        user = self._state.get_or_create_user(username)
+        self._state.get_or_create_user(username)
         if status in (UserStatus.ONLINE, UserStatus.AWAY, ):
             # Do something with the users queued uploads
             pass

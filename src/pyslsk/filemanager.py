@@ -8,7 +8,6 @@ import sys
 from typing import Dict, List, Tuple
 import uuid
 
-from .exceptions import FileNotSharedError
 from .messages import DirectoryData, FileData
 from .settings import Settings
 

@@ -163,9 +163,6 @@ class LimitedRateLimiter(RateLimiter):
         return self.is_empty()
 
     def take_tokens(self):
-        if self.limit_bps == 0:
-            return self.UPPER_LIMIT
-
         # Take some tokens
         if self.bucket < self.LOWER_LIMIT:
             return 0
@@ -174,9 +171,6 @@ class LimitedRateLimiter(RateLimiter):
             return self.LOWER_LIMIT
 
     def add_tokens(self, token_amount: int):
-        if self.limit_bps == 0:
-            return
-
         self.bucket += token_amount
         if self.bucket > self.limit_bps:
             self.bucket = self.limit_bps
