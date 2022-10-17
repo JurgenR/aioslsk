@@ -167,9 +167,6 @@ class DataConnection(Connection):
         self.send_buf_size: int = TRANSFER_RECV_BUF_SIZE
 
     def set_state(self, state: ConnectionState, close_reason: CloseReason = CloseReason.UNKNOWN):
-        # if state == ConnectionState.CONNECTING:
-            # self.network.enable_write(self)
-
         if state == ConnectionState.CONNECTED:
             self.interact()
             if not self._messages:

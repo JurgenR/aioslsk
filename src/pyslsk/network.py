@@ -91,7 +91,6 @@ class ConnectionRequest:
     """Callback called when connection cannot be initialized"""
 
 
-
 class RateLimiter:
 
     @classmethod

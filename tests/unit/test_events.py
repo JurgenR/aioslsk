@@ -1,5 +1,5 @@
 from pyslsk.events import on_message, EventBus, UserAddEvent
-from pyslsk.messages import Login, Ping
+from pyslsk.messages import Ping
 from pyslsk.model import User
 
 from unittest.mock import create_autospec

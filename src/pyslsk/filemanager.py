@@ -96,8 +96,8 @@ class FileManager:
         The hardware address is mixed in to avoid getting the same alias for the
         same directory on different machines. Admittedly this is a lousy
         security measure but hopefully this will prevent easy leaking of files
-        in case such issue would occur. Example: `abcde` is always generated for
-        `C:\` so the attacker could guess where a file is located.
+        in case such issue would occur. Example: 'abcde' is always generated for
+        'C:\\' so the attacker could guess where a file is located.
 
         :param path: the path for which to generate an alias
         :param offset: offset for the value of the initial 5 bytes (default=0)

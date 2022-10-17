@@ -1,6 +1,5 @@
 import copy
 import logging
-from functools import partial
 from typing import List, Union
 
 from .connection import (

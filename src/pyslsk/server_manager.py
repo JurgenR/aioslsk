@@ -348,6 +348,7 @@ class ServerManager:
     @on_message(PrivateRoomToggle)
     def on_private_room_toggle(self, message, connection):
         enabled = message.parse()
+        logger.debug(f"private rooms enabled : {enabled}")
 
     @on_message(PrivateRoomAdded)
     def on_private_room_added(self, message, connection):
