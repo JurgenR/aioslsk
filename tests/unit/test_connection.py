@@ -3,8 +3,10 @@ from pyslsk.connection import (
     CloseReason,
     ConnectionState,
     DataConnection,
+    ListeningConnection,
     PeerConnection,
     PeerConnectionState,
+    PeerConnectionType,
 )
 import pytest
 from unittest.mock import MagicMock, Mock, patch
@@ -172,3 +174,51 @@ class TestPeerConnection:
         network.on_state_changed.assert_called_once_with(
             ConnectionState.CLOSED, conn, close_reason=CloseReason.READ_ERROR)
         assert conn.state == ConnectionState.CLOSED
+
+
+class TestListeningConnection:
+
+    @patch('pyslsk.connection.socket.socket', autospec=True)
+    def test_whenConnect_shouldConnect(self, sock_mock):
+        network = Mock()
+        connection = ListeningConnection('0.0.0.0', 1234, network)
+
+        fileobj = MagicMock()
+        fileobj.connect_ex.return_value = 10035
+        sock_mock.return_value = fileobj
+
+        connection.connect()
+
+        fileobj.bind.assert_called_once_with(('0.0.0.0', 1234))
+        fileobj.setblocking.assert_called_once_with(False)
+        fileobj.listen.assert_called_once()
+
+        assert connection.state == ConnectionState.CONNECTING
+        assert connection.fileobj == fileobj
+
+    def test_whenAccept_shouldCreateNewPeerConnection(self):
+        peer_addr = ('6.6.6.6', 123)
+        obfuscated = True
+
+        network = Mock()
+        fileobj = Mock()
+        sock = Mock()
+        sock.accept.return_value = (fileobj, peer_addr)
+
+        connection = ListeningConnection('0.0.0.0', 1234, network, obfuscated=obfuscated)
+        peer = connection.accept(sock)
+
+        # Assert created peer
+        assert (peer.hostname, peer.port) == peer_addr
+        assert peer.connection_type == PeerConnectionType.PEER
+        assert peer.obfuscated == obfuscated
+        assert peer.incoming is True
+        assert peer.state == ConnectionState.CONNECTED
+        assert peer.fileobj == fileobj
+
+        # Assert correct calls
+        sock.accept.assert_called_once()
+        fileobj.setblocking.assert_called_once_with(False)
+
+        network.on_peer_accepted.assert_called_once_with(peer)
+        assert connection.connections_accepted == 1
