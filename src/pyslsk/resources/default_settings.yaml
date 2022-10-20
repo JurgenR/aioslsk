@@ -22,6 +22,8 @@ sharing:
     upload_speed_kbps: 0
     download_speed_kbps: 0
   download: null
+  index:
+    store_interval: 120
   directories: []
 
 chats:

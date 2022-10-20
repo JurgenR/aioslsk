@@ -5,7 +5,12 @@ from typing import List, Union
 
 from .configuration import Configuration
 from .events import EventBus, InternalEventBus
-from .shares import SharesManager, SharesIndexer, IndexStorage
+from .shares import (
+    SharesManager,
+    SharesIndexer,
+    SharesShelveStorage,
+    SharesStorage,
+)
 from .model import Room, User
 from .network import Network
 from . import messages
@@ -51,17 +56,16 @@ class SoulSeek(threading.Thread):
         self.state.scheduler.add_job(self._cache_expiration_job)
 
         shares_indexer: SharesIndexer = SharesIndexer()
-        index_storage: IndexStorage = IndexStorage(self.configuration.data_directory)
+        shares_storage: SharesStorage = SharesShelveStorage(self.configuration.data_directory)
         self.shares_manager: SharesManager = SharesManager(
             self.settings,
             shares_indexer,
-            index_storage
+            shares_storage
         )
-        self.shares_manager.shared_items = set(index_storage.load_items())
+        self.shares_manager.read_items_from_storage()
         self.shares_manager.build_term_map(rebuild=True)
-        self.state.scheduler.add(
-            0, self.shares_manager.load_from_settings, times=1
-        )
+        # Schedule a task to run as soon as the event loop starts
+        self.state.scheduler.add(0, self.shares_manager.load_from_settings, times=1)
         logger.debug(f"loaded from settings")
 
         self.transfer_manager: TransferManager = TransferManager(

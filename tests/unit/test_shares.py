@@ -1,4 +1,10 @@
-from pyslsk.shares import extract_attributes, SharesManager, SharedItem
+from pyslsk.shares import (
+    extract_attributes,
+    SharesManager,
+    SharedItem,
+    SharesIndexer,
+    SharesStorage,
+)
 from pyslsk.settings import Settings
 
 import pytest

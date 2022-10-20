@@ -158,7 +158,19 @@ class SharesIndexer:
         self._thread_pool.shutdown(wait=True)
 
 
-class IndexStorage:
+class SharesStorage:
+    """Abstract base class for storing shares"""
+
+    def load_items(self) -> Set[SharedItem]:
+        raise NotImplementedError(
+            "'load_items' needs to be overwritten in a subclass")
+
+    def store_items(self, shared_items: Set[SharedItem]):
+        raise NotImplementedError(
+            "'store_items' needs to be overwritten in a subclass")
+
+
+class SharesShelveStorage(SharesStorage):
     DEFAULT_FILENAME = 'shares_index'
 
     def __init__(self, data_directory: str):
@@ -167,14 +179,14 @@ class IndexStorage:
     def _get_index_path(self):
         return os.path.join(self.data_directory, self.DEFAULT_FILENAME)
 
-    def load_items(self) -> List[SharedItem]:
+    def load_items(self) -> Set[SharedItem]:
         with shelve.open(self._get_index_path(), 'c') as db:
             if 'index' not in db:
                 return []
 
             return db['index']
 
-    def store_items(self, shared_items: List[SharedItem]):
+    def store_items(self, shared_items: Set[SharedItem]):
         with shelve.open(self._get_index_path(), 'c') as db:
             db['index'] = shared_items
 
@@ -182,14 +194,14 @@ class IndexStorage:
 class SharesManager:
     _ALIAS_LENGTH = 5
 
-    def __init__(self, settings: Settings, indexer: SharesIndexer, index_storage: IndexStorage):
+    def __init__(self, settings: Settings, indexer: SharesIndexer, storage: SharesStorage):
         self._settings: Settings = settings
         self.term_map: Dict[str, Set[SharedItem]] = {}
         self.shared_items: Set[SharedItem] = set()
         self.directory_aliases: Dict[str, str] = {}
 
-        self.indexer = indexer
-        self.index_storage = index_storage
+        self.indexer: SharesIndexer = indexer
+        self.storage: SharesStorage = storage
 
         self._shared_items_lock = RLock()
 
@@ -234,8 +246,22 @@ class SharesManager:
         for shared_directory in self._settings.get('sharing.directories'):
             self.add_shared_directory(shared_directory)
 
+    def read_items_from_storage(self):
+        """Read the items from the storage. Rebuilding of the term map needs to
+        be called independently.
+        """
+        with self._shared_items_lock:
+            self.shared_items = self.storage.load_items()
+
+    def write_items_to_storage(self):
+        with self._shared_items_lock:
+            self.shared_items = self.storage.store_items(self.shared_items)
+
     def build_term_map(self, rebuild=True):
-        """Builds a list of valid terms for the current list of shared items"""
+        """Builds a list of valid terms for the current list of shared items
+
+        :param rebuild: rebuilds the term map from scratch
+        """
         if rebuild:
             self.term_map = {}
 
