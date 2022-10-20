@@ -2,7 +2,6 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from functools import partial
 import logging
-import time
 from weakref import WeakSet
 import mutagen
 from mutagen.mp3 import BitrateMode
@@ -180,7 +179,7 @@ class IndexStorage:
             db['index'] = shared_items
 
 
-class FileManager:
+class SharesManager:
     _ALIAS_LENGTH = 5
 
     def __init__(self, settings: Settings, indexer: SharesIndexer, index_storage: IndexStorage):

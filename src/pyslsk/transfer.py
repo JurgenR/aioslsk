@@ -35,7 +35,7 @@ from .events import (
     TransferDataSentEvent,
     TransferDataReceivedEvent,
 )
-from .filemanager import FileManager
+from .shares import SharesManager
 from .messages import (
     pack_int64,
     pack_int,
@@ -429,7 +429,7 @@ class TransferManager:
     def __init__(
             self, state: State, configuration: Configuration, settings: Settings,
             event_bus: EventBus, internal_event_bus: InternalEventBus,
-            file_manager: FileManager, network: Network):
+            shares_manager: SharesManager, network: Network):
         self._state = state
         self._configuration: Configuration = configuration
         self._settings: Settings = settings
@@ -437,7 +437,7 @@ class TransferManager:
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._ticket_generator = ticket_generator()
 
-        self._file_manager: FileManager = file_manager
+        self._shares_manager: SharesManager = shares_manager
         self._network: Network = network
 
         self._storage: TransferStorage = TransferStorage(self._configuration.data_directory)
@@ -776,7 +776,7 @@ class TransferManager:
             return
 
         transfer.set_offset(event.offset)
-        transfer.filesize = self._file_manager.get_filesize(transfer.local_path)
+        transfer.filesize = self._shares_manager.get_filesize(transfer.local_path)
 
         event.connection.set_connection_state(PeerConnectionState.TRANSFERING)
         self.uploading(transfer)
@@ -830,7 +830,7 @@ class TransferManager:
 
         # Set the local download path in case it was not yet set
         if transfer.local_path is None:
-            download_path = self._file_manager.get_download_path(transfer.remote_path)
+            download_path = self._shares_manager.get_download_path(transfer.remote_path)
             transfer.local_path = download_path
             logger.info(f"started receiving transfer data, download path : {download_path}")
 
@@ -920,9 +920,9 @@ class TransferManager:
 
         # Check if the shared file exists. Otherwise fail the error
         try:
-            shared_item = self._file_manager.get_shared_item(filename)
-            transfer.local_path = self._file_manager.resolve_path(shared_item)
-            transfer.filesize = self._file_manager.get_filesize(transfer.local_path)
+            shared_item = self._shares_manager.get_shared_item(filename)
+            transfer.local_path = self._shares_manager.resolve_path(shared_item)
+            transfer.filesize = self._shares_manager.get_filesize(transfer.local_path)
         except LookupError:
             self.fail(transfer, reason="File not shared.")
             self._network.send_peer_messages(

@@ -28,7 +28,7 @@ from .events import (
     UserStatsEvent,
     UserStatusEvent,
 )
-from .filemanager import FileManager
+from .shares import SharesManager
 from .messages import (
     AcceptChildren,
     AddPrivilegedUser,
@@ -94,12 +94,12 @@ LOGIN_TIMEOUT = 30
 
 class ServerManager:
 
-    def __init__(self, state: State, settings: Settings, event_bus: EventBus, internal_event_bus: InternalEventBus, file_manager: FileManager, network: Network):
+    def __init__(self, state: State, settings: Settings, event_bus: EventBus, internal_event_bus: InternalEventBus, shares_manager: SharesManager, network: Network):
         self._state: State = state
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._internal_event_bus: InternalEventBus = internal_event_bus
-        self.file_manager: FileManager = file_manager
+        self.shares_manager: SharesManager = shares_manager
         self.network: Network = network
 
         self._ping_job = Job(5 * 60, self.send_ping)
@@ -122,7 +122,7 @@ class ServerManager:
 
     def report_shares(self):
         """Reports the shares amount to the server"""
-        dir_count, file_count = self.file_manager.get_stats()
+        dir_count, file_count = self.shares_manager.get_stats()
         logger.debug(f"reporting shares to the server (dirs={dir_count}, file_count={file_count})")
         self.network.send_server_messages(
             SharedFoldersFiles.create(dir_count, file_count)
@@ -209,7 +209,7 @@ class ServerManager:
             logger.error(f"Failed to login, reason: {reason!r}")
 
         # Make setup calls
-        dir_count, file_count = self.file_manager.get_stats()
+        dir_count, file_count = self.shares_manager.get_stats()
         logger.debug(f"Sharing {dir_count} directories and {file_count} files")
 
         self.network.send_server_messages(

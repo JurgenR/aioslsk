@@ -5,7 +5,7 @@ from typing import List, Union
 
 from .configuration import Configuration
 from .events import EventBus, InternalEventBus
-from .filemanager import FileManager, SharesIndexer, IndexStorage
+from .shares import SharesManager, SharesIndexer, IndexStorage
 from .model import Room, User
 from .network import Network
 from . import messages
@@ -52,15 +52,15 @@ class SoulSeek(threading.Thread):
 
         shares_indexer: SharesIndexer = SharesIndexer()
         index_storage: IndexStorage = IndexStorage(self.configuration.data_directory)
-        self.file_manager: FileManager = FileManager(
+        self.shares_manager: SharesManager = SharesManager(
             self.settings,
             shares_indexer,
             index_storage
         )
-        self.file_manager.shared_items = set(index_storage.load_items())
-        self.file_manager.build_term_map(rebuild=True)
+        self.shares_manager.shared_items = set(index_storage.load_items())
+        self.shares_manager.build_term_map(rebuild=True)
         self.state.scheduler.add(
-            0, self.file_manager.load_from_settings, times=1
+            0, self.shares_manager.load_from_settings, times=1
         )
         logger.debug(f"loaded from settings")
 
@@ -70,7 +70,7 @@ class SoulSeek(threading.Thread):
             self.settings,
             self.events,
             self.internal_events,
-            self.file_manager,
+            self.shares_manager,
             self._network
         )
         self.transfer_manager.load_transfers()
@@ -80,7 +80,7 @@ class SoulSeek(threading.Thread):
             self.settings,
             self.events,
             self.internal_events,
-            self.file_manager,
+            self.shares_manager,
             self.transfer_manager,
             self._network
         )
@@ -89,7 +89,7 @@ class SoulSeek(threading.Thread):
             self.settings,
             self.events,
             self.internal_events,
-            self.file_manager,
+            self.shares_manager,
             self._network
         )
 
@@ -121,7 +121,7 @@ class SoulSeek(threading.Thread):
             if self.is_alive():
                 logger.warning(f"thread is still alive after 30s : {self!r}")
 
-        self.file_manager.indexer.stop()
+        self.shares_manager.indexer.stop()
 
         # Writing database needs to be last, as transfers need to go into the
         # incomplete state if they were still transfering

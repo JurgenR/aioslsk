@@ -21,7 +21,7 @@ from .events import (
     UserSharesReplyEvent,
     SearchResultEvent,
 )
-from .filemanager import FileManager
+from .shares import SharesManager
 from .messages import (
     AcceptChildren,
     BranchLevel,
@@ -52,12 +52,12 @@ class PeerManager:
     def __init__(
             self, state: State, settings: Settings,
             event_bus: EventBus, internal_event_bus: InternalEventBus,
-            file_manager: FileManager, transfer_manager: TransferManager, network: Network):
+            shares_manager: SharesManager, transfer_manager: TransferManager, network: Network):
         self._state: State = state
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._internal_event_bus: InternalEventBus = internal_event_bus
-        self.file_manager: FileManager = file_manager
+        self.shares_manager: SharesManager = shares_manager
         self.transfer_manager: TransferManager = transfer_manager
         self.network: Network = network
 
@@ -173,7 +173,7 @@ class PeerManager:
     def _on_peer_shares_request(self, message, connection: PeerConnection):
         _ = message.parse()
 
-        reply = PeerSharesReply.create(self.file_manager.create_shares_reply())
+        reply = PeerSharesReply.create(self.shares_manager.create_shares_reply())
         connection.queue_messages(reply)
 
     @on_message(PeerSharesReply)
@@ -241,7 +241,7 @@ class PeerManager:
     def _on_distributed_search_request(self, message, connection: PeerConnection):
         _, username, search_ticket, query = message.parse()
         # logger.info(f"search request from {username!r}, query: {query!r}")
-        results = self.file_manager.query(query)
+        results = self.shares_manager.query(query)
 
         self._state.received_searches.append(
             ReceivedSearch(username=username, query=query, matched_files=len(results))
@@ -257,7 +257,7 @@ class PeerManager:
             PeerSearchReply.create(
                 self._settings.get('credentials.username'),
                 search_ticket,
-                self.file_manager.convert_items_to_file_data(results, use_full_path=True),
+                self.shares_manager.convert_items_to_file_data(results, use_full_path=True),
                 self.transfer_manager.has_slots_free(),
                 int(self.transfer_manager.get_average_upload_speed()),
                 self.transfer_manager.get_queue_size()
