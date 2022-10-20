@@ -864,7 +864,7 @@ class Network:
 
             if close_reason != CloseReason.REQUESTED:
                 if self._settings.get('network.reconnect.auto'):
-                    logger.info("scheduling to re-attempting connecting in 5 seconds")
+                    logger.info("attempting to reconnect to server in 5 seconds")
                     self._server_connect_attempts += 1
                     self._state.scheduler.add(5, self.server.connect, times=1)
 
@@ -948,10 +948,12 @@ class Network:
         )
 
     def disable_write(self, connection: Connection):
-        self.selector.modify(connection.fileobj, EVENT_READ, data=connection)
+        if connection not in self._selector_queue:
+            self.selector.modify(connection.fileobj, EVENT_READ, data=connection)
 
     def enable_write(self, connection: Connection):
-        self.selector.modify(connection.fileobj, EVENT_READ | EVENT_WRITE, data=connection)
+        if connection not in self._selector_queue:
+            self.selector.modify(connection.fileobj, EVENT_READ | EVENT_WRITE, data=connection)
 
     # Settings listeners
 

@@ -103,13 +103,13 @@ Chats / Users
 Debug
 -----
 
-+-------------------------+-------------------------------------------+---------+
-|        Parameter        |                Description                | Default |
-+=========================+===========================================+=========+
-| debug.search_for_parent | Toggle searching for a distributed parent | false   |
-+-------------------------+-------------------------------------------+---------+
-| debug.user_ip_overrides | Mapping of username and IP addresses, overrides  | <empty>   |
-+-------------------------+-------------------------------------------+---------+
++-------------------------+-------------------------------------------------+---------+
+|        Parameter        |                   Description                   | Default |
++=========================+=================================================+=========+
+| debug.search_for_parent | Toggle searching for a distributed parent       | false   |
++-------------------------+-------------------------------------------------+---------+
+| debug.user_ip_overrides | Mapping of username and IP addresses, overrides | <empty> |
++-------------------------+-------------------------------------------------+---------+
 
 
 Code Structure

@@ -103,20 +103,30 @@ class ServerManager:
         self.network: Network = network
 
         self._ping_job = Job(5 * 60, self.send_ping)
+        self._report_shares_job = Job(30, self.report_shares)
 
         self.MESSAGE_MAP = build_message_map(self)
 
         self._internal_event_bus.register(
-            ServerMessageEvent, self.on_server_message)
+            ServerMessageEvent, self._on_server_message)
         self._internal_event_bus.register(
-            ConnectionStateChangedEvent, self.on_state_changed)
+            ConnectionStateChangedEvent, self._on_state_changed)
 
     @property
     def connection_state(self) -> ConnectionState:
         return self.network.server.state
 
     def send_ping(self):
+        """Send ping to the server"""
         self.network.send_server_messages(Ping.create())
+
+    def report_shares(self):
+        """Reports the shares amount to the server"""
+        dir_count, file_count = self.file_manager.get_stats()
+        logger.debug(f"reporting shares to the server (dirs={dir_count}, file_count={file_count})")
+        self.network.send_server_messages(
+            SharedFoldersFiles.create(dir_count, file_count)
+        )
 
     def login(self, username: str, password: str, version: int = 157):
         logger.info(f"sending request to login: username={username}, password={password}")
@@ -185,7 +195,7 @@ class ServerManager:
         )
 
     @on_message(Login)
-    def on_login(self, message, connection):
+    def _on_login(self, message, connection):
         """Called when a response is received to a logon call"""
         login_values = message.parse()
         # First value indicates success
@@ -238,7 +248,7 @@ class ServerManager:
         self._internal_event_bus.emit(LoginEvent(success=success))
 
     @on_message(ChatRoomMessage)
-    def on_chat_room_message(self, message, connection):
+    def _on_chat_room_message(self, message, connection):
         room_name, username, chat_message = message.parse()
 
         user = self._state.get_or_create_user(username)
@@ -254,7 +264,7 @@ class ServerManager:
         self._event_bus.emit(RoomMessageEvent(room_message))
 
     @on_message(ChatUserJoinedRoom)
-    def on_user_joined_room(self, message, connection):
+    def _on_user_joined_room(self, message, connection):
         room_name, username, status, avg_speed, download_num, file_count, dir_count, slots_free, country = message.parse()
         logger.info(f"user {username} joined room {room_name}")
 
@@ -273,7 +283,7 @@ class ServerManager:
         self._event_bus.emit(UserJoinedRoomEvent(user=user, room=room))
 
     @on_message(ChatUserLeftRoom)
-    def on_user_left_room(self, message, connection):
+    def _on_user_left_room(self, message, connection):
         room_name, username = message.parse()
         logger.info(f"user {username} left room {room_name}")
         user = self._state.get_or_create_user(username)
@@ -282,7 +292,7 @@ class ServerManager:
         self._event_bus.emit(UserLeftRoomEvent(user=user, room=room))
 
     @on_message(ChatJoinRoom)
-    def on_join_room(self, message, connection):
+    def _on_join_room(self, message, connection):
         room_name, users, users_status, users_data, users_has_slots_free, users_countries, owner, operators = message.parse()
 
         room = self._state.get_or_create_room(room_name)
@@ -306,7 +316,7 @@ class ServerManager:
         self._event_bus.emit(RoomJoinedEvent(room=room))
 
     @on_message(ChatLeaveRoom)
-    def on_leave_room(self, message, connection):
+    def _on_leave_room(self, message, connection):
         room_name = message.parse()
         room = self._state.get_or_create_room(room_name)
         room.joined = False
@@ -314,7 +324,7 @@ class ServerManager:
         self._event_bus.emit(RoomLeftEvent(room=room))
 
     @on_message(ChatRoomTickers)
-    def on_chat_room_tickers(self, message, connection):
+    def _on_chat_room_tickers(self, message, connection):
         room_name, tickers = message.parse()
         logger.debug(f"room tickers {len(tickers)}")
 
@@ -324,7 +334,7 @@ class ServerManager:
         self._event_bus.emit(RoomTickersEvent(room, tickers))
 
     @on_message(ChatRoomTickerAdd)
-    def on_chat_room_ticker_add(self, message, connection):
+    def _on_chat_room_ticker_add(self, message, connection):
         contents = message.parse()
         room_name, username, ticker = contents
         logger.debug(f"room ticker add : {contents!r}")
@@ -335,7 +345,7 @@ class ServerManager:
         self._event_bus.emit(RoomTickerAddedEvent(room, user, ticker))
 
     @on_message(ChatRoomTickerRemove)
-    def on_chat_room_ticker_removed(self, message, connection):
+    def _on_chat_room_ticker_removed(self, message, connection):
         contents = message.parse()
         room_name, username = contents
         logger.debug(f"room ticker removed : {contents!r}")
@@ -346,12 +356,12 @@ class ServerManager:
         self._event_bus.emit(RoomTickerRemovedEvent(room, user))
 
     @on_message(PrivateRoomToggle)
-    def on_private_room_toggle(self, message, connection):
+    def _on_private_room_toggle(self, message, connection):
         enabled = message.parse()
         logger.debug(f"private rooms enabled : {enabled}")
 
     @on_message(PrivateRoomAdded)
-    def on_private_room_added(self, message, connection):
+    def _on_private_room_added(self, message, connection):
         room_name = message.parse()
         room = self._state.get_or_create_room(room_name)
         room.joined = True
@@ -360,7 +370,7 @@ class ServerManager:
         self._event_bus.emit(UserJoinedPrivateRoomEvent(room))
 
     @on_message(PrivateRoomRemoved)
-    def on_private_room_removed(self, message, connection):
+    def _on_private_room_removed(self, message, connection):
         room_name = message.parse()
         room = self._state.get_or_create_room(room_name)
         room.joined = False
@@ -369,7 +379,7 @@ class ServerManager:
         self._event_bus.emit(UserLeftPrivateRoomEvent(room))
 
     @on_message(PrivateRoomUsers)
-    def on_private_room_users(self, message, connection):
+    def _on_private_room_users(self, message, connection):
         room_name, usernames = message.parse()
 
         room = self._state.get_or_create_room(room_name)
@@ -377,7 +387,7 @@ class ServerManager:
             room.add_user(self._state.get_or_create_user(username))
 
     @on_message(PrivateRoomAddUser)
-    def on_private_room_add_user(self, message, connection):
+    def _on_private_room_add_user(self, message, connection):
         room_name, username = message.parse()
 
         room = self._state.get_or_create_room(room_name)
@@ -386,7 +396,7 @@ class ServerManager:
         room.add_user(user)
 
     @on_message(PrivateRoomOperators)
-    def on_private_room_operators(self, message, connection):
+    def _on_private_room_operators(self, message, connection):
         room_name, operators = message.parse()
 
         room = self._state.get_or_create_room(room_name)
@@ -394,33 +404,33 @@ class ServerManager:
             room.add_operator(self._state.get_or_create_user(operator))
 
     @on_message(PrivateRoomOperatorAdded)
-    def on_private_room_operator_added(self, message, connection):
+    def _on_private_room_operator_added(self, message, connection):
         room_name = message.parse()
         room = self._state.get_or_create_room(room_name)
         room.is_operator = True
 
     @on_message(PrivateRoomOperatorRemoved)
-    def on_private_room_operator_removed(self, message, connection):
+    def _on_private_room_operator_removed(self, message, connection):
         room_name = message.parse()
         room = self._state.get_or_create_room(room_name)
         room.is_operator = False
 
     @on_message(PrivateRoomAddOperator)
-    def on_private_room_add_operator(self, message, connection):
+    def _on_private_room_add_operator(self, message, connection):
         room_name, username = message.parse()
         room = self._state.get_or_create_room(room_name)
         user = self._state.get_or_create_user(username)
         room.add_operator(user)
 
     @on_message(PrivateRoomRemoveOperator)
-    def on_private_room_remove_operators(self, message, connection):
+    def _on_private_room_remove_operators(self, message, connection):
         room_name, username = message.parse()
         room = self._state.get_or_create_room(room_name)
         user = self._state.get_or_create_user(username)
         room.operators.remove(user)
 
     @on_message(ChatPrivateMessage)
-    def on_private_message(self, message, connection):
+    def _on_private_message(self, message, connection):
         chat_id, timestamp, username, chat_msg, is_admin = message.parse()
         user = self._state.get_or_create_user(username)
         chat_message = ChatMessage(
@@ -439,7 +449,7 @@ class ServerManager:
         self._event_bus.emit(PrivateMessageEvent(user, chat_message))
 
     @on_message(ServerSearchRequest)
-    def on_server_search_request(self, message, connection):
+    def _on_server_search_request(self, message, connection):
         contents = message.parse()
         code, unknown, username, ticket, query = contents
         logger.info(f"ServerSearchRequest : {contents!r}")
@@ -452,11 +462,11 @@ class ServerManager:
 
     # State related messages
     @on_message(CheckPrivileges)
-    def on_check_privileges(self, message, connection):
+    def _on_check_privileges(self, message, connection):
         self._state.privileges_time_left = message.parse()
 
     @on_message(RoomList)
-    def on_room_list(self, message, connection):
+    def _on_room_list(self, message, connection):
         room_infos, rooms_private_owned, rooms_private, rooms_private_operated = message.parse()
         for room_name, user_count in room_infos.items():
             room = self._state.get_or_create_room(room_name)
@@ -481,44 +491,44 @@ class ServerManager:
         self._event_bus.emit(RoomListEvent(rooms=self._state.rooms.values()))
 
     @on_message(ParentMinSpeed)
-    def on_parent_min_speed(self, message, connection):
+    def _on_parent_min_speed(self, message, connection):
         self._state.parent_min_speed = message.parse()
 
     @on_message(ParentSpeedRatio)
-    def on_parent_speed_ratio(self, message, connection):
+    def _on_parent_speed_ratio(self, message, connection):
         self._state.parent_speed_ratio = message.parse()
 
     @on_message(MinParentsInCache)
-    def on_min_parents_in_cache(self, message, connection):
+    def _on_min_parents_in_cache(self, message, connection):
         self._state.min_parents_in_cache = message.parse()
 
     @on_message(DistributedAliveInterval)
-    def on_ditributed_alive_interval(self, message, connection):
+    def _on_ditributed_alive_interval(self, message, connection):
         self._state.distributed_alive_interval = message.parse()
 
     @on_message(SearchInactivityTimeout)
-    def on_search_inactivity_timeout(self, message, connection):
+    def _on_search_inactivity_timeout(self, message, connection):
         self._state.search_inactivity_timeout = message.parse()
 
     @on_message(PrivilegedUsers)
-    def on_privileged_users(self, message, connection):
+    def _on_privileged_users(self, message, connection):
         privileged_users = message.parse()
         for privileged_user in privileged_users:
             user = self._state.get_or_create_user(privileged_user)
             user.privileged = True
 
     @on_message(AddPrivilegedUser)
-    def on_add_privileged_user(self, message, connection):
+    def _on_add_privileged_user(self, message, connection):
         privileged_user = message.parse()
         user = self._state.get_or_create_user(privileged_user)
         user.privileged = True
 
     @on_message(WishlistInterval)
-    def on_wish_list_interval(self, message, connection):
+    def _on_wish_list_interval(self, message, connection):
         self._state.wishlist_interval = message.parse()
 
     @on_message(AddUser)
-    def on_add_user(self, message, connection):
+    def _on_add_user(self, message, connection):
         add_user_info = message.parse()
         logger.info(f"AddUser : {add_user_info}")
         name, exists, status, avg_speed, downloads, files, directories, country = add_user_info
@@ -535,7 +545,7 @@ class ServerManager:
             self._event_bus.emit(UserAddEvent(user))
 
     @on_message(GetUserStatus)
-    def on_get_user_status(self, message, connection):
+    def _on_get_user_status(self, message, connection):
         username, status, privileged = message.parse()
         logger.info(f"GetUserStatus : username={username}, status={status}, privileged={privileged}")
 
@@ -546,7 +556,7 @@ class ServerManager:
         self._event_bus.emit(UserStatusEvent(user))
 
     @on_message(GetUserStats)
-    def on_get_user_stats(self, message, connection):
+    def _on_get_user_stats(self, message, connection):
         contents = message.parse()
         username, avg_speed, download_num, files, dirs = contents
         logger.info(f"GetUserStats : {contents}")
@@ -560,7 +570,7 @@ class ServerManager:
         self._event_bus.emit(UserStatsEvent(user))
 
     @on_message(NetInfo)
-    def on_net_info(self, message, connection):
+    def _on_net_info(self, message, connection):
         net_info_list = message.parse()
 
         if not self._settings.get('debug.search_for_parent'):
@@ -581,13 +591,13 @@ class ServerManager:
                 port=port
             )
 
-    def on_server_message(self, event: ServerMessageEvent):
+    def _on_server_message(self, event: ServerMessageEvent):
         message = copy.deepcopy(event.message)
         if message.__class__ in self.MESSAGE_MAP:
             self.MESSAGE_MAP[message.__class__](message, event.connection)
 
     # Connection state listeners
-    def on_state_changed(self, event: ConnectionStateChangedEvent):
+    def _on_state_changed(self, event: ConnectionStateChangedEvent):
         if not isinstance(event.connection, ServerConnection):
             return
 
@@ -597,8 +607,10 @@ class ServerManager:
                 self._settings.get('credentials.password')
             )
             self._state.scheduler.add_job(self._ping_job)
+            self._state.scheduler.add_job(self._report_shares_job)
 
         elif event.state == ConnectionState.CLOSED:
             self._state.logged_in = False
             self._state.scheduler.remove(self._ping_job)
+            self._state.scheduler.remove(self._report_shares_job)
             self._event_bus.emit(ServerDisconnectedEvent())

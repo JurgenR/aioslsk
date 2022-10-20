@@ -144,9 +144,13 @@ class ListeningConnection(Connection):
             incoming=True
         )
         peer_connection.fileobj = fileobj
-        peer_connection.set_state(ConnectionState.CONNECTED)
 
+        # To order is important here. on_peer_accepted will register the
+        # connection to the selector
+        # Setting the state will disable the for the connection write on the
+        # selector (error if not registered)
         self.network.on_peer_accepted(peer_connection)
+        peer_connection.set_state(ConnectionState.CONNECTED)
         return peer_connection
 
 

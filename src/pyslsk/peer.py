@@ -64,13 +64,13 @@ class PeerManager:
         self._distributed_peers: List[DistributedPeer] = []
 
         self._internal_event_bus.register(
-            PeerInitializedEvent, self.on_peer_connection_initialized)
+            PeerInitializedEvent, self._on_peer_connection_initialized)
         self._internal_event_bus.register(
-            ConnectionStateChangedEvent, self.on_state_changed)
+            ConnectionStateChangedEvent, self._on_state_changed)
         self._internal_event_bus.register(
-            PeerMessageEvent, self.on_peer_message)
+            PeerMessageEvent, self._on_peer_message)
         self._internal_event_bus.register(
-            DistributedMessageEvent, self.on_distributed_message)
+            DistributedMessageEvent, self._on_distributed_message)
 
         self.MESSAGE_MAP = build_message_map(self)
 
@@ -151,6 +151,8 @@ class PeerManager:
         )
 
     def add_potential_child(self, peer: DistributedPeer):
+        """Potentially adds a distributed connection to our list of children.
+        """
         if peer.username in self._state.potential_parents:
             return
 
@@ -168,14 +170,14 @@ class PeerManager:
     # Peer messages
 
     @on_message(PeerSharesRequest)
-    def on_peer_shares_request(self, message, connection: PeerConnection):
+    def _on_peer_shares_request(self, message, connection: PeerConnection):
         _ = message.parse()
 
         reply = PeerSharesReply.create(self.file_manager.create_shares_reply())
         connection.queue_messages(reply)
 
     @on_message(PeerSharesReply)
-    def on_peer_shares_reply(self, message, connection: PeerConnection):
+    def _on_peer_shares_reply(self, message, connection: PeerConnection):
         directories = message.parse()
 
         logger.info(f"PeerSharesReply : from username {connection.username}, got {len(directories)} directories")
@@ -184,7 +186,7 @@ class PeerManager:
         self._event_bus.emit(UserSharesReplyEvent(user, directories))
 
     @on_message(PeerSearchReply)
-    def on_peer_search_reply(self, message, connection: PeerConnection):
+    def _on_peer_search_reply(self, message, connection: PeerConnection):
         contents = message.parse()
         username, ticket, shared_items, has_free_slots, avg_speed, queue_size, locked_results = contents
 
@@ -207,7 +209,7 @@ class PeerManager:
         connection.set_state(ConnectionState.SHOULD_CLOSE)
 
     @on_message(PeerUserInfoReply)
-    def on_peer_user_info_reply(self, message, connection: PeerConnection):
+    def _on_peer_user_info_reply(self, message, connection: PeerConnection):
         contents = message.parse()
         description, picture, upload_slots, queue_size, has_slots_free = contents
         logger.info(f"PeerUserInfoReply : {contents!r}")
@@ -222,7 +224,7 @@ class PeerManager:
         self._event_bus.emit(UserInfoReplyEvent(user))
 
     @on_message(PeerUserInfoRequest)
-    def on_peer_user_info_request(self, message, connection: PeerConnection):
+    def _on_peer_user_info_request(self, message, connection: PeerConnection):
         logger.info("PeerUserInfoRequest")
         connection.queue_messages(
             PeerUserInfoReply.create(
@@ -236,7 +238,7 @@ class PeerManager:
     # Distributed messages
 
     @on_message(DistributedSearchRequest)
-    def on_distributed_search_request(self, message, connection: PeerConnection):
+    def _on_distributed_search_request(self, message, connection: PeerConnection):
         _, username, search_ticket, query = message.parse()
         # logger.info(f"search request from {username!r}, query: {query!r}")
         results = self.file_manager.query(query)
@@ -263,7 +265,7 @@ class PeerManager:
         )
 
     @on_message(DistributedBranchLevel)
-    def on_distributed_branch_level(self, message, connection: PeerConnection):
+    def _on_distributed_branch_level(self, message, connection: PeerConnection):
         level = message.parse()
         logger.info(f"branch level {level!r}: {connection!r}")
 
@@ -281,7 +283,7 @@ class PeerManager:
             self.send_messages_to_children(DistributedBranchLevel.create(level + 1))
 
     @on_message(DistributedBranchRoot)
-    def on_distributed_branch_root(self, message, connection: PeerConnection):
+    def _on_distributed_branch_root(self, message, connection: PeerConnection):
         root = message.parse()
         logger.info(f"branch root {root!r}: {connection!r}")
 
@@ -294,7 +296,7 @@ class PeerManager:
             self.send_messages_to_children(DistributedBranchRoot.create(root))
 
     @on_message(DistributedServerSearchRequest)
-    def on_distributed_server_search_request(self, message, connection: PeerConnection):
+    def _on_distributed_server_search_request(self, message, connection: PeerConnection):
         distrib_code, distrib_message = message.parse()
         logger.info(f"distributed server search request: {distrib_code} {distrib_message}")
 
@@ -306,24 +308,24 @@ class PeerManager:
                 DistributedSearchRequest.create_from_body(distrib_message)
             )
 
-    def on_peer_connection_initialized(self, event: PeerInitializedEvent):
+    def _on_peer_connection_initialized(self, event: PeerInitializedEvent):
         if event.connection.connection_type == PeerConnectionType.DISTRIBUTED:
             peer = DistributedPeer(event.connection.username, event.connection)
             self._distributed_peers.append(peer)
             self.add_potential_child(peer)
 
-    def on_peer_message(self, event: PeerMessageEvent):
+    def _on_peer_message(self, event: PeerMessageEvent):
         message = copy.deepcopy(event.message)
         if message.__class__ in self.MESSAGE_MAP:
             self.MESSAGE_MAP[message.__class__](message, event.connection)
 
-    def on_distributed_message(self, event: DistributedMessageEvent):
+    def _on_distributed_message(self, event: DistributedMessageEvent):
         message = copy.deepcopy(event.message)
         if message.__class__ in self.MESSAGE_MAP:
             self.MESSAGE_MAP[message.__class__](message, event.connection)
 
     # Connection state changes
-    def on_state_changed(self, event: ConnectionStateChangedEvent):
+    def _on_state_changed(self, event: ConnectionStateChangedEvent):
         if not isinstance(event.connection, PeerConnection):
             return
 
