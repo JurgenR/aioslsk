@@ -1,4 +1,5 @@
 import os
+from typing import Any, Callable, Dict, List
 
 
 RESOURCES_DIRECTORY: str = os.path.join(
@@ -10,7 +11,7 @@ class Settings:
 
     def __init__(self, settings):
         self._settings = settings
-        self.listeners = {}
+        self.listeners: Dict[str, List[Callable]] = {}
 
     def add_listener(self, key, callback):
         if key in self.listeners:
@@ -22,7 +23,7 @@ class Settings:
         for listener in self.listeners.get(key, []):
             listener(value)
 
-    def set(self, key: str, value):
+    def set(self, key: str, value: Any):
         parts = key.split('.')
 
         old_value = self._settings
@@ -43,7 +44,7 @@ class Settings:
 
         return value
 
-    def append(self, key: str, value):
+    def append(self, key: str, value: Any):
         parts = key.split('.')
 
         old_value = self._settings
@@ -53,7 +54,7 @@ class Settings:
             else:
                 old_value = old_value[part]
 
-    def remove(self, key: str, value):
+    def remove(self, key: str, value: Any):
         parts = key.split('.')
 
         old_value = self._settings

@@ -750,10 +750,13 @@ class Network:
                     self.fail_peer_connection_request(request)
             return
 
+        obfuscate =  self._settings.get('network.peer.obfuscate') and obfuscated_port
+
         for _, request in self._connection_requests.items():
             if request.username == username:
                 request.ip = self._user_ip_overrides.get(username, ip)
-                request.port = port
+                request.port = obfuscated_port if obfuscate else port
+                request.obfuscated = obfuscate
                 self._connect_to_peer(request)
 
     @on_message(ConnectToPeer)
@@ -764,13 +767,16 @@ class Network:
 
         ip = self._user_ip_overrides.get(username, ip)
 
+        obfuscate = self._settings.get('network.peer.obfuscate') and obfuscated_port
+
         request = ConnectionRequest(
             ticket=ticket,
             username=username,
             typ=typ,
             is_requested_by_us=False,
             ip=ip,
-            port=port
+            port=obfuscated_port if obfuscate else port,
+            obfuscated=obfuscate
         )
         self._connection_requests[ticket] = request
 

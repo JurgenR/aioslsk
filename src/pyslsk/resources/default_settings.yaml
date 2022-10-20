@@ -10,6 +10,8 @@ network:
     distributed: 120
   reconnect:
     auto: true
+  peer:
+    obfuscate: false
 
 credentials:
   username: null

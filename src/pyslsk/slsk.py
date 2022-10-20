@@ -25,6 +25,7 @@ from .utils import ticket_generator
 
 
 CLIENT_VERSION = 157
+DEFAULT_SETTINGS_NAME = 'pyslsk'
 
 
 logger = logging.getLogger()
@@ -35,7 +36,7 @@ class SoulSeek(threading.Thread):
     def __init__(self, configuration: Configuration, event_bus: EventBus = None):
         super().__init__()
         self.configuration: Configuration = configuration
-        self.settings: Settings = configuration.load_settings('pyslsk')
+        self.settings: Settings = configuration.load_settings(DEFAULT_SETTINGS_NAME)
 
         self._ticket_generator = ticket_generator()
         self._stop_event = threading.Event()
@@ -62,11 +63,15 @@ class SoulSeek(threading.Thread):
             shares_indexer,
             shares_storage
         )
+        # Perform the initial read of the index from storage, restart the
         self.shares_manager.read_items_from_storage()
         self.shares_manager.build_term_map(rebuild=True)
         # Schedule a task to run as soon as the event loop starts
         self.state.scheduler.add(0, self.shares_manager.load_from_settings, times=1)
-        logger.debug(f"loaded from settings")
+        self.state.scheduler.add(
+            self.settings.get('sharing.index.store_interval'),
+            self.shares_manager.write_items_to_storage
+        )
 
         self.transfer_manager: TransferManager = TransferManager(
             self.state,
@@ -77,7 +82,7 @@ class SoulSeek(threading.Thread):
             self.shares_manager,
             self._network
         )
-        self.transfer_manager.load_transfers()
+        self.transfer_manager.read_transfers_from_storage()
 
         self.peer_manager: PeerManager = PeerManager(
             self.state,
@@ -99,7 +104,7 @@ class SoulSeek(threading.Thread):
 
         self._loops = [
             self._network,
-            self.state.scheduler,
+            self.state.scheduler
         ]
 
     def run(self):
@@ -125,11 +130,11 @@ class SoulSeek(threading.Thread):
             if self.is_alive():
                 logger.warning(f"thread is still alive after 30s : {self!r}")
 
-        self.shares_manager.indexer.stop()
-
         # Writing database needs to be last, as transfers need to go into the
         # incomplete state if they were still transfering
-        self.transfer_manager.store_transfers()
+        self.transfer_manager.write_transfers_to_storage()
+
+        self.shares_manager.indexer.stop()
 
     @property
     def connections(self):
@@ -140,7 +145,7 @@ class SoulSeek(threading.Thread):
         return self.transfer_manager._transfers
 
     def save_settings(self):
-        self.configuration.save_settings('pyslsk', self.settings)
+        self.configuration.save_settings(DEFAULT_SETTINGS_NAME, self.settings)
 
     def download(self, user: Union[str, User], filename: str):
         if isinstance(user, User):

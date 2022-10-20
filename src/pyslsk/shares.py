@@ -55,26 +55,28 @@ def extract_attributes(filepath: str):
     attributes = []
     try:
         mutagen_file = mutagen.File(filepath)
-        if mutagen_file is not None:
-            if mutagen_file.__class__.__name__ in _COMPRESSED_FORMATS:
-                attributes = [
-                    (0, int(mutagen_file.info.bitrate / 1000), ),
-                    (1, int(mutagen_file.info.length), )
-                ]
+        if not mutagen_file:
+            return []
 
-                # Figure out bitrate mode if applicable
-                bitrate_mode = getattr(mutagen_file, 'bitrate_mode', BitrateMode.UNKNOWN)
-                if bitrate_mode == BitrateMode.CBR:
-                    attributes.append((2, 0, ))
-                elif bitrate_mode in (BitrateMode.VBR, BitrateMode.ABR, ):
-                    attributes.append((2, 1, ))
+        if mutagen_file.__class__.__name__ in _COMPRESSED_FORMATS:
+            attributes = [
+                (0, int(mutagen_file.info.bitrate / 1000), ),
+                (1, int(mutagen_file.info.length), )
+            ]
 
-            elif mutagen_file.__class__.__name__ in _LOSSLESS_FORMATS:
-                attributes = [
-                    (1, int(mutagen_file.info.length), ),
-                    (4, mutagen_file.info.sample_rate, ),
-                    (5, mutagen_file.info.bits_per_sample, ),
-                ]
+            # Figure out bitrate mode if applicable
+            bitrate_mode = getattr(mutagen_file, 'bitrate_mode', BitrateMode.UNKNOWN)
+            if bitrate_mode == BitrateMode.CBR:
+                attributes.append((2, 0, ))
+            elif bitrate_mode in (BitrateMode.VBR, BitrateMode.ABR, ):
+                attributes.append((2, 1, ))
+
+        elif mutagen_file.__class__.__name__ in _LOSSLESS_FORMATS:
+            attributes = [
+                (1, int(mutagen_file.info.length), ),
+                (4, mutagen_file.info.sample_rate, ),
+                (5, mutagen_file.info.bits_per_sample, ),
+            ]
 
     except mutagen.MutagenError:
         logger.exception(f"failed retrieve audio file metadata. path={filepath!r}")
@@ -92,8 +94,8 @@ class ScanDirectoryTask(IndexingTask):
         self.directory = directory
         self.alias = alias
 
-    def __call__(self) -> Tuple[IndexingTask, List[SharedItem]]:
-        shared_items = []
+    def __call__(self) -> Tuple[IndexingTask, Set[SharedItem]]:
+        shared_items = set()
         for directory, _, files in os.walk(self.directory):
             subdir = os.path.relpath(directory, self.directory)
 
@@ -107,11 +109,8 @@ class ScanDirectoryTask(IndexingTask):
                 except OSError:
                     logger.debug(f"could not get modified time for file {filepath!r}")
                 else:
-                    item = SharedItem(self.alias, subdir, filename, modified)
-                    # logger.debug(f"got shared file {item!r}")
-                    shared_items.append(item)
+                    shared_items.add(SharedItem(self.alias, subdir, filename, modified))
 
-        logger.debug(f"returning scan for directory : {self.directory!r}")
         return shared_items
 
 
@@ -132,7 +131,7 @@ class SharesIndexer:
         self._tasks = []
         self._thread_pool = ThreadPoolExecutor(
             thread_name_prefix='pyslsk-index',
-            max_workers=10
+            max_workers=20
         )
 
     def _submit_task(self, task: IndexingTask, callback: Callable):
@@ -155,7 +154,7 @@ class SharesIndexer:
         return self._submit_task(task, callback)
 
     def stop(self):
-        self._thread_pool.shutdown(wait=True)
+        self._thread_pool.shutdown(wait=False)
 
 
 class SharesStorage:
@@ -181,10 +180,7 @@ class SharesShelveStorage(SharesStorage):
 
     def load_items(self) -> Set[SharedItem]:
         with shelve.open(self._get_index_path(), 'c') as db:
-            if 'index' not in db:
-                return []
-
-            return db['index']
+            return db.get('index', set())
 
     def store_items(self, shared_items: Set[SharedItem]):
         with shelve.open(self._get_index_path(), 'c') as db:
@@ -252,10 +248,12 @@ class SharesManager:
         """
         with self._shared_items_lock:
             self.shared_items = self.storage.load_items()
+            import pdb; pdb.set_trace()
 
     def write_items_to_storage(self):
+        logger.debug(f"writing {len(self.shared_items)} items to storage")
         with self._shared_items_lock:
-            self.shared_items = self.storage.store_items(self.shared_items)
+            self.storage.store_items(self.shared_items)
 
     def build_term_map(self, rebuild=True):
         """Builds a list of valid terms for the current list of shared items
@@ -322,35 +320,34 @@ class SharesManager:
 
     def _scan_directory_callback(self, task: ScanDirectoryTask, future: Future):
         try:
-            shared_items = future.result()
+            shared_items: Set[SharedItem] = future.result()
         except Exception:
             # Rollback adding the directory?
-            logger.exception("exception adding directory")
+            logger.exception(f"exception adding directory : {task.directory}")
         else:
             logger.debug(f"scan found {len(shared_items)} files for directory {task.directory!r}")
             with self._shared_items_lock:
-                for shared_item in shared_items:
-                    self.shared_items.add(shared_item)
+                self.shared_items |= shared_items
 
-                    # Schedule a task to get attributes for items that don't
-                    # have them yet
+                # Go over the current shared items and filter out those that
+                # aren't returned in the scan. Also schedule a task to get the
+                # attributes if they weren't set yet for this item
+                items_to_remove = set()
+                for shared_item in self.shared_items:
+                    if shared_item.root != task.alias:
+                        continue
+
+                    if shared_item not in shared_items:
+                        items_to_remove.add(shared_item)
+                        continue
+
                     if shared_item.attributes is None:
                         self.indexer.extract_attributes(
                             self.resolve_path(shared_item),
                             shared_item,
                             self._get_attributes_callback
                         )
-
-                # Go over the current shared items and filter out those that
-                # aren't returned in the scan
-                items_to_remove = set()
-                for shared_items in self.shared_items:
-                    if shared_item.root != task.alias:
-                        continue
-
-                    if shared_item not in self.shared_items:
-                        items_to_remove.add(shared_item)
-
+                logger.debug(f"removing {len(items_to_remove)} items")
                 self.shared_items -= items_to_remove
 
             self.build_term_map(rebuild=False)

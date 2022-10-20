@@ -111,7 +111,6 @@ class PeerManager:
 
         for distributed_peer in distributed_peers_to_remove:
             distributed_peer.connection.set_state(ConnectionState.SHOULD_CLOSE)
-            self._distributed_peers.remove(distributed_peer)
 
         # Notify children of new parent
         self.send_messages_to_children(

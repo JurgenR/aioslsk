@@ -126,7 +126,7 @@ class TransferStorage:
                     transfer.state = TransferState.QUEUED
                     transfer.reset_times()
 
-                    transfers.append(transfers)
+                transfers.append(transfer)
 
         return transfers
 
@@ -458,12 +458,13 @@ class TransferManager:
         self._internal_event_bus.register(TransferDataReceivedEvent, self._on_transfer_data_received)
         self._internal_event_bus.register(TransferDataSentEvent, self._on_transfer_data_sent)
 
-    def load_transfers(self):
+    def read_transfers_from_storage(self):
         transfers = self._storage.read_database()
+        logger.debug(f"read {len(transfers)} transfers from storage")
         for transfer in transfers:
             self.add(transfer)
 
-    def store_transfers(self):
+    def write_transfers_to_storage(self):
         self._storage.write_database(self._transfers)
 
     @property
