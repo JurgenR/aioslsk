@@ -248,7 +248,6 @@ class SharesManager:
         """
         with self._shared_items_lock:
             self.shared_items = self.storage.load_items()
-            import pdb; pdb.set_trace()
 
     def write_items_to_storage(self):
         logger.debug(f"writing {len(self.shared_items)} items to storage")
