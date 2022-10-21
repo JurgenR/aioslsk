@@ -406,8 +406,6 @@ class PeerConnection(DataConnection):
 
     def set_connection_state(self, state: PeerConnectionState):
         if state == PeerConnectionState.TRANSFERING:
-            self.fileobj.setsockopt(socket.SOL_SOCKET, socket.TCP_NODELAY, 1)
-            self.fileobj.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 0)
             self.timeout = DEFAULT_PEER_TRANSFER_TIMEOUT
             self.recv_buf_size = TRANSFER_RECV_BUF_SIZE
             if self.is_uploading():

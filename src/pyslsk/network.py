@@ -750,7 +750,7 @@ class Network:
                     self.fail_peer_connection_request(request)
             return
 
-        obfuscate =  self._settings.get('network.peer.obfuscate') and obfuscated_port
+        obfuscate = self._settings.get('network.peer.obfuscate') and bool(obfuscated_port)
 
         for _, request in self._connection_requests.items():
             if request.username == username:
@@ -767,7 +767,7 @@ class Network:
 
         ip = self._user_ip_overrides.get(username, ip)
 
-        obfuscate = self._settings.get('network.peer.obfuscate') and obfuscated_port
+        obfuscate = self._settings.get('network.peer.obfuscate') and bool(obfuscated_port)
 
         request = ConnectionRequest(
             ticket=ticket,

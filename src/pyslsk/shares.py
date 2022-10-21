@@ -131,7 +131,7 @@ class SharesIndexer:
         self._tasks = []
         self._thread_pool = ThreadPoolExecutor(
             thread_name_prefix='pyslsk-index',
-            max_workers=20
+            max_workers=5
         )
 
     def _submit_task(self, task: IndexingTask, callback: Callable):
