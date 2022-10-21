@@ -338,8 +338,10 @@ class Login(ServerMessage):
             greet = self.parse_string()
             ip = self.parse_ip()
             md5hash = self.parse_string()
-            unknown = self.parse_uchar()
-            return success, greet, ip, md5hash, unknown
+            # Described as unknown in museek docs, I assume this holds whether
+            # the user is privileged
+            privileged = self.parse_uchar()
+            return success, greet, ip, md5hash, privileged
         else:
             reason = self.parse_string()
             return success, reason

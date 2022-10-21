@@ -199,7 +199,8 @@ class SharesManager:
         self.indexer: SharesIndexer = indexer
         self.storage: SharesStorage = storage
 
-        self._shared_items_lock = RLock()
+        self._directory_lock: RLock = RLock()
+        self._shared_items_lock: RLock = RLock()
 
     def generate_alias(self, path: str, offset: int = 0) -> str:
         """Generates a directory alias for the given path, this method will be
@@ -241,6 +242,18 @@ class SharesManager:
     def load_from_settings(self):
         for shared_directory in self._settings.get('sharing.directories'):
             self.add_shared_directory(shared_directory)
+
+        self._prune_index()
+
+    def _prune_index(self):
+        items_to_remove = set()
+        with self._shared_items_lock:
+            for item in self.shared_items:
+                if item.root not in self.directory_aliases.keys():
+                    items_to_remove.add(item)
+
+            logger.debug(f"pruning {len(items_to_remove)} shared items")
+            self.shared_items -= items_to_remove
 
     def read_items_from_storage(self):
         """Read the items from the storage. Rebuilding of the term map needs to
@@ -309,9 +322,10 @@ class SharesManager:
             will be calculated before performing the rest of the functions
         """
         # Calc absolute path, generate an alias and store it
-        abs_directory = os.path.abspath(shared_directory)
-        alias = self.generate_alias(abs_directory)
-        self.directory_aliases[alias] = abs_directory
+        with self._directory_lock:
+            abs_directory = os.path.abspath(shared_directory)
+            alias = self.generate_alias(abs_directory)
+            self.directory_aliases[alias] = abs_directory
 
         logger.debug(f"scheduling scan for directory : {abs_directory!r} (alias={alias})")
         self.indexer.scan_directory(
@@ -378,6 +392,7 @@ class SharesManager:
                 item for item in self.shared_items if item.root == alias
             }
 
+        with self._directory_lock:
             del self.directory_aliases[alias]
 
     def resolve_path(self, item: SharedItem) -> str:
