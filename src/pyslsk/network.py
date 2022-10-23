@@ -191,8 +191,6 @@ class Network:
         self.listening_connections: List[ListeningConnection] = []
         self.peer_connections: List[PeerConnection] = []
 
-        self.peer_listener = None
-
         # Selectors
         self.selector = DefaultSelector()
         self._connection_limit = CONNECTION_LIMITS.get(
@@ -247,7 +245,7 @@ class Network:
         for listening_connection in self.listening_connections:
             listening_connection.connect()
 
-    def get_connections(self):
+    def get_connections(self) -> List[Connection]:
         """Returns a list of currently registered L{Connection} objects"""
         return [
             selector_key.data
@@ -488,6 +486,7 @@ class Network:
         )
         request.connection = connection
         connection.connect()
+        return connection
 
     def on_peer_connection_established(self, connection: PeerConnection):
         """Called after a peer connection goes into CONNECTED state"""
@@ -710,7 +709,7 @@ class Network:
     # Server related
 
     @on_message(PeerInit)
-    def on_peer_init(self, message, connection: PeerConnection):
+    def _on_peer_init(self, message, connection: PeerConnection):
         username, typ, ticket = message.parse()
         logger.info(f"PeerInit : {username}, {typ} (ticket={ticket})")
 
@@ -727,7 +726,7 @@ class Network:
         )
 
     @on_message(PeerPierceFirewall)
-    def on_peer_pierce_firewall(self, message, connection: PeerConnection):
+    def _on_peer_pierce_firewall(self, message, connection: PeerConnection):
         ticket = message.parse()
         logger.debug(f"PeerPierceFirewall : (ticket={ticket})")
 
@@ -739,7 +738,7 @@ class Network:
             self.complete_peer_connection_request(request, connection)
 
     @on_message(GetPeerAddress)
-    def on_get_peer_address(self, message, connection):
+    def _on_get_peer_address(self, message, connection):
         username, ip, port, _, obfuscated_port = message.parse()
         logger.debug(f"GetPeerAddress : username={username}, ip={ip}, ports={port}/{obfuscated_port}")
 
@@ -760,7 +759,7 @@ class Network:
                 self._connect_to_peer(request)
 
     @on_message(ConnectToPeer)
-    def on_connect_to_peer(self, message, connection):
+    def _on_connect_to_peer(self, message, connection):
         contents = message.parse()
         logger.info("ConnectToPeer : {!r}".format(contents))
         username, typ, ip, port, ticket, privileged, _, obfuscated_port = contents
@@ -783,7 +782,7 @@ class Network:
         self._connect_to_peer(request)
 
     @on_message(CannotConnect)
-    def on_cannot_connect(self, message, connection):
+    def _on_cannot_connect(self, message, connection):
         ticket, username = message.parse()
         logger.debug(f"CannotConnect : username={username} (ticket={ticket})")
         try:

@@ -1,3 +1,6 @@
+import copy
+from unittest.mock import Mock, patch
+
 from pyslsk.connection import (
     ConnectionState,
     CloseReason,
@@ -14,15 +17,13 @@ from pyslsk.messages import (
     PeerInit,
     PeerPierceFirewall
 )
-from pyslsk.network import Network
+from pyslsk.network import Network, LimitedRateLimiter, UnlimitedRateLimiter
 from pyslsk.scheduler import Scheduler
 from pyslsk.state import State
 from pyslsk.settings import Settings
-import pytest
-from unittest.mock import Mock, MagicMock, patch
 
 
-DEFAULT_SETTINGS = Settings({
+DEFAULT_SETTINGS = {
     'credentials': {
         'username': 'user0'
     },
@@ -44,15 +45,16 @@ DEFAULT_SETTINGS = Settings({
     'debug': {
         'user_ip_overrides': {}
     }
-})
+}
 
 
 class _BaseTestComponentNetwork:
 
-    def _create_network(self) -> Network:
+    def _create_network(self, settings=None) -> Network:
+        settings = settings or DEFAULT_SETTINGS
         state = State()
         state.scheduler = Scheduler()
-        network = Network(state, DEFAULT_SETTINGS, InternalEventBus())
+        network = Network(state, Settings(settings), InternalEventBus())
 
         # Mock UPNP
         network._upnp = Mock()
@@ -140,8 +142,8 @@ class TestComponentNetwork(_BaseTestComponentNetwork):
         req = list(network._connection_requests.values())[0]
         assert req.username == 'user1'
         assert req.typ == PeerConnectionType.PEER
-        assert req.ip == None
-        assert req.port == None
+        assert req.ip is None
+        assert req.port is None
         assert req.is_requested_by_us is True
         assert req.connection is None
 
@@ -262,3 +264,99 @@ class TestComponentNetwork(_BaseTestComponentNetwork):
         # Assert request is finalized
         assert len(network._connection_requests) == 0
         assert len(network.peer_connections) == 0
+
+
+class TestComponentNetworkLimiter(_BaseTestComponentNetwork):
+
+    def test_whenChangeUploadSpeed_limitedToUnlimited_shouldChangeLimiter(self):
+        settings = copy.deepcopy(DEFAULT_SETTINGS)
+        settings['sharing']['limits']['upload_speed_kbps'] = 10
+        network = self._create_network(settings=settings)
+
+        assert isinstance(network.upload_rate_limiter, LimitedRateLimiter)
+
+        limit = 0
+        network._settings.set('sharing.limits.upload_speed_kbps', limit)
+
+        assert isinstance(network.upload_rate_limiter, UnlimitedRateLimiter)
+
+    def test_whenChangeUploadSpeed_unlimitedToLimited_shouldChangeLimiter(self):
+        settings = copy.deepcopy(DEFAULT_SETTINGS)
+        settings['sharing']['limits']['upload_speed_kbps'] = 0
+        network = self._create_network(settings=settings)
+
+        assert isinstance(network.upload_rate_limiter, UnlimitedRateLimiter)
+
+        limit = 10
+        network._settings.set('sharing.limits.upload_speed_kbps', limit)
+
+        assert isinstance(network.upload_rate_limiter, LimitedRateLimiter)
+        assert network.upload_rate_limiter.limit_bps == (limit * 1024)
+
+    def test_whenChangeUploadSpeed_limitedToLimited_shouldKeepBucket(self):
+        settings = copy.deepcopy(DEFAULT_SETTINGS)
+        settings['sharing']['limits']['upload_speed_kbps'] = 10
+        network = self._create_network(settings=settings)
+
+        # Verify the initially created limiter is actually limited, modify the
+        # params
+        bucket = 9 * 1024
+        last_refill = 1.0
+        assert isinstance(network.upload_rate_limiter, LimitedRateLimiter)
+        network.upload_rate_limiter.bucket = bucket
+        network.upload_rate_limiter.last_refill = last_refill
+
+        limit = 5
+        network._settings.set('sharing.limits.upload_speed_kbps', limit)
+
+        assert isinstance(network.upload_rate_limiter, LimitedRateLimiter)
+        assert network.upload_rate_limiter.limit_bps == (limit * 1024)
+        assert network.upload_rate_limiter.bucket == (limit * 1024)
+        assert network.upload_rate_limiter.last_refill == last_refill
+
+    # Download
+    def test_whenChangeDownloadSpeed_limitedToUnlimited_shouldChangeLimiter(self):
+        settings = copy.deepcopy(DEFAULT_SETTINGS)
+        settings['sharing']['limits']['download_speed_kbps'] = 10
+        network = self._create_network(settings=settings)
+
+        assert isinstance(network.download_rate_limiter, LimitedRateLimiter)
+
+        limit = 0
+        network._settings.set('sharing.limits.download_speed_kbps', limit)
+
+        assert isinstance(network.download_rate_limiter, UnlimitedRateLimiter)
+
+    def test_whenChangeDownloadSpeed_unlimitedToLimited_shouldChangeLimiter(self):
+        settings = copy.deepcopy(DEFAULT_SETTINGS)
+        settings['sharing']['limits']['download_speed_kbps'] = 0
+        network = self._create_network(settings=settings)
+
+        assert isinstance(network.download_rate_limiter, UnlimitedRateLimiter)
+
+        limit = 10
+        network._settings.set('sharing.limits.download_speed_kbps', limit)
+
+        assert isinstance(network.download_rate_limiter, LimitedRateLimiter)
+        assert network.download_rate_limiter.limit_bps == (limit * 1024)
+
+    def test_whenChangeDownloadSpeed_limitedToLimited_shouldKeepBucket(self):
+        settings = copy.deepcopy(DEFAULT_SETTINGS)
+        settings['sharing']['limits']['download_speed_kbps'] = 10
+        network = self._create_network(settings=settings)
+
+        # Verify the initially created limiter is actually limited, modify the
+        # params
+        bucket = 9 * 1024
+        last_refill = 1.0
+        assert isinstance(network.download_rate_limiter, LimitedRateLimiter)
+        network.download_rate_limiter.bucket = bucket
+        network.download_rate_limiter.last_refill = last_refill
+
+        limit = 5
+        network._settings.set('sharing.limits.download_speed_kbps', limit)
+
+        assert isinstance(network.download_rate_limiter, LimitedRateLimiter)
+        assert network.download_rate_limiter.limit_bps == (limit * 1024)
+        assert network.download_rate_limiter.bucket == (limit * 1024)
+        assert network.download_rate_limiter.last_refill == last_refill
