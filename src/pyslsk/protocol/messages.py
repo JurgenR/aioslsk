@@ -49,6 +49,8 @@ from pyslsk.protocol.primitives import (
     string,
     array,
     ipaddr,
+    FileData,
+    DirectoryData,
     MessageDataclass,
     UserData,
     PotentialParent,
@@ -414,6 +416,14 @@ class ParentSpeedRatio:
         ratio: int = field(metadata={'type': uint32})
 
 
+class ParentInactivityTimeout:
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x56)
+        timeout: int = field(metadata={'type': uint32})
+
+
 class SearchInactivityTimeout:
 
     @dataclass(order=True)
@@ -621,3 +631,294 @@ class PrivilegesNotificationAck:
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7D)
         notification_id: int = field(metadata={'type': uint32})
+
+
+class BranchLevel:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x7E)
+        level: int = field(metadata={'type': uint32})
+
+
+class BranchRoot:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x7F)
+        username: str = field(metadata={'type': string})
+
+
+class ChildDepth:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x81)
+        depth: int = field(metadata={'type': uint32})
+
+
+class PrivateRoomUsers:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x85)
+        room: str = field(metadata={'type': string})
+        usernames: List[str] = field(metadata={'type': array, 'subtype': string})
+
+
+class PrivateRoomAddUser:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x86)
+        room: str = field(metadata={'type': string})
+        username: str = field(metadata={'type': string})
+
+    @dataclass
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x86)
+        room: str = field(metadata={'type': string})
+        username: str = field(metadata={'type': string})
+
+
+class PrivateRoomRemoveUser:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x87)
+        room: str = field(metadata={'type': string})
+        username: str = field(metadata={'type': string})
+
+    @dataclass
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x87)
+        room: str = field(metadata={'type': string})
+        username: str = field(metadata={'type': string})
+
+
+class PrivateRoomDropMembership:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x88)
+        room: str = field(metadata={'type': string})
+
+
+class PrivateRoomDropOwnership:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x89)
+        room: str = field(metadata={'type': string})
+
+
+class PrivateRoomAdded:
+
+    @dataclass
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x8B)
+        room: str = field(metadata={'type': string})
+
+
+class PrivateRoomRemoved:
+
+    @dataclass
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x8C)
+        room: str = field(metadata={'type': string})
+
+
+class TogglePrivateRooms:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x8D)
+        enable: bool = field(metadata={'type': boolean})
+
+
+class NewPassword:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x8E)
+        password: str = field(metadata={'type': string})
+
+
+class PrivateRoomAddOperator:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x8F)
+        room: str = field(metadata={'type': string})
+        username: str = field(metadata={'type': string})
+
+    @dataclass
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x8F)
+        room: str = field(metadata={'type': string})
+        username: str = field(metadata={'type': string})
+
+
+class PrivateRoomRemoveOperator:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x90)
+        room: str = field(metadata={'type': string})
+        username: str = field(metadata={'type': string})
+
+    @dataclass
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x90)
+        room: str = field(metadata={'type': string})
+        username: str = field(metadata={'type': string})
+
+
+class PrivateRoomOperatorAdded:
+
+    @dataclass
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x91)
+        room: str = field(metadata={'type': string})
+
+
+class PrivateRoomOperatorRemoved:
+
+    @dataclass
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x92)
+        room: str = field(metadata={'type': string})
+
+
+class PrivateRoomOperators:
+
+    @dataclass
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x94)
+        room: str = field(metadata={'type': string})
+        usernames: List[str] = field(metadata={'type': array, 'subtype': string})
+
+
+class ChatMessageUsers:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x95)
+        usernames: List[str] = field(metadata={'type': array, 'subtype': string})
+        message: str = field(metadata={'type': string})
+
+
+class ChatEnablePublic:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x96)
+
+
+class ChatDisablePublic:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x97)
+
+
+class ChatPublicMessage:
+
+    @dataclass
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x98)
+        room: str = field(metadata={'type': string})
+        username: str = field(metadata={'type': string})
+        message: str = field(metadata={'type': string})
+
+
+class FileSearchEx:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x99)
+        query: str = field(metadata={'type': string})
+
+    @dataclass
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x99)
+        query: str = field(metadata={'type': string})
+        unknown: int = field(metadata={'type': uint32})
+
+
+class CannotConnect:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x03E9)
+        ticket: int = field(metadata={'type': uint32})
+        username: str = field(default=None, metadata={'type': string, 'optional': True})
+
+    @dataclass
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x03E9)
+        ticket: int = field(metadata={'type': uint32})
+        username: str = field(default=None, metadata={'type': string, 'optional': True})
+
+
+# Peer Initialization messages
+
+class PeerPierceFirewall:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint8] = uint8(0x00)
+        ticket: int = field(metadata={'type': uint32})
+
+
+class _PeerInitTicket(uint32):
+    # Hacky type here: sometimes people will send a uint64 instead of uint32 as
+    # the ticket for a PeerInit message
+
+    @classmethod
+    def deserialize(cls, pos: int, data: bytes):
+        if len(data[pos:]) == 4:
+            return super().deserialize(pos, data)
+        else:
+            return uint64.deserialize(pos, data)
+
+
+class PeerInit:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint8] = uint8(0x01)
+        username: str = field(metadata={'type': string})
+        typ: str = field(metadata={'type': string})
+        ticket: int = field(metadata={'type': _PeerInitTicket})
+
+
+# Peer messages
+
+class PeerSharesRequest:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x04)
+
+
+class PeerSharesReply:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x05)
+        directories: List[DirectoryData] = field(
+            metadata={'type': array, 'subtype': DirectoryData}
+        )
+        unknown: int = field(default=0, metadata={'type': uint32})
+        locked_directories: List[DirectoryData] = field(
+            default=None,
+            metadata={'type': array, 'subtype': DirectoryData, 'optional': True}
+        )
+
+        def serialize(self, compress: bool = True) -> bytes:
+            return super().serialize(compress)
+
+        @classmethod
+        def deserialize(cls, message: bytes, decompress: bool = True):
+            return super().deserialize(message, decompress)

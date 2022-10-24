@@ -1,5 +1,8 @@
 from pyslsk.protocol.primitives import (
     calc_md5,
+    DirectoryData,
+    FileData,
+    Attribute,
     PotentialParent,
     ItemRecommendation,
     SimilarUser,
@@ -31,6 +34,7 @@ from pyslsk.protocol.messages import (
     ParentIP,
     ParentMinSpeed,
     ParentSpeedRatio,
+    ParentInactivityTimeout,
     SearchInactivityTimeout,
     MinParentsInCache,
     DistributedAliveInterval,
@@ -53,6 +57,33 @@ from pyslsk.protocol.messages import (
     GiveUserPrivileges,
     PrivilegesNotification,
     PrivilegesNotificationAck,
+    BranchLevel,
+    BranchRoot,
+    ChildDepth,
+    PrivateRoomUsers,
+    PrivateRoomAddUser,
+    PrivateRoomRemoveUser,
+    PrivateRoomDropMembership,
+    PrivateRoomDropOwnership,
+    PrivateRoomAdded,
+    PrivateRoomRemoved,
+    TogglePrivateRooms,
+    NewPassword,
+    PrivateRoomAddOperator,
+    PrivateRoomRemoveOperator,
+    PrivateRoomOperatorAdded,
+    PrivateRoomOperatorRemoved,
+    PrivateRoomOperators,
+    ChatMessageUsers,
+    ChatEnablePublic,
+    ChatDisablePublic,
+    ChatPublicMessage,
+    FileSearchEx,
+    CannotConnect,
+    PeerPierceFirewall,
+    PeerInit,
+    PeerSharesRequest,
+    PeerSharesReply,
 )
 
 
@@ -749,6 +780,19 @@ class TestParentSpeedRatio:
         assert ParentSpeedRatio.Response.deserialize(data) == message
 
 
+class TestParentInactivityTimeout:
+
+    def test_ParentInactivityTimeout_Response_serialize(self):
+        message = ParentInactivityTimeout.Response(1000)
+        data = bytes.fromhex('0800000056000000e8030000')
+        assert message.serialize() == data
+
+    def test_ParentInactivityTimeout_Response_deserialize(self):
+        message = ParentInactivityTimeout.Response(1000)
+        data = bytes.fromhex('0800000056000000e8030000')
+        assert ParentInactivityTimeout.Response.deserialize(data) == message
+
+
 class TestSearchInactivityTimeout:
 
     def test_SearchInactivityTimeout_Response_serialize(self):
@@ -1189,3 +1233,624 @@ class TestPrivilegesNotificationAck:
         message = PrivilegesNotificationAck.Request(1000)
         data = bytes.fromhex('080000007d000000e8030000')
         assert PrivilegesNotificationAck.Request.deserialize(data) == message
+
+
+class TestBranchLevel:
+
+    def test_BranchLevel_Request_serialize(self):
+        message = BranchLevel.Request(5)
+        data = bytes.fromhex('080000007e00000005000000')
+        assert message.serialize() == data
+
+    def test_BranchLevel_Request_deserialize(self):
+        message = BranchLevel.Request(5)
+        data = bytes.fromhex('080000007e00000005000000')
+        assert BranchLevel.Request.deserialize(data) == message
+
+
+class TestBranchRoot:
+
+    def test_BranchRoot_Request_serialize(self):
+        message = BranchRoot.Request('user0')
+        data = bytes.fromhex('0d0000007f000000050000007573657230')
+        assert message.serialize() == data
+
+    def test_BranchRoot_Request_deserialize(self):
+        message = BranchRoot.Request('user0')
+        data = bytes.fromhex('0d0000007f000000050000007573657230')
+        assert BranchRoot.Request.deserialize(data) == message
+
+
+class TestChildDepth:
+
+    def test_ChildDepth_Request_serialize(self):
+        message = ChildDepth.Request(5)
+        data = bytes.fromhex('080000008100000005000000')
+        assert message.serialize() == data
+
+    def test_ChildDepth_Request_deserialize(self):
+        message = ChildDepth.Request(5)
+        data = bytes.fromhex('080000008100000005000000')
+        assert ChildDepth.Request.deserialize(data) == message
+
+
+class TestPrivateRoomUsers:
+
+    def test_PrivateRoomUsers_Request_serialize(self):
+        message = PrivateRoomUsers.Request(
+            room='room0',
+            usernames=['user0', 'user1']
+        )
+        data = bytes.fromhex('230000008500000005000000726f6f6d3002000000050000007573657230050000007573657231')
+        assert message.serialize() == data
+
+    def test_PrivateRoomUsers_Request_deserialize(self):
+        message = PrivateRoomUsers.Request(
+            room='room0',
+            usernames=['user0', 'user1']
+        )
+        data = bytes.fromhex('230000008500000005000000726f6f6d3002000000050000007573657230050000007573657231')
+        assert PrivateRoomUsers.Request.deserialize(data) == message
+
+
+class TestPrivateRoomAddUser:
+
+    def test_PrivateRoomAddUser_Request_serialize(self):
+        message = PrivateRoomAddUser.Request(
+            room='room0',
+            username='user0'
+        )
+        data = bytes.fromhex('160000008600000005000000726f6f6d30050000007573657230')
+        assert message.serialize() == data
+
+    def test_PrivateRoomAddUser_Request_deserialize(self):
+        message = PrivateRoomAddUser.Request(
+            room='room0',
+            username='user0'
+        )
+        data = bytes.fromhex('160000008600000005000000726f6f6d30050000007573657230')
+        assert PrivateRoomAddUser.Request.deserialize(data) == message
+
+    def test_PrivateRoomAddUser_Response_serialize(self):
+        message = PrivateRoomAddUser.Response(
+            room='room0',
+            username='user0'
+        )
+        data = bytes.fromhex('160000008600000005000000726f6f6d30050000007573657230')
+        assert message.serialize() == data
+
+    def test_PrivateRoomAddUser_Response_deserialize(self):
+        message = PrivateRoomAddUser.Response(
+            room='room0',
+            username='user0'
+        )
+        data = bytes.fromhex('160000008600000005000000726f6f6d30050000007573657230')
+        assert PrivateRoomAddUser.Response.deserialize(data) == message
+
+
+class TestPrivateRoomRemoveUser:
+
+    def test_PrivateRoomRemoveUser_Request_serialize(self):
+        message = PrivateRoomRemoveUser.Request(
+            room='room0',
+            username='user0'
+        )
+        data = bytes.fromhex('160000008700000005000000726f6f6d30050000007573657230')
+        assert message.serialize() == data
+
+    def test_PrivateRoomRemoveUser_Request_deserialize(self):
+        message = PrivateRoomRemoveUser.Request(
+            room='room0',
+            username='user0'
+        )
+        data = bytes.fromhex('160000008700000005000000726f6f6d30050000007573657230')
+        assert PrivateRoomRemoveUser.Request.deserialize(data) == message
+
+    def test_PrivateRoomRemoveUser_Response_serialize(self):
+        message = PrivateRoomRemoveUser.Response(
+            room='room0',
+            username='user0'
+        )
+        data = bytes.fromhex('160000008700000005000000726f6f6d30050000007573657230')
+        assert message.serialize() == data
+
+    def test_PrivateRoomRemoveUser_Response_deserialize(self):
+        message = PrivateRoomRemoveUser.Response(
+            room='room0',
+            username='user0'
+        )
+        data = bytes.fromhex('160000008700000005000000726f6f6d30050000007573657230')
+        assert PrivateRoomRemoveUser.Response.deserialize(data) == message
+
+
+class TestPrivateRoomDropMembership:
+
+    def test_PrivateRoomDropMembership_Request_serialize(self):
+        message = PrivateRoomDropMembership.Request('room0')
+        data = bytes.fromhex('0d0000008800000005000000726f6f6d30')
+        assert message.serialize() == data
+
+    def test_PrivateRoomDropMembership_Request_deserialize(self):
+        message = PrivateRoomDropMembership.Request('room0')
+        data = bytes.fromhex('0d0000008800000005000000726f6f6d30')
+        assert PrivateRoomDropMembership.Request.deserialize(data) == message
+
+
+class TestPrivateRoomDropOwnership:
+
+    def test_PrivateRoomDropOwnership_Request_serialize(self):
+        message = PrivateRoomDropOwnership.Request('room0')
+        data = bytes.fromhex('0d0000008900000005000000726f6f6d30')
+        assert message.serialize() == data
+
+    def test_PrivateRoomDropOwnership_Request_deserialize(self):
+        message = PrivateRoomDropOwnership.Request('room0')
+        data = bytes.fromhex('0d0000008900000005000000726f6f6d30')
+        assert PrivateRoomDropOwnership.Request.deserialize(data) == message
+
+
+class TestPrivateRoomAdded:
+
+    def test_PrivateRoomAdded_Response_serialize(self):
+        message = PrivateRoomAdded.Response('room0')
+        data = bytes.fromhex('0d0000008b00000005000000726f6f6d30')
+        assert message.serialize() == data
+
+    def test_PrivateRoomAdded_Response_deserialize(self):
+        message = PrivateRoomAdded.Response('room0')
+        data = bytes.fromhex('0d0000008b00000005000000726f6f6d30')
+        assert PrivateRoomAdded.Response.deserialize(data) == message
+
+
+class TestPrivateRoomRemoved:
+
+    def test_PrivateRoomRemoved_Response_serialize(self):
+        message = PrivateRoomRemoved.Response('room0')
+        data = bytes.fromhex('0d0000008c00000005000000726f6f6d30')
+        assert message.serialize() == data
+
+    def test_PrivateRoomRemoved_Response_deserialize(self):
+        message = PrivateRoomRemoved.Response('room0')
+        data = bytes.fromhex('0d0000008c00000005000000726f6f6d30')
+        assert PrivateRoomRemoved.Response.deserialize(data) == message
+
+
+class TestTogglePrivateRooms:
+
+    def test_TogglePrivateRooms_Request_serialize(self):
+        message = TogglePrivateRooms.Request(True)
+        data = bytes.fromhex('050000008d00000001')
+        assert message.serialize() == data
+
+    def test_TogglePrivateRooms_Request_deserialize(self):
+        message = TogglePrivateRooms.Request(True)
+        data = bytes.fromhex('050000008d00000001')
+        assert TogglePrivateRooms.Request.deserialize(data) == message
+
+
+class TestNewPassword:
+
+    def test_NewPassword_Request_serialize(self):
+        message = NewPassword.Request('password0')
+        data = bytes.fromhex('110000008e0000000900000070617373776f726430')
+        assert message.serialize() == data
+
+    def test_NewPassword_Request_deserialize(self):
+        message = NewPassword.Request('password0')
+        data = bytes.fromhex('110000008e0000000900000070617373776f726430')
+        assert NewPassword.Request.deserialize(data) == message
+
+
+class TestPrivateRoomAddOperator:
+
+    def test_PrivateRoomAddOperator_Request_serialize(self):
+        message = PrivateRoomAddOperator.Request(
+            room='room0',
+            username='user0'
+        )
+        data = bytes.fromhex('160000008f00000005000000726f6f6d30050000007573657230')
+        assert message.serialize() == data
+
+    def test_PrivateRoomAddOperator_Request_deserialize(self):
+        message = PrivateRoomAddOperator.Request(
+            room='room0',
+            username='user0'
+        )
+        data = bytes.fromhex('160000008f00000005000000726f6f6d30050000007573657230')
+        assert PrivateRoomAddOperator.Request.deserialize(data) == message
+
+    def test_PrivateRoomAddOperator_Response_serialize(self):
+        message = PrivateRoomAddOperator.Response(
+            room='room0',
+            username='user0'
+        )
+        data = bytes.fromhex('160000008f00000005000000726f6f6d30050000007573657230')
+        assert message.serialize() == data
+
+    def test_PrivateRoomAddOperator_Response_deserialize(self):
+        message = PrivateRoomAddOperator.Response(
+            room='room0',
+            username='user0'
+        )
+        data = bytes.fromhex('160000008f00000005000000726f6f6d30050000007573657230')
+        assert PrivateRoomAddOperator.Response.deserialize(data) == message
+
+
+class TestPrivateRoomRemoveOperator:
+
+    def test_PrivateRoomRemoveOperator_Request_serialize(self):
+        message = PrivateRoomRemoveOperator.Request(
+            room='room0',
+            username='user0'
+        )
+        data = bytes.fromhex('160000009000000005000000726f6f6d30050000007573657230')
+        assert message.serialize() == data
+
+    def test_PrivateRoomRemoveOperator_Request_deserialize(self):
+        message = PrivateRoomRemoveOperator.Request(
+            room='room0',
+            username='user0'
+        )
+        data = bytes.fromhex('160000009000000005000000726f6f6d30050000007573657230')
+        assert PrivateRoomRemoveOperator.Request.deserialize(data) == message
+
+    def test_PrivateRoomRemoveOperator_Response_serialize(self):
+        message = PrivateRoomRemoveOperator.Response(
+            room='room0',
+            username='user0'
+        )
+        data = bytes.fromhex('160000009000000005000000726f6f6d30050000007573657230')
+        assert message.serialize() == data
+
+    def test_PrivateRoomRemoveOperator_Response_deserialize(self):
+        message = PrivateRoomRemoveOperator.Response(
+            room='room0',
+            username='user0'
+        )
+        data = bytes.fromhex('160000009000000005000000726f6f6d30050000007573657230')
+        assert PrivateRoomRemoveOperator.Response.deserialize(data) == message
+
+
+class TestPrivateRoomOperatorAdded:
+
+    def test_PrivateRoomOperatorAdded_Response_serialize(self):
+        message = PrivateRoomOperatorAdded.Response('room0')
+        data = bytes.fromhex('0d0000009100000005000000726f6f6d30')
+        assert message.serialize() == data
+
+    def test_PrivateRoomOperatorAdded_Response_deserialize(self):
+        message = PrivateRoomOperatorAdded.Response('room0')
+        data = bytes.fromhex('0d0000009100000005000000726f6f6d30')
+        assert PrivateRoomOperatorAdded.Response.deserialize(data) == message
+
+
+class TestPrivateRoomOperatorRemoved:
+
+    def test_PrivateRoomOperatorRemoved_Response_serialize(self):
+        message = PrivateRoomOperatorRemoved.Response('room0')
+        data = bytes.fromhex('0d0000009200000005000000726f6f6d30')
+        assert message.serialize() == data
+
+    def test_PrivateRoomOperatorRemoved_Response_deserialize(self):
+        message = PrivateRoomOperatorRemoved.Response('room0')
+        data = bytes.fromhex('0d0000009200000005000000726f6f6d30')
+        assert PrivateRoomOperatorRemoved.Response.deserialize(data) == message
+
+
+class TestPrivateRoomOperators:
+
+    def test_PrivateRoomOperators_Response_serialize(self):
+        message = PrivateRoomOperators.Response(
+            room='room0',
+            usernames=['user0', 'user1']
+        )
+        data = bytes.fromhex('230000009400000005000000726f6f6d3002000000050000007573657230050000007573657231')
+        assert message.serialize() == data
+
+    def test_PrivateRoomOperators_Response_deserialize(self):
+        message = PrivateRoomOperators.Response(
+            room='room0',
+            usernames=['user0', 'user1']
+        )
+        data = bytes.fromhex('230000009400000005000000726f6f6d3002000000050000007573657230050000007573657231')
+        assert PrivateRoomOperators.Response.deserialize(data) == message
+
+
+class TestChatMessageUsers:
+
+    def test_ChatMessageUsers_Request_serialize(self):
+        message = ChatMessageUsers.Request(
+            usernames=['user0', 'user1'],
+            message="Hello"
+        )
+        data = bytes.fromhex('2300000095000000020000000500000075736572300500000075736572310500000048656c6c6f')
+        assert message.serialize() == data
+
+    def test_ChatMessageUsers_Request_deserialize(self):
+        message = ChatMessageUsers.Request(
+            usernames=['user0', 'user1'],
+            message="Hello"
+        )
+        data = bytes.fromhex('2300000095000000020000000500000075736572300500000075736572310500000048656c6c6f')
+        assert ChatMessageUsers.Request.deserialize(data) == message
+
+
+class TestChatEnablePublic:
+
+    def test_ChatEnablePublic_Request_serialize(self):
+        message = ChatEnablePublic.Request()
+        data = bytes.fromhex('0400000096000000')
+        assert message.serialize() == data
+
+    def test_ChatEnablePublic_Request_deserialize(self):
+        message = ChatEnablePublic.Request()
+        data = bytes.fromhex('0400000096000000')
+        assert ChatEnablePublic.Request.deserialize(data) == message
+
+
+class TestChatDisablePublic:
+
+    def test_ChatDisablePublic_Request_serialize(self):
+        message = ChatDisablePublic.Request()
+        data = bytes.fromhex('0400000097000000')
+        assert message.serialize() == data
+
+    def test_ChatDisablePublic_Request_deserialize(self):
+        message = ChatDisablePublic.Request()
+        data = bytes.fromhex('0400000097000000')
+        assert ChatDisablePublic.Request.deserialize(data) == message
+
+
+class TestChatPublicMessage:
+
+    def test_ChatPublicMessage_Response_serialize(self):
+        message = ChatPublicMessage.Response(
+            room='room0',
+            username='user0',
+            message="Hello"
+        )
+        data = bytes.fromhex('1f0000009800000005000000726f6f6d300500000075736572300500000048656c6c6f')
+        assert message.serialize() == data
+
+    def test_ChatPublicMessage_Response_deserialize(self):
+        message = ChatPublicMessage.Response(
+            room='room0',
+            username='user0',
+            message="Hello"
+        )
+        data = bytes.fromhex('1f0000009800000005000000726f6f6d300500000075736572300500000048656c6c6f')
+        assert ChatPublicMessage.Response.deserialize(data) == message
+
+
+class TestFileSearchEx:
+
+    def test_FileSearchEx_Request_serialize(self):
+        message = FileSearchEx.Request('Query')
+        data = bytes.fromhex('0d00000099000000050000005175657279')
+        assert message.serialize() == data
+
+    def test_FileSearchEx_Request_deserialize(self):
+        message = FileSearchEx.Request('Query')
+        data = bytes.fromhex('0d00000099000000050000005175657279')
+        assert FileSearchEx.Request.deserialize(data) == message
+
+    def test_FileSearchEx_Response_serialize(self):
+        message = FileSearchEx.Response(
+            query='Query',
+            unknown=1
+        )
+        data = bytes.fromhex('110000009900000005000000517565727901000000')
+        assert message.serialize() == data
+
+    def test_FileSearchEx_Response_deserialize(self):
+        message = FileSearchEx.Response(
+            query='Query',
+            unknown=1
+        )
+        data = bytes.fromhex('110000009900000005000000517565727901000000')
+        assert FileSearchEx.Response.deserialize(data) == message
+
+
+class TestCannotConnect:
+
+    def test_CannotConnect_Request_serialize_withoutUsername(self):
+        message = CannotConnect.Request(
+            ticket=1234
+        )
+        data = bytes.fromhex('08000000e9030000d2040000')
+        assert message.serialize() == data
+
+    def test_CannotConnect_Request_deserialize_withoutUsername(self):
+        message = CannotConnect.Request(
+            ticket=1234
+        )
+        data = bytes.fromhex('08000000e9030000d2040000')
+        assert CannotConnect.Request.deserialize(data) == message
+
+    def test_CannotConnect_Request_serialize_withUsername(self):
+        message = CannotConnect.Request(
+            ticket=1234,
+            username='user0'
+        )
+        data = bytes.fromhex('11000000e9030000d2040000050000007573657230')
+        assert message.serialize() == data
+
+    def test_CannotConnect_Request_deserialize_withUsername(self):
+        message = CannotConnect.Request(
+            ticket=1234,
+            username='user0'
+        )
+        data = bytes.fromhex('11000000e9030000d2040000050000007573657230')
+        assert CannotConnect.Request.deserialize(data) == message
+
+    # Response
+    def test_CannotConnect_Response_serialize_withoutUsername(self):
+        message = CannotConnect.Response(
+            ticket=1234
+        )
+        data = bytes.fromhex('08000000e9030000d2040000')
+        assert message.serialize() == data
+
+    def test_CannotConnect_Response_deserialize_withoutUsername(self):
+        message = CannotConnect.Response(
+            ticket=1234
+        )
+        data = bytes.fromhex('08000000e9030000d2040000')
+        assert CannotConnect.Response.deserialize(data) == message
+
+    def test_CannotConnect_Response_serialize_withUsername(self):
+        message = CannotConnect.Response(
+            ticket=1234,
+            username='user0'
+        )
+        data = bytes.fromhex('11000000e9030000d2040000050000007573657230')
+        assert message.serialize() == data
+
+    def test_CannotConnect_Response_deserialize_withUsername(self):
+        message = CannotConnect.Response(
+            ticket=1234,
+            username='user0'
+        )
+        data = bytes.fromhex('11000000e9030000d2040000050000007573657230')
+        assert CannotConnect.Response.deserialize(data) == message
+
+
+# Peer Initialization messages
+
+class TestPeerPierceFirewall:
+
+    def test_PeerPierceFirewall_Request_serialize(self):
+        message = PeerPierceFirewall.Request(1000)
+        data = bytes.fromhex('0500000000e8030000')
+        assert message.serialize() == data
+
+    def test_PeerPierceFirewall_Request_deserialize(self):
+        message = PeerPierceFirewall.Request(1000)
+        data = bytes.fromhex('0500000000e8030000')
+        assert PeerPierceFirewall.Request.deserialize(data) == message
+
+
+class TestPeerInit:
+
+    def test_PeerInit_Request_serialize(self):
+        message = PeerInit.Request(
+            username='user0',
+            typ='D',
+            ticket=1000
+        )
+        data = bytes.fromhex('13000000010500000075736572300100000044e8030000')
+        assert message.serialize() == data
+
+    def test_PeerInit_Request_deserialize_uint32(self):
+        message = PeerInit.Request(
+            username='user0',
+            typ='D',
+            ticket=1000
+        )
+        data = bytes.fromhex('13000000010500000075736572300100000044e8030000')
+        assert PeerInit.Request.deserialize(data) == message
+
+    def test_PeerInit_Request_deserialize_uint64(self):
+        message = PeerInit.Request(
+            username='user0',
+            typ='D',
+            ticket=1000
+        )
+        data = bytes.fromhex('13000000010500000075736572300100000044e803000000000000')
+        assert PeerInit.Request.deserialize(data) == message
+
+
+# Peer messages
+
+class TestPeerSharesRequest:
+
+    def test_PeerSharesRequest_Request_serialize(self):
+        message = PeerSharesRequest.Request()
+        data = bytes.fromhex('0400000004000000')
+        assert message.serialize() == data
+
+    def test_PeerSharesRequest_Request_deserialize(self):
+        message = PeerSharesRequest.Request()
+        data = bytes.fromhex('0400000004000000')
+        assert PeerSharesRequest.Request.deserialize(data) == message
+
+
+class TestPeerSharesReply:
+    MESSAGE = PeerSharesReply.Request(
+        directories=[
+            DirectoryData(
+                name="C:\\dir0",
+                files=[
+                    FileData(
+                        unknown='0',
+                        filename="song0.mp3",
+                        filesize=1000000,
+                        extension='mp3',
+                        attributes=[
+                            Attribute(1, 320),
+                            Attribute(2, 3000)
+                        ]
+                    )
+                ]
+            )
+        ]
+    )
+    DATA = bytes.fromhex('3f00000005000000789c6364606060076267ab9894cc2203462013840d388144717e5eba815e6e81b183133f03335000c864822a70001220f60e6e0630000051cf085e')
+
+    MESSAGE_LOCKED = PeerSharesReply.Request(
+        directories=[
+            DirectoryData(
+                name="C:\\dir0",
+                files=[
+                    FileData(
+                        unknown='1',
+                        filename="song0.mp3",
+                        filesize=1000000,
+                        extension='mp3',
+                        attributes=[
+                            Attribute(1, 320),
+                            Attribute(2, 3000)
+                        ]
+                    )
+                ]
+            )
+        ],
+        locked_directories=[
+            DirectoryData(
+                name="C:\\locked_dir0",
+                files=[
+                    FileData(
+                        unknown='1',
+                        filename="locked_song0.mp3",
+                        filesize=1000000,
+                        extension='mp3',
+                        attributes=[
+                            Attribute(1, 320),
+                            Attribute(2, 3000)
+                        ]
+                    )
+                ]
+            )
+        ]
+    )
+    DATA_LOCKED = bytes.fromhex('5400000005000000789c6364606060076267ab9894cc2203462013840d398144717e5eba815e6e81b183133f03335000c864822a70001220f60e6e06300089f141ccc9c94fce4e4d8947314e004840c5893515008852166d')
+
+    def test_PeerSharesReply_Request_serialize_withoutLockedResults(self):
+        message = self.MESSAGE
+        data = self.DATA
+        assert message.serialize() == data
+
+    def test_PeerSharesReply_Request_deserialize_withoutLockedResults(self):
+        message = self.MESSAGE
+        data = self.DATA
+        assert PeerSharesReply.Request.deserialize(data) == message
+
+    def test_PeerSharesReply_Request_serialize_withLockedResults(self):
+        message = self.MESSAGE_LOCKED
+        data = self.DATA_LOCKED
+        assert message.serialize() == data
+
+    def test_PeerSharesReply_Request_deserialize_withLockedResults(self):
+        message = self.MESSAGE_LOCKED
+        data = self.DATA_LOCKED
+        assert PeerSharesReply.Request.deserialize(data) == message

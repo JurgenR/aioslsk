@@ -5,6 +5,7 @@ import logging
 import socket
 import struct
 from typing import List
+import zlib
 
 logger = logging.getLogger()
 
@@ -232,29 +233,38 @@ class ProtocolDataclass:
 
 class MessageDataclass(ProtocolDataclass):
 
-    def serialize(self):
+    def serialize(self, compress: bool = False) -> bytes:
         message = super().serialize()
+
+        if compress:
+            message = zlib.compress(message)
+
         message = self.MESSAGE_ID.serialize() + message
         return uint32(len(message)).serialize() + message
 
     @classmethod
-    def deserialize(cls, message: bytes):
+    def deserialize(cls, message: bytes, decompress: bool = False):
         pos: int = 0
 
         # Parse length and header
         pos, _ = uint32.deserialize(pos, message)
-        pos, message_id = uint32.deserialize(pos, message)
+        pos, message_id = type(cls.MESSAGE_ID).deserialize(pos, message)
         if message_id != cls.MESSAGE_ID:
             raise ValueError(f"message id mismatch {message_id} != {cls.MESSAGE_ID}")
 
-        pos, obj = super().deserialize(pos, message)
+        if decompress:
+            message = zlib.decompress(message[pos:])
+            pos, obj = super().deserialize(0, message)
+        else:
+            pos, obj = super().deserialize(pos, message)
+
         return obj
 
 
 @dataclass(frozen=True)
 class Attribute(ProtocolDataclass):
-    key: int
-    value: int
+    key: int = field(metadata={'type': uint32})
+    value: int = field(metadata={'type': uint32})
 
 
 @dataclass(frozen=True)
@@ -296,15 +306,13 @@ class FileData(ProtocolDataclass):
     filename: str = field(metadata={'type': string})
     filesize: int = field(metadata={'type': uint32})
     extension: str = field(metadata={'type': string})
-    attributes: List[Attribute] = field(
-        default_factory=list
-    )
+    attributes: List[Attribute] = field(metadata={'type': array, 'subtype': Attribute})
 
 
 @dataclass(frozen=True, order=True)
 class DirectoryData(ProtocolDataclass):
-    name: str
-    files: List[FileData] = field(default_factory=list)
+    name: str = field(metadata={'type': string})
+    files: List[FileData] = field(metadata={'type': array, 'subtype': FileData})
 
 
 def has_unparsed_bytes(pos, message):
