@@ -28,7 +28,7 @@ from pyslsk.protocol.messages import (
     FileSearch,
     SetStatus,
     Ping,
-    SharedFolderFiles,
+    SharedFoldersFiles,
     UserSearch,
     RoomList,
     PrivilegedUsers,
@@ -241,13 +241,21 @@ class TestSetListenPort:
         data = bytes.fromhex('0800000002000000d2040000')
         assert SetListenPort.Request.deserialize(data) == message
 
-    def test_SetListenPort_Request_serialize_withObfuscatedPorts(self):
-        message = SetListenPort.Request(1234, obfuscated_ports=[1235])
+    def test_SetListenPort_Request_serialize_withObfuscatedPort(self):
+        message = SetListenPort.Request(
+            1234,
+            obfuscated_port_amount=1,
+            obfuscated_port=1235
+        )
         data = bytes.fromhex('1000000002000000d204000001000000d3040000')
         assert message.serialize() == data
 
     def test_SetListenPort_Request_deserialize_withObfuscatedPorts(self):
-        message = SetListenPort.Request(1234, obfuscated_ports=[1235])
+        message = SetListenPort.Request(
+            1234,
+            obfuscated_port_amount=1,
+            obfuscated_port=1235
+        )
         data = bytes.fromhex('1000000002000000d204000001000000d3040000')
         assert SetListenPort.Request.deserialize(data) == message
 
@@ -288,7 +296,8 @@ class TestGetPeerAddress:
             username='user0',
             ip='1.2.3.4',
             port=1234,
-            obfuscated_ports=[1235]
+            obfuscated_port_amount=1,
+            obfuscated_port=1235
         )
         data = bytes.fromhex('1b0000000300000005000000757365723004030201d204000001000000d304')
         assert message.serialize() == data
@@ -298,7 +307,8 @@ class TestGetPeerAddress:
             username='user0',
             ip='1.2.3.4',
             port=1234,
-            obfuscated_ports=[1235]
+            obfuscated_port_amount=1,
+            obfuscated_port=1235
         )
         data = bytes.fromhex('1b0000000300000005000000757365723004030201d204000001000000d304')
         assert GetPeerAddress.Response.deserialize(data) == message
@@ -755,23 +765,23 @@ class TestPing:
         assert Ping.Request.deserialize(data) == message
 
 
-class TestSharedFolderFiles:
+class TestSharedFoldersFiles:
 
-    def test_SharedFolderFiles_Request_serialize(self):
-        message = SharedFolderFiles.Request(
-            dir_count=1000,
+    def test_SharedFoldersFiles_Request_serialize(self):
+        message = SharedFoldersFiles.Request(
+            directory_count=1000,
             file_count=10000
         )
         data = bytes.fromhex('0c00000020000000e803000010270000')
         assert message.serialize() == data
 
-    def test_SharedFolderFiles_Request_deserialize(self):
-        message = SharedFolderFiles.Request(
-            dir_count=1000,
+    def test_SharedFoldersFiles_Request_deserialize(self):
+        message = SharedFoldersFiles.Request(
+            directory_count=1000,
             file_count=10000
         )
         data = bytes.fromhex('0c00000020000000e803000010270000')
-        assert SharedFolderFiles.Request.deserialize(data) == message
+        assert SharedFoldersFiles.Request.deserialize(data) == message
 
 
 class TestGetUserStats:

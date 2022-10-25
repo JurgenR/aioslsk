@@ -10,7 +10,6 @@ This file contains 3 types of messages:
         `deserialize` method of these messages
 
 
-
 Field metadata:
 
 The `Serializer` and `Deserializer` use the `metadata` parameter of the
@@ -158,14 +157,8 @@ class SetListenPort(ServerMessage):
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x02)
         port: int = field(metadata={'type': uint32})
-        obfuscated_ports: List[int] = field(
-            default=None,
-            metadata={
-                'type': array,
-                'subtype': uint32,
-                'optional': True
-            }
-        )
+        obfuscated_port_amount: int = field(default=None, metadata={'type': uint32, 'optional': True})
+        obfuscated_port: int = field(default=None, metadata={'type': uint32, 'optional': True})
 
 
 class GetPeerAddress(ServerMessage):
@@ -181,14 +174,8 @@ class GetPeerAddress(ServerMessage):
         username: str = field(metadata={'type': string})
         ip: str = field(metadata={'type': ipaddr})
         port: int = field(metadata={'type': uint32})
-        obfuscated_ports: List[int] = field(
-            default=None,
-            metadata={
-                'type': array,
-                'subtype': uint16,
-                'optional': True
-            }
-        )
+        obfuscated_port_amount: int = field(default=None, metadata={'type': uint32, 'optional': True})
+        obfuscated_port: int = field(default=None, metadata={'type': uint16, 'optional': True})
 
 
 class AddUser(ServerMessage):
@@ -391,12 +378,12 @@ class Ping(ServerMessage):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x20)
 
 
-class SharedFolderFiles(ServerMessage):
+class SharedFoldersFiles(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x20)
-        dir_count: int = field(metadata={'type': uint32})
+        directory_count: int = field(metadata={'type': uint32})
         file_count: int = field(metadata={'type': uint32})
 
 
