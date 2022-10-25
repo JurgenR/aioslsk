@@ -7,6 +7,7 @@ from pyslsk.protocol.primitives import (
     ItemRecommendation,
     SimilarUser,
     RoomTicker,
+    UserData,
 )
 from pyslsk.protocol.messages import (
     Login,
@@ -19,6 +20,7 @@ from pyslsk.protocol.messages import (
     ChatLeaveRoom,
     ChatJoinRoom,
     ChatUserLeftRoom,
+    ChatUserJoinedRoom,
     GetUserStats,
     ConnectToPeer,
     ChatPrivateMessage,
@@ -84,6 +86,7 @@ from pyslsk.protocol.messages import (
     PeerInit,
     PeerSharesRequest,
     PeerSharesReply,
+    PeerSearchReply,
     PeerUserInfoRequest,
     PeerUserInfoReply,
     PeerDirectoryContentsRequest,
@@ -96,24 +99,36 @@ from pyslsk.protocol.messages import (
     PeerTransferQueueFailed,
     PeerPlaceInQueueRequest,
     PeerUploadQueueNotification,
+    DistributedSearchRequest,
+    DistributedBranchLevel,
+    DistributedBranchRoot,
+    DistributedChildDepth,
 )
 
 
 class TestLogin:
-    REQ_MESSAGE = Login.Request(
-        username='Test',
-        password='Test1234',
-        client_version=10,
-        password_md5=calc_md5('Test1234'),
-        minor_version=123
-    )
-    REQ_MESSAGE_BYTES = bytes.fromhex("440000000100000004000000546573740800000054657374313233340a0000002000000032633933343163613463663364383762396534656239303564366133656334357b000000")
 
     def test_Login_Request(self):
-        assert self.REQ_MESSAGE.serialize() == self.REQ_MESSAGE_BYTES
+        message = Login.Request(
+            username='Test',
+            password='Test1234',
+            client_version=10,
+            password_md5=calc_md5('Test1234'),
+            minor_version=123
+        )
+        data = bytes.fromhex("440000000100000004000000546573740800000054657374313233340a0000002000000032633933343163613463663364383762396534656239303564366133656334357b000000")
+        assert message.serialize() == data
 
     def test_Login_Request(self):
-        assert Login.Request.deserialize(self.REQ_MESSAGE_BYTES) == self.REQ_MESSAGE
+        message = Login.Request(
+            username='Test',
+            password='Test1234',
+            client_version=10,
+            password_md5=calc_md5('Test1234'),
+            minor_version=123
+        )
+        data = bytes.fromhex("440000000100000004000000546573740800000054657374313233340a0000002000000032633933343163613463663364383762396534656239303564366133656334357b000000")
+        assert Login.Request.deserialize(data) == message
 
     def test_Login_Response_serialize_successful(self):
         message = Login.Response(
@@ -121,8 +136,10 @@ class TestLogin:
             greeting="Hello",
             ip='1.2.3.4',
             md5hash=calc_md5('Test1234'),
-            unknown=0
+            privileged=True
         )
+        data = bytes.fromhex('3700000001000000010500000048656c6c6f0403020120000000326339333431636134636633643837623965346562393035643661336563343501')
+        assert message.serialize() == data
 
     def test_Login_Response_serialize_unsuccessful(self):
         message = Login.Response(
@@ -132,7 +149,15 @@ class TestLogin:
         assert message.serialize() == bytes.fromhex("1400000001000000000b000000494e56414c494450415353")
 
     def test_Login_Response_deserialize_successful(self):
-        pass
+        message = Login.Response(
+            success=True,
+            greeting="Hello",
+            ip='1.2.3.4',
+            md5hash=calc_md5('Test1234'),
+            privileged=True
+        )
+        data = bytes.fromhex('3700000001000000010500000048656c6c6f0403020120000000326339333431636134636633643837623965346562393035643661336563343501')
+        assert Login.Response.deserialize(data) == message
 
     def test_Login_Response_deserialize_unsuccessful(self):
         obj = Login.Response.deserialize(
@@ -381,7 +406,39 @@ class TestChatLeaveRoom:
 
 class TestUserJoinedRoom:
 
-    pass
+    def test_ChatUserJoinedRoom_Response_serialize(self):
+        message = ChatUserJoinedRoom.Response(
+            room='room0',
+            username='user0',
+            status=1,
+            user_data=UserData(
+                avg_speed=1000,
+                download_num=10000,
+                file_count=1000,
+                dir_count=1000
+            ),
+            slots_free=5,
+            country_code='DE'
+        )
+        data = bytes.fromhex('380000001000000005000000726f6f6d3005000000757365723001000000e80300001027000000000000e8030000e803000005000000020000004445')
+        assert message.serialize() == data
+
+    def test_ChatUserJoinedRoom_Response_deserialize(self):
+        message = ChatUserJoinedRoom.Response(
+            room='room0',
+            username='user0',
+            status=1,
+            user_data=UserData(
+                avg_speed=1000,
+                download_num=10000,
+                file_count=1000,
+                dir_count=1000
+            ),
+            slots_free=5,
+            country_code='DE'
+        )
+        data = bytes.fromhex('380000001000000005000000726f6f6d3005000000757365723001000000e80300001027000000000000e8030000e803000005000000020000004445')
+        assert ChatUserJoinedRoom.Response.deserialize(data) == message
 
 
 class TestChatUserLeftRoom:
@@ -1868,6 +1925,83 @@ class TestPeerSharesReply:
         assert PeerSharesReply.Request.deserialize(data) == message
 
 
+class TestPeerSearchReply:
+
+    MESSAGE = PeerSearchReply.Request(
+        username='user0',
+        ticket=1234,
+        results=[
+            FileData(
+                unknown='1',
+                filename="C:\\dir0\\song0.mp3",
+                filesize=10000000,
+                extension='mp3',
+                attributes=[
+                    Attribute(1, 320),
+                    Attribute(2, 100)
+                ]
+            )
+        ],
+        has_slots_free=True,
+        avg_speed=1000,
+        queue_size=5,
+    )
+    DATA = bytes.fromhex('4a00000009000000789c63656060282d4e2d32b8c4c2c0c0c800c1868240c2d92a2625b3c820a6383f2fdd402fb7c0b861da0c0666a00490c90455e8002440ec1410ff05509295010200ab850d34')
+
+    MESSAGE_LOCKED = PeerSearchReply.Request(
+        username='user0',
+        ticket=1234,
+        results=[
+            FileData(
+                unknown='1',
+                filename="C:\\dir0\\song0.mp3",
+                filesize=10000000,
+                extension='mp3',
+                attributes=[
+                    Attribute(1, 320),
+                    Attribute(2, 100)
+                ]
+            )
+        ],
+        has_slots_free=True,
+        avg_speed=1000,
+        queue_size=5,
+        locked_results=[
+            FileData(
+                unknown='1',
+                filename="C:\\dir0\\locked_song0.mp3",
+                filesize=10000000,
+                extension='mp3',
+                attributes=[
+                    Attribute(1, 320),
+                    Attribute(2, 100)
+                ]
+            )
+        ]
+    )
+    DATA_LOCKED = bytes.fromhex('5900000009000000789c63656060282d4e2d32b8c4c2c0c0c800c1868240c2d92a2625b3c820a6383f2fdd402fb7c0b861da0c0666a00490c90455e8002440ec1410ff055092950102e02649209994939f9c9d9a124fac810004801984')
+
+    def test_PeerSearchReply_Request_serialize_withoutLockedResults(self):
+        message = self.MESSAGE
+        data = self.DATA
+        assert message.serialize() == data
+
+    def test_PeerSearchReply_Request_deserialize_withoutLockedResults(self):
+        message = self.MESSAGE
+        data = self.DATA
+        assert PeerSearchReply.Request.deserialize(data) == message
+
+    def test_PeerSearchReply_Request_serialize_withLockedResults(self):
+        message = self.MESSAGE_LOCKED
+        data = self.DATA_LOCKED
+        assert message.serialize() == data
+
+    def test_PeerSearchReply_Request_deserialize_withLockedResults(self):
+        message = self.MESSAGE_LOCKED
+        data = self.DATA_LOCKED
+        assert PeerSearchReply.Request.deserialize(data) == message
+
+
 class TestPeerUserInfoRequest:
 
     def test_PeerUserInfoRequest_Request_serialize(self):
@@ -2174,3 +2308,89 @@ class TestPeerUploadQueueNotification:
         assert PeerUploadQueueNotification.Request.deserialize(data) == message
 
 
+# Distributed messages
+class TestDistributedSearchRequest:
+
+    def test_DistributedSearchRequest_Request_serialize(self):
+        message = DistributedSearchRequest.Request(
+            unknown=0x31,
+            username='user0',
+            ticket=1234,
+            query='Query'
+        )
+        data = bytes.fromhex('1b0000000331000000050000007573657230d2040000050000005175657279')
+        assert message.serialize() == data
+
+    def test_DistributedSearchRequest_Request_deserialize(self):
+        message = DistributedSearchRequest.Request(
+            unknown=0x31,
+            username='user0',
+            ticket=1234,
+            query='Query'
+        )
+        data = bytes.fromhex('1b0000000331000000050000007573657230d2040000050000005175657279')
+        assert DistributedSearchRequest.Request.deserialize(data) == message
+
+
+class TestDistributedBranchLevel:
+
+    def test_DistributedBranchLevel_Request_serialize(self):
+        message = DistributedBranchLevel.Request(5)
+        data = bytes.fromhex('050000000405000000')
+        assert message.serialize() == data
+
+    def test_DistributedBranchLevel_Request_deserialize(self):
+        message = DistributedBranchLevel.Request(5)
+        data = bytes.fromhex('050000000405000000')
+        assert DistributedBranchLevel.Request.deserialize(data) == message
+
+
+class TestDistributedBranchRoot:
+
+    def test_DistributedBranchRoot_Request_serialize(self):
+        message = DistributedBranchRoot.Request('user0')
+        data = bytes.fromhex('0a00000005050000007573657230')
+        assert message.serialize() == data
+
+    def test_DistributedBranchRoot_Request_deserialize(self):
+        message = DistributedBranchRoot.Request('user0')
+        data = bytes.fromhex('0a00000005050000007573657230')
+        assert DistributedBranchRoot.Request.deserialize(data) == message
+
+
+class TestDistributedChildDepth:
+
+    def test_DistributedChildDepth_Request_serialize(self):
+        message = DistributedChildDepth.Request(5)
+        data = bytes.fromhex('050000000705000000')
+        assert message.serialize() == data
+
+    def test_DistributedChildDepth_Request_deserialize(self):
+        message = DistributedChildDepth.Request(5)
+        data = bytes.fromhex('050000000705000000')
+        assert DistributedChildDepth.Request.deserialize(data) == message
+
+
+class DistributedServerSearchRequest:
+
+    def test_DistributedServerSearchRequest_Request_serialize(self):
+        message = DistributedServerSearchRequest.Response(
+            distributed_code=3,
+            unknown=0,
+            username='user0',
+            ticket=1234,
+            query='Query'
+        )
+        data = bytes.fromhex('1f0000005d0000000300000000050000007573657230d2040000050000005175657279')
+        assert message.serialize() == data
+
+    def test_DistributedServerSearchRequest_Request_deserialize(self):
+        message = DistributedServerSearchRequest.Response(
+            distributed_code=3,
+            unknown=0,
+            username='user0',
+            ticket=1234,
+            query='Query'
+        )
+        data = bytes.fromhex('1f0000005d0000000300000000050000007573657230d2040000050000005175657279')
+        assert DistributedServerSearchRequest.Response.deserialize(data) == message

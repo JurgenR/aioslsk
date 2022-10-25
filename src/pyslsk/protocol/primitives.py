@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field, fields, is_dataclass
-import functools
 import hashlib
 import logging
 import socket
@@ -10,14 +9,14 @@ import zlib
 logger = logging.getLogger()
 
 
-def decode_string(value):
+def decode_string(value: bytes) -> str:
     try:
         return value.decode('utf-8')
     except UnicodeDecodeError:
         return value.decode('cp1252')
 
 
-def parse_basic(pos: int, data, data_type: str):
+def parse_basic(pos: int, data: bytes, data_type: str):
     size = struct.calcsize(data_type)
     value = data[pos:pos + size]
     return pos + size, struct.unpack(data_type, value)[0]
@@ -92,16 +91,6 @@ class ipaddr(str):
         value = struct.unpack(data_type, data[pos:pos + 4])[0]
         ip_addr = socket.inet_ntoa(bytes(reversed(value)))
         return pos + 4, ip_addr
-
-
-class uchar(int):
-
-    def serialize(self):
-        return struct.pack('<B', self)
-
-    @classmethod
-    def deserialize(cls, pos: int, data: bytes):
-        return parse_basic(pos, data, '<B')
 
 
 class boolean(int):
@@ -217,16 +206,13 @@ class ProtocolDataclass:
             if value is None:
                 return None
 
-        if 'is_true' in fld.metadata:
-            other_value = getattr(obj, fld.metadata['is_true'])
+        if 'if_true' in fld.metadata:
+            other_value = getattr(obj, fld.metadata['if_true'])
             return value if bool(other_value) else None
 
-        if 'is_false' in fld.metadata:
-            other_value = getattr(obj, fld.metadata['is_false'])
+        if 'if_false' in fld.metadata:
+            other_value = getattr(obj, fld.metadata['if_false'])
             return value if not bool(other_value) else None
-
-        if 'condition' in fld.metadata:
-            return fld.metadata['condition'](obj)
 
         return value
 

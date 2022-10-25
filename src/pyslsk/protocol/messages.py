@@ -26,11 +26,6 @@ These metadata keys are implemented:
 ** serialization : only pack this field if the field in the value evaluates to False
 ** deserialization : only parse this field if the field in the value evaluates to False
 
-* 'condition': <callable>
-** serialization : value is determined based on another variable. The object to
-    serialize will be passed to the callable
-** deserialization : not used
-
 * 'optional': True
 ** serialization : only pack this field if its value is anything other than None
 ** deserialization : during deserialization the code will determine if the message
@@ -40,6 +35,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import List, ClassVar
 
+from pyslsk.exceptions import UnknownMessageError
 from pyslsk.protocol.primitives import (
     boolean,
     uint8,
@@ -63,7 +59,78 @@ from pyslsk.protocol.primitives import (
 logger = logging.getLogger()
 
 
-class Login:
+class ServerMessage:
+    """Class for identifying server messages"""
+
+    @classmethod
+    def deserialize_request(cls, message: bytes):
+        _, msg_id = uint32.deserialize(4, message)
+
+        for msg_class in cls.__subclasses__():
+            request_cls = getattr(msg_class, 'Request', None)
+            if request_cls and request_cls.MESSAGE_ID == msg_id:
+                return request_cls.deserialize(message)
+
+        raise UnknownMessageError(msg_id, message, "Unknown server request message")
+
+    @classmethod
+    def deserialize_response(cls, message):
+        _, msg_id = uint32.deserialize(4, message)
+
+        for msg_class in cls.__subclasses__():
+            response_cls = getattr(msg_class, 'Response', None)
+            if response_cls and response_cls.MESSAGE_ID == msg_id:
+                return response_cls.deserialize(message)
+
+        raise UnknownMessageError(msg_id, message, "Unknown server response message")
+
+
+class PeerInitializationMessage:
+    """Class for identifying peer initialization messages"""
+
+    @classmethod
+    def deserialize_request(cls, message: bytes):
+        _, msg_id = uint8.deserialize(4, message)
+
+        for msg_class in cls.__subclasses__():
+            request_cls = getattr(msg_class, 'Request', None)
+            if request_cls and request_cls.MESSAGE_ID == msg_id:
+                return request_cls.deserialize(message)
+
+        raise UnknownMessageError(msg_id, message, "Unknown peer initialization message")
+
+
+class PeerMessage:
+    """Class for identifying peer messages"""
+
+    @classmethod
+    def deserialize_request(cls, message: bytes):
+        _, msg_id = uint32.deserialize(4, message)
+
+        for msg_class in cls.__subclasses__():
+            request_cls = getattr(msg_class, 'Request', None)
+            if request_cls and request_cls.MESSAGE_ID == msg_id:
+                return request_cls.deserialize(message)
+
+        raise UnknownMessageError(msg_id, message, "Unknown peer message")
+
+
+class DistributedMessage:
+    """Class for identifying distributed messages"""
+
+    @classmethod
+    def deserialize_request(cls, message: bytes):
+        _, msg_id = uint8.deserialize(4, message)
+
+        for msg_class in cls.__subclasses__():
+            request_cls = getattr(msg_class, 'Request', None)
+            if request_cls and request_cls.MESSAGE_ID == msg_id:
+                return request_cls.deserialize(message)
+
+        raise UnknownMessageError(msg_id, message, "Unknown distributed message")
+
+
+class Login(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -81,11 +148,11 @@ class Login:
         greeting: str = field(default=None, metadata={'type': string, 'if_true': 'success'})
         ip: str = field(default=None, metadata={'type': ipaddr, 'if_true': 'success'})
         md5hash: str = field(default=None, metadata={'type': string, 'if_true': 'success'})
-        unknown: int = field(default=None, metadata={'type': int, 'if_true': 'success'})
+        privileged: bool = field(default=None, metadata={'type': boolean, 'if_true': 'success'})
         reason: str = field(default=None, metadata={'type': string, 'if_false': 'success'})
 
 
-class SetListenPort:
+class SetListenPort(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -101,7 +168,7 @@ class SetListenPort:
         )
 
 
-class GetPeerAddress:
+class GetPeerAddress(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -124,7 +191,7 @@ class GetPeerAddress:
         )
 
 
-class AddUser:
+class AddUser(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -150,7 +217,7 @@ class AddUser:
             })
 
 
-class RemoveUser:
+class RemoveUser(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -158,7 +225,7 @@ class RemoveUser:
         username: str = field(metadata={'type': string})
 
 
-class GetUserStatus:
+class GetUserStatus(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -173,7 +240,7 @@ class GetUserStatus:
         privileged: bool = field(metadata={'type': boolean})
 
 
-class ChatRoomMessage:
+class ChatRoomMessage(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -183,7 +250,7 @@ class ChatRoomMessage:
         message: str = field(metadata={'type': string})
 
 
-class ChatJoinRoom:
+class ChatJoinRoom(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -209,7 +276,7 @@ class ChatJoinRoom:
             })
 
 
-class ChatLeaveRoom:
+class ChatLeaveRoom(ServerMessage):
     MESSAGE_ID = 0x0F
 
     @dataclass(order=True)
@@ -223,7 +290,7 @@ class ChatLeaveRoom:
         room: str = field(metadata={'type': string})
 
 
-class ChatUserJoinedRoom:
+class ChatUserJoinedRoom(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -236,7 +303,7 @@ class ChatUserJoinedRoom:
         country_code: str = field(metadata={'type': string})
 
 
-class ChatUserLeftRoom:
+class ChatUserLeftRoom(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -245,7 +312,7 @@ class ChatUserLeftRoom:
         username: str = field(metadata={'type': string})
 
 
-class ConnectToPeer:
+class ConnectToPeer(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -267,7 +334,7 @@ class ConnectToPeer:
         obfuscated_port: int = field(default=None, metadata={'type': uint32, 'optional': True})
 
 
-class ChatPrivateMessage:
+class ChatPrivateMessage(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -285,7 +352,7 @@ class ChatPrivateMessage:
         is_admin: bool = field(default=False, metadata={'type': boolean, 'optional': True})
 
 
-class ChatAckPrivateMessage:
+class ChatAckPrivateMessage(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -293,7 +360,7 @@ class ChatAckPrivateMessage:
         chat_id: int = field(metadata={'type': uint32})
 
 
-class FileSearch:
+class FileSearch(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -309,7 +376,7 @@ class FileSearch:
         query: str = field(metadata={'type': string})
 
 
-class SetStatus:
+class SetStatus(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -317,14 +384,14 @@ class SetStatus:
         status: int = field(metadata={'type': uint32})
 
 
-class Ping:
+class Ping(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x20)
 
 
-class SharedFolderFiles:
+class SharedFolderFiles(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -333,7 +400,7 @@ class SharedFolderFiles:
         file_count: int = field(metadata={'type': uint32})
 
 
-class GetUserStats:
+class GetUserStats(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -350,7 +417,7 @@ class GetUserStats:
         dir_count: int = field(metadata={'type': uint32})
 
 
-class UserSearch:
+class UserSearch(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -360,7 +427,7 @@ class UserSearch:
         query: str = field(metadata={'type': string})
 
 
-class RoomList:
+class RoomList(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -378,7 +445,7 @@ class RoomList:
         rooms_private_operated: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
-class PrivilegedUsers:
+class PrivilegedUsers(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -386,7 +453,7 @@ class PrivilegedUsers:
         users: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
-class ToggleParentSearch:
+class ToggleParentSearch(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -394,21 +461,21 @@ class ToggleParentSearch:
         enabled: bool = field(metadata={'type': boolean})
 
 
-class ParentIP:
+class ParentIP(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x49)
         ip: str = field(metadata={'type': ipaddr})
 
-class ParentMinSpeed:
+class ParentMinSpeed(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x53)
         speed: int = field(metadata={'type': uint32})
 
-class ParentSpeedRatio:
+class ParentSpeedRatio(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -416,7 +483,7 @@ class ParentSpeedRatio:
         ratio: int = field(metadata={'type': uint32})
 
 
-class ParentInactivityTimeout:
+class ParentInactivityTimeout(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -424,7 +491,7 @@ class ParentInactivityTimeout:
         timeout: int = field(metadata={'type': uint32})
 
 
-class SearchInactivityTimeout:
+class SearchInactivityTimeout(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -432,7 +499,7 @@ class SearchInactivityTimeout:
         timeout: int = field(metadata={'type': uint32})
 
 
-class MinParentsInCache:
+class MinParentsInCache(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -440,7 +507,7 @@ class MinParentsInCache:
         amount: int = field(metadata={'type': uint32})
 
 
-class DistributedAliveInterval:
+class DistributedAliveInterval(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -448,7 +515,7 @@ class DistributedAliveInterval:
         interval: int = field(metadata={'type': uint32})
 
 
-class AddPrivilegedUser:
+class AddPrivilegedUser(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -456,7 +523,7 @@ class AddPrivilegedUser:
         username: str = field(metadata={'type': string})
 
 
-class CheckPrivileges:
+class CheckPrivileges(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -468,7 +535,7 @@ class CheckPrivileges:
         time_left: int = field(metadata={'type': uint32})
 
 
-class ServerSearchRequest:
+class ServerSearchRequest(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -480,7 +547,7 @@ class ServerSearchRequest:
         query: str = field(metadata={'type': string})
 
 
-class AcceptChildren:
+class AcceptChildren(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -488,7 +555,7 @@ class AcceptChildren:
         accept: bool = field(metadata={'type': boolean})
 
 
-class PotentialParents:
+class PotentialParents(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -496,7 +563,7 @@ class PotentialParents:
         entries: List[PotentialParent] = field(metadata={'type': array, 'subtype': PotentialParent})
 
 
-class WishlistSearch:
+class WishlistSearch(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -505,7 +572,7 @@ class WishlistSearch:
         query: str = field(metadata={'type': string})
 
 
-class WishlistInterval:
+class WishlistInterval(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -513,7 +580,7 @@ class WishlistInterval:
         interval: int = field(metadata={'type': uint32})
 
 
-class GetSimilarUsers:
+class GetSimilarUsers(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -525,7 +592,7 @@ class GetSimilarUsers:
         users: List[SimilarUser] = field(metadata={'type': array, 'subtype': SimilarUser})
 
 
-class GetItemRecommendations:
+class GetItemRecommendations(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -538,7 +605,7 @@ class GetItemRecommendations:
         recommendations: List[ItemRecommendation] = field(metadata={'type': array, 'subtype': ItemRecommendation})
 
 
-class ChatRoomTickers:
+class ChatRoomTickers(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -547,7 +614,7 @@ class ChatRoomTickers:
         tickers: List[RoomTicker] = field(metadata={'type': array, 'subtype': RoomTicker})
 
 
-class ChatRoomTickerAdded:
+class ChatRoomTickerAdded(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -557,7 +624,7 @@ class ChatRoomTickerAdded:
         ticker: str = field(metadata={'type': string})
 
 
-class ChatRoomTickerRemoved:
+class ChatRoomTickerRemoved(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -566,7 +633,7 @@ class ChatRoomTickerRemoved:
         username: str = field(metadata={'type': string})
 
 
-class ChatRoomTickerSet:
+class ChatRoomTickerSet(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -575,7 +642,7 @@ class ChatRoomTickerSet:
         ticker: str = field(metadata={'type': string})
 
 
-class ChatRoomSearch:
+class ChatRoomSearch(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -585,7 +652,7 @@ class ChatRoomSearch:
         query: str = field(metadata={'type': string})
 
 
-class SendUploadSpeed:
+class SendUploadSpeed(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -593,7 +660,7 @@ class SendUploadSpeed:
         speed: int = field(metadata={'type': uint32})
 
 
-class GetUserPrivileges:
+class GetUserPrivileges(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -607,7 +674,7 @@ class GetUserPrivileges:
         privileged: bool = field(metadata={'type': boolean})
 
 
-class GiveUserPrivileges:
+class GiveUserPrivileges(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -616,7 +683,7 @@ class GiveUserPrivileges:
         days: int = field(metadata={'type': uint32})
 
 
-class PrivilegesNotification:
+class PrivilegesNotification(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -625,7 +692,7 @@ class PrivilegesNotification:
         username: str = field(metadata={'type': string})
 
 
-class PrivilegesNotificationAck:
+class PrivilegesNotificationAck(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -633,7 +700,7 @@ class PrivilegesNotificationAck:
         notification_id: int = field(metadata={'type': uint32})
 
 
-class BranchLevel:
+class BranchLevel(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -641,7 +708,7 @@ class BranchLevel:
         level: int = field(metadata={'type': uint32})
 
 
-class BranchRoot:
+class BranchRoot(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -649,7 +716,7 @@ class BranchRoot:
         username: str = field(metadata={'type': string})
 
 
-class ChildDepth:
+class ChildDepth(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -657,7 +724,7 @@ class ChildDepth:
         depth: int = field(metadata={'type': uint32})
 
 
-class PrivateRoomUsers:
+class PrivateRoomUsers(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -666,7 +733,7 @@ class PrivateRoomUsers:
         usernames: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
-class PrivateRoomAddUser:
+class PrivateRoomAddUser(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -681,7 +748,7 @@ class PrivateRoomAddUser:
         username: str = field(metadata={'type': string})
 
 
-class PrivateRoomRemoveUser:
+class PrivateRoomRemoveUser(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -696,7 +763,7 @@ class PrivateRoomRemoveUser:
         username: str = field(metadata={'type': string})
 
 
-class PrivateRoomDropMembership:
+class PrivateRoomDropMembership(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -704,7 +771,7 @@ class PrivateRoomDropMembership:
         room: str = field(metadata={'type': string})
 
 
-class PrivateRoomDropOwnership:
+class PrivateRoomDropOwnership(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -712,7 +779,7 @@ class PrivateRoomDropOwnership:
         room: str = field(metadata={'type': string})
 
 
-class PrivateRoomAdded:
+class PrivateRoomAdded(ServerMessage):
 
     @dataclass
     class Response(MessageDataclass):
@@ -720,7 +787,7 @@ class PrivateRoomAdded:
         room: str = field(metadata={'type': string})
 
 
-class PrivateRoomRemoved:
+class PrivateRoomRemoved(ServerMessage):
 
     @dataclass
     class Response(MessageDataclass):
@@ -728,7 +795,7 @@ class PrivateRoomRemoved:
         room: str = field(metadata={'type': string})
 
 
-class TogglePrivateRooms:
+class TogglePrivateRooms(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -736,7 +803,7 @@ class TogglePrivateRooms:
         enable: bool = field(metadata={'type': boolean})
 
 
-class NewPassword:
+class NewPassword(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -744,7 +811,7 @@ class NewPassword:
         password: str = field(metadata={'type': string})
 
 
-class PrivateRoomAddOperator:
+class PrivateRoomAddOperator(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -759,7 +826,7 @@ class PrivateRoomAddOperator:
         username: str = field(metadata={'type': string})
 
 
-class PrivateRoomRemoveOperator:
+class PrivateRoomRemoveOperator(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -774,7 +841,7 @@ class PrivateRoomRemoveOperator:
         username: str = field(metadata={'type': string})
 
 
-class PrivateRoomOperatorAdded:
+class PrivateRoomOperatorAdded(ServerMessage):
 
     @dataclass
     class Response(MessageDataclass):
@@ -782,7 +849,7 @@ class PrivateRoomOperatorAdded:
         room: str = field(metadata={'type': string})
 
 
-class PrivateRoomOperatorRemoved:
+class PrivateRoomOperatorRemoved(ServerMessage):
 
     @dataclass
     class Response(MessageDataclass):
@@ -790,7 +857,7 @@ class PrivateRoomOperatorRemoved:
         room: str = field(metadata={'type': string})
 
 
-class PrivateRoomOperators:
+class PrivateRoomOperators(ServerMessage):
 
     @dataclass
     class Response(MessageDataclass):
@@ -799,7 +866,7 @@ class PrivateRoomOperators:
         usernames: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
-class ChatMessageUsers:
+class ChatMessageUsers(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -808,21 +875,21 @@ class ChatMessageUsers:
         message: str = field(metadata={'type': string})
 
 
-class ChatEnablePublic:
+class ChatEnablePublic(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x96)
 
 
-class ChatDisablePublic:
+class ChatDisablePublic(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x97)
 
 
-class ChatPublicMessage:
+class ChatPublicMessage(ServerMessage):
 
     @dataclass
     class Response(MessageDataclass):
@@ -832,7 +899,7 @@ class ChatPublicMessage:
         message: str = field(metadata={'type': string})
 
 
-class FileSearchEx:
+class FileSearchEx(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -846,7 +913,7 @@ class FileSearchEx:
         unknown: int = field(metadata={'type': uint32})
 
 
-class CannotConnect:
+class CannotConnect(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -863,7 +930,7 @@ class CannotConnect:
 
 # Peer Initialization messages
 
-class PeerPierceFirewall:
+class PeerPierceFirewall(PeerInitializationMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -883,7 +950,7 @@ class _PeerInitTicket(uint32):
             return uint64.deserialize(pos, data)
 
 
-class PeerInit:
+class PeerInit(PeerInitializationMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -895,14 +962,14 @@ class PeerInit:
 
 # Peer messages
 
-class PeerSharesRequest:
+class PeerSharesRequest(PeerMessage):
 
     @dataclass
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x04)
 
 
-class PeerSharesReply:
+class PeerSharesReply(PeerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -910,6 +977,8 @@ class PeerSharesReply:
         directories: List[DirectoryData] = field(
             metadata={'type': array, 'subtype': DirectoryData}
         )
+        # Unknown uint32 that appears to always be 0, possibly this was another
+        # list?
         unknown: int = field(default=0, metadata={'type': uint32})
         locked_directories: List[DirectoryData] = field(
             default=None,
@@ -924,7 +993,7 @@ class PeerSharesReply:
             return super().deserialize(message, decompress)
 
 
-class PeerSearchReply:
+class PeerSearchReply(PeerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -934,10 +1003,15 @@ class PeerSearchReply:
         results: List[FileData] = field(metadata={'type': array, 'subtype': FileData})
         has_slots_free: bool = field(metadata={'type': boolean})
         avg_speed: int = field(metadata={'type': uint32})
-        queue_size: int = field(metadata={'type': uint64})
+        # Note: queue_size and unknown. queue_size is described as uint64 in the
+        # museek documentation. However I believe that this is actually just a
+        # uint32. The other 4 bytes are for an unknown uint32 right before the
+        # locked results: the same can be seen in PeerSharesReply
+        queue_size: int = field(metadata={'type': uint32})
+        unknown: int = field(default=0, metadata={'type': uint32})
         locked_results: List[FileData] = field(
             default=None,
-            metadata={'type': array, 'subtype': DirectoryData, 'optional': True}
+            metadata={'type': array, 'subtype': FileData, 'optional': True}
         )
 
         def serialize(self, compress: bool = True) -> bytes:
@@ -948,14 +1022,14 @@ class PeerSearchReply:
             return super().deserialize(message, decompress)
 
 
-class PeerUserInfoRequest:
+class PeerUserInfoRequest(PeerMessage):
 
     @dataclass
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x0F)
 
 
-class PeerUserInfoReply:
+class PeerUserInfoReply(PeerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -967,7 +1041,7 @@ class PeerUserInfoReply:
         has_slots_free: bool = field(default=False, metadata={'type': boolean})
 
 
-class PeerDirectoryContentsRequest:
+class PeerDirectoryContentsRequest(PeerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -975,7 +1049,7 @@ class PeerDirectoryContentsRequest:
         directories: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
-class PeerDirectoryContentsReply:
+class PeerDirectoryContentsReply(PeerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -991,7 +1065,7 @@ class PeerDirectoryContentsReply:
             return super().deserialize(message, decompress)
 
 
-class PeerTransferRequest:
+class PeerTransferRequest(PeerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -1002,7 +1076,7 @@ class PeerTransferRequest:
         filesize: int = field(default=None, metadata={'type': uint32, 'optional': True})
 
 
-class PeerTransferReply:
+class PeerTransferReply(PeerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -1013,7 +1087,7 @@ class PeerTransferReply:
         reason: str = field(default=None, metadata={'type': string, 'optional': True, 'if_false': 'allowed'})
 
 
-class PeerTransferQueue:
+class PeerTransferQueue(PeerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -1021,7 +1095,7 @@ class PeerTransferQueue:
         filename: str = field(metadata={'type': string})
 
 
-class PeerPlaceInQueueReply:
+class PeerPlaceInQueueReply(PeerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -1030,7 +1104,7 @@ class PeerPlaceInQueueReply:
         place: int = field(metadata={'type': uint32})
 
 
-class PeerUploadFailed:
+class PeerUploadFailed(PeerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -1038,7 +1112,7 @@ class PeerUploadFailed:
         filename: str = field(metadata={'type': string})
 
 
-class PeerTransferQueueFailed:
+class PeerTransferQueueFailed(PeerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -1047,7 +1121,7 @@ class PeerTransferQueueFailed:
         reason: str = field(metadata={'type': string})
 
 
-class PeerPlaceInQueueRequest:
+class PeerPlaceInQueueRequest(PeerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -1055,8 +1129,66 @@ class PeerPlaceInQueueRequest:
         filename: str = field(metadata={'type': string})
 
 
-class PeerUploadQueueNotification:
+class PeerUploadQueueNotification(PeerMessage):
 
     @dataclass
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x34)
+
+
+# Distributed messages
+
+class DistributedSearchRequest(DistributedMessage):
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint8] = uint8(0x03)
+        # Should always be 0x31
+        unknown: int = field(metadata={'type': uint32})
+        username: int = field(metadata={'type': string})
+        ticket: int = field(metadata={'type': uint32})
+        query: int = field(metadata={'type': string})
+
+
+class DistributedBranchLevel(DistributedMessage):
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint8] = uint8(0x04)
+        level: int = field(metadata={'type': uint32})
+
+
+class DistributedBranchRoot(DistributedMessage):
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint8] = uint8(0x05)
+        username: str = field(metadata={'type': string})
+
+
+class DistributedChildDepth(DistributedMessage):
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint8] = uint8(0x07)
+        depth: int = field(metadata={'type': uint32})
+
+
+class DistributedServerSearchRequest(DistributedMessage):
+    """The branch root should just pass the ServerSearchRequest as-is to all its
+    children; meaning we will get this message if we are at level 1. If we get
+    this message we should translate it to a proper DistributedSearchRequest
+    message.
+
+    This message might need to be revisited, as it's only currently used for
+    parsing
+    """
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x5D)
+        distributed_code: int = field(metadata={'type': uint8})
+        unknown: int = field(metadata={'type': uint32})
+        username: str = field(metadata={'type': string})
+        ticket: int = field(metadata={'type': uint32})
+        query: str = field(metadata={'type': string})
