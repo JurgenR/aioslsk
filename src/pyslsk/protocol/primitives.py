@@ -261,31 +261,31 @@ class MessageDataclass(ProtocolDataclass):
         return obj
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class Attribute(ProtocolDataclass):
     key: int = field(metadata={'type': uint32})
     value: int = field(metadata={'type': uint32})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class SimilarUser(ProtocolDataclass):
     username: str = field(metadata={'type': string})
     status: int = field(metadata={'type': uint32})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class ItemRecommendation(ProtocolDataclass):
     recommendation: str = field(metadata={'type': string})
     number: int = field(metadata={'type': uint32})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class RoomTicker(ProtocolDataclass):
     username: str = field(metadata={'type': string})
     ticker: str = field(metadata={'type': string})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, order=True)
 class PotentialParent(ProtocolDataclass):
     username: str = field(metadata={'type': string})
     ip: str = field(metadata={'type': ipaddr})

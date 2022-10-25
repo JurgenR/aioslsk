@@ -922,3 +922,141 @@ class PeerSharesReply:
         @classmethod
         def deserialize(cls, message: bytes, decompress: bool = True):
             return super().deserialize(message, decompress)
+
+
+class PeerSearchReply:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x09)
+        username: str = field(metadata={'type': string})
+        ticket: str = field(metadata={'type': uint32})
+        results: List[FileData] = field(metadata={'type': array, 'subtype': FileData})
+        has_slots_free: bool = field(metadata={'type': boolean})
+        avg_speed: int = field(metadata={'type': uint32})
+        queue_size: int = field(metadata={'type': uint64})
+        locked_results: List[FileData] = field(
+            default=None,
+            metadata={'type': array, 'subtype': DirectoryData, 'optional': True}
+        )
+
+        def serialize(self, compress: bool = True) -> bytes:
+            return super().serialize(compress)
+
+        @classmethod
+        def deserialize(cls, message: bytes, decompress: bool = True):
+            return super().deserialize(message, decompress)
+
+
+class PeerUserInfoRequest:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x0F)
+
+
+class PeerUserInfoReply:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x10)
+        has_picture: bool = field(metadata={'type': boolean})
+        picture: str = field(default=None, metadata={'type': string, 'if_true': 'has_picture'})
+        upload_slots: int = field(default=0, metadata={'type': uint32})
+        queue_size: int = field(default=0, metadata={'type': uint32})
+        has_slots_free: bool = field(default=False, metadata={'type': boolean})
+
+
+class PeerDirectoryContentsRequest:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x24)
+        directories: List[str] = field(metadata={'type': array, 'subtype': string})
+
+
+class PeerDirectoryContentsReply:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x25)
+        directories: List[DirectoryData] = field(metadata={'type': array, 'subtype': DirectoryData})
+        # TODO: Investigate locked results (see PeerSharesReply)
+
+        def serialize(self, compress: bool = True) -> bytes:
+            return super().serialize(compress)
+
+        @classmethod
+        def deserialize(cls, message: bytes, decompress: bool = True):
+            return super().deserialize(message, decompress)
+
+
+class PeerTransferRequest:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x28)
+        direction: int = field(metadata={'type': uint32})
+        ticket: int = field(metadata={'type': uint32})
+        filename: str = field(metadata={'type': string})
+        filesize: int = field(default=None, metadata={'type': uint32, 'optional': True})
+
+
+class PeerTransferReply:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x29)
+        ticket: int = field(metadata={'type': uint32})
+        allowed: bool = field(metadata={'type': boolean})
+        filesize: int = field(default=None, metadata={'type': uint32, 'optional': True, 'if_true': 'allowed'})
+        reason: str = field(default=None, metadata={'type': string, 'optional': True, 'if_false': 'allowed'})
+
+
+class PeerTransferQueue:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x2B)
+        filename: str = field(metadata={'type': string})
+
+
+class PeerPlaceInQueueReply:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x2C)
+        filename: str = field(metadata={'type': string})
+        place: int = field(metadata={'type': uint32})
+
+
+class PeerUploadFailed:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x2E)
+        filename: str = field(metadata={'type': string})
+
+
+class PeerTransferQueueFailed:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x32)
+        filename: str = field(metadata={'type': string})
+        reason: str = field(metadata={'type': string})
+
+
+class PeerPlaceInQueueRequest:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x33)
+        filename: str = field(metadata={'type': string})
+
+
+class PeerUploadQueueNotification:
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x34)

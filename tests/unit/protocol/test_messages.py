@@ -84,6 +84,18 @@ from pyslsk.protocol.messages import (
     PeerInit,
     PeerSharesRequest,
     PeerSharesReply,
+    PeerUserInfoRequest,
+    PeerUserInfoReply,
+    PeerDirectoryContentsRequest,
+    PeerDirectoryContentsReply,
+    PeerTransferRequest,
+    PeerTransferReply,
+    PeerTransferQueue,
+    PeerPlaceInQueueReply,
+    PeerUploadFailed,
+    PeerTransferQueueFailed,
+    PeerPlaceInQueueRequest,
+    PeerUploadQueueNotification,
 )
 
 
@@ -1854,3 +1866,311 @@ class TestPeerSharesReply:
         message = self.MESSAGE_LOCKED
         data = self.DATA_LOCKED
         assert PeerSharesReply.Request.deserialize(data) == message
+
+
+class TestPeerUserInfoRequest:
+
+    def test_PeerUserInfoRequest_Request_serialize(self):
+        message = PeerUserInfoRequest.Request()
+        data = bytes.fromhex('040000000f000000')
+        assert message.serialize() == data
+
+    def test_PeerUserInfoRequest_Request_deserialize(self):
+        message = PeerUserInfoRequest.Request()
+        data = bytes.fromhex('040000000f000000')
+        assert PeerUserInfoRequest.Request.deserialize(data) == message
+
+
+class TestPeerUserInfoReply:
+
+    def test_PeerUserInfoReply_Request_serialize_withoutPicture(self):
+        message = PeerUserInfoReply.Request(
+            has_picture=False,
+            upload_slots=5,
+            queue_size=10,
+            has_slots_free=True
+        )
+        data = bytes.fromhex('0e0000001000000000050000000a00000001')
+        assert message.serialize() == data
+
+    def test_PeerUserInfoReply_Request_deserialize_withoutPicture(self):
+        message = PeerUserInfoReply.Request(
+            has_picture=False,
+            upload_slots=5,
+            queue_size=10,
+            has_slots_free=True
+        )
+        data = bytes.fromhex('0e0000001000000000050000000a00000001')
+        assert PeerUserInfoReply.Request.deserialize(data) == message
+
+    def test_PeerUserInfoReply_Request_serialize_withPicture(self):
+        message = PeerUserInfoReply.Request(
+            has_picture=True,
+            picture='picture.png',
+            upload_slots=5,
+            queue_size=10,
+            has_slots_free=True
+        )
+        data = bytes.fromhex('1d00000010000000010b000000706963747572652e706e67050000000a00000001')
+        assert message.serialize() == data
+
+    def test_PeerUserInfoReply_Request_deserialize_withPicture(self):
+        message = PeerUserInfoReply.Request(
+            has_picture=True,
+            picture='picture.png',
+            upload_slots=5,
+            queue_size=10,
+            has_slots_free=True
+        )
+        data = bytes.fromhex('1d00000010000000010b000000706963747572652e706e67050000000a00000001')
+        assert PeerUserInfoReply.Request.deserialize(data) == message
+
+
+class TestPeerDirectoryContentsRequest:
+
+    def test_PeerDirectoryContentsRequest_Request_serialize(self):
+        message = PeerDirectoryContentsRequest.Request(
+            directories=['C:\\dir0', 'C\\dir1']
+        )
+        data = bytes.fromhex('1d000000240000000200000007000000433a5c6469723006000000435c64697231')
+        assert message.serialize() == data
+
+    def test_PeerDirectoryContentsRequest_Request_deserialize(self):
+        message = PeerDirectoryContentsRequest.Request(
+            directories=['C:\\dir0', 'C\\dir1']
+        )
+        data = bytes.fromhex('1d000000240000000200000007000000433a5c6469723006000000435c64697231')
+        assert PeerDirectoryContentsRequest.Request.deserialize(data) == message
+
+
+class TestPeerDirectoryContentsReply:
+    MESSAGE = PeerDirectoryContentsReply.Request(
+        directories=[
+            DirectoryData(
+                name='C:\\dir0',
+                files=[
+                    FileData(
+                        unknown='1',
+                        filename='song0.mp3',
+                        filesize=1000000,
+                        extension='mp3',
+                        attributes=[
+                            Attribute(1, 320),
+                            Attribute(0, 1000)
+                        ]
+                    )
+                ]
+            )
+        ]
+    )
+    DATA = bytes.fromhex('3d00000025000000789c6364606060076267ab9894cc2203462013840d398144717e5eba815e6e81b183133f03335000c864822a70001140f002280e00311c0885')
+
+    def test_PeerDirectoryContentsReply_Request_serialize(self):
+        message = self.MESSAGE
+        data = self.DATA
+        assert message.serialize() == data
+
+    def test_PeerDirectoryContentsReply_Request_deserialize(self):
+        message = self.MESSAGE
+        data = self.DATA
+        assert PeerDirectoryContentsReply.Request.deserialize(data) == message
+
+
+class TestPeerTransferRequest:
+
+    def test_PeerTransferRequest_Request_serialize_withoutFilesize(self):
+        message = PeerTransferRequest.Request(
+            direction=1,
+            ticket=1234,
+            filename="C:\\dir0\\song0.mp3"
+        )
+        data = bytes.fromhex('210000002800000001000000d204000011000000433a5c646972305c736f6e67302e6d7033')
+        assert message.serialize() == data
+
+    def test_PeerTransferRequest_Request_deserialize_withoutFilesize(self):
+        message = PeerTransferRequest.Request(
+            direction=1,
+            ticket=1234,
+            filename="C:\\dir0\\song0.mp3"
+        )
+        data = bytes.fromhex('210000002800000001000000d204000011000000433a5c646972305c736f6e67302e6d7033')
+        assert PeerTransferRequest.Request.deserialize(data) == message
+
+    def test_PeerTransferRequest_Request_serialize_withFilesize(self):
+        message = PeerTransferRequest.Request(
+            direction=1,
+            ticket=1234,
+            filename="C:\\dir0\\song0.mp3",
+            filesize=100000
+        )
+        data = bytes.fromhex('250000002800000001000000d204000011000000433a5c646972305c736f6e67302e6d7033a0860100')
+        assert message.serialize() == data
+
+    def test_PeerTransferRequest_Request_deserialize_withFilesize(self):
+        message = PeerTransferRequest.Request(
+            direction=1,
+            ticket=1234,
+            filename="C:\\dir0\\song0.mp3",
+            filesize=100000
+        )
+        data = bytes.fromhex('250000002800000001000000d204000011000000433a5c646972305c736f6e67302e6d7033a0860100')
+        assert PeerTransferRequest.Request.deserialize(data) == message
+
+
+class TestPeerTransferReply:
+
+    def test_PeerTransferReply_Request_serialize_withoutExtra(self):
+        message = PeerTransferReply.Request(
+            ticket=1234,
+            allowed=False
+        )
+        data = bytes.fromhex('0900000029000000d204000000')
+        assert message.serialize() == data
+
+    def test_PeerTransferReply_Request_deserialize_withoutExtra(self):
+        message = PeerTransferReply.Request(
+            ticket=1234,
+            allowed=False
+        )
+        data = bytes.fromhex('0900000029000000d204000000')
+        assert PeerTransferReply.Request.deserialize(data) == message
+
+    def test_PeerTransferReply_Request_serialize_withFilesize(self):
+        message = PeerTransferReply.Request(
+            ticket=1234,
+            allowed=True,
+            filesize=1000000
+        )
+        data = bytes.fromhex('0d00000029000000d20400000140420f00')
+        assert message.serialize() == data
+
+    def test_PeerTransferReply_Request_deserialize_withFilesize(self):
+        message = PeerTransferReply.Request(
+            ticket=1234,
+            allowed=True,
+            filesize=1000000
+        )
+        data = bytes.fromhex('0d00000029000000d20400000140420f00')
+        assert PeerTransferReply.Request.deserialize(data) == message
+
+    def test_PeerTransferReply_Request_serialize_withReason(self):
+        message = PeerTransferReply.Request(
+            ticket=1234,
+            allowed=False,
+            reason='Cancelled'
+        )
+        data = bytes.fromhex('1600000029000000d2040000000900000043616e63656c6c6564')
+        assert message.serialize() == data
+
+    def test_PeerTransferReply_Request_deserialize_withReason(self):
+        message = PeerTransferReply.Request(
+            ticket=1234,
+            allowed=False,
+            reason='Cancelled'
+        )
+        data = bytes.fromhex('1600000029000000d2040000000900000043616e63656c6c6564')
+        assert PeerTransferReply.Request.deserialize(data) == message
+
+
+class TestPeerTransferQueue:
+
+    def test_PeerTransferQueue_Request_serialize(self):
+        message = PeerTransferQueue.Request(
+            filename="C:\\dir0\\song0.mp3"
+        )
+        data = bytes.fromhex('190000002b00000011000000433a5c646972305c736f6e67302e6d7033')
+        assert message.serialize() == data
+
+    def test_PeerTransferQueue_Request_deserialize(self):
+        message = PeerTransferQueue.Request(
+            filename="C:\\dir0\\song0.mp3"
+        )
+        data = bytes.fromhex('190000002b00000011000000433a5c646972305c736f6e67302e6d7033')
+        assert PeerTransferQueue.Request.deserialize(data) == message
+
+
+class TestPeerPlaceInQueueReply:
+
+    def test_PeerPlaceInQueueReply_Request_serialize(self):
+        message = PeerPlaceInQueueReply.Request(
+            filename="C:\\dir0\\song0.mp3",
+            place=10
+        )
+        data = bytes.fromhex('1d0000002c00000011000000433a5c646972305c736f6e67302e6d70330a000000')
+        assert message.serialize() == data
+
+    def test_PeerPlaceInQueueReply_Request_deserialize(self):
+        message = PeerPlaceInQueueReply.Request(
+            filename="C:\\dir0\\song0.mp3",
+            place=10
+        )
+        data = bytes.fromhex('1d0000002c00000011000000433a5c646972305c736f6e67302e6d70330a000000')
+        assert PeerPlaceInQueueReply.Request.deserialize(data) == message
+
+
+class TestPeerUploadFailed:
+
+    def test_PeerUploadFailed_Request_serialize(self):
+        message = PeerUploadFailed.Request(
+            filename="C:\\dir0\\song0.mp3"
+        )
+        data = bytes.fromhex('190000002e00000011000000433a5c646972305c736f6e67302e6d7033')
+        assert message.serialize() == data
+
+    def test_PeerUploadFailed_Request_deserialize(self):
+        message = PeerUploadFailed.Request(
+            filename="C:\\dir0\\song0.mp3"
+        )
+        data = bytes.fromhex('190000002e00000011000000433a5c646972305c736f6e67302e6d7033')
+        assert PeerUploadFailed.Request.deserialize(data) == message
+
+
+class TestPeerTransferQueueFailed:
+
+    def test_PeerTransferQueueFailed_Request_serialize(self):
+        message = PeerTransferQueueFailed.Request(
+            filename="C:\\dir0\\song0.mp3",
+            reason='Cancelled'
+        )
+        data = bytes.fromhex('260000003200000011000000433a5c646972305c736f6e67302e6d70330900000043616e63656c6c6564')
+        assert message.serialize() == data
+
+    def test_PeerTransferQueueFailed_Request_deserialize(self):
+        message = PeerTransferQueueFailed.Request(
+            filename="C:\\dir0\\song0.mp3",
+            reason='Cancelled'
+        )
+        data = bytes.fromhex('260000003200000011000000433a5c646972305c736f6e67302e6d70330900000043616e63656c6c6564')
+        assert PeerTransferQueueFailed.Request.deserialize(data) == message
+
+
+class TestPeerPlaceInQueueRequest:
+
+    def test_PeerPlaceInQueueRequest_Request_serialize(self):
+        message = PeerPlaceInQueueRequest.Request(
+            filename="C:\\dir0\\song0.mp3"
+        )
+        data = bytes.fromhex('190000003300000011000000433a5c646972305c736f6e67302e6d7033')
+        assert message.serialize() == data
+
+    def test_PeerPlaceInQueueRequest_Request_deserialize(self):
+        message = PeerPlaceInQueueRequest.Request(
+            filename="C:\\dir0\\song0.mp3"
+        )
+        data = bytes.fromhex('190000003300000011000000433a5c646972305c736f6e67302e6d7033')
+        assert PeerPlaceInQueueRequest.Request.deserialize(data) == message
+
+
+class TestPeerUploadQueueNotification:
+
+    def test_PeerUploadQueueNotification_Request_serialize(self):
+        message = PeerUploadQueueNotification.Request()
+        data = bytes.fromhex('0400000034000000')
+        assert message.serialize() == data
+
+    def test_PeerUploadQueueNotification_Request_deserialize(self):
+        message = PeerUploadQueueNotification.Request()
+        data = bytes.fromhex('0400000034000000')
+        assert PeerUploadQueueNotification.Request.deserialize(data) == message
+
+
