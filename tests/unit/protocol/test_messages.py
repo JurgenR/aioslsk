@@ -109,8 +109,11 @@ from pyslsk.protocol.messages import (
     DistributedMessage,
 )
 
+import pytest
+from pyslsk.exceptions import UnknownMessageError
 
-class MessageDeserializers:
+
+class TestMessageDeserializers:
 
     def test_whenDeserializeServerRequest_shouldDeserialize(self):
         data = bytes.fromhex('0400000020000000')
@@ -133,9 +136,34 @@ class MessageDeserializers:
         assert isinstance(message, PeerUserInfoRequest.Request)
 
     def test_whenDeserializeDistributedRequest_shouldDeserialize(self):
-        data = bytes.fromhex('0a00000005050000007573657230')
+        data = bytes.fromhex('050000000405000000')
         message = DistributedMessage.deserialize_request(data)
         assert isinstance(message, DistributedBranchLevel.Request)
+
+    def test_whenDeserializeServerRequest_unknownMessageId_shouldRaise(self):
+        data = bytes.fromhex('04000000ff000000')
+        with pytest.raises(UnknownMessageError):
+            ServerMessage.deserialize_request(data)
+
+    def test_whenDeserializeServerResponse_unknownMessageId_shouldRaise(self):
+        data = bytes.fromhex('08000000ff000000e8030000')
+        with pytest.raises(UnknownMessageError):
+            ServerMessage.deserialize_response(data)
+
+    def test_whenDeserializePeerInitializationRequest_unknownMessageId_shouldRaise(self):
+        data = bytes.fromhex('05000000ffe8030000')
+        with pytest.raises(UnknownMessageError):
+            PeerInitializationMessage.deserialize_request(data)
+
+    def test_whenDeserializePeerRequest_unknownMessageId_shouldRaise(self):
+        data = bytes.fromhex('04000000ff000000')
+        with pytest.raises(UnknownMessageError):
+            PeerMessage.deserialize_request(data)
+
+    def test_whenDeserializeDistributedRequest_unknownMessageId_shouldRaise(self):
+        data = bytes.fromhex('05000000ff05000000')
+        with pytest.raises(UnknownMessageError):
+            DistributedMessage.deserialize_request(data)
 
 
 class TestLogin:
