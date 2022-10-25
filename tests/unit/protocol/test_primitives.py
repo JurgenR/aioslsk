@@ -1,11 +1,16 @@
 from dataclasses import dataclass, field
+import logging
 from typing import ClassVar
-from pyslsk.protocol.primitives import decode_string, uint32, MessageDataclass
 import pytest
+
+from pyslsk.protocol.primitives import decode_string, uint32, MessageDataclass
+
+
+logger = logging.getLogger()
 
 
 @dataclass(order=True)
-class MismatchMessageId(MessageDataclass):
+class SimpleMessage(MessageDataclass):
     MESSAGE_ID: ClassVar[uint32] = uint32(0x01)
 
 
@@ -28,10 +33,17 @@ class TestPrimitives:
 
 class TestMessageDataclass:
 
+    def test_whenDeserialize_andHasUnparsedBytes_shouldWarn(self, caplog):
+        data = bytes.fromhex('0400000001000000ff')
+        SimpleMessage.deserialize(data)
+        assert len(caplog.records) >= 1
+        assert caplog.records[-1].levelname == 'WARNING'
+        assert 'message has 1 unparsed bytes' in caplog.records[-1].msg
+
     def test_whenDeserialize_mismatchMessageId_shouldRaise(self):
         data = bytes.fromhex('0400000002000000')
         with pytest.raises(Exception):
-            MismatchMessageId.deserialize(data)
+            SimpleMessage.deserialize(data)
 
     def test_whenSerialize_fieldWithoutType_shouldRaise(self):
         with pytest.raises(Exception):

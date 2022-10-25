@@ -179,6 +179,9 @@ class ProtocolDataclass:
 
             field_map[obj_field.name] = value
 
+        if has_unparsed_bytes(pos, message):
+            logger.warning(f"message has {len(message[pos:])} unparsed bytes : {message!r}")
+
         return pos, cls(**field_map)
 
     @classmethod
