@@ -103,7 +103,39 @@ from pyslsk.protocol.messages import (
     DistributedBranchLevel,
     DistributedBranchRoot,
     DistributedChildDepth,
+    ServerMessage,
+    PeerInitializationMessage,
+    PeerMessage,
+    DistributedMessage,
 )
+
+
+class MessageDeserializers:
+
+    def test_whenDeserializeServerRequest_shouldDeserialize(self):
+        data = bytes.fromhex('0400000020000000')
+        message = ServerMessage.deserialize_request(data)
+        assert isinstance(message, Ping.Request)
+
+    def test_whenDeserializeServerResponse_shouldDeserialize(self):
+        data = bytes.fromhex('080000005c000000e8030000')
+        message = ServerMessage.deserialize_response(data)
+        assert isinstance(message, CheckPrivileges.Response)
+
+    def test_whenDeserializePeerInitializationRequest_shouldDeserialize(self):
+        data = bytes.fromhex('0500000000e8030000')
+        message = PeerInitializationMessage.deserialize_request(data)
+        assert isinstance(message, PeerPierceFirewall.Request)
+
+    def test_whenDeserializePeerRequest_shouldDeserialize(self):
+        data = bytes.fromhex('040000000f000000')
+        message = PeerMessage.deserialize_request(data)
+        assert isinstance(message, PeerUserInfoRequest.Request)
+
+    def test_whenDeserializeDistributedRequest_shouldDeserialize(self):
+        data = bytes.fromhex('0a00000005050000007573657230')
+        message = DistributedMessage.deserialize_request(data)
+        assert isinstance(message, DistributedBranchLevel.Request)
 
 
 class TestLogin:
