@@ -179,9 +179,6 @@ class ProtocolDataclass:
 
             field_map[obj_field.name] = value
 
-        if has_unparsed_bytes(pos, message):
-            logger.warning(f"message has {len(message[pos:])} unparsed bytes : {message!r}")
-
         return pos, cls(**field_map)
 
     @classmethod
@@ -247,6 +244,9 @@ class MessageDataclass(ProtocolDataclass):
         else:
             pos, obj = super().deserialize(pos, message)
 
+        if has_unparsed_bytes(pos, message):
+            logger.warning(f"message has {len(message[pos:])} unparsed bytes : {message!r}")
+
         return obj
 
 
@@ -291,9 +291,9 @@ class UserData(ProtocolDataclass):
 
 @dataclass(frozen=True, order=True)
 class FileData(ProtocolDataclass):
-    unknown: str = field(metadata={'type': string})
+    unknown: int = field(metadata={'type': uint8})
     filename: str = field(metadata={'type': string})
-    filesize: int = field(metadata={'type': uint32})
+    filesize: int = field(metadata={'type': uint64})
     extension: str = field(metadata={'type': string})
     attributes: List[Attribute] = field(metadata={'type': array, 'subtype': Attribute})
 

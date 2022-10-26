@@ -13,7 +13,7 @@ from threading import RLock
 from typing import Callable, Dict, List, Set, Tuple
 import uuid
 
-from .messages import DirectoryData, FileData
+from .protocol.primitives import DirectoryData, FileData
 from .settings import Settings
 
 logger = logging.getLogger()

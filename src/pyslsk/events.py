@@ -5,14 +5,8 @@ import logging
 from typing import Callable, Dict, List, Tuple, Type, TYPE_CHECKING
 
 from .model import ChatMessage, Room, RoomMessage, User
-from .messages import (
-    DirectoryData,
-    DistributedMessage,
-    Message,
-    PeerInitializationMessage,
-    PeerMessage,
-    ServerMessage,
-)
+from .protocol.primitives import DirectoryData, MessageDataclass
+# from .protocol.messages import DirectoryData
 from .search import SearchQuery, SearchResult
 
 if TYPE_CHECKING:
@@ -239,27 +233,9 @@ class PeerConnectionAcceptedEvent(InternalEvent):
 
 
 @dataclass(frozen=True)
-class ServerMessageEvent(InternalEvent):
-    message: ServerMessage
-    connection: ServerConnection
-
-
-@dataclass(frozen=True)
-class PeerInitializationMessageEvent(InternalEvent):
-    message: PeerInitializationMessage
-    connection: PeerConnection
-
-
-@dataclass(frozen=True)
-class PeerMessageEvent(InternalEvent):
-    message: PeerMessage
-    connection: PeerConnection
-
-
-@dataclass(frozen=True)
-class DistributedMessageEvent(InternalEvent):
-    message: DistributedMessage
-    connection: PeerConnection
+class MessageReceivedEvent(InternalEvent):
+    message: MessageDataclass
+    connection: Connection
 
 
 @dataclass(frozen=True)

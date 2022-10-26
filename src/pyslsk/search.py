@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import List
 
-from pyslsk.messages import FileData
+from .protocol.primitives import FileData
 
 
 @dataclass

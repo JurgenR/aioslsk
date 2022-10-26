@@ -9,7 +9,13 @@ import struct
 import time
 
 from . import obfuscation
-from . import messages
+from .protocol.primitives import uint32, uint64
+from .protocol.messages import (
+    DistributedMessage,
+    PeerInitializationMessage,
+    PeerMessage,
+    ServerMessage,
+)
 
 if TYPE_CHECKING:
     from .network import Network
@@ -266,7 +272,7 @@ class DataConnection(Connection):
 
     def notify_message_received(self, message):
         """Notify the network that the given message was received"""
-        logger.debug(f"received message of type : {message.__class__.__name__!r}")
+        logger.debug(f"received message : {message!r}")
         try:
             self.network.on_message_received(message, self)
         except Exception:
@@ -306,7 +312,7 @@ class DataConnection(Connection):
             return
 
         # Calculate total message length (message length + length indicator)
-        _, msg_len = messages.parse_int(0, self._buffer)
+        _, msg_len = uint32.deserialize(0, self._buffer)
         total_msg_len = self.HEADER_SIZE_UNOBFUSCATED + msg_len
 
         if len(self._buffer) >= total_msg_len:
@@ -330,7 +336,7 @@ class DataConnection(Connection):
         decoded_header = obfuscation.decode(self._buffer[:self.HEADER_SIZE_OBFUSCATED])
 
         # Calculate total message length (key length + message length + length indicator)
-        _, msg_len = messages.parse_int(0, decoded_header)
+        _, msg_len = uint32.deserialize(0, decoded_header)
         total_msg_len = self.HEADER_SIZE_OBFUSCATED + msg_len
 
         if len(self._buffer) >= total_msg_len:
@@ -380,7 +386,7 @@ class ServerConnection(DataConnection):
 
     def parse_message(self, message_data: bytes):
         try:
-            return messages.parse_server_message(message_data)
+            return ServerMessage.deserialize_response(message_data)
         except Exception:
             logger.exception(
                 f"failed to parse server message data {message_data}")
@@ -535,14 +541,14 @@ class PeerConnection(DataConnection):
             # After peer initialization, we should just receive 4 bytes with the
             # ticket number
             if len(self._buffer) >= struct.calcsize('I'):
-                pos, ticket = messages.parse_int(0, self._buffer)
+                pos, ticket = uint32.deserialize(0, self._buffer)
                 self._buffer = self._buffer[pos:]
                 self.network.on_transfer_ticket(ticket, self)
 
         elif self.connection_state == PeerConnectionState.AWAITING_OFFSET:
 
             if len(self._buffer) >= struct.calcsize('Q'):
-                pos, ticket = messages.parse_int64(0, self._buffer)
+                pos, ticket = uint64.deserialize(0, self._buffer)
                 self._buffer = self._buffer[pos:]
                 self.network.on_transfer_offset(ticket, self)
 
@@ -555,13 +561,13 @@ class PeerConnection(DataConnection):
     def parse_message(self, message_data: bytes):
         try:
             if self.connection_state == PeerConnectionState.AWAITING_INIT:
-                return messages.parse_peer_initialization_message(message_data)
+                return PeerInitializationMessage.deserialize_request(message_data)
 
             else:
                 if self.connection_type == PeerConnectionType.PEER:
-                    return messages.parse_peer_message(message_data)
+                    return PeerMessage.deserialize_request(message_data)
                 else:
-                    return messages.parse_distributed_message(message_data)
+                    return DistributedMessage.deserialize_request(message_data)
 
         except Exception:
             logger.exception(f"failed to parse peer message : {message_data!r}")

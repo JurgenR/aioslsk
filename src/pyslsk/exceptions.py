@@ -4,7 +4,7 @@ class PySlskException(Exception):
 
 class UnknownMessageError(PySlskException):
 
-    def __init__(self, message_id: bytes, data: int, message):
+    def __init__(self, message_id: int, data: bytes, message):
         self.message_id = message_id
         self.data = data
         self.message = message

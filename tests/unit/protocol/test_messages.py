@@ -431,20 +431,36 @@ class TestChatRoomMessage:
     def test_ChatRoomMessage_Request_serialize(self):
         message = ChatRoomMessage.Request(
             room='room0',
+            message="Hello"
+        )
+        data = bytes.fromhex('160000000d00000005000000726f6f6d300500000048656c6c6f')
+        assert message.serialize() == data
+
+    def test_ChatRoomMessage_Request_deserialize(self):
+        message = ChatRoomMessage.Request(
+            room='room0',
+            message="Hello"
+        )
+        data = bytes.fromhex('160000000d00000005000000726f6f6d300500000048656c6c6f')
+        assert ChatRoomMessage.Request.deserialize(data) == message
+
+    def test_ChatRoomMessage_Response_serialize(self):
+        message = ChatRoomMessage.Response(
+            room='room0',
             username='user0',
             message="Hello"
         )
         data = bytes.fromhex('1f0000000d00000005000000726f6f6d300500000075736572300500000048656c6c6f')
         assert message.serialize() == data
 
-    def test_ChatRoomMessage_Request_deserialize(self):
-        message = ChatRoomMessage.Request(
+    def test_ChatRoomMessage_Response_deserialize(self):
+        message = ChatRoomMessage.Response(
             room='room0',
             username='user0',
             message="Hello"
         )
         data = bytes.fromhex('1f0000000d00000005000000726f6f6d300500000075736572300500000048656c6c6f')
-        assert ChatRoomMessage.Request.deserialize(data) == message
+        assert ChatRoomMessage.Response.deserialize(data) == message
 
 
 class TestChatJoinRoom:
@@ -1415,21 +1431,21 @@ class TestChildDepth:
 
 class TestPrivateRoomUsers:
 
-    def test_PrivateRoomUsers_Request_serialize(self):
-        message = PrivateRoomUsers.Request(
+    def test_PrivateRoomUsers_Response_serialize(self):
+        message = PrivateRoomUsers.Response(
             room='room0',
             usernames=['user0', 'user1']
         )
         data = bytes.fromhex('230000008500000005000000726f6f6d3002000000050000007573657230050000007573657231')
         assert message.serialize() == data
 
-    def test_PrivateRoomUsers_Request_deserialize(self):
-        message = PrivateRoomUsers.Request(
+    def test_PrivateRoomUsers_Response_deserialize(self):
+        message = PrivateRoomUsers.Response(
             room='room0',
             usernames=['user0', 'user1']
         )
         data = bytes.fromhex('230000008500000005000000726f6f6d3002000000050000007573657230050000007573657231')
-        assert PrivateRoomUsers.Request.deserialize(data) == message
+        assert PrivateRoomUsers.Response.deserialize(data) == message
 
 
 class TestPrivateRoomAddUser:
@@ -2089,44 +2105,48 @@ class TestPeerUserInfoReply:
 
     def test_PeerUserInfoReply_Request_serialize_withoutPicture(self):
         message = PeerUserInfoReply.Request(
+            description="description",
             has_picture=False,
             upload_slots=5,
             queue_size=10,
             has_slots_free=True
         )
-        data = bytes.fromhex('0e0000001000000000050000000a00000001')
+        data = bytes.fromhex('1d000000100000000b0000006465736372697074696f6e00050000000a00000001')
         assert message.serialize() == data
 
     def test_PeerUserInfoReply_Request_deserialize_withoutPicture(self):
         message = PeerUserInfoReply.Request(
+            description="description",
             has_picture=False,
             upload_slots=5,
             queue_size=10,
             has_slots_free=True
         )
-        data = bytes.fromhex('0e0000001000000000050000000a00000001')
+        data = bytes.fromhex('1d000000100000000b0000006465736372697074696f6e00050000000a00000001')
         assert PeerUserInfoReply.Request.deserialize(data) == message
 
     def test_PeerUserInfoReply_Request_serialize_withPicture(self):
         message = PeerUserInfoReply.Request(
+            description="description",
             has_picture=True,
             picture='picture.png',
             upload_slots=5,
             queue_size=10,
             has_slots_free=True
         )
-        data = bytes.fromhex('1d00000010000000010b000000706963747572652e706e67050000000a00000001')
+        data = bytes.fromhex('2c000000100000000b0000006465736372697074696f6e010b000000706963747572652e706e67050000000a00000001')
         assert message.serialize() == data
 
     def test_PeerUserInfoReply_Request_deserialize_withPicture(self):
         message = PeerUserInfoReply.Request(
+            description="description",
             has_picture=True,
             picture='picture.png',
             upload_slots=5,
             queue_size=10,
             has_slots_free=True
         )
-        data = bytes.fromhex('1d00000010000000010b000000706963747572652e706e67050000000a00000001')
+        data = bytes.fromhex('2c000000100000000b0000006465736372697074696f6e010b000000706963747572652e706e67050000000a00000001')
         assert PeerUserInfoReply.Request.deserialize(data) == message
 
 

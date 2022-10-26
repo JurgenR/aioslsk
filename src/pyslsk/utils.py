@@ -1,4 +1,7 @@
 import logging
+from typing import List
+
+from pyslsk.protocol.primitives import Attribute
 
 
 logger = logging.getLogger()
@@ -17,11 +20,11 @@ def try_decoding(value: bytes):
             raise
 
 
-def get_duration(attributes):
+def get_duration(attributes: List[Attribute]):
     duration = ''
-    for attr, value in attributes:
-        if attr == 1:
-            minutes, seconds = divmod(value, 60)
+    for attribute in attributes:
+        if attribute.key == 1:
+            minutes, seconds = divmod(attribute.value, 60)
             hours, minutes = divmod(minutes, 60)
             duration = f"{hours}h {minutes}m {seconds}s"
             break

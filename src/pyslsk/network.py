@@ -29,26 +29,18 @@ from .events import (
     ConnectionStateChangedEvent,
     InternalEventBus,
     PeerInitializedEvent,
-    ServerMessageEvent,
-    PeerInitializationMessageEvent,
-    PeerMessageEvent,
-    DistributedMessageEvent,
+    MessageReceivedEvent,
     TransferOffsetEvent,
     TransferTicketEvent,
     TransferDataSentEvent,
     TransferDataReceivedEvent,
 )
-from .messages import (
-    Message,
+from .protocol.messages import (
     CannotConnect,
     ConnectToPeer,
-    DistributedMessage,
     GetPeerAddress,
-    PeerInitializationMessage,
     PeerInit,
-    PeerMessage,
     PeerPierceFirewall,
-    ServerMessage,
 )
 from . import upnp
 from .state import State
@@ -462,7 +454,7 @@ class Network:
 
         if ip is None or port is None:
             # Request peer address if ip and port are not given
-            self.send_server_messages(GetPeerAddress.create(username))
+            self.send_server_messages(GetPeerAddress.Request(username).serialize())
         else:
             self._connect_to_peer(connection_request)
 
@@ -505,13 +497,13 @@ class Network:
 
         request = requests[0]
         if request.is_requested_by_us:
-            message = PeerInit.create(
+            message = PeerInit.Request(
                 self._settings.get('credentials.username'),
                 request.typ,
                 request.ticket
-            )
+            ).serialize()
         else:
-            message = PeerPierceFirewall.create(request.ticket)
+            message = PeerPierceFirewall.Request(request.ticket).serialize()
 
         with self._lock:
             connection.queue_messages(
@@ -543,11 +535,11 @@ class Network:
                 # In case we want to connect to someone, don't give up just yet
                 # and send a ConnectToPeer
                 self.send_server_messages(
-                    ConnectToPeer.create(
+                    ConnectToPeer.Request(
                         request.ticket,
                         request.username,
                         request.typ
-                    )
+                    ).serialize()
                 )
                 self._state.scheduler.add(
                     CONNECT_TO_PEER_TIMEOUT,
@@ -558,7 +550,7 @@ class Network:
             else:
                 # In case we failed to connect to the other after they requested it, give up
                 self.send_server_messages(
-                    CannotConnect.create(request.ticket, request.username)
+                    CannotConnect.Request(request.ticket, request.username).serialize()
                 )
                 self.fail_peer_connection_request(request)
             break
@@ -708,88 +700,77 @@ class Network:
 
     # Server related
 
-    @on_message(PeerInit)
-    def _on_peer_init(self, message, connection: PeerConnection):
-        username, typ, ticket = message.parse()
-        logger.info(f"PeerInit : {username}, {typ} (ticket={ticket})")
+    @on_message(PeerInit.Request)
+    def _on_peer_init(self, message: PeerInit.Request, connection: PeerConnection):
+        logger.info(f"PeerInit : {message.username}, {message.typ} (ticket={message.ticket})")
 
         self.complete_peer_connection_request(
             # Create a dummy connection request for peers that are directly
             # connecting to us
             ConnectionRequest(
-                ticket=ticket,
-                typ=typ,
-                username=username,
+                ticket=message.ticket,
+                typ=message.typ,
+                username=message.username,
                 is_requested_by_us=False
             ),
             connection
         )
 
-    @on_message(PeerPierceFirewall)
-    def _on_peer_pierce_firewall(self, message, connection: PeerConnection):
-        ticket = message.parse()
-        logger.debug(f"PeerPierceFirewall : (ticket={ticket})")
+    @on_message(PeerPierceFirewall.Request)
+    def _on_peer_pierce_firewall(self, message: PeerPierceFirewall.Request, connection: PeerConnection):
+        logger.debug(f"PeerPierceFirewall : (ticket={message.ticket})")
 
         try:
-            request = self._connection_requests[ticket]
+            request = self._connection_requests[message.ticket]
         except KeyError:
-            logger.warning(f"PeerPierceFirewall : unknown ticket (ticket={ticket})")
+            logger.warning(f"PeerPierceFirewall : unknown ticket (ticket={message.ticket})")
         else:
             self.complete_peer_connection_request(request, connection)
 
-    @on_message(GetPeerAddress)
-    def _on_get_peer_address(self, message, connection):
-        username, ip, port, _, obfuscated_port = message.parse()
-        logger.debug(f"GetPeerAddress : username={username}, ip={ip}, ports={port}/{obfuscated_port}")
-
-        if ip == '0.0.0.0':
-            logger.warning(f"GetPeerAddress : no address returned for username : {username}")
+    @on_message(GetPeerAddress.Response)
+    def _on_get_peer_address(self, message: GetPeerAddress.Response, connection):
+        if message.ip == '0.0.0.0':
+            logger.warning(f"GetPeerAddress : no address returned for username : {message.username}")
             for _, request in self._connection_requests.items():
-                if request.username == username:
+                if request.username == message.username:
                     self.fail_peer_connection_request(request)
             return
 
-        obfuscate = self._settings.get('network.peer.obfuscate') and bool(obfuscated_port)
+        obfuscate = self._settings.get('network.peer.obfuscate') and bool(message.obfuscated_port_amount)
 
         for _, request in self._connection_requests.items():
-            if request.username == username:
-                request.ip = self._user_ip_overrides.get(username, ip)
-                request.port = obfuscated_port if obfuscate else port
+            if request.username == message.username:
+                request.ip = self._user_ip_overrides.get(message.username, message.ip)
+                request.port = message.obfuscated_port if obfuscate else message.port
                 request.obfuscated = obfuscate
                 self._connect_to_peer(request)
 
-    @on_message(ConnectToPeer)
-    def _on_connect_to_peer(self, message, connection):
-        contents = message.parse()
-        logger.info("ConnectToPeer : {!r}".format(contents))
-        username, typ, ip, port, ticket, privileged, _, obfuscated_port = contents
+    @on_message(ConnectToPeer.Response)
+    def _on_connect_to_peer(self, message: ConnectToPeer.Response, connection):
+        ip = self._user_ip_overrides.get(message.username, message.ip)
 
-        ip = self._user_ip_overrides.get(username, ip)
-
-        obfuscate = self._settings.get('network.peer.obfuscate') and bool(obfuscated_port)
+        obfuscate = self._settings.get('network.peer.obfuscate') and bool(message.obfuscated_port_amount)
 
         request = ConnectionRequest(
-            ticket=ticket,
-            username=username,
-            typ=typ,
+            ticket=message.ticket,
+            username=message.username,
+            typ=message.typ,
             is_requested_by_us=False,
             ip=ip,
-            port=obfuscated_port if obfuscate else port,
+            port=message.obfuscated_port if obfuscate else message.port,
             obfuscated=obfuscate
         )
-        self._connection_requests[ticket] = request
+        self._connection_requests[message.ticket] = request
 
         self._connect_to_peer(request)
 
-    @on_message(CannotConnect)
-    def _on_cannot_connect(self, message, connection):
-        ticket, username = message.parse()
-        logger.debug(f"CannotConnect : username={username} (ticket={ticket})")
+    @on_message(CannotConnect.Response)
+    def _on_cannot_connect(self, message: CannotConnect.Response, connection):
         try:
-            request = self._connection_requests[ticket]
+            request = self._connection_requests[message.ticket]
         except KeyError:
             logger.warning(
-                f"CannotConnect : ticket {ticket} (username={username}) was not found in cache")
+                f"CannotConnect : ticket {message.ticket} (username={message.username}) was not found in cache")
         else:
             self.fail_peer_connection_request(request)
 
@@ -902,24 +883,13 @@ class Network:
         self._register_connection(
             connection.fileobj, EVENT_READ | EVENT_WRITE, connection)
 
-    def on_message_received(self, message: Message, connection: Connection):
+    def on_message_received(self, message, connection: Connection):
         # Call the message callbacks for this object
         message = copy.deepcopy(message)
         if message.__class__ in self.MESSAGE_MAP:
             self.MESSAGE_MAP[message.__class__](message, connection)
 
-        # Emit an event for the message
-        msg_event_cls = None
-        if isinstance(message, ServerMessage):
-            msg_event_cls = ServerMessageEvent
-        elif isinstance(message, PeerMessage):
-            msg_event_cls = PeerMessageEvent
-        elif isinstance(message, PeerInitializationMessage):
-            msg_event_cls = PeerInitializationMessageEvent
-        elif isinstance(message, DistributedMessage):
-            msg_event_cls = DistributedMessageEvent
-
-        self._internal_event_bus.emit(msg_event_cls(message, connection))
+        self._internal_event_bus.emit(MessageReceivedEvent(message, connection))
 
     def on_message_sent(self, message: ProtocolMessage, connection: Connection):
         if message.on_success is not None:

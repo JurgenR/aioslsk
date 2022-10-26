@@ -1,4 +1,3 @@
-import copy
 import logging
 from typing import List, Union
 
@@ -14,19 +13,18 @@ from .events import (
     EventBus,
     InternalEventBus,
     ConnectionStateChangedEvent,
-    DistributedMessageEvent,
     PeerInitializedEvent,
-    PeerMessageEvent,
+    MessageReceivedEvent,
     UserInfoReplyEvent,
     UserSharesReplyEvent,
     SearchResultEvent,
 )
 from .shares import SharesManager
-from .messages import (
+from .protocol.messages import (
     AcceptChildren,
     BranchLevel,
     BranchRoot,
-    HaveNoParent,
+    ToggleParentSearch,
     DistributedBranchLevel,
     DistributedBranchRoot,
     DistributedSearchRequest,
@@ -36,6 +34,7 @@ from .messages import (
     PeerSharesReply,
     PeerUserInfoReply,
     PeerUserInfoRequest,
+    PeerUploadQueueNotification,
 )
 from .network import Network
 from .search import ReceivedSearch, SearchResult
@@ -68,9 +67,7 @@ class PeerManager:
         self._internal_event_bus.register(
             ConnectionStateChangedEvent, self._on_state_changed)
         self._internal_event_bus.register(
-            PeerMessageEvent, self._on_peer_message)
-        self._internal_event_bus.register(
-            DistributedMessageEvent, self._on_distributed_message)
+            MessageReceivedEvent, self._on_message_received)
 
         self.MESSAGE_MAP = build_message_map(self)
 
@@ -95,10 +92,10 @@ class PeerManager:
         # The original Windows client sends out the child depth (=0) and the
         # ParentIP
         self.network.send_server_messages(
-            BranchLevel.create(peer.branch_level + 1),
-            BranchRoot.create(peer.branch_root),
-            HaveNoParent.create(False),
-            AcceptChildren.create(True)
+            BranchLevel.Request(peer.branch_level + 1).serialize(),
+            BranchRoot.Request(peer.branch_root).serialize(),
+            ToggleParentSearch.Request(False).serialize(),
+            AcceptChildren.Request(True).serialize()
         )
 
         # Remove all other distributed connections except for children and the
@@ -114,8 +111,8 @@ class PeerManager:
 
         # Notify children of new parent
         self.send_messages_to_children(
-            DistributedBranchLevel.create(peer.branch_level + 1),
-            DistributedBranchRoot.create(peer.branch_root),
+            DistributedBranchLevel.Request(peer.branch_level + 1).serialize(),
+            DistributedBranchRoot.Request(peer.branch_root).serialize(),
         )
 
     def _check_if_new_parent(self, peer: DistributedPeer):
@@ -137,16 +134,16 @@ class PeerManager:
 
         username = self._settings.get('credentials.username')
         self.network.send_server_messages(
-            BranchLevel.create(0),
-            BranchRoot.create(username),
-            HaveNoParent.create(True)
+            BranchLevel.Request(0).serialize(),
+            BranchRoot.Request(username).serialize(),
+            ToggleParentSearch.Request(True).serialize()
         )
 
         # TODO: What happens to the children when we lose our parent is still
         # unclear
         self.send_messages_to_children(
-            DistributedBranchLevel.create(0),
-            DistributedBranchRoot.create(username)
+            DistributedBranchLevel.Request(0).serialize(),
+            DistributedBranchRoot.Request(username).serialize()
         )
 
     def add_potential_child(self, peer: DistributedPeer):
@@ -161,151 +158,151 @@ class PeerManager:
         # Let the child know where it is in the distributed tree
         self.network.send_peer_messages(
             peer.username,
-            BranchLevel.create(self._state.parent.branch_level + 1),
-            BranchRoot.create(self._state.parent.branch_root),
+            DistributedBranchLevel.Request(self._state.parent.branch_level + 1).serialize(),
+            DistributedBranchRoot.Request(self._state.parent.branch_root).serialize(),
             connection=peer.connection
         )
 
     # Peer messages
 
-    @on_message(PeerSharesRequest)
-    def _on_peer_shares_request(self, message, connection: PeerConnection):
-        _ = message.parse()
-
-        reply = PeerSharesReply.create(self.shares_manager.create_shares_reply())
+    @on_message(PeerSharesRequest.Request)
+    def _on_peer_shares_request(self, message: PeerSharesRequest.Request, connection: PeerConnection):
+        reply = PeerSharesReply.Request(self.shares_manager.create_shares_reply()).serialize()
         connection.queue_messages(reply)
 
-    @on_message(PeerSharesReply)
-    def _on_peer_shares_reply(self, message, connection: PeerConnection):
-        directories = message.parse()
-
-        logger.info(f"PeerSharesReply : from username {connection.username}, got {len(directories)} directories")
+    @on_message(PeerSharesReply.Request)
+    def _on_peer_shares_reply(self, message: PeerSharesReply.Request, connection: PeerConnection):
+        logger.info(f"PeerSharesReply : from username {connection.username}, got {len(message.directories)} directories")
 
         user = self._state.get_or_create_user(connection.username)
-        self._event_bus.emit(UserSharesReplyEvent(user, directories))
+        self._event_bus.emit(UserSharesReplyEvent(user, message.directories))
 
-    @on_message(PeerSearchReply)
-    def _on_peer_search_reply(self, message, connection: PeerConnection):
-        contents = message.parse()
-        username, ticket, shared_items, has_free_slots, avg_speed, queue_size, locked_results = contents
-
+    @on_message(PeerSearchReply.Request)
+    def _on_peer_search_reply(self, message: PeerSearchReply.Request, connection: PeerConnection):
         search_result = SearchResult(
-            ticket=ticket,
-            username=username,
-            has_free_slots=has_free_slots,
-            avg_speed=avg_speed,
-            queue_size=queue_size,
-            shared_items=shared_items,
-            locked_results=locked_results
+            ticket=message.ticket,
+            username=message.username,
+            has_free_slots=message.has_slots_free,
+            avg_speed=message.avg_speed,
+            queue_size=message.queue_size,
+            shared_items=message.results,
+            locked_results=message.locked_results
         )
         try:
-            query = self._state.search_queries[ticket]
+            query = self._state.search_queries[message.ticket]
         except KeyError:
-            logger.warning(f"search reply ticket '{ticket}' does not match any search query")
+            logger.warning(f"search reply ticket '{message.ticket}' does not match any search query")
         else:
             query.results.append(search_result)
             self._event_bus.emit(SearchResultEvent(query, search_result))
         connection.set_state(ConnectionState.SHOULD_CLOSE)
 
-    @on_message(PeerUserInfoReply)
-    def _on_peer_user_info_reply(self, message, connection: PeerConnection):
-        contents = message.parse()
-        description, picture, upload_slots, queue_size, has_slots_free = contents
-        logger.info(f"PeerUserInfoReply : {contents!r}")
-
+    @on_message(PeerUserInfoReply.Request)
+    def _on_peer_user_info_reply(self, message: PeerUserInfoReply.Request, connection: PeerConnection):
         user = self._state.get_or_create_user(connection.username)
-        user.description = description
-        user.picture = picture
-        user.total_uploads = upload_slots
-        user.queue_length = queue_size
-        user.has_slots_free = has_slots_free
+        user.description = message
+        user.picture = message.picture
+        user.total_uploads = message.upload_slots
+        user.queue_length = message.queue_size
+        user.has_slots_free = message.has_slots_free
 
         self._event_bus.emit(UserInfoReplyEvent(user))
 
-    @on_message(PeerUserInfoRequest)
-    def _on_peer_user_info_request(self, message, connection: PeerConnection):
+    @on_message(PeerUserInfoRequest.Request)
+    def _on_peer_user_info_request(self, message: PeerUserInfoRequest.Request, connection: PeerConnection):
         logger.info("PeerUserInfoRequest")
         connection.queue_messages(
-            PeerUserInfoReply.create(
+            PeerUserInfoReply.Request(
                 "No description",
                 self.transfer_manager.upload_slots,
                 self.transfer_manager.get_free_upload_slots(),
                 self.transfer_manager.has_slots_free()
-            )
+            ).serialize()
+        )
+
+    @on_message(PeerUploadQueueNotification.Request)
+    def _on_peer_upload_queue_notification(self, message: PeerUploadQueueNotification.Request, connection: PeerConnection):
+        logger.info("PeerUploadQueueNotification")
+        connection.queue_messages(
+            PeerUploadQueueNotification.Request().serialize()
         )
 
     # Distributed messages
 
-    @on_message(DistributedSearchRequest)
-    def _on_distributed_search_request(self, message, connection: PeerConnection):
-        _, username, search_ticket, query = message.parse()
-        # logger.info(f"search request from {username!r}, query: {query!r}")
-        results = self.shares_manager.query(query)
+    @on_message(DistributedSearchRequest.Request)
+    def _on_distributed_search_request(self, message: DistributedSearchRequest.Request, connection: PeerConnection):
+        results = self.shares_manager.query(message.query)
 
         self._state.received_searches.append(
-            ReceivedSearch(username=username, query=query, matched_files=len(results))
+            ReceivedSearch(
+                username=message.username,
+                query=message.query,
+                matched_files=len(results)
+            )
         )
 
         if len(results) == 0:
             return
 
-        logger.info(f"got {len(results)} results for query {query} (username={username})")
+        logger.info(f"got {len(results)} results for query {message.query} (username={message.username})")
 
         self.network.send_peer_messages(
-            username,
-            PeerSearchReply.create(
-                self._settings.get('credentials.username'),
-                search_ticket,
-                self.shares_manager.convert_items_to_file_data(results, use_full_path=True),
-                self.transfer_manager.has_slots_free(),
-                int(self.transfer_manager.get_average_upload_speed()),
-                self.transfer_manager.get_queue_size()
-            )
+            message.username,
+            PeerSearchReply.Request(
+                username=self._settings.get('credentials.username'),
+                ticket=message.ticket,
+                results=self.shares_manager.convert_items_to_file_data(results, use_full_path=True),
+                has_slots_free=self.transfer_manager.has_slots_free(),
+                avg_speed=int(self.transfer_manager.get_average_upload_speed()),
+                queue_size=self.transfer_manager.get_queue_size()
+            ).serialize()
         )
 
-    @on_message(DistributedBranchLevel)
-    def _on_distributed_branch_level(self, message, connection: PeerConnection):
-        level = message.parse()
-        logger.info(f"branch level {level!r}: {connection!r}")
+        self.send_messages_to_children(message.serialize())
+
+    @on_message(DistributedBranchLevel.Request)
+    def _on_distributed_branch_level(self, message: DistributedBranchLevel.Request, connection: PeerConnection):
+        logger.info(f"branch level {message.level!r}: {connection!r}")
 
         peer = self.get_distributed_peer(connection.username, connection)
-        peer.branch_level = level
+        peer.branch_level = message.level
 
         # Branch root is not always sent in case the peer advertises branch
         # level 0 because he himself is the root
-        if level == 0:
+        if message.level == 0:
             peer.branch_root = peer.username
 
         if peer != self._state.parent:
             self._check_if_new_parent(peer)
         else:
-            self.send_messages_to_children(DistributedBranchLevel.create(level + 1))
+            self.send_messages_to_children(
+                DistributedBranchLevel.Request(message.level + 1).serialize())
 
-    @on_message(DistributedBranchRoot)
-    def _on_distributed_branch_root(self, message, connection: PeerConnection):
-        root = message.parse()
-        logger.info(f"branch root {root!r}: {connection!r}")
+    @on_message(DistributedBranchRoot.Request)
+    def _on_distributed_branch_root(self, message: DistributedBranchRoot.Request, connection: PeerConnection):
+        logger.info(f"branch root {message.root!r}: {connection!r}")
 
         peer = self.get_distributed_peer(connection.username, connection)
-        peer.branch_root = root
+        peer.branch_root = message.root
 
         if peer != self._state.parent:
             self._check_if_new_parent(peer)
         else:
-            self.send_messages_to_children(DistributedBranchRoot.create(root))
+            self.send_messages_to_children(
+                DistributedBranchRoot.Request(message.root).serialize())
 
-    @on_message(DistributedServerSearchRequest)
-    def _on_distributed_server_search_request(self, message, connection: PeerConnection):
-        distrib_code, distrib_message = message.parse()
-        logger.info(f"distributed server search request: {distrib_code} {distrib_message}")
+    @on_message(DistributedServerSearchRequest.Request)
+    def _on_distributed_server_search_request(self, message: DistributedServerSearchRequest.Request, connection: PeerConnection):
+        if message.distributed_code != DistributedSearchRequest.MESSAGE_ID:
+            logger.warning(f"no handling for server search request with code {message.distributed_code}")
 
-        if distrib_code != DistributedSearchRequest.MESSAGE_ID:
-            logger.warning(f"no handling for server search request with code {distrib_code}")
-
-        for child in self._state.children:
-            child.connection.queue_messages(
-                DistributedSearchRequest.create_from_body(distrib_message)
-            )
+        dmessage = DistributedSearchRequest.Request(
+            unknown=0x31,
+            username=message.username,
+            ticket=message.ticket,
+            query=message.query
+        ).serialize()
+        self.send_messages_to_children(dmessage)
 
     def _on_peer_connection_initialized(self, event: PeerInitializedEvent):
         if event.connection.connection_type == PeerConnectionType.DISTRIBUTED:
@@ -313,13 +310,8 @@ class PeerManager:
             self._distributed_peers.append(peer)
             self.add_potential_child(peer)
 
-    def _on_peer_message(self, event: PeerMessageEvent):
-        message = copy.deepcopy(event.message)
-        if message.__class__ in self.MESSAGE_MAP:
-            self.MESSAGE_MAP[message.__class__](message, event.connection)
-
-    def _on_distributed_message(self, event: DistributedMessageEvent):
-        message = copy.deepcopy(event.message)
+    def _on_message_received(self, event: MessageReceivedEvent):
+        message = event.message
         if message.__class__ in self.MESSAGE_MAP:
             self.MESSAGE_MAP[message.__class__](message, event.connection)
 

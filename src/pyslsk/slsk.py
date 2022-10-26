@@ -13,7 +13,7 @@ from .shares import (
 )
 from .model import Room, User
 from .network import Network
-from . import messages
+from .protocol.messages import FileSearch
 from .peer import PeerManager
 from .server_manager import ServerManager
 from .scheduler import Job, Scheduler
@@ -208,7 +208,7 @@ class SoulSeek(threading.Thread):
         logger.info(f"Starting search for query: {query}")
         ticket = next(self._ticket_generator)
         self._network.send_server_messages(
-            messages.FileSearch.create(ticket, query)
+            FileSearch.Request(ticket, query).serialize()
         )
         self.state.search_queries[ticket] = SearchQuery(ticket=ticket, query=query)
         return ticket

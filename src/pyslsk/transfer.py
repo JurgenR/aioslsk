@@ -1,6 +1,5 @@
 from __future__ import annotations
 from collections import deque
-import copy
 from dataclasses import dataclass
 from enum import auto, Enum
 from functools import partial
@@ -27,8 +26,7 @@ from .events import (
     ConnectionStateChangedEvent,
     InternalEventBus,
     LoginEvent,
-    PeerMessageEvent,
-    ServerMessageEvent,
+    MessageReceivedEvent,
     TransferAddedEvent,
     TransferOffsetEvent,
     TransferTicketEvent,
@@ -36,9 +34,8 @@ from .events import (
     TransferDataReceivedEvent,
 )
 from .shares import SharesManager
-from .messages import (
-    pack_int64,
-    pack_int,
+from .protocol.primitives import uint32, uint64
+from .protocol.messages import (
     GetUserStatus,
     PeerPlaceInQueueReply,
     PeerPlaceInQueueRequest,
@@ -451,8 +448,7 @@ class TransferManager:
 
         self._internal_event_bus.register(ConnectionStateChangedEvent, self._on_connection_state_changed)
         self._internal_event_bus.register(LoginEvent, self._on_server_login)
-        self._internal_event_bus.register(PeerMessageEvent, self._on_peer_message)
-        self._internal_event_bus.register(ServerMessageEvent, self._on_server_message)
+        self._internal_event_bus.register(MessageReceivedEvent, self._on_message_received)
         self._internal_event_bus.register(TransferOffsetEvent, self._on_transfer_offset)
         self._internal_event_bus.register(TransferTicketEvent, self._on_transfer_ticket)
         self._internal_event_bus.register(TransferDataReceivedEvent, self._on_transfer_data_received)
@@ -809,7 +805,7 @@ class TransferManager:
         # Send the offset
         event.connection.queue_messages(
             ProtocolMessage(
-                pack_int64(transfer.calculate_offset()),
+                uint64.serialize(transfer.calculate_offset()),
                 on_success=partial(self._on_transfer_offset_sent, event.connection)
             )
         )
@@ -880,27 +876,21 @@ class TransferManager:
                     PeerUploadFailed.create(transfer.remote_path)
                 )
 
-    def _on_peer_message(self, event: PeerMessageEvent):
-        message = copy.deepcopy(event.message)
+    def _on_message_received(self, event: MessageReceivedEvent):
+        message = event.message
         if message.__class__ in self.MESSAGE_MAP:
             self.MESSAGE_MAP[message.__class__](message, event.connection)
 
-    def _on_server_message(self, event: ServerMessageEvent):
-        message = copy.deepcopy(event.message)
-        if message.__class__ in self.MESSAGE_MAP:
-            self.MESSAGE_MAP[message.__class__](message, event.connection)
-
-    @on_message(GetUserStatus)
-    def _on_get_user_status(self, message, connection):
-        username, status, _ = message.parse()
-        status = UserStatus(status)
-        self._state.get_or_create_user(username)
+    @on_message(GetUserStatus.Response)
+    def _on_get_user_status(self, message: GetUserStatus.Response, connection):
+        status = UserStatus(message.status)
+        self._state.get_or_create_user(message.username)
         if status in (UserStatus.ONLINE, UserStatus.AWAY, ):
             # Do something with the users queued uploads
             pass
 
-    @on_message(PeerTransferQueue)
-    def _on_peer_transfer_queue(self, message, connection: PeerConnection):
+    @on_message(PeerTransferQueue.Request)
+    def _on_peer_transfer_queue(self, message: PeerTransferQueue.Request, connection: PeerConnection):
         """The peer is requesting to transfer a file to them or at least put it
         in the queue. This is usually the first message in the transfer process.
 
@@ -908,34 +898,36 @@ class TransferManager:
         will also check if the file actually does exist before putting it in the
         queue.
         """
-        filename = message.parse()
-        logger.info(f"PeerTransferQueue : {filename}")
+        logger.info(f"PeerTransferQueue : {message.filename}")
 
         transfer = self.add(
             Transfer(
                 username=connection.username,
-                remote_path=filename,
+                remote_path=message.filename,
                 direction=TransferDirection.UPLOAD
             )
         )
 
         # Check if the shared file exists. Otherwise fail the error
         try:
-            shared_item = self._shares_manager.get_shared_item(filename)
+            shared_item = self._shares_manager.get_shared_item(message.filename)
             transfer.local_path = self._shares_manager.resolve_path(shared_item)
             transfer.filesize = self._shares_manager.get_filesize(transfer.local_path)
         except LookupError:
             self.fail(transfer, reason="File not shared.")
             self._network.send_peer_messages(
                 connection.username,
-                PeerTransferQueueFailed.create(filename, transfer.fail_reason),
+                PeerTransferQueueFailed.Request(
+                    filename=message.filename,
+                    reason=transfer.fail_reason
+                ).serialize(),
                 connection=connection
             )
         else:
             self.queue(transfer)
 
-    @on_message(PeerTransferRequest)
-    def _on_peer_transfer_request(self, message, connection: PeerConnection):
+    @on_message(PeerTransferRequest.Request)
+    def _on_peer_transfer_request(self, message: PeerTransferRequest.Request, connection: PeerConnection):
         """The PeerTransferRequest message is sent when the peer is ready to
         transfer the file. The message contains more information about the
         transfer.
@@ -943,25 +935,22 @@ class TransferManager:
         We also handle situations here where the other peer sends this message
         without sending PeerTransferQueue first
         """
-        direction, ticket, filename, filesize = message.parse()
-        logger.info(f"PeerTransferRequest : {filename} {direction} (filesize={filesize}, ticket={ticket})")
-
         try:
             transfer = self.get_transfer(
-                connection.username, filename, TransferDirection(direction)
+                connection.username, message.filename, TransferDirection(message.direction)
             )
         except LookupError:
             transfer = None
 
         # Make a decision based on what was requested and what we currently have
         # in our queue
-        if TransferDirection(direction) == TransferDirection.UPLOAD:
+        if TransferDirection(message.direction) == TransferDirection.UPLOAD:
             if transfer is None:
                 # Got a request to upload, possibly without prior PeerTransferQueue
                 # message. Kindly put it in queue
                 transfer = Transfer(
                     connection.username,
-                    filename,
+                    message.filename,
                     TransferDirection.UPLOAD
                 )
                 # Send before queueing: queueing will trigger the transfer
@@ -969,7 +958,11 @@ class TransferManager:
                 # the upload
                 self._network.send_peer_messages(
                     connection.username,
-                    PeerTransferReply.create(ticket, False, reason='Queued'),
+                    PeerTransferReply.Request(
+                        ticket=message.ticket,
+                        allowed=False,
+                        reason='Queued'
+                    ).serialize(),
                     connection=connection
                 )
                 transfer = self.add(transfer)
@@ -983,7 +976,11 @@ class TransferManager:
                 # - INCOMPLETE : Should go back to QUEUED?
                 self._network.send_peer_messages(
                     connection.username,
-                    PeerTransferReply.create(ticket, False, reason='Queued'),
+                    PeerTransferReply.Request(
+                        ticket=message.ticket,
+                        allowed=False,
+                        reason='Queued'
+                    ).serialize(),
                     connection=connection
                 )
 
@@ -993,7 +990,11 @@ class TransferManager:
                 # A download which we don't have in queue, assume we removed it
                 self._network.send_peer_messages(
                     connection.username,
-                    PeerTransferReply.create(ticket, False, reason='Cancelled'),
+                    PeerTransferReply.Request(
+                        ticket=message.ticket,
+                        allowed=False,
+                        reason='Cancelled'
+                    ).serialize(),
                     connection=connection
                 )
             else:
@@ -1001,38 +1002,38 @@ class TransferManager:
                 # Possibly needs a check to see if there's any inconsistencies
                 # normally we get this response when we were the one requesting
                 # to download so ideally all should be fine here.
-                request = TransferRequest(ticket, transfer)
-                self._transfer_requests[ticket] = request
+                request = TransferRequest(message.ticket, transfer)
+                self._transfer_requests[message.ticket] = request
 
-                transfer.filesize = filesize
+                transfer.filesize = message.filesize
 
-                logger.debug(f"PeerTransferRequest : sending PeerTransferReply (ticket={ticket})")
+                logger.debug(f"PeerTransferRequest : sending PeerTransferReply (ticket={message.ticket})")
                 self._network.send_peer_messages(
                     connection.username,
-                    PeerTransferReply.create(ticket, True),
+                    PeerTransferReply.Request(
+                        ticket=message.ticket,
+                        allowed=True
+                    ),
                     connection=connection
                 )
 
-    @on_message(PeerTransferReply)
-    def _on_peer_transfer_reply(self, message, connection: PeerConnection):
-        ticket, allowed, filesize, reason = message.parse()
-        logger.info(f"PeerTransferReply : allowed={allowed}, filesize={filesize}, reason={reason!r} (ticket={ticket})")
-
+    @on_message(PeerTransferReply.Request)
+    def _on_peer_transfer_reply(self, message: PeerTransferReply.Request, connection: PeerConnection):
         try:
-            request = self._transfer_requests[ticket]
+            request = self._transfer_requests[message.ticket]
         except KeyError:
-            logger.warning(f"got a ticket for an unknown transfer request (ticket={ticket})")
+            logger.warning(f"got a ticket for an unknown transfer request (ticket={message.ticket})")
             return
         else:
             transfer = request.transfer
 
-        if not allowed:
-            if reason == 'Queued':
+        if not message.allowed:
+            if message.reason == 'Queued':
                 self.queue(transfer)
-            elif reason == 'Complete':
+            elif message.reason == 'Complete':
                 pass
             else:
-                self.fail(transfer, reason=reason)
+                self.fail(transfer, reason=message.reason)
                 self.fail_transfer_request(request)
             return
 
@@ -1041,7 +1042,7 @@ class TransferManager:
             transfer.username,
             typ=PeerConnectionType.FILE,
             transfer=transfer,
-            messages=[pack_int(ticket)],
+            messages=[uint32.serialize(message.ticket)],
             on_failure=partial(self._on_file_connection_failed, transfer)
         )
 
@@ -1049,14 +1050,12 @@ class TransferManager:
         logger.debug(f"failed to initialize file connection for {transfer!r}")
         self._network.send_peer_messages(
             transfer.username,
-            PeerUploadFailed.create(transfer.remote_path)
+            PeerUploadFailed.Request(transfer.remote_path).serialize()
         )
 
-    @on_message(PeerPlaceInQueueRequest)
-    def _on_peer_place_in_queue_request(self, message, connection: PeerConnection):
-        filename = message.parse()
-        logger.info(f"{message.__class__.__name__}: {filename}")
-
+    @on_message(PeerPlaceInQueueRequest.Request)
+    def _on_peer_place_in_queue_request(self, message: PeerPlaceInQueueRequest.Request, connection: PeerConnection):
+        filename = message.filename
         try:
             transfer = self.get_transfer(
                 connection.username,
@@ -1070,51 +1069,44 @@ class TransferManager:
             if place > 0:
                 self._network.send_peer_messages(
                     connection.username,
-                    PeerPlaceInQueueReply.create(filename, place),
+                    PeerPlaceInQueueReply.Request(filename, place).serialize(),
                     connection=connection
                 )
 
-    @on_message(PeerPlaceInQueueReply)
-    def _on_peer_place_in_queue_reply(self, message, connection: PeerConnection):
-        filename, place = message.parse()
-        logger.info(f"{message.__class__.__name__}: filename={filename}, place={place}")
-
+    @on_message(PeerPlaceInQueueReply.Request)
+    def _on_peer_place_in_queue_reply(self, message: PeerPlaceInQueueReply.Request, connection: PeerConnection):
         try:
             transfer = self.get_transfer(
                 connection.username,
-                filename,
+                message.filename,
                 TransferDirection.DOWNLOAD
             )
         except LookupError:
-            logger.error(f"PeerPlaceInQueueReply : could not find transfer (download) for {filename} from {connection.username}")
+            logger.error(f"PeerPlaceInQueueReply : could not find transfer (download) for {message.filename} from {connection.username}")
         else:
-            transfer.place_in_queue = place
+            transfer.place_in_queue = message.place
 
-    @on_message(PeerUploadFailed)
-    def _on_peer_upload_failed(self, message, connection: PeerConnection):
+    @on_message(PeerUploadFailed.Request)
+    def _on_peer_upload_failed(self, message: PeerUploadFailed.Request, connection: PeerConnection):
         """Called when there is a problem on their end uploading the file. This
         is actually a common message that happens when we close the connection
         before the upload is finished
         """
-        filename = message.parse()
-        logger.info(f"PeerUploadFailed : upload failed for {filename}")
-
         try:
             transfer = self.get_transfer(
                 connection.username,
-                filename,
+                message.filename,
                 TransferDirection.DOWNLOAD
             )
         except LookupError:
-            logger.error(f"PeerUploadFailed : could not find transfer (download) for {filename} from {connection.username}")
+            logger.error(f"PeerUploadFailed : could not find transfer (download) for {message.filename} from {connection.username}")
         else:
             self.fail(transfer)
 
-    @on_message(PeerTransferQueueFailed)
-    def _on_peer_transfer_queue_failed(self, message, connection: PeerConnection):
-        filename, reason = message.parse()
-        logger.info(f"PeerTransferQueueFailed : transfer failed for {filename}, reason={reason}")
-
+    @on_message(PeerTransferQueueFailed.Request)
+    def _on_peer_transfer_queue_failed(self, message: PeerTransferQueueFailed.Request, connection: PeerConnection):
+        filename = message.filename
+        reason = message.reason
         try:
             transfer = self.get_transfer(
                 connection.username, filename, TransferDirection.DOWNLOAD)

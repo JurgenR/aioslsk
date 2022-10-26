@@ -1,4 +1,4 @@
-import copy
+import enum
 import logging
 import time
 
@@ -19,7 +19,7 @@ from .events import (
     RoomTickerAddedEvent,
     RoomTickerRemovedEvent,
     ServerDisconnectedEvent,
-    ServerMessageEvent,
+    MessageReceivedEvent,
     UserAddEvent,
     UserJoinedRoomEvent,
     UserJoinedPrivateRoomEvent,
@@ -29,7 +29,8 @@ from .events import (
     UserStatusEvent,
 )
 from .shares import SharesManager
-from .messages import (
+from .protocol.primitives import calc_md5
+from .protocol.messages import (
     AcceptChildren,
     AddPrivilegedUser,
     AddUser,
@@ -43,18 +44,18 @@ from .messages import (
     ChatPrivateMessage,
     ChatAckPrivateMessage,
     ChatRoomTickers,
-    ChatRoomTickerAdd,
-    ChatRoomTickerRemove,
+    ChatRoomTickerAdded,
+    ChatRoomTickerRemoved,
     ChatUserJoinedRoom,
     ChatUserLeftRoom,
     CheckPrivileges,
     DistributedAliveInterval,
     GetUserStatus,
     GetUserStats,
-    HaveNoParent,
+    ToggleParentSearch,
     Login,
     MinParentsInCache,
-    NetInfo,
+    PotentialParents,
     ParentMinSpeed,
     ParentSpeedRatio,
     Ping,
@@ -65,7 +66,7 @@ from .messages import (
     PrivateRoomAddOperator,
     PrivateRoomRemoveOperator,
     PrivateRoomRemoved,
-    PrivateRoomToggle,
+    TogglePrivateRooms,
     PrivateRoomDropMembership,
     PrivateRoomDropOwnership,
     PrivilegedUsers,
@@ -77,7 +78,6 @@ from .messages import (
     SetStatus,
     SharedFoldersFiles,
     WishlistInterval,
-    DistributedServerSearchRequest,
 )
 from .model import ChatMessage, RoomMessage, UserStatus
 from .network import Network
@@ -108,7 +108,7 @@ class ServerManager:
         self.MESSAGE_MAP = build_message_map(self)
 
         self._internal_event_bus.register(
-            ServerMessageEvent, self._on_server_message)
+            MessageReceivedEvent, self._on_message_received)
         self._internal_event_bus.register(
             ConnectionStateChangedEvent, self._on_state_changed)
 
@@ -118,120 +118,126 @@ class ServerManager:
 
     def send_ping(self):
         """Send ping to the server"""
-        self.network.send_server_messages(Ping.create())
+        self.network.send_server_messages(Ping.Request().serialize())
 
     def report_shares(self):
         """Reports the shares amount to the server"""
         dir_count, file_count = self.shares_manager.get_stats()
         logger.debug(f"reporting shares to the server (dirs={dir_count}, file_count={file_count})")
         self.network.send_server_messages(
-            SharedFoldersFiles.create(dir_count, file_count)
+            SharedFoldersFiles.Request(
+                directory_count=dir_count,
+                file_count=file_count
+            ).serialize()
         )
 
     def login(self, username: str, password: str, version: int = 157):
         logger.info(f"sending request to login: username={username}, password={password}")
         self.network.send_server_messages(
-            Login.create(username, password, version)
+            Login.Request(
+                username=username,
+                password=password,
+                client_version=157,
+                password_md5=calc_md5(password),
+                minor_version=100
+            ).serialize()
         )
 
     def add_user(self, username: str):
         logger.info(f"adding user {username}")
         self.network.send_server_messages(
-            AddUser.create(username)
+            AddUser.Request(username).serialize()
         )
 
     def remove_user(self, username: str):
         logger.info(f"removing user {username}")
         self.network.send_server_messages(
-            RemoveUser.create(username)
+            RemoveUser.Request(username).serialize()
         )
 
     def get_user_stats(self, username: str):
         logger.info(f"getting user stats {username}")
         self.network.send_server_messages(
-            GetUserStats.create(username)
+            GetUserStats.Request(username).serialize()
         )
 
     def get_user_status(self, username: str):
         logger.info(f"getting user status {username}")
         self.network.send_server_messages(
-            GetUserStatus.create(username)
+            GetUserStatus.Request(username).serialize()
         )
 
     def get_room_list(self):
         logger.info("sending request for room list")
-        self.network.send_server_messages(RoomList.create())
+        self.network.send_server_messages(RoomList.Request().serialize())
 
     def join_room(self, name: str):
         logger.info(f"sending request to join room with name {name}")
         self.network.send_server_messages(
-            ChatJoinRoom.create(name)
+            ChatJoinRoom.Request(name).serialize()
         )
 
     def leave_room(self, name: str):
         logger.info(f"sending request to leave room with name {name}")
         self.network.send_server_messages(
-            ChatLeaveRoom.create(name)
+            ChatLeaveRoom.Request(name).serialize()
         )
 
     def send_private_message(self, username: str, message: str):
         self.network.send_server_messages(
-            ChatPrivateMessage.create(username, message)
+            ChatPrivateMessage.Request(username, message).serialize()
         )
 
     def send_room_message(self, room_name: str, message: str):
         self.network.send_server_messages(
-            ChatRoomMessage.create(room_name, message)
+            ChatRoomMessage.Request(room_name, message).serialize()
         )
 
     def drop_private_room_ownership(self, room_name: str):
         self.network.send_server_messages(
-            PrivateRoomDropOwnership.create(room_name)
+            PrivateRoomDropOwnership.Request(room_name).serialize()
         )
 
     def drop_private_room_membership(self, room_name: str):
         self.network.send_server_messages(
-            PrivateRoomDropMembership.create(room_name)
+            PrivateRoomDropMembership.Request(room_name).serialize()
         )
 
-    @on_message(Login)
-    def _on_login(self, message, connection):
+    @on_message(Login.Response)
+    def _on_login(self, message: Login.Response, connection):
         """Called when a response is received to a logon call"""
-        login_values = message.parse()
         # First value indicates success
-        if login_values[0]:
+        if message.success:
             self._state.logged_in = True
-            success, greet, ip, md5hash, _ = login_values
-            logger.info(
-                f"Successfully logged on. Greeting message: {greet!r}. Your IP: {ip!r}")
+            logger.info(f"Successfully logged on")
         else:
-            success, reason = login_values
-            logger.error(f"Failed to login, reason: {reason!r}")
+            logger.error(f"Failed to login, reason: {message.reason!r}")
 
         # Make setup calls
         dir_count, file_count = self.shares_manager.get_stats()
         logger.debug(f"Sharing {dir_count} directories and {file_count} files")
 
         self.network.send_server_messages(
-            CheckPrivileges.create(),
-            SetListenPort.create(
+            CheckPrivileges.Request().serialize(),
+            SetListenPort.Request(
                 self._settings.get('network.listening_port'),
-                self._settings.get('network.listening_port') + 1
-            ),
-            SetStatus.create(UserStatus.ONLINE.value),
-            HaveNoParent.create(True),
-            BranchRoot.create(self._settings.get('credentials.username')),
-            BranchLevel.create(0),
-            AcceptChildren.create(False),
-            SharedFoldersFiles.create(dir_count, file_count),
-            AddUser.create(self._settings.get('credentials.username')),
-            PrivateRoomToggle.create(self._settings.get('chats.private_room_invites'))
+                obfuscated_port_amount=1,
+                obfuscated_port=self._settings.get('network.listening_port') + 1
+            ).serialize(),
+            SetStatus.Request(UserStatus.ONLINE.value).serialize(),
+            ToggleParentSearch.Request(True).serialize(),
+            BranchRoot.Request(self._settings.get('credentials.username')).serialize(),
+            BranchLevel.Request(0).serialize(),
+            AcceptChildren.Request(False).serialize(),
+            SharedFoldersFiles.Request(dir_count, file_count).serialize(),
+            AddUser.Request(self._settings.get('credentials.username')).serialize(),
+            TogglePrivateRooms.Request(self._settings.get('chats.private_room_invites')).serialize()
         )
 
         # Perform AddUser for all in the friendlist
         self.network.send_server_messages(
             *[
-                AddUser.create(friend)
+                AddUser.Request(friend).serialize()
                 for friend in self._settings.get('users.friends')
             ]
         )
@@ -240,359 +246,305 @@ class ServerManager:
         if self._settings.get('chats.auto_join'):
             self.network.send_server_messages(
                 *[
-                    ChatJoinRoom.create(room_name)
+                    ChatJoinRoom.Request(room_name).serialize()
                     for room_name in self._settings.get('chats.rooms')
                 ]
             )
 
-        self._internal_event_bus.emit(LoginEvent(success=success))
+        self._internal_event_bus.emit(LoginEvent(success=message.success))
 
-    @on_message(ChatRoomMessage)
-    def _on_chat_room_message(self, message, connection):
-        room_name, username, chat_message = message.parse()
-
-        user = self._state.get_or_create_user(username)
-        room = self._state.get_or_create_room(room_name)
+    @on_message(ChatRoomMessage.Response)
+    def _on_chat_room_message(self, message: ChatRoomMessage.Response, connection):
+        user = self._state.get_or_create_user(message.username)
+        room = self._state.get_or_create_room(message.room)
         room_message = RoomMessage(
             timestamp=int(time.time()),
             room=room,
             user=user,
-            message=chat_message
+            message=message.message
         )
         room.messages.append(room_message)
 
         self._event_bus.emit(RoomMessageEvent(room_message))
 
-    @on_message(ChatUserJoinedRoom)
-    def _on_user_joined_room(self, message, connection):
-        room_name, username, status, avg_speed, download_num, file_count, dir_count, slots_free, country = message.parse()
-        logger.info(f"user {username} joined room {room_name}")
+    @on_message(ChatUserJoinedRoom.Response)
+    def _on_user_joined_room(self, message: ChatUserJoinedRoom.Response, connection):
+        user = self._state.get_or_create_user(message.username)
+        user.status = UserStatus(message.status)
+        user.avg_speed = message.user_data.avg_speed
+        user.downloads = message.user_data.download_num
+        user.files = message.user_data.file_count
+        user.directories = message.user_data.dir_count
+        user.has_slots_free = message.slots_free
+        user.country = message.country_code
 
-        user = self._state.get_or_create_user(username)
-        user.status = UserStatus(status)
-        user.avg_speed = avg_speed
-        user.downloads = download_num
-        user.files = file_count
-        user.directories = dir_count
-        user.has_slots_free = slots_free
-        user.country = country
-
-        room = self._state.get_or_create_room(room_name)
+        room = self._state.get_or_create_room(message.username)
         room.add_user(user)
 
         self._event_bus.emit(UserJoinedRoomEvent(user=user, room=room))
 
-    @on_message(ChatUserLeftRoom)
-    def _on_user_left_room(self, message, connection):
-        room_name, username = message.parse()
-        logger.info(f"user {username} left room {room_name}")
-        user = self._state.get_or_create_user(username)
-        room = self._state.get_or_create_room(room_name)
+    @on_message(ChatUserLeftRoom.Response)
+    def _on_user_left_room(self, message: ChatUserLeftRoom.Response, connection):
+        user = self._state.get_or_create_user(message.username)
+        room = self._state.get_or_create_room(message.room)
 
         self._event_bus.emit(UserLeftRoomEvent(user=user, room=room))
 
-    @on_message(ChatJoinRoom)
-    def _on_join_room(self, message, connection):
-        room_name, users, users_status, users_data, users_has_slots_free, users_countries, owner, operators = message.parse()
+    @on_message(ChatJoinRoom.Response)
+    def _on_join_room(self, message: ChatJoinRoom.Response, connection):
+        room = self._state.get_or_create_room(message.room)
+        for idx, name in enumerate(message.users):
+            user_data = message.users_data[idx]
 
-        room = self._state.get_or_create_room(room_name)
-        for idx, name in enumerate(users):
-            avg_speed, download_num, file_count, dir_count = users_data[idx]
             user = self._state.get_or_create_user(name)
-            user.status = UserStatus(users_status[idx])
-            user.avg_speed = avg_speed
-            user.downloads = download_num
-            user.files = file_count
-            user.directories = dir_count
-            user.country = users_countries[idx]
-            user.has_slots_free = users_has_slots_free[idx]
+            user.status = UserStatus(message.users_status[idx])
+            user.avg_speed = user_data.avg_speed
+            user.downloads = user_data.download_num
+            user.files = user_data.file_count
+            user.directories = user_data.dir_count
+            user.country = message.users_countries[idx]
+            user.has_slots_free = message.users_slots_free[idx]
 
             room.add_user(user)
 
-        room.owner = owner
-        for operator in operators:
+        room.owner = message.owner
+        for operator in message.operators:
             room.add_operator(self._state.get_or_create_user(operator))
 
         self._event_bus.emit(RoomJoinedEvent(room=room))
 
-    @on_message(ChatLeaveRoom)
-    def _on_leave_room(self, message, connection):
-        room_name = message.parse()
-        room = self._state.get_or_create_room(room_name)
+    @on_message(ChatLeaveRoom.Response)
+    def _on_leave_room(self, message: ChatLeaveRoom.Response, connection):
+        room = self._state.get_or_create_room(message.room)
         room.joined = False
 
         self._event_bus.emit(RoomLeftEvent(room=room))
 
-    @on_message(ChatRoomTickers)
-    def _on_chat_room_tickers(self, message, connection):
-        room_name, tickers = message.parse()
-        logger.debug(f"room tickers {len(tickers)}")
+    @on_message(ChatRoomTickers.Response)
+    def _on_chat_room_tickers(self, message: ChatRoomTickers.Response, connection):
+        room = self._state.get_or_create_room(message.room)
+        tickers = []
+        for ticker in message.tickers:
+            user = self._state.get_or_create_user(ticker.username)
+            tickers.append(user, ticker.ticker)
 
-        room = self._state.get_or_create_room(room_name)
-        tickers = [(self._state.get_or_create_user(username), ticker, )
-                   for username, ticker in tickers]
         self._event_bus.emit(RoomTickersEvent(room, tickers))
 
-    @on_message(ChatRoomTickerAdd)
-    def _on_chat_room_ticker_add(self, message, connection):
-        contents = message.parse()
-        room_name, username, ticker = contents
-        logger.debug(f"room ticker add : {contents!r}")
+    @on_message(ChatRoomTickerAdded.Response)
+    def _on_chat_room_ticker_add(self, message: ChatRoomTickerAdded.Response, connection):
+        room = self._state.get_or_create_room(message.room)
+        user = self._state.get_or_create_user(message.username)
 
-        room = self._state.get_or_create_room(room_name)
-        user = self._state.get_or_create_user(username)
+        self._event_bus.emit(RoomTickerAddedEvent(room, user, message.ticker))
 
-        self._event_bus.emit(RoomTickerAddedEvent(room, user, ticker))
-
-    @on_message(ChatRoomTickerRemove)
-    def _on_chat_room_ticker_removed(self, message, connection):
-        contents = message.parse()
-        room_name, username = contents
-        logger.debug(f"room ticker removed : {contents!r}")
-
-        room = self._state.get_or_create_room(room_name)
-        user = self._state.get_or_create_user(username)
+    @on_message(ChatRoomTickerRemoved.Response)
+    def _on_chat_room_ticker_removed(self, message: ChatRoomTickerRemoved.Response, connection):
+        room = self._state.get_or_create_room(message.room)
+        user = self._state.get_or_create_user(message.username)
 
         self._event_bus.emit(RoomTickerRemovedEvent(room, user))
 
-    @on_message(PrivateRoomToggle)
+    @on_message(TogglePrivateRooms.Response)
     def _on_private_room_toggle(self, message, connection):
-        enabled = message.parse()
-        logger.debug(f"private rooms enabled : {enabled}")
+        logger.debug(f"private rooms enabled : {message.enabled}")
 
-    @on_message(PrivateRoomAdded)
-    def _on_private_room_added(self, message, connection):
-        room_name = message.parse()
-        room = self._state.get_or_create_room(room_name)
+    @on_message(PrivateRoomAdded.Response)
+    def _on_private_room_added(self, message: PrivateRoomAdded.Response, connection):
+        room = self._state.get_or_create_room(message.room)
         room.joined = True
         room.is_private = True
 
         self._event_bus.emit(UserJoinedPrivateRoomEvent(room))
 
-    @on_message(PrivateRoomRemoved)
-    def _on_private_room_removed(self, message, connection):
-        room_name = message.parse()
-        room = self._state.get_or_create_room(room_name)
+    @on_message(PrivateRoomRemoved.Response)
+    def _on_private_room_removed(self, message: PrivateRoomRemoved.Response, connection):
+        room = self._state.get_or_create_room(message.room)
         room.joined = False
         room.is_private = True
 
         self._event_bus.emit(UserLeftPrivateRoomEvent(room))
 
-    @on_message(PrivateRoomUsers)
-    def _on_private_room_users(self, message, connection):
-        room_name, usernames = message.parse()
-
-        room = self._state.get_or_create_room(room_name)
-        for username in usernames:
+    @on_message(PrivateRoomUsers.Response)
+    def _on_private_room_users(self, message: PrivateRoomUsers.Response, connection):
+        room = self._state.get_or_create_room(message.room)
+        for username in message.usernames:
             room.add_user(self._state.get_or_create_user(username))
 
-    @on_message(PrivateRoomAddUser)
-    def _on_private_room_add_user(self, message, connection):
-        room_name, username = message.parse()
-
-        room = self._state.get_or_create_room(room_name)
-        user = self._state.get_or_create_user(username)
+    @on_message(PrivateRoomAddUser.Response)
+    def _on_private_room_add_user(self, message: PrivateRoomAddUser.Response, connection):
+        room = self._state.get_or_create_room(message.room)
+        user = self._state.get_or_create_user(message.username)
 
         room.add_user(user)
 
-    @on_message(PrivateRoomOperators)
-    def _on_private_room_operators(self, message, connection):
-        room_name, operators = message.parse()
-
-        room = self._state.get_or_create_room(room_name)
-        for operator in operators:
+    @on_message(PrivateRoomOperators.Response)
+    def _on_private_room_operators(self, message: PrivateRoomOperators.Response, connection):
+        room = self._state.get_or_create_room(message.room)
+        for operator in message.usernames:
             room.add_operator(self._state.get_or_create_user(operator))
 
-    @on_message(PrivateRoomOperatorAdded)
-    def _on_private_room_operator_added(self, message, connection):
-        room_name = message.parse()
-        room = self._state.get_or_create_room(room_name)
+    @on_message(PrivateRoomOperatorAdded.Response)
+    def _on_private_room_operator_added(self, message: PrivateRoomOperatorAdded.Response, connection):
+        room = self._state.get_or_create_room(message.room)
         room.is_operator = True
 
-    @on_message(PrivateRoomOperatorRemoved)
-    def _on_private_room_operator_removed(self, message, connection):
-        room_name = message.parse()
-        room = self._state.get_or_create_room(room_name)
+    @on_message(PrivateRoomOperatorRemoved.Response)
+    def _on_private_room_operator_removed(self, message: PrivateRoomOperatorRemoved.Response, connection):
+        room = self._state.get_or_create_room(message.room)
         room.is_operator = False
 
-    @on_message(PrivateRoomAddOperator)
-    def _on_private_room_add_operator(self, message, connection):
-        room_name, username = message.parse()
-        room = self._state.get_or_create_room(room_name)
-        user = self._state.get_or_create_user(username)
+    @on_message(PrivateRoomAddOperator.Response)
+    def _on_private_room_add_operator(self, message: PrivateRoomAddOperator.Response, connection):
+        room = self._state.get_or_create_room(message.room)
+        user = self._state.get_or_create_user(message.username)
         room.add_operator(user)
 
-    @on_message(PrivateRoomRemoveOperator)
-    def _on_private_room_remove_operators(self, message, connection):
-        room_name, username = message.parse()
-        room = self._state.get_or_create_room(room_name)
-        user = self._state.get_or_create_user(username)
+    @on_message(PrivateRoomRemoveOperator.Response)
+    def _on_private_room_remove_operators(self, message: PrivateRoomRemoveOperator.Response, connection):
+        room = self._state.get_or_create_room(message.room)
+        user = self._state.get_or_create_user(message.username)
         room.operators.remove(user)
 
-    @on_message(ChatPrivateMessage)
-    def _on_private_message(self, message, connection):
-        chat_id, timestamp, username, chat_msg, is_admin = message.parse()
-        user = self._state.get_or_create_user(username)
+    @on_message(ChatPrivateMessage.Response)
+    def _on_private_message(self, message: ChatPrivateMessage.Response, connection):
+        user = self._state.get_or_create_user(message.username)
         chat_message = ChatMessage(
-            id=chat_id,
-            timestamp=timestamp,
+            id=message.chat_id,
+            timestamp=message.timestamp,
             user=user,
-            message=chat_msg,
-            is_admin=is_admin
+            message=message.message,
+            is_admin=message.is_admin
         )
-        self._state.private_messages[chat_id] = chat_message
+        self._state.private_messages[message.chat_id] = chat_message
 
         self.network.send_server_messages(
-            ChatAckPrivateMessage.create(chat_id)
+            ChatAckPrivateMessage.Request(message.chat_id).serialize()
         )
 
         self._event_bus.emit(PrivateMessageEvent(user, chat_message))
 
-    @on_message(ServerSearchRequest)
-    def _on_server_search_request(self, message, connection):
-        contents = message.parse()
-        code, unknown, username, ticket, query = contents
-        logger.info(f"ServerSearchRequest : {contents!r}")
-
-        message_to_send = DistributedServerSearchRequest.create(
-            code, username, ticket, query, unknown=unknown
-        )
+    @on_message(ServerSearchRequest.Response)
+    def _on_server_search_request(self, message: ServerSearchRequest.Response, connection):
+        message_to_send = message.serialize()
         for child in self._state.children:
             child.connection.queue_messages(message_to_send)
 
     # State related messages
-    @on_message(CheckPrivileges)
-    def _on_check_privileges(self, message, connection):
-        self._state.privileges_time_left = message.parse()
+    @on_message(CheckPrivileges.Response)
+    def _on_check_privileges(self, message: CheckPrivileges.Response, connection):
+        self._state.privileges_time_left = message.time_left
 
-    @on_message(RoomList)
-    def _on_room_list(self, message, connection):
-        room_infos, rooms_private_owned, rooms_private, rooms_private_operated = message.parse()
-        for room_name, user_count in room_infos.items():
+    @on_message(RoomList.Response)
+    def _on_room_list(self, message: RoomList.Response, connection):
+        for idx, room_name in enumerate(message.rooms):
             room = self._state.get_or_create_room(room_name)
-            room.user_count = user_count
+            room.user_count = message.rooms_user_count[idx]
 
-        for room_name, user_count in rooms_private_owned.items():
+        for idx, room_name in enumerate(message.rooms_private_owned):
             room = self._state.get_or_create_room(room_name)
-            room.user_count = user_count
+            room.user_count = message.rooms_private_owned_user_count[idx]
             room.is_private = True
             room.owner = self._settings.get('credentials.username')
 
-        for room_name, user_count in rooms_private.items():
+        for idx, room_name in enumerate(message.rooms_private):
             room = self._state.get_or_create_room(room_name)
-            room.user_count = user_count
+            room.user_count = message.rooms_private_user_count[idx]
             room.is_private = True
 
-        for room_name in rooms_private_operated:
+        for room_name in message.rooms_private_operated:
             room = self._state.get_or_create_room(room_name)
             room.is_private = True
             room.is_operator = True
 
         self._event_bus.emit(RoomListEvent(rooms=self._state.rooms.values()))
 
-    @on_message(ParentMinSpeed)
-    def _on_parent_min_speed(self, message, connection):
-        self._state.parent_min_speed = message.parse()
+    @on_message(ParentMinSpeed.Response)
+    def _on_parent_min_speed(self, message: ParentMinSpeed.Response, connection):
+        self._state.parent_min_speed = message.speed
 
-    @on_message(ParentSpeedRatio)
-    def _on_parent_speed_ratio(self, message, connection):
-        self._state.parent_speed_ratio = message.parse()
+    @on_message(ParentSpeedRatio.Response)
+    def _on_parent_speed_ratio(self, message: ParentSpeedRatio.Response, connection):
+        self._state.parent_speed_ratio = message.ratio
 
-    @on_message(MinParentsInCache)
-    def _on_min_parents_in_cache(self, message, connection):
-        self._state.min_parents_in_cache = message.parse()
+    @on_message(MinParentsInCache.Response)
+    def _on_min_parents_in_cache(self, message: MinParentsInCache.Response, connection):
+        self._state.min_parents_in_cache = message.amount
 
-    @on_message(DistributedAliveInterval)
-    def _on_ditributed_alive_interval(self, message, connection):
-        self._state.distributed_alive_interval = message.parse()
+    @on_message(DistributedAliveInterval.Response)
+    def _on_ditributed_alive_interval(self, message: DistributedAliveInterval.Response, connection):
+        self._state.distributed_alive_interval = message.interval
 
-    @on_message(SearchInactivityTimeout)
-    def _on_search_inactivity_timeout(self, message, connection):
-        self._state.search_inactivity_timeout = message.parse()
+    @on_message(SearchInactivityTimeout.Response)
+    def _on_search_inactivity_timeout(self, message: SearchInactivityTimeout.Response, connection):
+        self._state.search_inactivity_timeout = message.timeout
 
-    @on_message(PrivilegedUsers)
-    def _on_privileged_users(self, message, connection):
-        privileged_users = message.parse()
-        for privileged_user in privileged_users:
-            user = self._state.get_or_create_user(privileged_user)
+    @on_message(PrivilegedUsers.Response)
+    def _on_privileged_users(self, message: PrivilegedUsers.Response, connection):
+        for username in message.users:
+            user = self._state.get_or_create_user(username)
             user.privileged = True
 
-    @on_message(AddPrivilegedUser)
-    def _on_add_privileged_user(self, message, connection):
-        privileged_user = message.parse()
-        user = self._state.get_or_create_user(privileged_user)
+    @on_message(AddPrivilegedUser.Response)
+    def _on_add_privileged_user(self, message: AddPrivilegedUser.Response, connection):
+        user = self._state.get_or_create_user(message.username)
         user.privileged = True
 
-    @on_message(WishlistInterval)
-    def _on_wish_list_interval(self, message, connection):
-        self._state.wishlist_interval = message.parse()
+    @on_message(WishlistInterval.Response)
+    def _on_wish_list_interval(self, message: WishlistInterval.Response, connection):
+        self._state.wishlist_interval = message.interval
 
-    @on_message(AddUser)
-    def _on_add_user(self, message, connection):
-        add_user_info = message.parse()
-        logger.info(f"AddUser : {add_user_info}")
-        name, exists, status, avg_speed, downloads, files, directories, country = add_user_info
-        if exists:
-            user = self._state.get_or_create_user(name)
-            user.name = name
-            user.status = UserStatus(status)
-            user.avg_speed = avg_speed
-            user.downloads = downloads
-            user.files = files
-            user.directories = directories
-            user.country = country
+    @on_message(AddUser.Response)
+    def _on_add_user(self, message: AddUser.Response, connection):
+        if message.exists:
+            user = self._state.get_or_create_user(message.username)
+            user.name = message.username
+            user.status = UserStatus(message.status)
+            user.avg_speed = message.avg_speed
+            user.downloads = message.download_num
+            user.files = message.file_count
+            user.directories = message.dir_count
+            user.country = message.country_code
 
             self._event_bus.emit(UserAddEvent(user))
 
-    @on_message(GetUserStatus)
-    def _on_get_user_status(self, message, connection):
-        username, status, privileged = message.parse()
-        logger.info(f"GetUserStatus : username={username}, status={status}, privileged={privileged}")
-
-        user = self._state.get_or_create_user(username)
-        user.status = UserStatus(status)
-        user.privileged = privileged
+    @on_message(GetUserStatus.Response)
+    def _on_get_user_status(self, message: GetUserStatus.Response, connection):
+        user = self._state.get_or_create_user(message.username)
+        user.status = UserStatus(message.status)
+        user.privileged = message.privileged
 
         self._event_bus.emit(UserStatusEvent(user))
 
-    @on_message(GetUserStats)
-    def _on_get_user_stats(self, message, connection):
-        contents = message.parse()
-        username, avg_speed, download_num, files, dirs = contents
-        logger.info(f"GetUserStats : {contents}")
-
-        user = self._state.get_or_create_user(username)
-        user.avg_speed = avg_speed
-        user.downloads = download_num
-        user.files = files
-        user.directories = dirs
+    @on_message(GetUserStats.Response)
+    def _on_get_user_stats(self, message: GetUserStats.Response, connection):
+        user = self._state.get_or_create_user(message.username)
+        user.avg_speed = message.avg_speed
+        user.downloads = message.download_num
+        user.files = message.file_count
+        user.directories = message.dir_count
 
         self._event_bus.emit(UserStatsEvent(user))
 
-    @on_message(NetInfo)
-    def _on_net_info(self, message, connection):
-        net_info_list = message.parse()
-
+    @on_message(PotentialParents.Response)
+    def _on_net_info(self, message: PotentialParents.Response, connection):
         if not self._settings.get('debug.search_for_parent'):
             logger.debug("ignoring NetInfo message : searching for parent is disabled")
             return
 
-        logger.info(f"received NetInfo list : {net_info_list!r}")
-
         self._state.potential_parents = [
-            username for username, _, _ in net_info_list
+            entry.username for entry in message.entries
         ]
 
-        for username, ip, port in net_info_list:
+        for entry in message.entries:
             self.network.init_peer_connection(
-                username,
+                entry.username,
                 PeerConnectionType.DISTRIBUTED,
-                ip=ip,
-                port=port
+                ip=entry.ip,
+                port=entry.port
             )
 
-    def _on_server_message(self, event: ServerMessageEvent):
-        message = copy.deepcopy(event.message)
+    def _on_message_received(self, event: MessageReceivedEvent):
+        message = event.message
         if message.__class__ in self.MESSAGE_MAP:
             self.MESSAGE_MAP[message.__class__](message, event.connection)
 
