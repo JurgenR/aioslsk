@@ -1013,7 +1013,7 @@ class TransferManager:
                     PeerTransferReply.Request(
                         ticket=message.ticket,
                         allowed=True
-                    ),
+                    ).serialize(),
                     connection=connection
                 )
 
