@@ -6,7 +6,7 @@ import struct
 from typing import List
 import zlib
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 def decode_string(value: bytes) -> str:

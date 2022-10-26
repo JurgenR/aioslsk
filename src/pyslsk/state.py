@@ -32,7 +32,9 @@ class State:
 
     # Distributed network related
     potential_parents: List[str] = field(default_factory=list)
-    """List of the last potential parents received by the NetInfo commands"""
+    """List of the last potential parents received by the PotentialParents
+    commands
+    """
     parent: DistributedPeer = None
     children: List[DistributedPeer] = field(default_factory=list)
 
@@ -40,6 +42,7 @@ class State:
     parent_min_speed: int = 0
     parent_speed_ratio: int = 0
     min_parents_in_cache: int = 0
+    parent_inactivity_timeout: int = 0
     search_inactivity_timeout: int = 0
     distributed_alive_interval: int = 0
     wishlist_interval: int = 0

@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from .network import Network
 
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 SPEED_LOG_INTERVAL = 0.1

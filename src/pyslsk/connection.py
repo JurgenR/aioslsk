@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from .transfer import Transfer
 
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 DEFAULT_PEER_TIMEOUT = 30
@@ -180,7 +180,7 @@ class DataConnection(Connection):
         super().disconnect(reason)
         # Notify messages failed to be sent
         for message in self._messages:
-            self.network.on_message_send_failed(message)
+            self.network.on_message_send_failed(message, self)
 
     def set_state(self, state: ConnectionState, close_reason: CloseReason = CloseReason.UNKNOWN):
         if state == ConnectionState.CONNECTED:
@@ -255,7 +255,6 @@ class DataConnection(Connection):
                 self.write_message(message.message)
 
             except OSError:
-                self._messages
                 logger.exception(
                     f"close {self.hostname}:{self.port} : exception while sending")
                 # We need to be able to call the failure callbacks for all
@@ -266,7 +265,7 @@ class DataConnection(Connection):
 
             else:
                 self.bytes_sent += len(message.message)
-                self.network.on_message_sent(message)
+                self.network.on_message_sent(message, self)
 
         self._messages = []
         self.network.disable_write(self)

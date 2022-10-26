@@ -49,7 +49,7 @@ from .transfer import Transfer, TransferDirection
 from .utils import ticket_generator
 
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 CONNECT_TIMEOUT: int = 5

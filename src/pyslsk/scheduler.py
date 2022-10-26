@@ -3,7 +3,7 @@ import logging
 import time
 from typing import Any, Callable, List, Dict
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 @dataclass

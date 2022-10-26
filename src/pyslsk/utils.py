@@ -4,7 +4,7 @@ from typing import List
 from pyslsk.protocol.primitives import Attribute
 
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 def try_decoding(value: bytes):

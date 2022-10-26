@@ -16,7 +16,7 @@ import uuid
 from .protocol.primitives import Attribute, DirectoryData, FileData
 from .settings import Settings
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 _COMPRESSED_FORMATS = [

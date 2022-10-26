@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from .transfer import Transfer, TransferState
 
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 # Internal functions

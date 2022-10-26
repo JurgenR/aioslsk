@@ -2,7 +2,7 @@ import logging
 import upnpclient
 
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 ADD_PORT_MAPPING_ACTION = 'AddPortMapping'

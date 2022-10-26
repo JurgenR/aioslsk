@@ -56,6 +56,7 @@ from .protocol.messages import (
     Login,
     MinParentsInCache,
     PotentialParents,
+    ParentInactivityTimeout,
     ParentMinSpeed,
     ParentSpeedRatio,
     Ping,
@@ -484,6 +485,10 @@ class ServerManager:
     @on_message(DistributedAliveInterval.Response)
     def _on_ditributed_alive_interval(self, message: DistributedAliveInterval.Response, connection):
         self._state.distributed_alive_interval = message.interval
+
+    @on_message(ParentInactivityTimeout.Response)
+    def _on_parent_inactivity_timeout(self, message: ParentInactivityTimeout.Response, connection):
+        self._state.parent_inactivity_timeout = message.timeout
 
     @on_message(SearchInactivityTimeout.Response)
     def _on_search_inactivity_timeout(self, message: SearchInactivityTimeout.Response, connection):
