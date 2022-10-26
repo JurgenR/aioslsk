@@ -1191,11 +1191,3 @@ class DistributedServerSearchRequest(DistributedMessage):
         username: str = field(metadata={'type': string})
         ticket: int = field(metadata={'type': uint32})
         query: str = field(metadata={'type': string})
-
-
-if __name__ == '__main__':
-    data =bytes.fromhex('a701000009000000789cad943b4b03411485374111b5b0b51cb188e283c4f8885da2120d4410638cc1284e924976dd7566999d0dc4da4ed0c69f60636fe11fb049271636366a6ba9d87a6f7c80c580c5dc62cf9e61e03b73e7eef65b96e5d3aa27144ba5ee7b2c6b1016229bf048a769cbf5834a4d1cf91e53ac0e55a953e9068aca44b25250ac213859a3523a01c9f03a59f268cd15a12253a428ab948741259e00b32a389b3ef2931f774fd64f45bf351d011ca8402d19c3ce8059b66187723845f684f5ae659fa3ee186327c16c51ee2aa7e1b03ac2fb86a2111dfc1275cf187c164cc1a62e233945b24292f56eebdb57427bfc6bbcf1b2b1047360d61d8e682a6b36d2cf6e4fb4f407a4378dd1e7b1f9366b9392e03105a347c64a36e32407afe398e5f565587b171dd47d635916beb2904c4331a96c11366d851146e48db61d93a84563115260700aca2244f273affe0be4660fbf0866c90b59d0e5af30ee50afdbffdd6d6d84539c8503531112713079ca9b81825908483ef43c5a6d63888bb751ed103ca21e9b0af19f4df8af122d2649ae26f8f4a1dfec647fd3752b12db18f8b3f0090c9b9116')
-
-    print(f"data = {len(data)}")
-    msg = PeerSearchReply.Request.deserialize(data)
-    import pdb; pdb.set_trace()

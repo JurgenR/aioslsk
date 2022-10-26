@@ -53,4 +53,3 @@ class TestMessageDataclass:
         data = bytes.fromhex('04000000010000000100000030')
         with pytest.raises(Exception):
             FieldWithoutType.deserialize(data)
-

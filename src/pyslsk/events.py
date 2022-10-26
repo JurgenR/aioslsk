@@ -16,7 +16,6 @@ if TYPE_CHECKING:
         CloseReason,
         PeerConnection,
         PeerConnectionState,
-        ServerConnection,
     )
     from .transfer import Transfer, TransferState
 
@@ -35,7 +34,7 @@ def on_message(message_class):
     return register
 
 
-def build_message_map(obj) -> Dict[Type[Message], Callable]:
+def build_message_map(obj) -> Dict[Type[MessageDataclass], Callable]:
     methods = inspect.getmembers(obj, predicate=inspect.ismethod)
     mapping = {}
     for _, method in methods:

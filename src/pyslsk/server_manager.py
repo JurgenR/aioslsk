@@ -209,7 +209,7 @@ class ServerManager:
         # First value indicates success
         if message.success:
             self._state.logged_in = True
-            logger.info(f"Successfully logged on")
+            logger.info("Successfully logged on")
         else:
             logger.error(f"Failed to login, reason: {message.reason!r}")
 

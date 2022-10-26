@@ -870,6 +870,7 @@ class TestRoomList:
 
     # TODO: Response tests
 
+
 class TestPrivilegedUsers:
 
     def test_PrivilegedUsers_Response_serialize(self):
