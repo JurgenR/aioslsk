@@ -73,10 +73,10 @@ class PeerManager:
 
     # External methods
     def get_user_info(self, username: str):
-        self.network.send_peer_messages(username, PeerUserInfoRequest.create())
+        self.network.send_peer_messages(username, PeerUserInfoRequest.Request().serialize())
 
     def get_user_shares(self, username: str):
-        self.network.send_peer_messages(username, PeerSharesRequest.create())
+        self.network.send_peer_messages(username, PeerSharesRequest.Request().serialize())
 
     def get_distributed_peer(self, username: str, connection: PeerConnection) -> DistributedPeer:
         for peer in self._distributed_peers:
