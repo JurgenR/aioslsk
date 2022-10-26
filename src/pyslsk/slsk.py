@@ -190,6 +190,12 @@ class SoulSeek(threading.Thread):
         else:
             self.server_manager.leave_room(room)
 
+    def set_room_ticker(self, room: Union[str, Room]):
+        if isinstance(room, Room):
+            self.server_manager.set_room_ticker(room.name)
+        else:
+            self.server_manager.set_room_ticker(room)
+
     def send_private_message(self, user: Union[str, User], message: str):
         if isinstance(user, User):
             self.server_manager.send_private_message(user.name, message)

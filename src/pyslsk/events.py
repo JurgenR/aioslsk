@@ -2,11 +2,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 import inspect
 import logging
-from typing import Callable, Dict, List, Tuple, Type, TYPE_CHECKING
+from typing import Callable, Dict, List, Type, TYPE_CHECKING
 
 from .model import ChatMessage, Room, RoomMessage, User
 from .protocol.primitives import DirectoryData, MessageDataclass
-# from .protocol.messages import DirectoryData
 from .search import SearchQuery, SearchResult
 
 if TYPE_CHECKING:
@@ -130,7 +129,7 @@ class RoomLeftEvent(Event):
 @dataclass(frozen=True)
 class RoomTickersEvent:
     room: Room
-    tickers: List[Tuple[User, str]]
+    tickers: Dict[str, str]
 
 
 @dataclass(frozen=True)

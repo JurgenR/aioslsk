@@ -1,4 +1,3 @@
-import enum
 import logging
 import time
 
@@ -46,6 +45,7 @@ from .protocol.messages import (
     ChatRoomTickers,
     ChatRoomTickerAdded,
     ChatRoomTickerRemoved,
+    ChatRoomTickerSet,
     ChatUserJoinedRoom,
     ChatUserLeftRoom,
     CheckPrivileges,
@@ -144,43 +144,43 @@ class ServerManager:
         )
 
     def add_user(self, username: str):
-        logger.info(f"adding user {username}")
         self.network.send_server_messages(
             AddUser.Request(username).serialize()
         )
 
     def remove_user(self, username: str):
-        logger.info(f"removing user {username}")
         self.network.send_server_messages(
             RemoveUser.Request(username).serialize()
         )
 
     def get_user_stats(self, username: str):
-        logger.info(f"getting user stats {username}")
         self.network.send_server_messages(
             GetUserStats.Request(username).serialize()
         )
 
     def get_user_status(self, username: str):
-        logger.info(f"getting user status {username}")
         self.network.send_server_messages(
             GetUserStatus.Request(username).serialize()
         )
 
     def get_room_list(self):
-        logger.info("sending request for room list")
         self.network.send_server_messages(RoomList.Request().serialize())
 
     def join_room(self, name: str):
-        logger.info(f"sending request to join room with name {name}")
         self.network.send_server_messages(
             ChatJoinRoom.Request(name).serialize()
         )
 
     def leave_room(self, name: str):
-        logger.info(f"sending request to leave room with name {name}")
         self.network.send_server_messages(
             ChatLeaveRoom.Request(name).serialize()
+        )
+
+    def set_room_ticker(self, room_name: str, ticker: str):
+        # No need to update the ticker in the model, a ChatRoomTickerAdded will
+        # be sent back to us
+        self.network.send_server_messages(
+            ChatRoomTickerSet.Request(room=room_name, ticker=ticker).serialize()
         )
 
     def send_private_message(self, username: str, message: str):
@@ -244,11 +244,10 @@ class ServerManager:
 
         # Auto-join rooms
         if self._settings.get('chats.auto_join'):
+            rooms = self._settings.get('chats.rooms')
+            logger.info(f"automatically rejoining {len(rooms)} rooms")
             self.network.send_server_messages(
-                *[
-                    ChatJoinRoom.Request(room_name).serialize()
-                    for room_name in self._settings.get('chats.rooms')
-                ]
+                *[ChatJoinRoom.Request(room).serialize() for room in rooms]
             )
 
         self._internal_event_bus.emit(LoginEvent(success=message.success))
@@ -323,17 +322,22 @@ class ServerManager:
     @on_message(ChatRoomTickers.Response)
     def _on_chat_room_tickers(self, message: ChatRoomTickers.Response, connection):
         room = self._state.get_or_create_room(message.room)
-        tickers = []
+        tickers = {}
         for ticker in message.tickers:
-            user = self._state.get_or_create_user(ticker.username)
-            tickers.append(user, ticker.ticker)
+            self._state.get_or_create_user(ticker.username)
+            tickers[ticker.username] = ticker.ticker
+
+        # Just replace all tickers instead of modifying the existing dict
+        room.tickers = tickers
 
         self._event_bus.emit(RoomTickersEvent(room, tickers))
 
     @on_message(ChatRoomTickerAdded.Response)
-    def _on_chat_room_ticker_add(self, message: ChatRoomTickerAdded.Response, connection):
+    def _on_chat_room_ticker_added(self, message: ChatRoomTickerAdded.Response, connection):
         room = self._state.get_or_create_room(message.room)
         user = self._state.get_or_create_user(message.username)
+
+        room.tickers[user.name] = message.ticker
 
         self._event_bus.emit(RoomTickerAddedEvent(room, user, message.ticker))
 
@@ -341,6 +345,13 @@ class ServerManager:
     def _on_chat_room_ticker_removed(self, message: ChatRoomTickerRemoved.Response, connection):
         room = self._state.get_or_create_room(message.room)
         user = self._state.get_or_create_user(message.username)
+
+        try:
+            del room.tickers[user.name]
+        except KeyError:
+            logger.warning(
+                f"attempted to remove room ticker for user {user.name} in room {room.name} "
+                "but it wasn't present")
 
         self._event_bus.emit(RoomTickerRemovedEvent(room, user))
 

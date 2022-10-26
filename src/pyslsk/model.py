@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 import enum
-from typing import List
+from typing import Dict, List
 
 
 class UserStatus(enum.Enum):
@@ -41,6 +41,7 @@ class Room:
     is_operator: bool = False
     joined: bool = False
     user_count: int = 0
+    tickers: Dict[str, str] = field(default_factory=dict)
 
     def add_user(self, user: User):
         if user not in self.users:
