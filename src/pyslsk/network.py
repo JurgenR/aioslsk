@@ -898,6 +898,13 @@ class Network:
             except Exception:
                 logger.exception(f"exception calling callback {message.on_success!r} (message={message!r})")
 
+    def on_message_send_failed(self, message: ProtocolMessage, connection: Connection):
+        if message.on_failure is not None:
+            try:
+                message.on_failure()
+            except Exception:
+                logger.exception(f"exception calling callback {message.on_failure!r} (message={message!r})")
+
     # Transfer related
 
     def on_transfer_offset(self, offset: int, connection: PeerConnection):

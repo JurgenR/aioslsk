@@ -176,6 +176,12 @@ class DataConnection(Connection):
         self.recv_buf_size: int = DEFAULT_RECV_BUF_SIZE
         self.send_buf_size: int = TRANSFER_RECV_BUF_SIZE
 
+    def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
+        super().disconnect(reason)
+        # Notify messages failed to be sent
+        for message in self._messages:
+            self.network.on_message_send_failed(message)
+
     def set_state(self, state: ConnectionState, close_reason: CloseReason = CloseReason.UNKNOWN):
         if state == ConnectionState.CONNECTED:
             self.interact()
@@ -242,20 +248,25 @@ class DataConnection(Connection):
         @return: False in case an exception occured on the socket while sending.
             True in case a message was successfully sent or nothing was sent
         """
-        for message in self._messages:
+        for idx, message in enumerate(self._messages):
             try:
                 logger.debug(f"send {self.hostname}:{self.port} : message {message.message.hex()}")
                 self.interact()
                 self.write_message(message.message)
 
             except OSError:
+                self._messages
                 logger.exception(
                     f"close {self.hostname}:{self.port} : exception while sending")
+                # We need to be able to call the failure callbacks for all
+                # remaining messages
+                self._messages = self._messages[idx:]
                 self.disconnect(reason=CloseReason.WRITE_ERROR)
                 return False
+
             else:
                 self.bytes_sent += len(message.message)
-                self.notify_message_sent(message)
+                self.network.on_message_sent(message)
 
         self._messages = []
         self.network.disable_write(self)
@@ -263,12 +274,6 @@ class DataConnection(Connection):
 
     def write_message(self, message: bytes):
         self.fileobj.sendall(message)
-
-    def notify_message_sent(self, message: ProtocolMessage):
-        try:
-            self.network.on_message_sent(message, self)
-        except Exception:
-            logger.exception(f"error during message sent callback: {message!r}")
 
     def notify_message_received(self, message):
         """Notify the network that the given message was received"""
