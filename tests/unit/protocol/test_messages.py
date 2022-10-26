@@ -2228,7 +2228,7 @@ class TestPeerTransferRequest:
             filename="C:\\dir0\\song0.mp3",
             filesize=100000
         )
-        data = bytes.fromhex('250000002800000001000000d204000011000000433a5c646972305c736f6e67302e6d7033a0860100')
+        data = bytes.fromhex('290000002800000001000000d204000011000000433a5c646972305c736f6e67302e6d7033a086010000000000')
         assert message.serialize() == data
 
     def test_PeerTransferRequest_Request_deserialize_withFilesize(self):
@@ -2238,7 +2238,7 @@ class TestPeerTransferRequest:
             filename="C:\\dir0\\song0.mp3",
             filesize=100000
         )
-        data = bytes.fromhex('250000002800000001000000d204000011000000433a5c646972305c736f6e67302e6d7033a0860100')
+        data = bytes.fromhex('290000002800000001000000d204000011000000433a5c646972305c736f6e67302e6d7033a086010000000000')
         assert PeerTransferRequest.Request.deserialize(data) == message
 
 
@@ -2266,7 +2266,7 @@ class TestPeerTransferReply:
             allowed=True,
             filesize=1000000
         )
-        data = bytes.fromhex('0d00000029000000d20400000140420f00')
+        data = bytes.fromhex('1100000029000000d20400000140420f0000000000')
         assert message.serialize() == data
 
     def test_PeerTransferReply_Request_deserialize_withFilesize(self):
@@ -2275,7 +2275,7 @@ class TestPeerTransferReply:
             allowed=True,
             filesize=1000000
         )
-        data = bytes.fromhex('0d00000029000000d20400000140420f00')
+        data = bytes.fromhex('1100000029000000d20400000140420f0000000000')
         assert PeerTransferReply.Request.deserialize(data) == message
 
     def test_PeerTransferReply_Request_serialize_withReason(self):

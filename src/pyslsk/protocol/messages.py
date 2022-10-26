@@ -1072,7 +1072,7 @@ class PeerTransferRequest(PeerMessage):
         direction: int = field(metadata={'type': uint32})
         ticket: int = field(metadata={'type': uint32})
         filename: str = field(metadata={'type': string})
-        filesize: int = field(default=None, metadata={'type': uint32, 'optional': True})
+        filesize: int = field(default=None, metadata={'type': uint64, 'optional': True})
 
 
 class PeerTransferReply(PeerMessage):
@@ -1082,7 +1082,7 @@ class PeerTransferReply(PeerMessage):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x29)
         ticket: int = field(metadata={'type': uint32})
         allowed: bool = field(metadata={'type': boolean})
-        filesize: int = field(default=None, metadata={'type': uint32, 'optional': True, 'if_true': 'allowed'})
+        filesize: int = field(default=None, metadata={'type': uint64, 'optional': True, 'if_true': 'allowed'})
         reason: str = field(default=None, metadata={'type': string, 'optional': True, 'if_false': 'allowed'})
 
 
