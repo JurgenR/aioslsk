@@ -665,7 +665,7 @@ class TransferManager:
 
         self._network.send_peer_messages(
             transfer.username,
-            PeerPlaceInQueueRequest.create(transfer.remote_path)
+            PeerPlaceInQueueRequest.Request(transfer.remote_path).serialize()
         )
 
     def _initialize_download(self, transfer: Transfer):
@@ -674,7 +674,7 @@ class TransferManager:
         self._network.send_peer_messages(
             transfer.username,
             ProtocolMessage(
-                PeerTransferQueue.create(transfer.remote_path),
+                PeerTransferQueue.Request(transfer.remote_path).serialize(),
                 on_success=partial(self._on_transfer_queue_success, transfer),
                 on_failure=partial(self._on_transfer_queue_failed, transfer)
             )
@@ -691,12 +691,12 @@ class TransferManager:
         self._network.send_peer_messages(
             transfer.username,
             ProtocolMessage(
-                PeerTransferRequest.create(
+                PeerTransferRequest.Request(
                     TransferDirection.DOWNLOAD.value,
                     ticket,
                     transfer.remote_path,
                     filesize=transfer.filesize
-                ),
+                ).serialize(),
                 on_success=partial(self._on_upload_request_success, transfer),
                 on_failure=partial(self._on_upload_request_failed, transfer)
             )
@@ -865,7 +865,7 @@ class TransferManager:
                 self.complete(transfer)
 
                 self._network.send_server_messages(
-                    SendUploadSpeed.create(int(self.get_average_upload_speed()))
+                    SendUploadSpeed.Request(int(self.get_average_upload_speed())).serialize()
                 )
         else:
             self.incomplete(transfer)
@@ -873,7 +873,7 @@ class TransferManager:
                 # Inform downloader that upload has failed
                 self._network.send_peer_messages(
                     transfer.username,
-                    PeerUploadFailed.create(transfer.remote_path)
+                    PeerUploadFailed.Request(transfer.remote_path).serialize()
                 )
 
     def _on_message_received(self, event: MessageReceivedEvent):

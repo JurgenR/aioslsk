@@ -1,3 +1,4 @@
+from pyslsk.protocol.primitives import Attribute
 from pyslsk.utils import get_duration, ticket_generator
 
 import pytest
@@ -15,7 +16,7 @@ class TestUtils:
         ]
     )
     def test_whenGetDuration_shouldReturnDuration(self, duration: int, expected: str):
-        attributes = [(1, duration)]
+        attributes = [Attribute(1, duration)]
         duration_str = get_duration(attributes)
         assert expected == duration_str
 

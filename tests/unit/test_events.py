@@ -1,5 +1,4 @@
 from pyslsk.events import on_message, EventBus, UserAddEvent
-from pyslsk.messages import Ping
 from pyslsk.model import User
 
 from unittest.mock import create_autospec
@@ -11,13 +10,6 @@ def listener1(event: UserAddEvent):
 
 def listener2(event: UserAddEvent):
     pass
-
-
-class DummyMessageListener:
-
-    @on_message(Ping)
-    def on_ping(self):
-        pass
 
 
 class TestFunctions:

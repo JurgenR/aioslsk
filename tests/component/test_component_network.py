@@ -10,7 +10,7 @@ from pyslsk.connection import (
     ServerConnection
 )
 from pyslsk.events import InternalEventBus
-from pyslsk.messages import (
+from pyslsk.protocol.messages import (
     CannotConnect,
     ConnectToPeer,
     GetPeerAddress,
@@ -86,7 +86,7 @@ class _BaseTestComponentNetwork:
 
         # Assert correct message is sent
         assert len(connection._messages) == 1
-        assert connection._messages[0].message[4] == init_message_type.MESSAGE_ID
+        assert connection._messages[0].message[4] == init_message_type.Request.MESSAGE_ID
 
         # Mock succesful sending of message
         connection.notify_message_sent(connection._messages[0])
@@ -148,13 +148,16 @@ class TestComponentNetwork(_BaseTestComponentNetwork):
         assert req.connection is None
 
         # Assert GetPeerAddress was requested
-        assert network.server._messages[-1].message[4] == GetPeerAddress.MESSAGE_ID
+        assert network.server._messages[-1].message[4] == GetPeerAddress.Request.MESSAGE_ID
 
         # Mock GetPeerAddress response
-        response = ('user1', '1.2.3.4', 1234, 1, 1235)
-        get_peer_address = Mock()
-        get_peer_address.parse.return_value = response
-
+        get_peer_address = GetPeerAddress.Response(
+            username='user1',
+            ip='1.2.3.4',
+            port=1234,
+            obfuscated_port_amount=1,
+            obfuscated_port=1235
+        )
         network._on_get_peer_address(get_peer_address, network.server)
 
         # Assert connection object was made and connect was attempted
@@ -200,7 +203,7 @@ class TestComponentNetwork(_BaseTestComponentNetwork):
             ConnectionState.CLOSED, close_reason=CloseReason.CONNECT_FAILED)
 
         # Assert ConnectToPeer is sent and task is scheduled
-        self._validate_server_message(network, ConnectToPeer)
+        self._validate_server_message(network, ConnectToPeer.Request)
 
         # Mock incoming connection
         inc_connection = PeerConnection(
@@ -212,8 +215,7 @@ class TestComponentNetwork(_BaseTestComponentNetwork):
         inc_connection.set_state(ConnectionState.CONNECTED)
 
         # Simulate piercefirewall
-        pierce_firewall = Mock()
-        pierce_firewall.parse.return_value = req.ticket
+        pierce_firewall = PeerPierceFirewall.Request(req.ticket)
         network._on_peer_pierce_firewall(pierce_firewall, inc_connection)
 
         # Assert connection is properly configured
@@ -254,11 +256,14 @@ class TestComponentNetwork(_BaseTestComponentNetwork):
             ConnectionState.CLOSED, close_reason=CloseReason.CONNECT_FAILED)
 
         # Assert ConnectToPeer is sent and task is scheduled
-        self._validate_server_message(network, ConnectToPeer)
+        self._validate_server_message(network, ConnectToPeer.Request)
 
         # Mock CannotConnect
-        cannot_connect = Mock()
-        cannot_connect.parse.return_value = (req.ticket, req.username)
+
+        cannot_connect = CannotConnect.Request(
+            ticket=req.ticket,
+            username=req.username
+        )
         network._on_cannot_connect(cannot_connect, network.server)
 
         # Assert request is finalized
