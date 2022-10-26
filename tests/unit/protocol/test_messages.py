@@ -168,26 +168,26 @@ class TestMessageDeserializers:
 
 class TestLogin:
 
-    def test_Login_Request(self):
+    def test_Login_Request_serialize(self):
         message = Login.Request(
             username='Test',
             password='Test1234',
             client_version=10,
-            password_md5=calc_md5('Test1234'),
+            md5hash=calc_md5('Test' + 'Test1234'),
             minor_version=123
         )
-        data = bytes.fromhex("440000000100000004000000546573740800000054657374313233340a0000002000000032633933343163613463663364383762396534656239303564366133656334357b000000")
+        data = bytes.fromhex('440000000100000004000000546573740800000054657374313233340a0000002000000032366330666134666430386237653233316237316532643434343034373236367b000000')
         assert message.serialize() == data
 
-    def test_Login_Request(self):
+    def test_Login_Request_deserialize(self):
         message = Login.Request(
             username='Test',
             password='Test1234',
             client_version=10,
-            password_md5=calc_md5('Test1234'),
+            md5hash=calc_md5('Test' + 'Test1234'),
             minor_version=123
         )
-        data = bytes.fromhex("440000000100000004000000546573740800000054657374313233340a0000002000000032633933343163613463663364383762396534656239303564366133656334357b000000")
+        data = bytes.fromhex('440000000100000004000000546573740800000054657374313233340a0000002000000032366330666134666430386237653233316237316532643434343034373236367b000000')
         assert Login.Request.deserialize(data) == message
 
     def test_Login_Response_serialize_successful(self):
@@ -788,7 +788,7 @@ class TestSharedFoldersFiles:
             directory_count=1000,
             file_count=10000
         )
-        data = bytes.fromhex('0c00000020000000e803000010270000')
+        data = bytes.fromhex('0c00000023000000e803000010270000')
         assert message.serialize() == data
 
     def test_SharedFoldersFiles_Request_deserialize(self):
@@ -796,7 +796,7 @@ class TestSharedFoldersFiles:
             directory_count=1000,
             file_count=10000
         )
-        data = bytes.fromhex('0c00000020000000e803000010270000')
+        data = bytes.fromhex('0c00000023000000e803000010270000')
         assert SharedFoldersFiles.Request.deserialize(data) == message
 
 
@@ -1937,7 +1937,7 @@ class TestPeerSharesReply:
                 name="C:\\dir0",
                 files=[
                     FileData(
-                        unknown='0',
+                        unknown=0,
                         filename="song0.mp3",
                         filesize=1000000,
                         extension='mp3',
@@ -1950,7 +1950,7 @@ class TestPeerSharesReply:
             )
         ]
     )
-    DATA = bytes.fromhex('3f00000005000000789c6364606060076267ab9894cc2203462013840d388144717e5eba815e6e81b183133f03335000c864822a70001220f60e6e0630000051cf085e')
+    DATA = bytes.fromhex('4100000005000000789c6364606060076267ab9894cc22034620938113888bf3f3d20df4720b8c1d9cf841620ccc400ce4320129902207200162efe006cb3200005766082d')
 
     MESSAGE_LOCKED = PeerSharesReply.Request(
         directories=[
@@ -1958,7 +1958,7 @@ class TestPeerSharesReply:
                 name="C:\\dir0",
                 files=[
                     FileData(
-                        unknown='1',
+                        unknown=1,
                         filename="song0.mp3",
                         filesize=1000000,
                         extension='mp3',
@@ -1975,7 +1975,7 @@ class TestPeerSharesReply:
                 name="C:\\locked_dir0",
                 files=[
                     FileData(
-                        unknown='1',
+                        unknown=1,
                         filename="locked_song0.mp3",
                         filesize=1000000,
                         extension='mp3',
@@ -1988,7 +1988,7 @@ class TestPeerSharesReply:
             )
         ]
     )
-    DATA_LOCKED = bytes.fromhex('5400000005000000789c6364606060076267ab9894cc2203462013840d398144717e5eba815e6e81b183133f03335000c864822a70001220f60e6e06300089f141ccc9c94fce4e4d8947314e004840c5893515008852166d')
+    DATA_LOCKED = bytes.fromhex('5400000005000000789c6364606060076267ab9894cc220346209391134814e7e7a51be8e516183b38f1338000331003b94c200540ec002440ec1ddc6059b0181fc49c9cfce4ecd49478b8710240022a468aa9008ea3160b')
 
     def test_PeerSharesReply_Request_serialize_withoutLockedResults(self):
         message = self.MESSAGE
@@ -2018,7 +2018,7 @@ class TestPeerSearchReply:
         ticket=1234,
         results=[
             FileData(
-                unknown='1',
+                unknown=1,
                 filename="C:\\dir0\\song0.mp3",
                 filesize=10000000,
                 extension='mp3',
@@ -2032,14 +2032,14 @@ class TestPeerSearchReply:
         avg_speed=1000,
         queue_size=5,
     )
-    DATA = bytes.fromhex('4a00000009000000789c63656060282d4e2d32b8c4c2c0c0c800c1868240c2d92a2625b3c820a6383f2fdd402fb7c0b861da0c0666a00490c90455e8002440ec1410ff05509295010200ab850d34')
+    DATA = bytes.fromhex('4c00000009000000789c63656060282d4e2d32b8c4c2c0c008e4300a020967ab9894cc228398e2fcbc7403bddc02e38669331840801988815c2606886207200162a780f82f8092ac0c100000bd030d03')
 
     MESSAGE_LOCKED = PeerSearchReply.Request(
         username='user0',
         ticket=1234,
         results=[
             FileData(
-                unknown='1',
+                unknown=1,
                 filename="C:\\dir0\\song0.mp3",
                 filesize=10000000,
                 extension='mp3',
@@ -2054,7 +2054,7 @@ class TestPeerSearchReply:
         queue_size=5,
         locked_results=[
             FileData(
-                unknown='1',
+                unknown=1,
                 filename="C:\\dir0\\locked_song0.mp3",
                 filesize=10000000,
                 extension='mp3',
@@ -2065,7 +2065,7 @@ class TestPeerSearchReply:
             )
         ]
     )
-    DATA_LOCKED = bytes.fromhex('5900000009000000789c63656060282d4e2d32b8c4c2c0c0c800c1868240c2d92a2625b3c820a6383f2fdd402fb7c0b861da0c0666a00490c90455e8002440ec1410ff055092950102e02649209994939f9c9d9a124fac810004801984')
+    DATA_LOCKED = bytes.fromhex('5b00000009000000789c63656060282d4e2d32b8c4c2c0c008e4300a020967ab9894cc228398e2fcbc7403bddc02e38669331840801988815c2606886207200162a780f82f8092ac0c1000364902c9a49cfce4ecd49478520c040026fe1922')
 
     def test_PeerSearchReply_Request_serialize_withoutLockedResults(self):
         message = self.MESSAGE
@@ -2174,7 +2174,7 @@ class TestPeerDirectoryContentsReply:
                 name='C:\\dir0',
                 files=[
                     FileData(
-                        unknown='1',
+                        unknown=1,
                         filename='song0.mp3',
                         filesize=1000000,
                         extension='mp3',
@@ -2187,7 +2187,7 @@ class TestPeerDirectoryContentsReply:
             )
         ]
     )
-    DATA = bytes.fromhex('3d00000025000000789c6364606060076267ab9894cc2203462013840d398144717e5eba815e6e81b183133f03335000c864822a70001140f002280e00311c0885')
+    DATA = bytes.fromhex('3f00000025000000789c6364606060076267ab9894cc220346209391134814e7e7a51be8e516183b38f1338000331003b94c200540ecc00816657801140700377b0854')
 
     def test_PeerDirectoryContentsReply_Request_serialize(self):
         message = self.MESSAGE

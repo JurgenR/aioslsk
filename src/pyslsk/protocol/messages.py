@@ -137,7 +137,7 @@ class Login(ServerMessage):
         username: str = field(metadata={'type': string})
         password: str = field(metadata={'type': string})
         client_version: int = field(metadata={'type': uint32})
-        password_md5: str = field(metadata={'type': string})
+        md5hash: str = field(metadata={'type': string})
         minor_version: int = field(metadata={'type': uint32})
 
     @dataclass(order=True)
@@ -388,7 +388,7 @@ class SharedFoldersFiles(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
-        MESSAGE_ID: ClassVar[uint32] = uint32(0x20)
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x23)
         directory_count: int = field(metadata={'type': uint32})
         file_count: int = field(metadata={'type': uint32})
 

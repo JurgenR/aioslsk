@@ -138,7 +138,7 @@ class ServerManager:
                 username=username,
                 password=password,
                 client_version=157,
-                password_md5=calc_md5(password),
+                md5hash=calc_md5(username + password),
                 minor_version=100
             ).serialize()
         )

@@ -280,21 +280,22 @@ class PeerManager:
 
     @on_message(DistributedBranchRoot.Request)
     def _on_distributed_branch_root(self, message: DistributedBranchRoot.Request, connection: PeerConnection):
-        logger.info(f"branch root {message.root!r}: {connection!r}")
+        logger.info(f"branch root {message.username!r}: {connection!r}")
 
         peer = self.get_distributed_peer(connection.username, connection)
-        peer.branch_root = message.root
+        peer.branch_root = message.username
 
         if peer != self._state.parent:
             self._check_if_new_parent(peer)
         else:
             self.send_messages_to_children(
-                DistributedBranchRoot.Request(message.root).serialize())
+                DistributedBranchRoot.Request(message.username).serialize())
 
     @on_message(DistributedServerSearchRequest.Request)
     def _on_distributed_server_search_request(self, message: DistributedServerSearchRequest.Request, connection: PeerConnection):
-        if message.distributed_code != DistributedSearchRequest.MESSAGE_ID:
+        if message.distributed_code != DistributedSearchRequest.Request.MESSAGE_ID:
             logger.warning(f"no handling for server search request with code {message.distributed_code}")
+            return
 
         dmessage = DistributedSearchRequest.Request(
             unknown=0x31,

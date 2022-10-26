@@ -13,7 +13,7 @@ from threading import RLock
 from typing import Callable, Dict, List, Set, Tuple
 import uuid
 
-from .protocol.primitives import DirectoryData, FileData
+from .protocol.primitives import Attribute, DirectoryData, FileData
 from .settings import Settings
 
 logger = logging.getLogger()
@@ -506,7 +506,7 @@ class SharesManager:
         if not shared_item.attributes:
             attributes = []
         else:
-            attributes = shared_item.attributes
+            attributes = [Attribute(*attr) for attr in shared_item.attributes]
 
         return FileData(
             unknown=1,
