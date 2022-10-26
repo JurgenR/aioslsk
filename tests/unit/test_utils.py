@@ -1,5 +1,10 @@
 from pyslsk.protocol.primitives import Attribute
-from pyslsk.utils import get_duration, ticket_generator
+from pyslsk.utils import (
+    get_attribute_string,
+    get_duration,
+    ticket_generator,
+    try_decoding,
+)
 
 import pytest
 
@@ -28,3 +33,27 @@ class TestUtils:
         ticket_gen = ticket_generator(initial=0xFFFFFFFE)
         assert next(ticket_gen) == 0xFFFFFFFF
         assert next(ticket_gen) == 0xFFFFFFFE
+
+    def test_whenGetAttributeString_shouldReturnString(self):
+        attrs = [
+            Attribute(0, 320),
+            Attribute(2, 1),
+            Attribute(4, 5000),
+            Attribute(5, 4)
+        ]
+        assert get_attribute_string(attrs) == "320kbps VBR 5.0kHz 4ch"
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("basic", "basic"),
+            ("test \u4E20".encode('utf8'), "test \u4E20"),
+            ("test \xF1".encode('cp1252'), "test \xF1")
+        ]
+    )
+    def test_whenTryDecoding_shouldDecode(self, value: bytes, expected: str):
+        assert try_decoding(value) == expected
+
+    def test_whenTryDecoding_unknownEncoding_shouldRaise(self):
+        with pytest.raises(Exception):
+            try_decoding(bytes([0x8f]))

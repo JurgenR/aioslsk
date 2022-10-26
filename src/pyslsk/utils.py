@@ -22,26 +22,26 @@ def try_decoding(value: bytes):
 
 def get_duration(attributes: List[Attribute]):
     duration = ''
-    for attribute in attributes:
-        if attribute.key == 1:
-            minutes, seconds = divmod(attribute.value, 60)
+    for attr in attributes:
+        if attr.key == 1:
+            minutes, seconds = divmod(attr.value, 60)
             hours, minutes = divmod(minutes, 60)
             duration = f"{hours}h {minutes}m {seconds}s"
             break
     return duration
 
 
-def get_attribute_string(attributes):
+def get_attribute_string(attributes: List[Attribute]):
     attr_str = []
-    for attr, value in attributes:
-        if attr == 0:
-            attr_str.append(f"{value}kbps")
-        elif attr == 2:
-            attr_str.append('CBR' if value == 0 else 'VBR')
-        elif attr == 4:
-            attr_str.append(f"{(value / 1000):.1f}kHz")
-        elif attr == 5:
-            attr_str.append(f"{value}ch")
+    for attr in attributes:
+        if attr.key == 0:
+            attr_str.append(f"{attr.value}kbps")
+        elif attr.key == 2:
+            attr_str.append('CBR' if attr.value == 0 else 'VBR')
+        elif attr.key == 4:
+            attr_str.append(f"{(attr.value / 1000):.1f}kHz")
+        elif attr.key == 5:
+            attr_str.append(f"{attr.value}ch")
 
     return ' '.join(attr_str)
 
