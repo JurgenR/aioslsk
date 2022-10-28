@@ -1,11 +1,11 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import inspect
 import logging
 from typing import Callable, Dict, List, Type, TYPE_CHECKING
 
 from .model import ChatMessage, Room, RoomMessage, User
-from .protocol.primitives import DirectoryData, MessageDataclass
+from .protocol.primitives import DirectoryData, FileData, MessageDataclass
 from .search import SearchQuery, SearchResult
 
 if TYPE_CHECKING:
@@ -189,6 +189,14 @@ class UserInfoReplyEvent(Event):
 @dataclass(frozen=True)
 class UserSharesReplyEvent(Event):
     user: User
+    directories: List[DirectoryData]
+    locked_directories: List[DirectoryData] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class UserDirectoryEvent(Event):
+    user: User
+    directory: str
     directories: List[DirectoryData]
 
 

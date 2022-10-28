@@ -250,7 +250,6 @@ class DataConnection(Connection):
         """
         for idx, message in enumerate(self._messages):
             try:
-                logger.debug(f"send {self.hostname}:{self.port} : message {message.message.hex()}")
                 self.interact()
                 self.write_message(message.message)
 
@@ -272,6 +271,7 @@ class DataConnection(Connection):
         return True
 
     def write_message(self, message: bytes):
+        logger.debug(f"send {self.hostname}:{self.port} : message {message.hex()}")
         self.fileobj.sendall(message)
 
     def notify_message_received(self, message):

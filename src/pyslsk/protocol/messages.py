@@ -256,12 +256,12 @@ class ChatJoinRoom(ServerMessage):
         room: str = field(metadata={'type': string})
         users: List[str] = field(metadata={'type': array, 'subtype': string})
         users_status: List[int] = field(metadata={'type': array, 'subtype': uint32})
-        users_slots_free: List[int] = field(metadata={'type': array, 'subtype': uint32})
         users_data: List[UserData] = field(metadata={'type': array, 'subtype': UserData})
+        users_slots_free: List[int] = field(metadata={'type': array, 'subtype': uint32})
         users_countries: List[str] = field(metadata={'type': array, 'subtype': string})
-        owner: str = field(metadata={'type': string, 'optional': True})
+        owner: str = field(default=None, metadata={'type': string, 'optional': True})
         operators: List[str] = field(
-            default_factory=list,
+            default=None,
             metadata={
                 'type': array,
                 'subtype': string,
@@ -965,6 +965,14 @@ class PeerSharesRequest(PeerMessage):
     @dataclass
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x04)
+        # Museek docs: PeerSharesReply has an unknown uint32. The assumption is
+        # that this is actually a ticket number that was supposed to be passed
+        # with this message. The Windows clients appear to accept this ticket
+        # number: they will send a reply if a ticket is set but only if this
+        # ticket is a uint32, sending the ticket as a uint64 will be rejected.
+        # Sending this ticket has no impact on the ticket in PeerSharesReply: it
+        # will always be 0
+        ticket: int = field(default=None, metadata={'type': uint32, 'optional': True})
 
 
 class PeerSharesReply(PeerMessage):
@@ -975,8 +983,9 @@ class PeerSharesReply(PeerMessage):
         directories: List[DirectoryData] = field(
             metadata={'type': array, 'subtype': DirectoryData}
         )
-        # Unknown uint32 that appears to always be 0, possibly this was another
-        # list?
+        # Unknown field that always seems to be 0, possibilities:
+        # * This was another list, but it always empty (not tested)
+        # * This is a ticket: See explanation of ticket in PeerSharesRequest
         unknown: int = field(default=0, metadata={'type': uint32})
         locked_directories: List[DirectoryData] = field(
             default=None,
@@ -1041,20 +1050,29 @@ class PeerUserInfoReply(PeerMessage):
 
 
 class PeerDirectoryContentsRequest(PeerMessage):
+    """Request the contents of a directory"""
 
     @dataclass
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x24)
-        directories: List[str] = field(metadata={'type': array, 'subtype': string})
+        ticket: int = field(metadata={'type': uint32})
+        directory: str = field(metadata={'type': string})
 
 
 class PeerDirectoryContentsReply(PeerMessage):
+    """Reply to a directory contents request. Although the returned directories
+    is a list it will only contain one element, the intention was probably to
+    let this method recurse down but doesn't seem like they ever did.
+
+    :todo: verify was happens if we pass multiple directories
+    """
 
     @dataclass
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x25)
+        ticket: int = field(metadata={'type': uint32})
+        directory: str = field(metadata={'type': string})
         directories: List[DirectoryData] = field(metadata={'type': array, 'subtype': DirectoryData})
-        # TODO: Investigate locked results (see PeerSharesReply)
 
         def serialize(self, compress: bool = True) -> bytes:
             return super().serialize(compress)

@@ -2155,21 +2155,25 @@ class TestPeerDirectoryContentsRequest:
 
     def test_PeerDirectoryContentsRequest_Request_serialize(self):
         message = PeerDirectoryContentsRequest.Request(
-            directories=['C:\\dir0', 'C\\dir1']
+            ticket=1234,
+            directory='C:\\dir0'
         )
-        data = bytes.fromhex('1d000000240000000200000007000000433a5c6469723006000000435c64697231')
+        data = bytes.fromhex('1300000024000000d204000007000000433a5c64697230')
         assert message.serialize() == data
 
     def test_PeerDirectoryContentsRequest_Request_deserialize(self):
         message = PeerDirectoryContentsRequest.Request(
-            directories=['C:\\dir0', 'C\\dir1']
+            ticket=1234,
+            directory='C:\\dir0'
         )
-        data = bytes.fromhex('1d000000240000000200000007000000433a5c6469723006000000435c64697231')
+        data = bytes.fromhex('1300000024000000d204000007000000433a5c64697230')
         assert PeerDirectoryContentsRequest.Request.deserialize(data) == message
 
 
 class TestPeerDirectoryContentsReply:
     MESSAGE = PeerDirectoryContentsReply.Request(
+        ticket=1234,
+        directory='C:\\dir0',
         directories=[
             DirectoryData(
                 name='C:\\dir0',
@@ -2188,7 +2192,7 @@ class TestPeerDirectoryContentsReply:
             )
         ]
     )
-    DATA = bytes.fromhex('3f00000025000000789c6364606060076267ab9894cc220346209391134814e7e7a51be8e516183b38f1338000331003b94c200540ecc00816657801140700377b0854')
+    DATA = bytes.fromhex('4100000025000000789cbbc4c2c0c0cec0c0e06c1593925964c0c880c165e40412c5f979e9067ab905c60e4efc0c20c00cc4402e134801103b308245195e00c501231c0b79')
 
     def test_PeerDirectoryContentsReply_Request_serialize(self):
         message = self.MESSAGE

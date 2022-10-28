@@ -28,7 +28,7 @@ CLIENT_VERSION = 157
 DEFAULT_SETTINGS_NAME = 'pyslsk'
 
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class SoulSeek(threading.Thread):
@@ -262,3 +262,9 @@ class SoulSeek(threading.Thread):
             self.peer_manager.get_user_shares(user.name)
         else:
             self.peer_manager.get_user_shares(user)
+
+    def get_user_directory(self, user: Union[str, User], directory: List[str]):
+        if isinstance(user, User):
+            self.peer_manager.get_user_directory(user.name, directory)
+        else:
+            self.peer_manager.get_user_directory(user, directory)

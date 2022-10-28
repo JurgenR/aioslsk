@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import logging
 from typing import List, Union
 
@@ -15,6 +16,7 @@ from .events import (
     ConnectionStateChangedEvent,
     PeerInitializedEvent,
     MessageReceivedEvent,
+    UserDirectoryEvent,
     UserInfoReplyEvent,
     UserSharesReplyEvent,
     SearchResultEvent,
@@ -29,6 +31,8 @@ from .protocol.messages import (
     DistributedBranchRoot,
     DistributedSearchRequest,
     DistributedServerSearchRequest,
+    PeerDirectoryContentsRequest,
+    PeerDirectoryContentsReply,
     PeerSearchReply,
     PeerSharesRequest,
     PeerSharesReply,
@@ -41,9 +45,15 @@ from .search import ReceivedSearch, SearchResult
 from .settings import Settings
 from .state import DistributedPeer, State
 from .transfer import TransferManager
+from .utils import ticket_generator
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class PeerRequest:
+    ticket: int
 
 
 class PeerManager:
@@ -60,6 +70,8 @@ class PeerManager:
         self.transfer_manager: TransferManager = transfer_manager
         self.network: Network = network
 
+        self._ticket_generator = ticket_generator()
+
         self._distributed_peers: List[DistributedPeer] = []
 
         self._internal_event_bus.register(
@@ -73,17 +85,29 @@ class PeerManager:
 
     # External methods
     def get_user_info(self, username: str):
-        self.network.send_peer_messages(username, PeerUserInfoRequest.Request().serialize())
+        self.network.send_peer_messages(
+            username, PeerUserInfoRequest.Request().serialize())
 
     def get_user_shares(self, username: str):
-        self.network.send_peer_messages(username, PeerSharesRequest.Request().serialize())
+        self.network.send_peer_messages(
+            username, PeerSharesRequest.Request().serialize())
+
+    def get_user_directory(self, username: str, directory: str) -> int:
+        ticket = next(self._ticket_generator)
+        self.network.send_peer_messages(
+            username, PeerDirectoryContentsRequest.Request(
+                ticket=ticket,
+                directory=directory
+            ).serialize()
+        )
+        return ticket
 
     def get_distributed_peer(self, username: str, connection: PeerConnection) -> DistributedPeer:
         for peer in self._distributed_peers:
             if peer.username == username and peer.connection == connection:
                 return peer
 
-    def set_parent(self, peer: DistributedPeer):
+    def _set_parent(self, peer: DistributedPeer):
         logger.info(f"set parent : {peer!r}")
 
         self._state.parent = peer
@@ -123,11 +147,11 @@ class PeerManager:
         # Explicit None checks because we can get 0 as branch level
         if peer.branch_level is not None and peer.branch_root is not None:
             if self._state.parent is None:
-                self.set_parent(peer)
+                self._set_parent(peer)
             else:
                 peer.connection.set_state(ConnectionState.SHOULD_CLOSE)
 
-    def unset_parent(self):
+    def _unset_parent(self):
         logger.debug(f"unset parent {self._state.parent!r}")
 
         self._state.parent = None
@@ -146,13 +170,15 @@ class PeerManager:
             DistributedBranchRoot.Request(username).serialize()
         )
 
-    def add_potential_child(self, peer: DistributedPeer):
+    def _check_if_new_child(self, peer: DistributedPeer):
         """Potentially adds a distributed connection to our list of children.
         """
-        if peer.username in self._state.potential_parents:
+        if peer.name in self._state.potential_parents:
             return
 
-        # Make child
+        self._add_child(peer)
+
+    def _add_child(self, peer: DistributedPeer):
         logger.debug(f"adding distributed connection as child : {peer!r}")
         self._state.children.append(peer)
         # Let the child know where it is in the distributed tree
@@ -168,14 +194,45 @@ class PeerManager:
     @on_message(PeerSharesRequest.Request)
     def _on_peer_shares_request(self, message: PeerSharesRequest.Request, connection: PeerConnection):
         reply = PeerSharesReply.Request(self.shares_manager.create_shares_reply()).serialize()
-        connection.queue_messages(reply)
+        self.network.send_peer_messages(
+            connection.username,
+            reply,
+            connection=connection
+        )
 
     @on_message(PeerSharesReply.Request)
     def _on_peer_shares_reply(self, message: PeerSharesReply.Request, connection: PeerConnection):
         logger.info(f"PeerSharesReply : from username {connection.username}, got {len(message.directories)} directories")
 
         user = self._state.get_or_create_user(connection.username)
-        self._event_bus.emit(UserSharesReplyEvent(user, message.directories))
+        if message.locked_directories:
+            reply_evt = UserSharesReplyEvent(
+                user, message.directories, message.locked_directories)
+        else:
+            reply_evt = UserSharesReplyEvent(
+                user, message.directories, [])
+        self._event_bus.emit(reply_evt)
+
+    @on_message(PeerDirectoryContentsRequest.Request)
+    def _on_peer_directory_contents_req(self, message: PeerDirectoryContentsRequest.Request, connection: PeerConnection):
+        directories = self.shares_manager.create_directory_reply(message.directory)
+        reply = PeerDirectoryContentsReply.Request(
+            ticket=message.ticket,
+            directory=message.directory,
+            directories=directories
+        ).serialize()
+        self.network.send_peer_messages(
+            connection.username,
+            reply,
+            connection=connection
+        )
+
+    @on_message(PeerDirectoryContentsReply.Request)
+    def _on_peer_directory_contents_reply(self, message: PeerDirectoryContentsReply.Request, connection: PeerConnection):
+        user = self._state.get_or_create_user(connection.username)
+        self._event_bus.emit(
+            UserDirectoryEvent(user, message.directory, message.directories)
+        )
 
     @on_message(PeerSearchReply.Request)
     def _on_peer_search_reply(self, message: PeerSearchReply.Request, connection: PeerConnection):
@@ -211,20 +268,24 @@ class PeerManager:
     @on_message(PeerUserInfoRequest.Request)
     def _on_peer_user_info_request(self, message: PeerUserInfoRequest.Request, connection: PeerConnection):
         logger.info("PeerUserInfoRequest")
-        connection.queue_messages(
+        self.network.send_peer_messages(
+            connection.username,
             PeerUserInfoReply.Request(
                 "No description",
                 self.transfer_manager.upload_slots,
                 self.transfer_manager.get_free_upload_slots(),
                 self.transfer_manager.has_slots_free()
-            ).serialize()
+            ).serialize(),
+            connection=connection
         )
 
     @on_message(PeerUploadQueueNotification.Request)
     def _on_peer_upload_queue_notification(self, message: PeerUploadQueueNotification.Request, connection: PeerConnection):
         logger.info("PeerUploadQueueNotification")
-        connection.queue_messages(
-            PeerUploadQueueNotification.Request().serialize()
+        self.network.send_peer_messages(
+            connection.username,
+            PeerUploadQueueNotification.Request().serialize(),
+            connection=connection
         )
 
     # Distributed messages
@@ -309,7 +370,7 @@ class PeerManager:
         if event.connection.connection_type == PeerConnectionType.DISTRIBUTED:
             peer = DistributedPeer(event.connection.username, event.connection)
             self._distributed_peers.append(peer)
-            self.add_potential_child(peer)
+            self._check_if_new_child(peer)
 
     def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message
@@ -326,7 +387,7 @@ class PeerManager:
                 # Check if it was the parent that was disconnected
                 parent = self._state.parent
                 if parent and event.connection == parent.connection:
-                    self.unset_parent()
+                    self._unset_parent()
                     return
 
                 # Check if it was a child
@@ -346,4 +407,8 @@ class PeerManager:
 
     def send_messages_to_children(self, *messages: Union[ProtocolMessage, bytes]):
         for child in self._state.children:
-            child.connection.queue_messages(*messages)
+            self.network.send_peer_messages(
+                child.username,
+                *messages,
+                connection=child.connection
+            )

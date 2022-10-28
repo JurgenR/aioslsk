@@ -440,7 +440,7 @@ class SharesManager:
         for term in clean_terms[1:]:
             term_items = self.term_map[clean_term]
 
-            found_items = found_items.intersection(term_items)
+            found_items &= term_items
 
             if not found_items:
                 return []
@@ -491,6 +491,29 @@ class SharesManager:
             )
 
         return shares_reply
+
+    def create_directory_reply(self, directory: str) -> List[DirectoryData]:
+        response_dirs = {}
+        for item in self.shared_items:
+            item_dir = item.get_remote_directory_path()
+            if item_dir != directory:
+                continue
+
+            if directory in response_dirs:
+                response_dirs[directory].append(item)
+            else:
+                response_dirs[directory] = [item, ]
+
+        reply = []
+        for directory, files in response_dirs.items():
+            reply.append(
+                DirectoryData(
+                    name=directory,
+                    files=self.convert_items_to_file_data(files, use_full_path=False)
+                )
+            )
+
+        return reply
 
     def convert_item_to_file_data(
             self, shared_item: SharedItem, use_full_path=True) -> FileData:

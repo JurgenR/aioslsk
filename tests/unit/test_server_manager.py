@@ -1,8 +1,5 @@
-import logging
-
 from pyslsk.events import (
     EventBus,
-    InternalEventBus,
     RoomTickersEvent,
     RoomTickerAddedEvent,
     RoomTickerRemovedEvent,
@@ -11,7 +8,6 @@ from pyslsk.protocol.messages import (
     ChatRoomTickerAdded,
     ChatRoomTickers,
     ChatRoomTickerRemoved,
-    ChatRoomTickerSet,
 )
 from pyslsk.protocol.primitives import RoomTicker
 from pyslsk.settings import Settings

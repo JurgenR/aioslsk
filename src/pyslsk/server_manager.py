@@ -307,8 +307,9 @@ class ServerManager:
 
             room.add_user(user)
 
-        room.owner = message.owner
-        for operator in message.operators:
+        if message.owner:
+            room.owner = message.owner
+        for operator in message.operators or []:
             room.add_operator(self._state.get_or_create_user(operator))
 
         self._event_bus.emit(RoomJoinedEvent(room=room))

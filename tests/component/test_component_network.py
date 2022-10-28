@@ -89,7 +89,7 @@ class _BaseTestComponentNetwork:
         assert connection._messages[0].message[4] == init_message_type.Request.MESSAGE_ID
 
         # Mock succesful sending of message
-        connection.notify_message_sent(connection._messages[0])
+        network.on_message_sent(connection._messages[0], connection)
 
         # Assert request was completed
         assert len(network._connection_requests) == 0
