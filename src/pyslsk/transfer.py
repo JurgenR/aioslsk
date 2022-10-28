@@ -9,6 +9,7 @@ import os
 import time
 import shelve
 from typing import Dict, List, Tuple, TYPE_CHECKING
+from xmlrpc.client import boolean
 
 from .configuration import Configuration
 from .connection import (
@@ -33,9 +34,9 @@ from .events import (
     TransferDataSentEvent,
     TransferDataReceivedEvent,
 )
-from .shares import SharesManager
 from .protocol.primitives import uint32, uint64
 from .protocol.messages import (
+    AddUser,
     GetUserStatus,
     PeerPlaceInQueueReply,
     PeerPlaceInQueueRequest,
@@ -48,6 +49,7 @@ from .protocol.messages import (
 )
 from .model import UserStatus
 from .settings import Settings
+from .shares import SharesManager
 from .state import State
 from .utils import ticket_generator
 
@@ -120,8 +122,7 @@ class TransferStorage:
                     # Needs to be forced here without using set_state. set_state
                     # explicitly denies a transfer going into queued when it is
                     # already processing
-                    transfer.state = TransferState.QUEUED
-                    transfer.reset_times()
+                    transfer.set_state(TransferState.QUEUED, force=True)
 
                 transfers.append(transfer)
 
@@ -231,13 +232,24 @@ class Transfer:
         self.upload_request_attempts += 1
         self.last_upload_request_attempt = time.monotonic()
 
-    def set_state(self, state: TransferState):
-        # Avoid triggering a state changed if it is already in that state
+    def set_state(self, state: TransferState, force: bool = False):
+        """Sets the current state for the transfer. This will do nothing in case
+        the transfer is already in that state
+
+        :param state: the new state
+        :param force: only used for the QUEUED state, normally we don't allow
+            to queue a transfer in case the transfer is processing but in some
+            cases it needs to be forced: during loading of transfers from
+            storage for transfers who were processing when they were stored or
+            if initialization failed (default: False)
+        """
         if state == self.state:
             return
 
         if state == TransferState.QUEUED:
-            if self.is_processing():
+            if force:
+                self.reset_times()
+            elif self.is_processing():
                 # Not allowed to queue processing transfers
                 return
 
@@ -470,8 +482,10 @@ class TransferManager:
         return self._settings.get('sharing.limits.upload_slots')
 
     # Methods for state changes on the transfers
-    def _set_transfer_state(self, transfer: Transfer, state: TransferState, fail_reason: str = None):
-        transfer.set_state(state)
+    def _set_transfer_state(
+            self, transfer: Transfer, state: TransferState,
+            fail_reason: str = None, force: bool = False):
+        transfer.set_state(state, force=force)
         transfer.fail_reason = fail_reason
         self.manage_transfers()
 
@@ -504,7 +518,7 @@ class TransferManager:
         self._set_transfer_state(transfer, TransferState.DOWNLOADING)
         self._network.download_rate_limiter.transfer_amount += 1
 
-    def queue(self, transfer: Transfer):
+    def queue(self, transfer: Transfer, force: bool = False):
         logger.debug(f"queueing transfer : {transfer!r}")
         self._set_transfer_state(transfer, TransferState.QUEUED)
 
@@ -643,6 +657,13 @@ class TransferManager:
         queued_downloads = []
         queued_uploads = []
         for transfer in self._transfers:
+            user = self._state.get_or_create_user(transfer.username)
+            if user.status == UserStatus.OFFLINE:
+                continue
+            elif user.status == UserStatus.UNKNOWN:
+                self._network.send_server_messages(
+                    AddUser.Request(transfer.username)
+                )
 
             if transfer.direction == TransferDirection.UPLOAD:
                 if transfer.state == TransferState.QUEUED:
@@ -654,7 +675,33 @@ class TransferManager:
                 if transfer.state in (TransferState.QUEUED, TransferState.INCOMPLETE):
                     queued_downloads.append(transfer)
 
+        queued_uploads = self._rank_queued_uploads(queued_uploads)
+
         return queued_downloads, queued_uploads
+
+    def _rank_queued_uploads(self, uploads: List[Transfer]):
+        """Ranks the queued uploads based on certain parameters"""
+        friends = self._settings.get('users.friends')
+
+        ranking = []
+        for upload in uploads:
+            user = self._state.get_or_create_user(upload.username)
+
+            rank = 0
+            # Rank UNKNOWN status lower, OFFLINE should be blocked
+            if user.status in (UserStatus.ONLINE, UserStatus.AWAY):
+                rank += 1
+
+            if upload.username in friends:
+                rank += 5
+
+            if user.privileged:
+                rank += 10
+
+            ranking.append((rank, upload))
+
+        ranking.sort(key=lambda rank, _: rank)
+        return list(reversed([upload for _, upload in uploads]))
 
     def _request_place_in_queue(self, transfer: Transfer):
         if transfer.state != TransferState.QUEUED:
@@ -741,7 +788,7 @@ class TransferManager:
     def _on_upload_request_failed(self, transfer: Transfer):
         transfer.increase_upload_request_attempt()
 
-        self.queue(transfer)
+        self.queue(transfer, force=True)
 
     def _on_upload_request_success(self, transfer: Transfer):
         pass
@@ -882,11 +929,7 @@ class TransferManager:
 
     @on_message(GetUserStatus.Response)
     def _on_get_user_status(self, message: GetUserStatus.Response, connection):
-        status = UserStatus(message.status)
-        self._state.get_or_create_user(message.username)
-        if status in (UserStatus.ONLINE, UserStatus.AWAY, ):
-            # Do something with the users queued uploads
-            pass
+        self.manage_transfers()
 
     @on_message(PeerTransferQueue.Request)
     def _on_peer_transfer_queue(self, message: PeerTransferQueue.Request, connection: PeerConnection):

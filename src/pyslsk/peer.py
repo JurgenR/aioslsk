@@ -184,6 +184,35 @@ class PeerManager:
             connection=peer.connection
         )
 
+    def _query_shares_and_reply(self, ticket: int, username: str, query: str):
+        """Performs a query on the shares manager and reports the results"""
+        results = self.shares_manager.query(query)
+
+        self._state.received_searches.append(
+            ReceivedSearch(
+                username=username,
+                query=query,
+                matched_files=len(results)
+            )
+        )
+
+        if len(results) == 0:
+            return
+
+        logger.info(f"got {len(results)} results for query {query} (username={username})")
+
+        self.network.send_peer_messages(
+            username,
+            PeerSearchReply.Request(
+                username=self._settings.get('credentials.username'),
+                ticket=ticket,
+                results=self.shares_manager.convert_items_to_file_data(results, use_full_path=True),
+                has_slots_free=self.transfer_manager.has_slots_free(),
+                avg_speed=int(self.transfer_manager.get_average_upload_speed()),
+                queue_size=self.transfer_manager.get_queue_size()
+            )
+        )
+
     # Peer messages
 
     @on_message(PeerSharesRequest.Request)
@@ -285,37 +314,6 @@ class PeerManager:
 
     # Distributed messages
 
-    @on_message(DistributedSearchRequest.Request)
-    def _on_distributed_search_request(self, message: DistributedSearchRequest.Request, connection: PeerConnection):
-        results = self.shares_manager.query(message.query)
-
-        self._state.received_searches.append(
-            ReceivedSearch(
-                username=message.username,
-                query=message.query,
-                matched_files=len(results)
-            )
-        )
-
-        if len(results) == 0:
-            return
-
-        logger.info(f"got {len(results)} results for query {message.query} (username={message.username})")
-
-        self.network.send_peer_messages(
-            message.username,
-            PeerSearchReply.Request(
-                username=self._settings.get('credentials.username'),
-                ticket=message.ticket,
-                results=self.shares_manager.convert_items_to_file_data(results, use_full_path=True),
-                has_slots_free=self.transfer_manager.has_slots_free(),
-                avg_speed=int(self.transfer_manager.get_average_upload_speed()),
-                queue_size=self.transfer_manager.get_queue_size()
-            )
-        )
-
-        self.send_messages_to_children(message)
-
     @on_message(DistributedBranchLevel.Request)
     def _on_distributed_branch_level(self, message: DistributedBranchLevel.Request, connection: PeerConnection):
         logger.info(f"branch level {message.level!r}: {connection!r}")
@@ -347,11 +345,19 @@ class PeerManager:
             self.send_messages_to_children(
                 DistributedBranchRoot.Request(message.username))
 
+    @on_message(DistributedSearchRequest.Request)
+    def _on_distributed_search_request(self, message: DistributedSearchRequest.Request, connection: PeerConnection):
+        self._query_shares_and_reply(message.ticket, message.username, message.query)
+
+        self.send_messages_to_children(message)
+
     @on_message(DistributedServerSearchRequest.Request)
     def _on_distributed_server_search_request(self, message: DistributedServerSearchRequest.Request, connection: PeerConnection):
         if message.distributed_code != DistributedSearchRequest.Request.MESSAGE_ID:
             logger.warning(f"no handling for server search request with code {message.distributed_code}")
             return
+
+        self._query_shares_and_reply(message.ticket, message.username, message.query)
 
         dmessage = DistributedSearchRequest.Request(
             unknown=0x31,

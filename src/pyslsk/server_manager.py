@@ -138,7 +138,7 @@ class ServerManager:
             Login.Request(
                 username=username,
                 password=password,
-                client_version=157,
+                client_version=version,
                 md5hash=calc_md5(username + password),
                 minor_version=100
             )
@@ -153,6 +153,11 @@ class ServerManager:
         self.network.send_server_messages(
             RemoveUser.Request(username)
         )
+        # Reset user status, this is needed for the transfer manager who will
+        # skip attempting to transfer for offline user. But if we don't know if
+        # a user is online we will never know
+        user = self._state.get_or_create_user(username)
+        user.status = UserStatus.UNKNOWN
 
     def get_user_stats(self, username: str):
         self.network.send_server_messages(
