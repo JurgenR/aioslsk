@@ -81,11 +81,11 @@ class PeerManager:
     # External methods
     def get_user_info(self, username: str):
         self.network.send_peer_messages(
-            username, PeerUserInfoRequest.Request().serialize())
+            username, PeerUserInfoRequest.Request())
 
     def get_user_shares(self, username: str):
         self.network.send_peer_messages(
-            username, PeerSharesRequest.Request().serialize())
+            username, PeerSharesRequest.Request())
 
     def get_user_directory(self, username: str, directory: str) -> int:
         ticket = next(self._ticket_generator)
@@ -93,7 +93,7 @@ class PeerManager:
             username, PeerDirectoryContentsRequest.Request(
                 ticket=ticket,
                 directory=directory
-            ).serialize()
+            )
         )
         return ticket
 
@@ -111,10 +111,10 @@ class PeerManager:
         # The original Windows client sends out the child depth (=0) and the
         # ParentIP
         self.network.send_server_messages(
-            BranchLevel.Request(peer.branch_level + 1).serialize(),
-            BranchRoot.Request(peer.branch_root).serialize(),
-            ToggleParentSearch.Request(False).serialize(),
-            AcceptChildren.Request(True).serialize()
+            BranchLevel.Request(peer.branch_level + 1),
+            BranchRoot.Request(peer.branch_root),
+            ToggleParentSearch.Request(False),
+            AcceptChildren.Request(True)
         )
 
         # Remove all other distributed connections except for children and the
@@ -130,8 +130,8 @@ class PeerManager:
 
         # Notify children of new parent
         self.send_messages_to_children(
-            DistributedBranchLevel.Request(peer.branch_level + 1).serialize(),
-            DistributedBranchRoot.Request(peer.branch_root).serialize(),
+            DistributedBranchLevel.Request(peer.branch_level + 1),
+            DistributedBranchRoot.Request(peer.branch_root),
         )
 
     def _check_if_new_parent(self, peer: DistributedPeer):
@@ -153,22 +153,22 @@ class PeerManager:
 
         username = self._settings.get('credentials.username')
         self.network.send_server_messages(
-            BranchLevel.Request(0).serialize(),
-            BranchRoot.Request(username).serialize(),
-            ToggleParentSearch.Request(True).serialize()
+            BranchLevel.Request(0),
+            BranchRoot.Request(username),
+            ToggleParentSearch.Request(True)
         )
 
         # TODO: What happens to the children when we lose our parent is still
         # unclear
         self.send_messages_to_children(
-            DistributedBranchLevel.Request(0).serialize(),
-            DistributedBranchRoot.Request(username).serialize()
+            DistributedBranchLevel.Request(0),
+            DistributedBranchRoot.Request(username)
         )
 
     def _check_if_new_child(self, peer: DistributedPeer):
         """Potentially adds a distributed connection to our list of children.
         """
-        if peer.name in self._state.potential_parents:
+        if peer.username in self._state.potential_parents:
             return
 
         self._add_child(peer)
@@ -179,8 +179,8 @@ class PeerManager:
         # Let the child know where it is in the distributed tree
         self.network.send_peer_messages(
             peer.username,
-            DistributedBranchLevel.Request(self._state.parent.branch_level + 1).serialize(),
-            DistributedBranchRoot.Request(self._state.parent.branch_root).serialize(),
+            DistributedBranchLevel.Request(self._state.parent.branch_level + 1),
+            DistributedBranchRoot.Request(self._state.parent.branch_root),
             connection=peer.connection
         )
 
@@ -188,7 +188,7 @@ class PeerManager:
 
     @on_message(PeerSharesRequest.Request)
     def _on_peer_shares_request(self, message: PeerSharesRequest.Request, connection: PeerConnection):
-        reply = PeerSharesReply.Request(self.shares_manager.create_shares_reply()).serialize()
+        reply = PeerSharesReply.Request(self.shares_manager.create_shares_reply())
         self.network.send_peer_messages(
             connection.username,
             reply,
@@ -215,7 +215,7 @@ class PeerManager:
             ticket=message.ticket,
             directory=message.directory,
             directories=directories
-        ).serialize()
+        )
         self.network.send_peer_messages(
             connection.username,
             reply,
@@ -270,7 +270,7 @@ class PeerManager:
                 self.transfer_manager.upload_slots,
                 self.transfer_manager.get_free_upload_slots(),
                 self.transfer_manager.has_slots_free()
-            ).serialize(),
+            ),
             connection=connection
         )
 
@@ -279,7 +279,7 @@ class PeerManager:
         logger.info("PeerUploadQueueNotification")
         self.network.send_peer_messages(
             connection.username,
-            PeerUploadQueueNotification.Request().serialize(),
+            PeerUploadQueueNotification.Request(),
             connection=connection
         )
 
@@ -311,10 +311,10 @@ class PeerManager:
                 has_slots_free=self.transfer_manager.has_slots_free(),
                 avg_speed=int(self.transfer_manager.get_average_upload_speed()),
                 queue_size=self.transfer_manager.get_queue_size()
-            ).serialize()
+            )
         )
 
-        self.send_messages_to_children(message.serialize())
+        self.send_messages_to_children(message)
 
     @on_message(DistributedBranchLevel.Request)
     def _on_distributed_branch_level(self, message: DistributedBranchLevel.Request, connection: PeerConnection):
@@ -332,7 +332,7 @@ class PeerManager:
             self._check_if_new_parent(peer)
         else:
             self.send_messages_to_children(
-                DistributedBranchLevel.Request(message.level + 1).serialize())
+                DistributedBranchLevel.Request(message.level + 1))
 
     @on_message(DistributedBranchRoot.Request)
     def _on_distributed_branch_root(self, message: DistributedBranchRoot.Request, connection: PeerConnection):
@@ -345,7 +345,7 @@ class PeerManager:
             self._check_if_new_parent(peer)
         else:
             self.send_messages_to_children(
-                DistributedBranchRoot.Request(message.username).serialize())
+                DistributedBranchRoot.Request(message.username))
 
     @on_message(DistributedServerSearchRequest.Request)
     def _on_distributed_server_search_request(self, message: DistributedServerSearchRequest.Request, connection: PeerConnection):
@@ -358,7 +358,7 @@ class PeerManager:
             username=message.username,
             ticket=message.ticket,
             query=message.query
-        ).serialize()
+        )
         self.send_messages_to_children(dmessage)
 
     def _on_peer_connection_initialized(self, event: PeerInitializedEvent):

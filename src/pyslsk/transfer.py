@@ -442,8 +442,6 @@ class TransferManager:
         self._transfer_requests: Dict[int, TransferRequest] = {}
         self._transfers: List[Transfer] = []
 
-        self._last_speed_log_time: float = 0.0
-
         self.MESSAGE_MAP = build_message_map(self)
 
         self._internal_event_bus.register(ConnectionStateChangedEvent, self._on_connection_state_changed)
@@ -641,6 +639,7 @@ class TransferManager:
             self._initialize_upload(upload)
 
     def _get_queued_transfers(self) -> Tuple[List[Transfer], List[Transfer]]:
+        """Returns all transfers eligable for being initialized"""
         queued_downloads = []
         queued_uploads = []
         for transfer in self._transfers:
@@ -665,7 +664,7 @@ class TransferManager:
 
         self._network.send_peer_messages(
             transfer.username,
-            PeerPlaceInQueueRequest.Request(transfer.remote_path).serialize()
+            PeerPlaceInQueueRequest.Request(transfer.remote_path)
         )
 
     def _initialize_download(self, transfer: Transfer):
@@ -674,7 +673,7 @@ class TransferManager:
         self._network.send_peer_messages(
             transfer.username,
             ProtocolMessage(
-                PeerTransferQueue.Request(transfer.remote_path).serialize(),
+                PeerTransferQueue.Request(transfer.remote_path),
                 on_success=partial(self._on_transfer_queue_success, transfer),
                 on_failure=partial(self._on_transfer_queue_failed, transfer)
             )
@@ -696,7 +695,7 @@ class TransferManager:
                     ticket,
                     transfer.remote_path,
                     filesize=transfer.filesize
-                ).serialize(),
+                ),
                 on_success=partial(self._on_upload_request_success, transfer),
                 on_failure=partial(self._on_upload_request_failed, transfer)
             )
@@ -742,7 +741,7 @@ class TransferManager:
     def _on_upload_request_failed(self, transfer: Transfer):
         transfer.increase_upload_request_attempt()
 
-        self._set_transfer_state(transfer, TransferState.QUEUED)
+        self.queue(transfer)
 
     def _on_upload_request_success(self, transfer: Transfer):
         pass
@@ -865,7 +864,7 @@ class TransferManager:
                 self.complete(transfer)
 
                 self._network.send_server_messages(
-                    SendUploadSpeed.Request(int(self.get_average_upload_speed())).serialize()
+                    SendUploadSpeed.Request(int(self.get_average_upload_speed()))
                 )
         else:
             self.incomplete(transfer)
@@ -873,7 +872,7 @@ class TransferManager:
                 # Inform downloader that upload has failed
                 self._network.send_peer_messages(
                     transfer.username,
-                    PeerUploadFailed.Request(transfer.remote_path).serialize()
+                    PeerUploadFailed.Request(transfer.remote_path)
                 )
 
     def _on_message_received(self, event: MessageReceivedEvent):
@@ -920,7 +919,7 @@ class TransferManager:
                 PeerTransferQueueFailed.Request(
                     filename=message.filename,
                     reason=transfer.fail_reason
-                ).serialize(),
+                ),
                 connection=connection
             )
         else:
@@ -962,7 +961,7 @@ class TransferManager:
                         ticket=message.ticket,
                         allowed=False,
                         reason='Queued'
-                    ).serialize(),
+                    ),
                     connection=connection
                 )
                 transfer = self.add(transfer)
@@ -980,7 +979,7 @@ class TransferManager:
                         ticket=message.ticket,
                         allowed=False,
                         reason='Queued'
-                    ).serialize(),
+                    ),
                     connection=connection
                 )
 
@@ -994,7 +993,7 @@ class TransferManager:
                         ticket=message.ticket,
                         allowed=False,
                         reason='Cancelled'
-                    ).serialize(),
+                    ),
                     connection=connection
                 )
             else:
@@ -1013,7 +1012,7 @@ class TransferManager:
                     PeerTransferReply.Request(
                         ticket=message.ticket,
                         allowed=True
-                    ).serialize(),
+                    ),
                     connection=connection
                 )
 
@@ -1050,7 +1049,7 @@ class TransferManager:
         logger.debug(f"failed to initialize file connection for {transfer!r}")
         self._network.send_peer_messages(
             transfer.username,
-            PeerUploadFailed.Request(transfer.remote_path).serialize()
+            PeerUploadFailed.Request(transfer.remote_path)
         )
 
     @on_message(PeerPlaceInQueueRequest.Request)
@@ -1069,7 +1068,7 @@ class TransferManager:
             if place > 0:
                 self._network.send_peer_messages(
                     connection.username,
-                    PeerPlaceInQueueReply.Request(filename, place).serialize(),
+                    PeerPlaceInQueueReply.Request(filename, place),
                     connection=connection
                 )
 

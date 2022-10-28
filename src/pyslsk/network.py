@@ -454,7 +454,7 @@ class Network:
 
         if ip is None or port is None:
             # Request peer address if ip and port are not given
-            self.send_server_messages(GetPeerAddress.Request(username).serialize())
+            self.send_server_messages(GetPeerAddress.Request(username))
         else:
             self._connect_to_peer(connection_request)
 
@@ -501,9 +501,9 @@ class Network:
                 self._settings.get('credentials.username'),
                 request.typ,
                 request.ticket
-            ).serialize()
+            )
         else:
-            message = PeerPierceFirewall.Request(request.ticket).serialize()
+            message = PeerPierceFirewall.Request(request.ticket)
 
         with self._lock:
             connection.queue_messages(
@@ -539,7 +539,7 @@ class Network:
                         request.ticket,
                         request.username,
                         request.typ
-                    ).serialize()
+                    )
                 )
                 self._state.scheduler.add(
                     CONNECT_TO_PEER_TIMEOUT,
@@ -550,7 +550,7 @@ class Network:
             else:
                 # In case we failed to connect to the other after they requested it, give up
                 self.send_server_messages(
-                    CannotConnect.Request(request.ticket, request.username).serialize()
+                    CannotConnect.Request(request.ticket, request.username)
                 )
                 self.fail_peer_connection_request(request)
             break

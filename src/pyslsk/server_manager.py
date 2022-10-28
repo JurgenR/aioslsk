@@ -119,7 +119,7 @@ class ServerManager:
 
     def send_ping(self):
         """Send ping to the server"""
-        self.network.send_server_messages(Ping.Request().serialize())
+        self.network.send_server_messages(Ping.Request())
 
     def report_shares(self):
         """Reports the shares amount to the server"""
@@ -129,7 +129,7 @@ class ServerManager:
             SharedFoldersFiles.Request(
                 directory_count=dir_count,
                 file_count=file_count
-            ).serialize()
+            )
         )
 
     def login(self, username: str, password: str, version: int = 157):
@@ -141,67 +141,67 @@ class ServerManager:
                 client_version=157,
                 md5hash=calc_md5(username + password),
                 minor_version=100
-            ).serialize()
+            )
         )
 
     def add_user(self, username: str):
         self.network.send_server_messages(
-            AddUser.Request(username).serialize()
+            AddUser.Request(username)
         )
 
     def remove_user(self, username: str):
         self.network.send_server_messages(
-            RemoveUser.Request(username).serialize()
+            RemoveUser.Request(username)
         )
 
     def get_user_stats(self, username: str):
         self.network.send_server_messages(
-            GetUserStats.Request(username).serialize()
+            GetUserStats.Request(username)
         )
 
     def get_user_status(self, username: str):
         self.network.send_server_messages(
-            GetUserStatus.Request(username).serialize()
+            GetUserStatus.Request(username)
         )
 
     def get_room_list(self):
-        self.network.send_server_messages(RoomList.Request().serialize())
+        self.network.send_server_messages(RoomList.Request())
 
     def join_room(self, name: str):
         self.network.send_server_messages(
-            ChatJoinRoom.Request(name).serialize()
+            ChatJoinRoom.Request(name)
         )
 
     def leave_room(self, name: str):
         self.network.send_server_messages(
-            ChatLeaveRoom.Request(name).serialize()
+            ChatLeaveRoom.Request(name)
         )
 
     def set_room_ticker(self, room_name: str, ticker: str):
         # No need to update the ticker in the model, a ChatRoomTickerAdded will
         # be sent back to us
         self.network.send_server_messages(
-            ChatRoomTickerSet.Request(room=room_name, ticker=ticker).serialize()
+            ChatRoomTickerSet.Request(room=room_name, ticker=ticker)
         )
 
     def send_private_message(self, username: str, message: str):
         self.network.send_server_messages(
-            ChatPrivateMessage.Request(username, message).serialize()
+            ChatPrivateMessage.Request(username, message)
         )
 
     def send_room_message(self, room_name: str, message: str):
         self.network.send_server_messages(
-            ChatRoomMessage.Request(room_name, message).serialize()
+            ChatRoomMessage.Request(room_name, message)
         )
 
     def drop_private_room_ownership(self, room_name: str):
         self.network.send_server_messages(
-            PrivateRoomDropOwnership.Request(room_name).serialize()
+            PrivateRoomDropOwnership.Request(room_name)
         )
 
     def drop_private_room_membership(self, room_name: str):
         self.network.send_server_messages(
-            PrivateRoomDropMembership.Request(room_name).serialize()
+            PrivateRoomDropMembership.Request(room_name)
         )
 
     @on_message(Login.Response)
@@ -219,26 +219,26 @@ class ServerManager:
         logger.debug(f"Sharing {dir_count} directories and {file_count} files")
 
         self.network.send_server_messages(
-            CheckPrivileges.Request().serialize(),
+            CheckPrivileges.Request(),
             SetListenPort.Request(
                 self._settings.get('network.listening_port'),
                 obfuscated_port_amount=1,
                 obfuscated_port=self._settings.get('network.listening_port') + 1
-            ).serialize(),
-            SetStatus.Request(UserStatus.ONLINE.value).serialize(),
-            ToggleParentSearch.Request(True).serialize(),
-            BranchRoot.Request(self._settings.get('credentials.username')).serialize(),
-            BranchLevel.Request(0).serialize(),
-            AcceptChildren.Request(False).serialize(),
-            SharedFoldersFiles.Request(dir_count, file_count).serialize(),
-            AddUser.Request(self._settings.get('credentials.username')).serialize(),
-            TogglePrivateRooms.Request(self._settings.get('chats.private_room_invites')).serialize()
+            ),
+            SetStatus.Request(UserStatus.ONLINE.value),
+            ToggleParentSearch.Request(True),
+            BranchRoot.Request(self._settings.get('credentials.username')),
+            BranchLevel.Request(0),
+            AcceptChildren.Request(False),
+            SharedFoldersFiles.Request(dir_count, file_count),
+            AddUser.Request(self._settings.get('credentials.username')),
+            TogglePrivateRooms.Request(self._settings.get('chats.private_room_invites'))
         )
 
         # Perform AddUser for all in the friendlist
         self.network.send_server_messages(
             *[
-                AddUser.Request(friend).serialize()
+                AddUser.Request(friend)
                 for friend in self._settings.get('users.friends')
             ]
         )
@@ -248,7 +248,7 @@ class ServerManager:
             rooms = self._settings.get('chats.rooms')
             logger.info(f"automatically rejoining {len(rooms)} rooms")
             self.network.send_server_messages(
-                *[ChatJoinRoom.Request(room).serialize() for room in rooms]
+                *[ChatJoinRoom.Request(room) for room in rooms]
             )
 
         self._internal_event_bus.emit(LoginEvent(success=message.success))
@@ -431,14 +431,14 @@ class ServerManager:
         self._state.private_messages[message.chat_id] = chat_message
 
         self.network.send_server_messages(
-            ChatAckPrivateMessage.Request(message.chat_id).serialize()
+            ChatAckPrivateMessage.Request(message.chat_id)
         )
 
         self._event_bus.emit(PrivateMessageEvent(user, chat_message))
 
     @on_message(ServerSearchRequest.Response)
     def _on_server_search_request(self, message: ServerSearchRequest.Response, connection):
-        message_to_send = message.serialize()
+        message_to_send = message
         for child in self._state.children:
             child.connection.queue_messages(message_to_send)
 

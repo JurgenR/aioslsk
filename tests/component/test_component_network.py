@@ -69,7 +69,7 @@ class _BaseTestComponentNetwork:
         return network
 
     def _validate_server_message(self, network, message_type):
-        assert network.server._messages[0].message[4] == message_type.MESSAGE_ID
+        assert isinstance(network.server._messages[0].message, message_type)
 
     def _validate_successful_connection(
             self, network, connection, init_message_type=PeerInit):
@@ -86,7 +86,7 @@ class _BaseTestComponentNetwork:
 
         # Assert correct message is sent
         assert len(connection._messages) == 1
-        assert connection._messages[0].message[4] == init_message_type.Request.MESSAGE_ID
+        assert isinstance(connection._messages[0].message, init_message_type.Request)
 
         # Mock succesful sending of message
         network.on_message_sent(connection._messages[0], connection)
@@ -148,7 +148,7 @@ class TestComponentNetwork(_BaseTestComponentNetwork):
         assert req.connection is None
 
         # Assert GetPeerAddress was requested
-        assert network.server._messages[-1].message[4] == GetPeerAddress.Request.MESSAGE_ID
+        assert isinstance(network.server._messages[-1].message, GetPeerAddress.Request)
 
         # Mock GetPeerAddress response
         get_peer_address = GetPeerAddress.Response(

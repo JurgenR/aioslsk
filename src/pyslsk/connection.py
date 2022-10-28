@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
+from email.message import Message
 from enum import auto, Enum
 from typing import Callable, List, TYPE_CHECKING, Union
 import errno
@@ -9,7 +10,7 @@ import struct
 import time
 
 from . import obfuscation
-from .protocol.primitives import uint32, uint64
+from .protocol.primitives import uint32, uint64, MessageDataclass
 from .protocol.messages import (
     DistributedMessage,
     PeerInitializationMessage,
@@ -38,7 +39,7 @@ TRANSFER_SEND_BUF_SIZE = 1024 * 8
 
 @dataclass(frozen=True)
 class ProtocolMessage:
-    message: bytes
+    message: Union[MessageDataclass, bytes]
     on_success: Callable = None
     on_failure: Callable = None
 
@@ -192,7 +193,7 @@ class DataConnection(Connection):
 
     def queue_messages(self, *messages: List[Union[bytes, ProtocolMessage]]):
         for message in messages:
-            if isinstance(message, bytes):
+            if isinstance(message, bytes) or isinstance(message, MessageDataclass):
                 message = ProtocolMessage(message)
             self._messages.append(message)
 
@@ -245,13 +246,13 @@ class DataConnection(Connection):
     def send_message(self) -> bool:
         """Sends a message if there is a message in the queue.
 
-        @return: False in case an exception occured on the socket while sending.
+        :return: False in case an exception occured on the socket while sending.
             True in case a message was successfully sent or nothing was sent
         """
         for idx, message in enumerate(self._messages):
             try:
                 self.interact()
-                self.write_message(message.message)
+                bytes_written = self.write_message(message)
 
             except OSError:
                 logger.exception(
@@ -262,17 +263,33 @@ class DataConnection(Connection):
                 self.disconnect(reason=CloseReason.WRITE_ERROR)
                 return False
 
+            except Exception:
+                logger.exception(f"unhandled exception occured sending message : {message}")
+                self.network.on_message_send_failed(message)
+
             else:
-                self.bytes_sent += len(message.message)
+                self.bytes_sent += bytes_written
                 self.network.on_message_sent(message, self)
 
         self._messages = []
         self.network.disable_write(self)
         return True
 
-    def write_message(self, message: bytes):
-        logger.debug(f"send {self.hostname}:{self.port} : message {message.hex()}")
-        self.fileobj.sendall(message)
+    def write_message(self, message: ProtocolMessage, obfuscate: bool = False) -> int:
+        if isinstance(message.message, MessageDataclass):
+            logger.debug(f"send message : {message.message}")
+            data = message.message.serialize()
+        else:
+            data = message.message
+
+        if obfuscate:
+            logger.debug(f"send {self.hostname}:{self.port} (obfuscated) : message {data.hex()}")
+            data = obfuscation.encode(data)
+        else:
+            logger.debug(f"send {self.hostname}:{self.port} : message {data.hex()}")
+
+        self.fileobj.sendall(data)
+        return len(data)
 
     def notify_message_received(self, message):
         """Notify the network that the given message was received"""
@@ -576,8 +593,5 @@ class PeerConnection(DataConnection):
         except Exception:
             logger.exception(f"failed to parse peer message : {message_data!r}")
 
-    def write_message(self, message):
-        if self.obfuscated:
-            super().write_message(obfuscation.encode(message))
-        else:
-            super().write_message(message)
+    def write_message(self, message: ProtocolMessage) -> int:
+        return super().write_message(message, obfuscate=self.obfuscated)

@@ -214,7 +214,7 @@ class SoulSeek(threading.Thread):
         logger.info(f"Starting search for query: {query}")
         ticket = next(self._ticket_generator)
         self._network.send_server_messages(
-            FileSearch.Request(ticket, query).serialize()
+            FileSearch.Request(ticket, query)
         )
         self.state.search_queries[ticket] = SearchQuery(ticket=ticket, query=query)
         return ticket
