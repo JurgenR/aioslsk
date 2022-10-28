@@ -51,11 +51,6 @@ from .utils import ticket_generator
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class PeerRequest:
-    ticket: int
-
-
 class PeerManager:
 
     def __init__(
