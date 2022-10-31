@@ -5,6 +5,7 @@ from enum import auto, Enum
 from functools import partial
 import hashlib
 import logging
+from operator import itemgetter
 import os
 import time
 import shelve
@@ -152,7 +153,7 @@ class Transfer:
     """Class representing a transfer"""
     _UNPICKABLE_FIELDS = ('_fileobj', 'connection', '_speed_log')
 
-    def __init__(self, username: str, remote_path: str, direction: TransferDirection, ticket: int = None):
+    def __init__(self, username: str, remote_path: str, direction: TransferDirection):
         self.state = TransferState.VIRGIN
 
         self.username: str = username
@@ -165,7 +166,6 @@ class Transfer:
         """Place in queue, only applicable for downloads"""
         self.fail_reason: str = None
 
-        self.ticket: int = ticket
         self.filesize: int = None
         """Filesize in bytes"""
         self._offset: int = None
@@ -207,7 +207,6 @@ class Transfer:
         self._fileobj = None
         self.connection = None
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
-        self.ticket = None
 
     def __getstate__(self):
         """Called when pickling, removes unpickable fields from the fields to
@@ -427,8 +426,7 @@ class Transfer:
     def __repr__(self):
         return (
             f"Transfer(username={self.username!r}, remote_path={self.remote_path!r}, "
-            f"local_path={self.local_path!r}, "
-            f"direction={self.direction}, ticket={self.ticket})"
+            f"local_path={self.local_path!r}, direction={self.direction})"
         )
 
 
@@ -619,20 +617,11 @@ class TransferManager:
         :return: The place in the queue, 0 if not in the queue a value equal or
             greater than 1 indicating the position otherwise
         """
-        queued_transfers = []
-        for queued_transfer in self._transfers:
-            if queued_transfer.is_upload() and queued_transfer.state == TransferState.QUEUED:
-                queued_transfers.append(queued_transfer)
+        _, uploads = self._get_queued_transfers()
         try:
-            return queued_transfers.index(transfer) + 1
+            return uploads.index(transfer)
         except ValueError:
             return 0
-
-    def get_transfer_by_ticket(self, ticket: int) -> Transfer:
-        for transfer in self._transfers:
-            if transfer.ticket == ticket:
-                return transfer
-        raise LookupError(f"transfer with ticket {ticket} not found")
 
     def get_transfer(self, username: str, remote_path: str, direction: TransferDirection) -> Transfer:
         """Lookup transfer by username, remote_path and transfer direction"""
@@ -675,8 +664,8 @@ class TransferManager:
                     queued_uploads.append(transfer)
 
             else:
-                # For downloads we try to continue with incomplete downloads, for
-                # uploads it's up to the other user
+                # For downloads we try to continue with incomplete downloads,
+                # for uploads it's up to the other user
                 if transfer.state in (TransferState.QUEUED, TransferState.INCOMPLETE):
                     queued_downloads.append(transfer)
 
@@ -705,12 +694,17 @@ class TransferManager:
 
             ranking.append((rank, upload))
 
-        ranking.sort(key=lambda rank, _: rank)
-        return list(reversed([upload for _, upload in uploads]))
+        ranking.sort(key=itemgetter(0))
+        return list(reversed([upload for _, upload in ranking]))
 
     def _request_place_in_queue(self, transfer: Transfer):
+        if transfer.direction != TransferDirection.DOWNLOAD:
+            logger.warning(
+                f"not requesting place in queue, transfer is not a download state (transfer={transfer!r})")
+            return
+
         if transfer.state != TransferState.QUEUED:
-            logger.debug(
+            logger.warning(
                 f"not requesting place in queue, transfer is not in QUEUED state (transfer={transfer!r})")
             return
 
@@ -753,11 +747,11 @@ class TransferManager:
             )
         )
 
-    def complete_transfer_request(self, request: TransferRequest):
+    def _complete_transfer_request(self, request: TransferRequest):
         logger.info(f"completing transfer request : {request!r}")
         del self._transfer_requests[request.ticket]
 
-    def fail_transfer_request(self, request: TransferRequest):
+    def _fail_transfer_request(self, request: TransferRequest):
         logger.info(f"failing transfer request : {request!r}")
         del self._transfer_requests[request.ticket]
 
@@ -846,7 +840,7 @@ class TransferManager:
             logger.exception(f"got a ticket for an unknown transfer (ticket={event.ticket})")
             return
         else:
-            self.complete_transfer_request(request)
+            self._complete_transfer_request(request)
 
         # We can only know the transfer when we get the ticket. Link them
         # together here
@@ -1081,7 +1075,7 @@ class TransferManager:
                 pass
             else:
                 self.fail(transfer, reason=message.reason)
-                self.fail_transfer_request(request)
+                self._fail_transfer_request(request)
             return
 
         # Init the file connection for transfering the file
@@ -1113,7 +1107,7 @@ class TransferManager:
             logger.error(f"PeerPlaceInQueueRequest : could not find transfer (upload) for {filename} from {connection.username}")
         else:
             place = self.get_place_in_queue(transfer)
-            if place > 0:
+            if place:
                 self._network.send_peer_messages(
                     connection.username,
                     PeerPlaceInQueueReply.Request(filename, place),
