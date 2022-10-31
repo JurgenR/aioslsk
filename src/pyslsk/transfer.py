@@ -9,7 +9,6 @@ import os
 import time
 import shelve
 from typing import Dict, List, Tuple, TYPE_CHECKING
-from xmlrpc.client import boolean
 
 from .configuration import Configuration
 from .connection import (
@@ -119,9 +118,6 @@ class TransferStorage:
         with shelve.open(db_path, flag='c') as database:
             for _, transfer in database.items():
                 if transfer.is_processing():
-                    # Needs to be forced here without using set_state. set_state
-                    # explicitly denies a transfer going into queued when it is
-                    # already processing
                     transfer.set_state(TransferState.QUEUED, force=True)
 
                 transfers.append(transfer)
@@ -359,11 +355,14 @@ class Transfer:
             else:
                 self._speed_log.append((current_time, bytes_transfered))
 
-    def is_upload(self):
+    def is_upload(self) -> bool:
         return self.direction == TransferDirection.UPLOAD
 
-    def is_download(self):
+    def is_download(self) -> bool:
         return self.direction == TransferDirection.DOWNLOAD
+
+    def is_finalized(self) -> bool:
+        return self.state in (TransferState.COMPLETE, TransferState.ABORTED, TransferState.FAILED)
 
     def is_processing(self) -> bool:
         return self.state in (TransferState.DOWNLOADING, TransferState.UPLOADING, TransferState.INITIALIZING, )
@@ -520,14 +519,15 @@ class TransferManager:
 
     def queue(self, transfer: Transfer, force: bool = False):
         logger.debug(f"queueing transfer : {transfer!r}")
-        self._set_transfer_state(transfer, TransferState.QUEUED)
+        self._set_transfer_state(transfer, TransferState.QUEUED, force=force)
 
     def add(self, transfer: Transfer) -> Transfer:
         """Adds a transfer if it does not already exist, otherwise it returns
         the already existing transfer.
 
         This will emit a TransferAddedEvent but only if the transfer did not
-        exist. This will also add the user.
+        exist. This will also perform an AddUser command on the server in case
+        the transfer isn't finalized yet
 
         :return: either the transfer we have passed or the already existing
             transfer
@@ -536,6 +536,11 @@ class TransferManager:
             if queued_transfer.equals(transfer):
                 logger.info(f"skip adding transfer, returning existing : {queued_transfer!r}")
                 return queued_transfer
+
+        if not transfer.is_finalized():
+            self._network.send_server_messages(
+                AddUser.Request(transfer.username)
+            )
 
         logger.info(f"adding transfer : {transfer!r}")
         self._transfers.append(transfer)
