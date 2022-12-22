@@ -191,11 +191,20 @@ class DataConnection(Connection):
 
         super().set_state(state, close_reason)
 
-    def queue_messages(self, *messages: List[Union[bytes, ProtocolMessage]]):
+    def queue_messages(self, *messages: List[Union[bytes, ProtocolMessage, MessageDataclass]], prepend: bool = False):
+        protocol_messages = []
+
+        # Convert messages to ProtocolMessage instances if necessary
         for message in messages:
             if isinstance(message, bytes) or isinstance(message, MessageDataclass):
-                message = ProtocolMessage(message)
-            self._messages.append(message)
+                protocol_messages.append(ProtocolMessage(message))
+            else:
+                protocol_messages.append(message)
+
+        if prepend:
+            self._messages = protocol_messages + self._messages
+        else:
+            self._messages += protocol_messages
 
         if self._messages:
             self.network.enable_write(self)

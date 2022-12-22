@@ -179,8 +179,24 @@ class Network:
         self._ticket_generator = ticket_generator()
 
         # List of connections
-        self.server: ServerConnection = None
-        self.listening_connections: List[ListeningConnection] = []
+        self.server: ServerConnection = ServerConnection(
+            self._settings.get('network.server_hostname'),
+            self._settings.get('network.server_port'),
+            self
+        )
+        self.listening_connections: List[ListeningConnection] = [
+            ListeningConnection(
+                DEFAULT_LISTENING_HOST,
+                self._settings.get('network.listening_port'),
+                self
+            ),
+            ListeningConnection(
+                DEFAULT_LISTENING_HOST,
+                self._settings.get('network.listening_port') + 1,
+                self,
+                obfuscated=True
+            )
+        ]
         self.peer_connections: List[PeerConnection] = []
 
         # Selectors
@@ -198,6 +214,7 @@ class Network:
 
         self.MESSAGE_MAP = build_message_map(self)
 
+        # Rate limitors
         self.upload_rate_limiter: RateLimiter = RateLimiter.create_limiter(
             self._settings.get('sharing.limits.upload_speed_kbps'))
         self.download_rate_limiter: RateLimiter = RateLimiter.create_limiter(
@@ -214,26 +231,8 @@ class Network:
     def initialize(self):
         logger.info("initializing network")
 
-        self.server = ServerConnection(
-            self._settings.get('network.server_hostname'),
-            self._settings.get('network.server_port'),
-            self
-        )
         self.server.connect()
 
-        self.listening_connections = [
-            ListeningConnection(
-                DEFAULT_LISTENING_HOST,
-                self._settings.get('network.listening_port'),
-                self
-            ),
-            ListeningConnection(
-                DEFAULT_LISTENING_HOST,
-                self._settings.get('network.listening_port') + 1,
-                self,
-                obfuscated=True
-            )
-        ]
         for listening_connection in self.listening_connections:
             listening_connection.connect()
 
@@ -348,12 +347,15 @@ class Network:
                 if not connection.last_interaction:
                     continue
 
+                # Timeout connecting connections
                 if connection.state == ConnectionState.CONNECTING:
                     if connection.last_interaction + CONNECT_TIMEOUT < current_time:
                         logger.debug(f"connection {connection.hostname}:{connection.port}: timeout reached during connecting")
                         connection.disconnect(reason=CloseReason.CONNECT_FAILED)
                         continue
 
+                # Timeout connected connections that are still awaiting
+                # initialization message
                 elif connection.state == ConnectionState.CONNECTED:
                     if connection.connection_state == PeerConnectionState.AWAITING_INIT:
                         if connection.last_interaction + CONNECT_INIT_TIMEOUT < current_time:
@@ -361,6 +363,7 @@ class Network:
                             connection.disconnect(reason=CloseReason.CONNECT_FAILED)
                             continue
 
+                # Regular timeout
                 if connection.last_interaction + connection.timeout < current_time:
                     logger.debug(f"connection {connection.hostname}:{connection.port}: timeout reached")
                     connection.disconnect(reason=CloseReason.TIMEOUT)
@@ -746,7 +749,7 @@ class Network:
                 self._connect_to_peer(request)
 
     @on_message(ConnectToPeer.Response)
-    def _on_connect_to_peer(self, message: ConnectToPeer.Response, connection):
+    def _on_connect_to_peer(self, message: ConnectToPeer.Response, connection: ServerConnection):
         ip = self._user_ip_overrides.get(message.username, message.ip)
 
         obfuscate = self._settings.get('network.peer.obfuscate') and bool(message.obfuscated_port_amount)
@@ -765,7 +768,7 @@ class Network:
         self._connect_to_peer(request)
 
     @on_message(CannotConnect.Response)
-    def _on_cannot_connect(self, message: CannotConnect.Response, connection):
+    def _on_cannot_connect(self, message: CannotConnect.Response, connection: ServerConnection):
         try:
             request = self._connection_requests[message.ticket]
         except KeyError:
@@ -774,10 +777,10 @@ class Network:
         else:
             self.fail_peer_connection_request(request)
 
-    def send_peer_messages(self, username: str, *messages: List[Union[bytes, ProtocolMessage]], connection: PeerConnection = None):
+    def send_peer_messages(self, username: str, *messages: List[Union[bytes, ProtocolMessage]], connection: PeerConnection = None, prepend: bool = False):
         """Sends messages to the specified peer. If the optional connection is
         given it will be used otherwise this method will first check if the
-        username already has a valid connection. If not a new one will be
+        username already has a valid connection. If not a new connection will be
         established
 
         :param username: user to send the messages to
@@ -786,12 +789,12 @@ class Network:
         """
         with self._lock:
             if connection is not None:
-                connection.queue_messages(*messages)
+                connection.queue_messages(*messages, prepend=prepend)
                 return
 
             connections = self.get_active_peer_connections(username, PeerConnectionType.PEER)
             if connections:
-                connections[0].queue_messages(*messages)
+                connections[0].queue_messages(*messages, prepend=prepend)
                 return
 
         self.init_peer_connection(
@@ -800,10 +803,15 @@ class Network:
             messages=messages
         )
 
-    def send_server_messages(self, *messages: List[Union[bytes, ProtocolMessage]]):
+    def send_server_messages(self, *messages: List[Union[bytes, ProtocolMessage]], prepend: bool = False):
+        """Queues server messages
+
+        :param messages: list of messages to queue
+        :param prepend: prepend the messages to the queue instead of appending
+            (default: False)
+        """
         with self._lock:
-            for message in messages:
-                self.server.queue_messages(message)
+            self.server.queue_messages(*messages, prepend=prepend)
 
     # Methods called by connections
 
@@ -930,10 +938,16 @@ class Network:
         )
 
     def disable_write(self, connection: Connection):
+        if not connection.fileobj:
+            return
+
         if connection not in self._selector_queue:
             self.selector.modify(connection.fileobj, EVENT_READ, data=connection)
 
     def enable_write(self, connection: Connection):
+        if not connection.fileobj:
+            return
+
         if connection not in self._selector_queue:
             self.selector.modify(connection.fileobj, EVENT_READ | EVENT_WRITE, data=connection)
 

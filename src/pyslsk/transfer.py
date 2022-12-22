@@ -101,6 +101,8 @@ class TransferRequest:
     created when the PeerTransferRequest is sent or received and should be
     destroyed once the transfer ticket has been received or a reply sent that
     the transfer cannot continue.
+
+    It completes once the ticket is received or sent on the file connection
     """
     ticket: int
     transfer: Transfer
@@ -237,16 +239,17 @@ class Transfer:
             cases it needs to be forced: during loading of transfers from
             storage for transfers who were processing when they were stored or
             if initialization failed (default: False)
+        :return: previous state in case state was changed, otherwise None
         """
         if state == self.state:
-            return
+            return None
 
         if state == TransferState.QUEUED:
             if force:
                 self.reset_times()
             elif self.is_processing():
                 # Not allowed to queue processing transfers
-                return
+                return None
 
         elif state == TransferState.INITIALIZING:
             pass
@@ -259,7 +262,7 @@ class Transfer:
             # Aborting on a complete state does nothing
             # TODO: Not sure what should # happen in case of INITIALIZING
             if self.state in (TransferState.COMPLETE, TransferState.INCOMPLETE, TransferState.ABORTED):
-                return
+                return None
             else:
                 self._finalize()
 
@@ -273,12 +276,14 @@ class Transfer:
 
         elif state == TransferState.INCOMPLETE:
             if self.state in (TransferState.COMPLETE, TransferState.ABORTED):
-                return
+                return None
             self._finalize()
 
         logger.debug(f"setting transfer state to {state} : {self!r}")
 
+        old_state = state
         self.state = state
+        return old_state
 
     def _finalize(self):
         self.complete_time = time.time()
@@ -658,6 +663,7 @@ class TransferManager:
                 self._network.send_server_messages(
                     AddUser.Request(transfer.username)
                 )
+                pass
 
             if transfer.direction == TransferDirection.UPLOAD:
                 if transfer.state == TransferState.QUEUED:
@@ -742,8 +748,7 @@ class TransferManager:
                     transfer.remote_path,
                     filesize=transfer.filesize
                 ),
-                on_success=partial(self._on_upload_request_success, transfer),
-                on_failure=partial(self._on_upload_request_failed, transfer)
+                on_failure=partial(self._on_upload_request_failed, request)
             )
         )
 
@@ -784,13 +789,11 @@ class TransferManager:
             times=1
         )
 
-    def _on_upload_request_failed(self, transfer: Transfer):
-        transfer.increase_upload_request_attempt()
+    def _on_upload_request_failed(self, request: TransferRequest):
+        request.transfer.increase_upload_request_attempt()
 
-        self.queue(transfer, force=True)
-
-    def _on_upload_request_success(self, transfer: Transfer):
-        pass
+        self.queue(request.transfer, force=True)
+        self._fail_transfer_request(request)
 
     def _on_connection_state_changed(self, event: ConnectionStateChangedEvent):
 
@@ -926,8 +929,12 @@ class TransferManager:
         if message.__class__ in self.MESSAGE_MAP:
             self.MESSAGE_MAP[message.__class__](message, event.connection)
 
+    @on_message(AddUser.Response)
+    def _on_add_user(self, message: AddUser.Response, connection: PeerConnection):
+        self.manage_transfers()
+
     @on_message(GetUserStatus.Response)
-    def _on_get_user_status(self, message: GetUserStatus.Response, connection):
+    def _on_get_user_status(self, message: GetUserStatus.Response, connection: PeerConnection):
         self.manage_transfers()
 
     @on_message(PeerTransferQueue.Request)
@@ -1083,16 +1090,21 @@ class TransferManager:
             transfer.username,
             typ=PeerConnectionType.FILE,
             transfer=transfer,
-            messages=[uint32.serialize(message.ticket)],
-            on_failure=partial(self._on_file_connection_failed, transfer)
+            messages=[
+                ProtocolMessage(
+                    uint32.serialize(message.ticket),
+                    on_failure=partial(self._on_file_connection_failed, request)
+                )
+            ]
         )
 
-    def _on_file_connection_failed(self, transfer: Transfer, request):
-        logger.debug(f"failed to initialize file connection for {transfer!r}")
+    def _on_file_connection_failed(self, request: TransferRequest):
+        logger.debug(f"failed to initialize file connection for {request!r}")
         self._network.send_peer_messages(
-            transfer.username,
-            PeerUploadFailed.Request(transfer.remote_path)
+            request.transfer.username,
+            PeerUploadFailed.Request(request.transfer.remote_path)
         )
+        self._fail_transfer_request(request)
 
     @on_message(PeerPlaceInQueueRequest.Request)
     def _on_peer_place_in_queue_request(self, message: PeerPlaceInQueueRequest.Request, connection: PeerConnection):

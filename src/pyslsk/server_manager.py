@@ -141,7 +141,9 @@ class ServerManager:
                 client_version=version,
                 md5hash=calc_md5(username + password),
                 minor_version=100
-            )
+            ),
+            # Login needs to be the first message that's sent over the connection
+            prepend=True
         )
 
     def add_user(self, username: str):
