@@ -10,5 +10,25 @@ class UnknownMessageError(PySlskException):
         self.message = message
 
 
+class MessageSerializationError(PySlskException):
+    pass
+
+
 class FileNotSharedError(PySlskException):
+    pass
+
+
+class PeerConnectionError(PySlskException):
+    pass
+
+
+class ConnectionFailedError(PySlskException):
+    pass
+
+
+class ConnectionReadError(PySlskException):
+    pass
+
+
+class ConnectionWriteError(PySlskException):
     pass

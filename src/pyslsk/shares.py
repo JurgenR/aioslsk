@@ -360,7 +360,7 @@ class SharesManager:
                             shared_item,
                             self._get_attributes_callback
                         )
-                logger.debug(f"removing {len(items_to_remove)} items")
+                logger.debug(f"removing {len(items_to_remove)} items from cache")
                 self.shared_items -= items_to_remove
 
             self.build_term_map(rebuild=False)

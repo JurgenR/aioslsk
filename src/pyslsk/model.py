@@ -18,7 +18,7 @@ class User:
     description: str = None
     picture: str = None
 
-    status: UserStatus = UserStatus.OFFLINE
+    status: UserStatus = UserStatus.UNKNOWN
     privileged: bool = False
 
     avg_speed: int = None

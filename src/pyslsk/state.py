@@ -7,7 +7,7 @@ from .scheduler import Scheduler
 from .model import ChatMessage, Room, User
 
 if TYPE_CHECKING:
-    from .connection import PeerConnection
+    from .network.connection import PeerConnection
     from .search import ReceivedSearch, SearchQuery
 
 

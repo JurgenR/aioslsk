@@ -9,7 +9,7 @@ from .protocol.primitives import DirectoryData, FileData, MessageDataclass
 from .search import SearchQuery, SearchResult
 
 if TYPE_CHECKING:
-    from .connection import (
+    from .network.connection import (
         Connection,
         ConnectionState,
         CloseReason,
@@ -56,7 +56,7 @@ class EventBus:
         except KeyError:
             self._events[event_class] = [listener, ]
 
-    def emit(self, event: Event):
+    async def emit(self, event: Event):
         try:
             listeners = self._events[event.__class__]
         except KeyError:
@@ -64,7 +64,10 @@ class EventBus:
         else:
             for listener in listeners:
                 try:
-                    listener(event)
+                    if inspect.iscoroutinefunction(listener):
+                        await listener(event)
+                    else:
+                        listener(event)
                 except Exception:
                     logger.exception(f"exception notifying listener {listener!r} of event {event!r}")
 
@@ -227,18 +230,6 @@ class ConnectionStateChangedEvent(InternalEvent):
 
 
 @dataclass(frozen=True)
-class PeerConnectionStateChangedEvent(InternalEvent):
-    connection: PeerConnection
-    state: PeerConnectionState
-    previous_state: PeerConnectionState
-
-
-@dataclass(frozen=True)
-class PeerConnectionAcceptedEvent(InternalEvent):
-    connection: PeerConnection
-
-
-@dataclass(frozen=True)
 class MessageReceivedEvent(InternalEvent):
     message: MessageDataclass
     connection: Connection
@@ -247,39 +238,7 @@ class MessageReceivedEvent(InternalEvent):
 @dataclass(frozen=True)
 class PeerInitializedEvent(InternalEvent):
     connection: PeerConnection
-
-
-@dataclass(frozen=True)
-class PeerInitializationFailedEvent(InternalEvent):
-    ticket: int
-    username: str
-    type: str
-
-
-@dataclass(frozen=True)
-class TransferOffsetEvent(InternalEvent):
-    connection: PeerConnection
-    offset: int
-
-
-@dataclass(frozen=True)
-class TransferTicketEvent(InternalEvent):
-    connection: PeerConnection
-    ticket: int
-
-
-@dataclass(frozen=True)
-class TransferDataSentEvent(InternalEvent):
-    connection: PeerConnection
-    tokens_taken: int
-    bytes_sent: int
-
-
-@dataclass(frozen=True)
-class TransferDataReceivedEvent(InternalEvent):
-    connection: PeerConnection
-    tokens_taken: int
-    data: bytes
+    requested: bool
 
 
 @dataclass(frozen=True)
