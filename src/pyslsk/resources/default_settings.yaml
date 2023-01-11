@@ -18,6 +18,9 @@ credentials:
   password: null
   description: null
 
+search:
+  wishlist: []
+
 sharing:
   limits:
     upload_slots: 2

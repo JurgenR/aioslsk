@@ -47,9 +47,6 @@ class UnlimitedRateLimiter(RateLimiter):
     async def take_tokens(self) -> int:
         return self.UPPER_LIMIT
 
-    # def take_tokens(self) -> int:
-    #     return self.UPPER_LIMIT
-
     def add_tokens(self, token_amount: int):
         pass
 
@@ -89,13 +86,6 @@ class LimitedRateLimiter(RateLimiter):
                 return self.LOWER_LIMIT
 
             await asyncio.sleep(0.01)
-
-    # def take_tokens(self):
-    #     if self.bucket < self.LOWER_LIMIT:
-    #         return 0
-    #     else:
-    #         self.bucket -= self.LOWER_LIMIT
-    #         return self.LOWER_LIMIT
 
     def add_tokens(self, token_amount: int):
         self.bucket += token_amount

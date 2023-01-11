@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 
-from .network.connection import ConnectionState, PeerConnectionType, ServerConnection
+from .network.connection import ConnectionState, ServerConnection
 from .events import (
     build_message_map,
     on_message,
@@ -51,13 +51,13 @@ from .protocol.messages import (
     ChatUserLeftRoom,
     CheckPrivileges,
     DistributedAliveInterval,
+    FileSearch,
     GetPeerAddress,
     GetUserStatus,
     GetUserStats,
     ToggleParentSearch,
     Login,
     MinParentsInCache,
-    PotentialParents,
     ParentInactivityTimeout,
     ParentMinSpeed,
     ParentSpeedRatio,
@@ -81,13 +81,15 @@ from .protocol.messages import (
     SetStatus,
     SharedFoldersFiles,
     WishlistInterval,
+    WishlistSearch,
 )
 from .model import ChatMessage, RoomMessage, UserStatus
 from .network.network import Network
 from .scheduler import Job
+from .search import SearchQuery
 from .settings import Settings
 from .state import State
-from .utils import task_counter
+from .utils import task_counter, ticket_generator
 
 
 logger = logging.getLogger()
@@ -107,7 +109,10 @@ class ServerManager:
         self.shares_manager: SharesManager = shares_manager
         self.network: Network = network
 
-        self._ping_task = None
+        self._ticket_generator = ticket_generator()
+
+        self._ping_task: asyncio.Task = None
+        self._wishlist_task: asyncio.Task = None
         self._report_shares_job = Job(30, self.report_shares)
 
         self.MESSAGE_MAP = build_message_map(self)
@@ -195,6 +200,14 @@ class ServerManager:
             )
 
         await self._internal_event_bus.emit(LoginEvent(success=response.success))
+
+    async def search(self, query: str) -> int:
+        ticket = next(self._ticket_generator)
+        await self.network.queue_server_messages(
+            FileSearch.Request(ticket, query)
+        )
+        self._state.search_queries[ticket] = SearchQuery(ticket=ticket, query=query)
+        return ticket
 
     async def add_user(self, username: str):
         await self.network.queue_server_messages(
@@ -536,6 +549,14 @@ class ServerManager:
     @on_message(WishlistInterval.Response)
     async def _on_wish_list_interval(self, message: WishlistInterval.Response, connection):
         self._state.wishlist_interval = message.interval
+        # Cancel the current task
+        if self._wishlist_task is not None:
+            self._wishlist_task.cancel()
+
+        self._wishlist_task = asyncio.create_task(
+            self._wishlist_job(message.interval),
+            name=f'wishlist-job-{task_counter()}'
+        )
 
     @on_message(AddUser.Response)
     async def _on_add_user(self, message: AddUser.Response, connection):
@@ -576,6 +597,33 @@ class ServerManager:
             await asyncio.sleep(PING_INTERVAL)
             await self.network.queue_server_messages(Ping.Request())
 
+    async def _wishlist_job(self, interval: int):
+        while True:
+            items = self._settings.get('search.wishlist')
+
+            # Remove all current wishlist searches
+            self._state.search_queries = {
+                ticket: qry for ticket, qry in self._state.search_queries.items()
+                if not qry.is_wishlist_query
+            }
+
+            # Recreate
+            for item in items:
+                if not item['enabled']:
+                    continue
+
+                ticket = next(self._ticket_generator)
+                self._state.search_queries[ticket] = SearchQuery(
+                    ticket,
+                    item['query'],
+                    is_wishlist_query=True
+                )
+                await self.network.queue_server_messages(
+                    WishlistSearch.Request(ticket, item['query'])
+                )
+
+            await asyncio.sleep(interval)
+
     # Listeners
 
     async def _on_message_received(self, event: MessageReceivedEvent):
@@ -594,6 +642,10 @@ class ServerManager:
 
         elif event.state == ConnectionState.CLOSING:
             self._state.logged_in = False
+
+            if self._wishlist_task is not None:
+                self._wishlist_task.cancel()
+                self._wishlist_task = None
 
             if self._ping_task is not None:
                 self._ping_task.cancel()

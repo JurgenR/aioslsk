@@ -28,7 +28,6 @@ from ..utils import task_counter
 
 if TYPE_CHECKING:
     from .network import Network
-    from ..transfer import Transfer
 
 
 logger = logging.getLogger(__name__)
@@ -246,9 +245,12 @@ class DataConnection(Connection):
         """Message reader loop. This will loop until the connection is closed or
         the network is closed
         """
-        close_states = (ConnectionState.CLOSING, ConnectionState.CLOSED)
-        while not(self.network._stop_event.is_set() or self.state in close_states):
-            message_data = await self.receive_message()
+        while not self._is_closing():
+            try:
+                message_data = await self.receive_message()
+            except ConnectionReadError as exc:
+                logger.warning(f"{self.hostname}:{self.ip} : read error : {exc!r}")
+
             if message_data:
                 await self._process_message_data(message_data)
 

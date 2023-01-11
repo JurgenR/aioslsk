@@ -213,12 +213,7 @@ class SoulSeek:
         """Performs a search, returns the generated ticket number for the search
         """
         logger.info(f"Starting search for query: {query}")
-        ticket = next(self._ticket_generator)
-        await self._network.queue_server_messages(
-            FileSearch.Request(ticket, query)
-        )
-        self.state.search_queries[ticket] = SearchQuery(ticket=ticket, query=query)
-        return ticket
+        return await self.server_manager.search(query)
 
     def get_search_results_by_ticket(self, ticket: int):
         """Returns all search results for given ticket"""

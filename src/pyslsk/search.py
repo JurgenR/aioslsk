@@ -32,3 +32,4 @@ class SearchQuery:
     ticket: int
     query: str
     results: List[SearchResult] = field(default_factory=list)
+    is_wishlist_query: bool = False
