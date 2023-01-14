@@ -32,3 +32,7 @@ class ConnectionReadError(PySlskException):
 
 class ConnectionWriteError(PySlskException):
     pass
+
+
+class NoSuchUserError(PySlskException):
+    pass

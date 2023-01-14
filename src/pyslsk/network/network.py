@@ -284,9 +284,11 @@ class Network:
         except ValueError:
             pass
 
-    def wait_for_server_message(self, message_class, **kwargs):
+    def wait_for_server_message(self, message_class, **kwargs) -> asyncio.Future:
         """Waits for a server message to arrive, the message must match the
         `message_class` and fields defined in the keyword arguments.
+
+        :return: `asyncio.Future` object
         """
         future = ExpectedResponse(
             ServerConnection,
@@ -297,10 +299,12 @@ class Network:
         future.add_done_callback(self._remove_response_future)
         return future
 
-    def wait_for_peer_message(self, peer, message_class, **kwargs):
+    def wait_for_peer_message(self, peer, message_class, **kwargs) -> asyncio.Future:
         """Waits for a peer message to arrive, the message must match the
         `message_class` and fields defined in the keyword arguments and must be
         coming from a connection by `peer`.
+
+        :return: `asyncio.Future` object
         """
         future = ExpectedResponse(
             PeerConnection,

@@ -1,14 +1,6 @@
 import copy
 from unittest.mock import Mock, patch
 
-from pyslsk.connection import (
-    ConnectionState,
-    CloseReason,
-    PeerConnection,
-    PeerConnectionType,
-    PeerConnectionState,
-    ServerConnection
-)
 from pyslsk.events import InternalEventBus
 from pyslsk.protocol.messages import (
     CannotConnect,
@@ -17,7 +9,16 @@ from pyslsk.protocol.messages import (
     PeerInit,
     PeerPierceFirewall
 )
-from pyslsk.network import Network, LimitedRateLimiter, UnlimitedRateLimiter
+from pyslsk.network.connection import (
+    ConnectionState,
+    CloseReason,
+    PeerConnection,
+    PeerConnectionType,
+    PeerConnectionState,
+    ServerConnection
+)
+from pyslsk.network.network import Network
+from pyslsk.network.rate_limiter import LimitedRateLimiter, UnlimitedRateLimiter
 from pyslsk.scheduler import Scheduler
 from pyslsk.state import State
 from pyslsk.settings import Settings

@@ -1,4 +1,4 @@
-from pyslsk.connection import (
+from pyslsk.network.connection import (
     Connection,
     CloseReason,
     ConnectionState,

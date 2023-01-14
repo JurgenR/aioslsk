@@ -3,6 +3,7 @@ import logging
 import time
 
 from .network.connection import ConnectionState, ServerConnection
+from .constants import SERVER_RESPONSE_TIMEOUT
 from .events import (
     build_message_map,
     on_message,
@@ -28,7 +29,7 @@ from .events import (
     UserStatsEvent,
     UserStatusEvent,
 )
-from .shares import SharesManager
+from .exceptions import NoSuchUserError
 from .protocol.primitives import calc_md5
 from .protocol.messages import (
     AcceptChildren,
@@ -83,8 +84,9 @@ from .protocol.messages import (
     WishlistInterval,
     WishlistSearch,
 )
-from .model import ChatMessage, RoomMessage, UserStatus
+from .model import ChatMessage, RoomMessage, User, UserStatus
 from .network.network import Network
+from .shares import SharesManager
 from .scheduler import Job
 from .search import SearchQuery
 from .settings import Settings
@@ -209,13 +211,28 @@ class ServerManager:
         self._state.search_queries[ticket] = SearchQuery(ticket=ticket, query=query)
         return ticket
 
-    async def add_user(self, username: str):
-        await self.network.queue_server_messages(
+    async def add_user(self, username: str) -> User:
+        """Request the server to track the user
+
+        :raise asnycio.TimeoutError: raised when the timeout is reached before a
+            response is received
+        :raise NoSuchUserError: raised when user does not exist
+        :return: `User` object
+        """
+        await self.network.send_server_messages(
             AddUser.Request(username)
         )
+        _, response = await asyncio.wait_for(
+            self.network.wait_for_server_message(AddUser.Response, username=username),
+            SERVER_RESPONSE_TIMEOUT
+        )
+        if not response.exists:
+            raise NoSuchUserError(f"user {username} does not exist")
+        else:
+            return await self._handle_add_user_response(response)
 
     async def remove_user(self, username: str):
-        await self.network.queue_server_messages(
+        await self.network.send_server_messages(
             RemoveUser.Request(username)
         )
         # Reset user status, this is needed for the transfer manager who will
@@ -229,7 +246,8 @@ class ServerManager:
             GetUserStats.Request(username)
         )
         _, response = await asyncio.wait_for(
-            self.network.wait_for_server_message(GetUserStats.Response, username=username), 30
+            self.network.wait_for_server_message(GetUserStats.Response, username=username),
+            SERVER_RESPONSE_TIMEOUT
         )
 
     async def get_user_status(self, username: str):
@@ -237,11 +255,16 @@ class ServerManager:
             GetUserStatus.Request(username)
         )
         _, response = await asyncio.wait_for(
-            self.network.wait_for_server_message(GetUserStatus.Response, username=username), 30
+            self.network.wait_for_server_message(GetUserStatus.Response, username=username),
+            SERVER_RESPONSE_TIMEOUT
         )
 
     async def get_room_list(self):
         await self.network.send_server_messages(RoomList.Request())
+        _, response = await asyncio.wait_for(
+            self.network.wait_for_server_message(RoomList.Response),
+            SERVER_RESPONSE_TIMEOUT
+        )
 
     async def join_room(self, name: str):
         await self.network.send_server_messages(
@@ -560,17 +583,7 @@ class ServerManager:
 
     @on_message(AddUser.Response)
     async def _on_add_user(self, message: AddUser.Response, connection):
-        if message.exists:
-            user = self._state.get_or_create_user(message.username)
-            user.name = message.username
-            user.status = UserStatus(message.status)
-            user.avg_speed = message.avg_speed
-            user.downloads = message.download_num
-            user.files = message.file_count
-            user.directories = message.dir_count
-            user.country = message.country_code
-
-            await self._event_bus.emit(UserAddEvent(user))
+        await self._handle_add_user_response(message)
 
     @on_message(GetUserStatus.Response)
     async def _on_get_user_status(self, message: GetUserStatus.Response, connection):
@@ -590,7 +603,21 @@ class ServerManager:
 
         await self._event_bus.emit(UserStatsEvent(user))
 
-    # Utility methods
+    async def _handle_add_user_response(self, response: AddUser.Response) -> User:
+        if response.exists:
+            user = self._state.get_or_create_user(response.username)
+            user.name = response.username
+            user.status = UserStatus(response.status)
+            user.avg_speed = response.avg_speed
+            user.downloads = response.download_num
+            user.files = response.file_count
+            user.directories = response.dir_count
+            user.country = response.country_code
+
+            await self._event_bus.emit(UserAddEvent(user))
+            return user
+
+    # Job methods
 
     async def _ping_job(self):
         while True:
@@ -607,6 +634,7 @@ class ServerManager:
                 if not qry.is_wishlist_query
             }
 
+            logger.info(f"starting wishlist search of {len(items)} items")
             # Recreate
             for item in items:
                 if not item['enabled']:

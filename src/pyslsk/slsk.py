@@ -234,11 +234,11 @@ class SoulSeek:
         else:
             await self.server_manager.get_user_status(user)
 
-    async def add_user(self, user: Union[str, User]):
+    async def add_user(self, user: Union[str, User]) -> User:
         if isinstance(user, User):
-            await self.server_manager.add_user(user.name)
+            return await self.server_manager.add_user(user.name)
         else:
-            await self.server_manager.add_user(user)
+            return await self.server_manager.add_user(user)
 
     async def remove_user(self, user: Union[str, User]):
         if isinstance(user, User):
