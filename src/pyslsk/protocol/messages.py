@@ -461,12 +461,14 @@ class ParentIP(ServerMessage):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x49)
         ip: str = field(metadata={'type': ipaddr})
 
+
 class ParentMinSpeed(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x53)
         speed: int = field(metadata={'type': uint32})
+
 
 class ParentSpeedRatio(ServerMessage):
 

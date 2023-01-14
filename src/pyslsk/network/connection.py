@@ -463,7 +463,6 @@ class PeerConnection(DataConnection):
             if bytes_received >= filesize:
                 return None
 
-
     async def send_data(self, data: bytes):
         try:
             self._writer.write(data)

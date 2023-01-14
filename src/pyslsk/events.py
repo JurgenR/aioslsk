@@ -6,7 +6,7 @@ import logging
 from typing import Callable, Dict, List, Type, TYPE_CHECKING
 
 from .model import ChatMessage, Room, RoomMessage, User
-from .protocol.primitives import DirectoryData, FileData, MessageDataclass
+from .protocol.primitives import DirectoryData, MessageDataclass
 from .search import SearchQuery, SearchResult
 
 if TYPE_CHECKING:
@@ -15,7 +15,6 @@ if TYPE_CHECKING:
         ConnectionState,
         CloseReason,
         PeerConnection,
-        PeerConnectionState,
     )
     from .transfer import Transfer, TransferState
 

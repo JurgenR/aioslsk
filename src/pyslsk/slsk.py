@@ -13,12 +13,10 @@ from .shares import (
 )
 from .model import Room, User
 from .network.network import Network
-from .protocol.messages import FileSearch
 from .peer import PeerManager
 from .server_manager import ServerManager
 from .scheduler import Scheduler
 from .state import State
-from .search import SearchQuery
 from .settings import Settings
 from .transfer import Transfer, TransferDirection, TransferManager
 from .utils import ticket_generator
