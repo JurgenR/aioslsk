@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+import datetime
 from typing import List
 
 from .protocol.primitives import FileData
@@ -33,3 +34,4 @@ class SearchQuery:
     query: str
     results: List[SearchResult] = field(default_factory=list)
     is_wishlist_query: bool = False
+    started: float = field(default_factory=datetime.datetime.now)

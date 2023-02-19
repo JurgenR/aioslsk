@@ -196,9 +196,13 @@ class PeerManager:
         """
         try:
             task.result()
+
+        except asyncio.CancelledError:
+            logger.debug(
+                f"cancelled delivery of search results : (ticket={ticket}, username={username}, query={query})")
         except Exception as exc:
             logger.warning(
-                f"failed to delivered search results : {exc!r} (ticket={ticket}, username={username}, query={query})")
+                f"failed to deliver search results : {exc!r} (ticket={ticket}, username={username}, query={query})")
         else:
             logger.info(
                 f"delivered search results (ticket={ticket}, username={username}, query={query})")
@@ -211,6 +215,9 @@ class PeerManager:
         """
         try:
             task.result()
+
+        except asyncio.CancelledError:
+            logger.debug(f"request for potential parent cancelled (username={username})")
         except Exception as exc:
             logger.warning(f"request for potential parent failed : {exc!r} (username={username})")
         else:
@@ -415,7 +422,7 @@ class PeerManager:
             logger.warning(f"no handling for server search request with code {message.distributed_code}")
             return
 
-        self._query_shares_and_reply(message.ticket, message.username, message.query)
+        await self._query_shares_and_reply(message.ticket, message.username, message.query)
 
         dmessage = DistributedSearchRequest.Request(
             unknown=0x31,
@@ -467,3 +474,10 @@ class PeerManager:
     async def send_messages_to_children(self, *messages: Union[MessageDataclass, bytes]):
         for child in self._state.children:
             await child.connection.queue_messages(*messages)
+
+    async def stop(self):
+        for task in self._search_reply_tasks:
+            task.cancel()
+
+        for task in self._potential_parent_tasks:
+            task.cancel()

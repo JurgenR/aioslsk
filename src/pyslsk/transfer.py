@@ -20,7 +20,6 @@ from .exceptions import (
     PeerConnectionError,
 )
 from .network.connection import (
-    ConnectionState,
     CloseReason,
     PeerConnection,
     PeerConnectionState,
@@ -30,7 +29,6 @@ from .events import (
     build_message_map,
     on_message,
     EventBus,
-    ConnectionStateChangedEvent,
     InternalEventBus,
     MessageReceivedEvent,
     PeerInitializedEvent,
@@ -893,7 +891,7 @@ class TransferManager:
             ticket = await connection.receive_transfer_ticket()
         except ConnectionReadError:
             logger.warning(f"failed to receive transfer ticket on file connection : {connection.hostname}:{connection.port}")
-            connection.disconnect(CloseReason.REQUESTED)
+            await connection.disconnect(CloseReason.REQUESTED)
             return
 
         # Get the transfer from the transfer requests

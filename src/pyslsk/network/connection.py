@@ -9,6 +9,7 @@ import struct
 from ..protocol import obfuscation
 from ..constants import (
     PEER_CONNECT_TIMEOUT,
+    PEER_RESPONSE_TIMEOUT,
     SERVER_CONNECT_TIMEOUT,
     TRANSFER_TIMEOUT,
 )
@@ -144,15 +145,17 @@ class ListeningConnection(Connection):
 
     async def accept(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         hostname, port = writer.get_extra_info('peername')
-        peer_connection = PeerConnection(
+        logger.debug(f"{self.hostname}:{self.port} : accepted connection {hostname}:{port}")
+        connection = PeerConnection(
             hostname, port, self.network,
             obfuscated=self.obfuscated,
             connection_type=PeerConnectionType.PEER,
             incoming=True
         )
-        peer_connection._reader = reader
-        peer_connection._writer = writer
-        self.network.on_peer_accepted(peer_connection)
+        connection._reader, connection._writer = reader, writer
+        self.network.on_peer_accepted(connection)
+        await connection.set_state(ConnectionState.CONNECTED)
+        connection._start_reader_task()
 
 
 class DataConnection(Connection):
@@ -202,7 +205,7 @@ class DataConnection(Connection):
         else:
             logger.debug(f"successfully connected to {self.hostname}:{self.port}")
             await self.set_state(ConnectionState.CONNECTED)
-            self._reader_task = asyncio.create_task(self._message_reader_loop())
+            self._start_reader_task()
 
     async def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
         """Disconnects the TCP connection. The method will not raise an
@@ -220,16 +223,24 @@ class DataConnection(Connection):
             if self._writer is not None:
                 if not self._writer.is_closing():
                     self._writer.close()
-                logger.debug(f"{self.hostname}:{self.port} : waiting until disconnected")
                 await self._writer.wait_closed()
 
         except Exception:
             logger.exception(f"{self.hostname}:{self.port} : exception while disconnecting")
 
         finally:
-            logger.debug(f"{self.hostname}:{self.port} : disconnected : {reason.name}")
+            self._stop_reader_task()
             await self.set_state(ConnectionState.CLOSED, close_reason=reason)
+
+    def _start_reader_task(self):
+        self._reader_task = asyncio.create_task(self._message_reader_loop())
+
+    def _stop_reader_task(self):
+        if self._reader_task is not None:
+            self._reader_task.cancel()
             self._reader_task = None
+
+    # Read/write methods
 
     async def _read_until_eof(self):
         await self._reader.read(-1)
@@ -249,19 +260,21 @@ class DataConnection(Connection):
             try:
                 message_data = await self.receive_message()
             except ConnectionReadError as exc:
-                logger.warning(f"{self.hostname}:{self.ip} : read error : {exc!r}")
-
-            if message_data:
-                await self._process_message_data(message_data)
+                logger.warning(f"{self.hostname}:{self.port} : read error : {exc!r}")
+            else:
+                if message_data:
+                    await self._process_message_data(message_data)
 
     async def _read_message(self):
         header_size = HEADER_SIZE_OBFUSCATED if self.obfuscated else HEADER_SIZE_UNOBFUSCATED
-        header = await self._reader.readexactly(header_size)
+        header = await asyncio.wait_for(
+            self._reader.readexactly(header_size), PEER_RESPONSE_TIMEOUT)
 
         message_len_buf = obfuscation.decode(header) if self.obfuscated else header
         _, message_len = uint32.deserialize(0, message_len_buf)
 
-        message = await self._reader.readexactly(message_len)
+        message = await asyncio.wait_for(
+            self._reader.readexactly(message_len), PEER_RESPONSE_TIMEOUT)
 
         return header + message
 
@@ -398,15 +411,14 @@ class PeerConnection(DataConnection):
         # For AWAITING_OFFSET, AWAITING_TICKET and TRANSFERING we need to cancel
         # the message reader as these require different handling
         if state not in (PeerConnectionState.AWAITING_INIT, PeerConnectionState.ESTABLISHED):
-            if self._reader_task is not None:
-                self._reader_task.cancel()
-                self._reader_task = None
+            self._stop_reader_task()
 
         # Set non-peer connections to non-obfuscated
         if state != PeerConnectionState.AWAITING_INIT:
             if self.connection_type != PeerConnectionType.PEER:
                 self.obfuscated = False
 
+        logger.debug(f"{self.hostname}:{self.port} setting state to {state}")
         self.connection_state = state
 
     async def _read_transfer_ticket(self) -> bytes:

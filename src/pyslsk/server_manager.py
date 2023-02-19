@@ -145,6 +145,7 @@ class ServerManager:
 
     async def login(self, username: str, password: str, version: int = 157):
         logger.info(f"sending request to login: username={username}, password={password}")
+        expected_response = self.network.wait_for_server_message(Login.Response)
         await self.network.send_server_messages(
             Login.Request(
                 username=username,
@@ -154,8 +155,7 @@ class ServerManager:
                 minor_version=100
             )
         )
-        _, response = await asyncio.wait_for(
-            self.network.wait_for_server_message(Login.Response), 30)
+        _, response = await asyncio.wait_for(expected_response, SERVER_RESPONSE_TIMEOUT)
 
         # First value indicates success
         if response.success:
@@ -203,13 +203,13 @@ class ServerManager:
 
         await self._internal_event_bus.emit(LoginEvent(success=response.success))
 
-    async def search(self, query: str) -> int:
+    async def search(self, query: str) -> SearchQuery:
         ticket = next(self._ticket_generator)
         await self.network.queue_server_messages(
             FileSearch.Request(ticket, query)
         )
         self._state.search_queries[ticket] = SearchQuery(ticket=ticket, query=query)
-        return ticket
+        return self._state.search_queries[ticket]
 
     async def add_user(self, username: str) -> User:
         """Request the server to track the user
@@ -493,7 +493,7 @@ class ServerManager:
         )
         self._state.private_messages[message.chat_id] = chat_message
 
-        self.network.send_server_messages(
+        await self.network.send_server_messages(
             ChatAckPrivateMessage.Request(message.chat_id)
         )
 
@@ -666,7 +666,6 @@ class ServerManager:
         if event.state == ConnectionState.CONNECTED:
             self._ping_task = asyncio.create_task(
                 self._ping_job(), name=f'ping-task-{task_counter()}')
-            # self._state.scheduler.add_job(self._report_shares_job)
 
         elif event.state == ConnectionState.CLOSING:
             self._state.logged_in = False

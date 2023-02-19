@@ -7,10 +7,7 @@ from typing import Dict, List, Union
 
 from ..constants import (
     DEFAULT_LISTENING_HOST,
-    PEER_CONNECT_TIMEOUT,
     PEER_INDIRECT_CONNECT_TIMEOUT,
-    PEER_INIT_TIMEOUT,
-    SERVER_CONNECT_TIMEOUT
 )
 from .connection import (
     Connection,
@@ -83,7 +80,7 @@ class Network:
         self._state = state
         self._settings: Settings = settings
         self._internal_event_bus: InternalEventBus = internal_event_bus
-        self._upnp = upnp.UPNP()
+        self._upnp = upnp.UPNP(self._settings)
         self._ticket_generator = ticket_generator()
         self._stop_event = stop_event
         self._response_futures: List[ExpectedResponse] = []
@@ -126,7 +123,9 @@ class Network:
         self._user_ip_overrides: Dict[str, str] = self._settings.get('debug.user_ip_overrides')
 
         # Operational
-        self._connect_to_peer_tasks: List[asyncio.Task] = []
+        self._log_connections_task: asyncio.Task = None
+        self._create_peer_connection_tasks: List[asyncio.Task] = []
+        self._upnp_task: asyncio.Task = None
 
     async def initialize(self):
         """Initializes the server and listening connections"""
@@ -138,36 +137,56 @@ class Network:
 
         await asyncio.gather(*tasks, return_exceptions=True)
 
+        if self._log_connections_task is None:
+            self._log_connections_task = asyncio.create_task(
+                self._log_connections_job(),
+                name=f'log-connections-{task_counter()}'
+            )
+
     async def _connect_server(self):
         await self.server.connect()
 
     async def disconnect(self):
         """Disconnects all current connections"""
+        for task in self._create_peer_connection_tasks:
+            task.cancel()
+
+        if self._log_connections_task is not None:
+            self._log_connections_task.cancel()
+            self._log_connections_task = None
+
+        if self._upnp_task is not None:
+            self._upnp_task.cancel()
+            self._upnp_task = None
+
         connections = [self.server, ] + self.listening_connections + self.peer_connections
-        logger.info(
-            f"waiting for network disconnect : {len(connections)} connections")
+        logger.info(f"waiting for network disconnect : {len(connections)} connections")
         results = await asyncio.gather(
             *[conn.disconnect(CloseReason.REQUESTED) for conn in connections],
             return_exceptions=True
         )
         logger.debug(f"disconnect results : {results!r}")
 
-    def _refill_buckets(self):
-        self.upload_rate_limiter.refill()
-        self.download_rate_limiter.refill()
+    async def _log_connections_job(self):
+        while True:
+            await asyncio.sleep(1)
+            count = len(self.peer_connections)
+            logger.info(f"currently {count} peer connections")
+            logger.info(f"currently {len(self._create_peer_connection_tasks)} connect to peer tasks")
 
-        for connection in self.peer_connections:
-            if not connection.is_uploading():
-                continue
+    async def map_upnp_ports(self):
+        """Maps the listening ports using UPNP on the gateway"""
+        listen_port = self._settings.get('network.listening_port')
+        ports = [listen_port, listen_port + 1]
+        ip_address = self.server.get_connecting_ip()
 
-    def enable_upnp(self):
-        listening_port = self._settings.get('network.listening_port')
-        for port in [listening_port, listening_port + 1, ]:
-            self._upnp.map_port(
-                self.server.get_connecting_ip(),
-                port,
-                self._settings.get('network.upnp_lease_duration')
-            )
+        devices = await self._upnp.search_igd_devices(ip_address)
+        for port in ports:
+            for device in devices:
+                await self._upnp.map_port(device, ip_address, port)
+
+    def _map_upnp_ports_callback(self, future: asyncio.Future):
+        self._upnp_task = None
 
     async def create_peer_connection(
                 self, username: str, typ: str, ip: str = None, port: int = None,
@@ -213,6 +232,7 @@ class Network:
             username=username,
             obfuscated=False
         )
+        self.peer_connections.append(connection)
         try:
             await connection.connect()
 
@@ -225,43 +245,14 @@ class Network:
 
             connection.set_connection_state(initial_state)
 
-            await self.add_peer_connection(connection, requested=True)
+            await self._internal_event_bus.emit(
+                PeerInitializedEvent(connection, requested=True))
             return connection
 
         # Make indirect connection
-        await self.server.send_message(ConnectToPeer.Request(ticket, username, typ))
-
-        # Wait for either a PierceFirewall from the peer or a CannotConnect from
-        # the server
-        futures = (
-            self.wait_for_peer_message(None, PeerPierceFirewall.Request, ticket=ticket),
-            self.wait_for_server_message(CannotConnect.Response, ticket=ticket)
+        connection = await self._make_indirect_connection(
+            ticket, username, typ, initial_state
         )
-        done, pending = await asyncio.wait(
-            futures,
-            timeout=PEER_INDIRECT_CONNECT_TIMEOUT,
-            return_when=asyncio.FIRST_COMPLETED
-        )
-
-        # Whatever happens here, we can remove all the pending futures
-        [future.cancel() for future in pending]
-        [self._remove_response_future(future) for future in futures]
-
-        # `done` will be empty in case of timeout
-        if not done:
-            raise PeerConnectionError(f"indirect connection timed out (username={username}, ticket={ticket})")
-
-        connection, response = done.pop().result()
-
-        if response.__class__ == CannotConnect.Response:
-            logger.debug(f"received cannot connect (ticket={ticket})")
-            raise PeerConnectionError(f"indirect connection failed (username={username}, ticket={ticket})")
-
-        connection.username = username
-        connection.connection_type = typ
-        connection.set_connection_state(initial_state)
-
-        await self.add_peer_connection(connection, requested=True)
 
         return connection
 
@@ -333,33 +324,12 @@ class Network:
         :param typ: peer connection type
         :return: list of PeerConnection instances
         """
-        active_connections = []
-
-        for connection in self.get_peer_connections(username, typ):
-            if connection.state != ConnectionState.CONNECTED:
-                continue
-            if connection.connection_state != PeerConnectionState.ESTABLISHED:
-                continue
-            active_connections.append(connection)
-        return active_connections
-
-    async def add_peer_connection(self, connection: PeerConnection, requested: bool):
-        """Creates a new peer object and adds it to our list of peers, if a peer
-        already exists with the given L{username} the connection will be added
-        to the existing peer.
-
-        This method emits the PeerInitializedEvent
-
-        :param connection: the connection instance
-        :param requested: whether we are connecting to another peer or another
-            peer is connecting to us
-        :rtype: L{Peer}
-        :return: created/updated L{Peer} object
-        """
-        if connection not in self.peer_connections:
-            self.peer_connections.append(connection)
-            await self._internal_event_bus.emit(
-                PeerInitializedEvent(connection, requested))
+        return list(
+            filter(
+                lambda conn: conn.state == ConnectionState.CONNECTED and conn.connection_state == PeerConnectionState.ESTABLISHED,
+                self.get_peer_connections(username, typ)
+            )
+        )
 
     def remove_peer_connection(self, connection: PeerConnection):
         if connection in self.peer_connections:
@@ -371,14 +341,50 @@ class Network:
     async def _on_connect_to_peer(self, message: ConnectToPeer.Response, connection: ServerConnection):
         """Handles a ConnectToPeer request coming from another peer"""
         task = asyncio.create_task(
-            self._handle_connect_to_peer(message),
+            self._handle_indirect_connection(message),
             name=f'connect-to-peer-{task_counter()}'
         )
         task.add_done_callback(
             partial(self._connect_to_peer_task_callback, message))
-        self._connect_to_peer_tasks.append(task)
+        self._create_peer_connection_tasks.append(task)
 
-    async def _handle_connect_to_peer(self, message: ConnectToPeer.Response):
+    async def _make_indirect_connection(self, ticket: int, username: str, typ: str, initial_state: PeerConnectionState) -> PeerConnection:
+        await self.server.send_message(ConnectToPeer.Request(ticket, username, typ))
+
+        # Wait for either a PierceFirewall from the peer or a CannotConnect from
+        # the server
+        futures = (
+            self.wait_for_peer_message(None, PeerPierceFirewall.Request, ticket=ticket),
+            self.wait_for_server_message(CannotConnect.Response, ticket=ticket)
+        )
+        done, pending = await asyncio.wait(
+            futures,
+            timeout=PEER_INDIRECT_CONNECT_TIMEOUT,
+            return_when=asyncio.FIRST_COMPLETED
+        )
+
+        # Whatever happens here, we can remove all the pending futures
+        [future.cancel() for future in pending]
+        [self._remove_response_future(future) for future in futures]
+
+        # `done` will be empty in case of timeout
+        if not done:
+            raise PeerConnectionError(f"indirect connection timed out (username={username}, ticket={ticket})")
+
+        connection, response = done.pop().result()
+
+        if response.__class__ == CannotConnect.Response:
+            logger.debug(f"received cannot connect (ticket={ticket})")
+            raise PeerConnectionError(f"indirect connection failed (username={username}, ticket={ticket})")
+
+        connection.username = username
+        connection.connection_type = typ
+        connection.set_connection_state(initial_state)
+
+        await self._internal_event_bus.emit(
+            PeerInitializedEvent(connection, requested=True))
+
+    async def _handle_indirect_connection(self, message: ConnectToPeer.Response):
         obfuscate = self._settings.get('network.peer.obfuscate') and bool(message.obfuscated_port)
 
         ip = self._user_ip_overrides.get(message.username, message.ip)
@@ -392,9 +398,10 @@ class Network:
             obfuscated=obfuscate,
             username=message.username
         )
+        self.peer_connections.append(peer_connection)
 
         try:
-            await asyncio.wait_for(peer_connection.connect(), PEER_CONNECT_TIMEOUT)
+            await peer_connection.connect()
 
         except Exception as exc:
             logger.warning(f"couldn't connect to peer : {exc!r}")
@@ -409,7 +416,8 @@ class Network:
         else:
             peer_connection.set_connection_state(PeerConnectionState.ESTABLISHED)
 
-        await self.add_peer_connection(peer_connection, requested=False)
+        await self._internal_event_bus.emit(
+            PeerInitializedEvent(peer_connection, requested=False))
 
     @on_message(PeerInit.Request)
     async def _on_peer_init(self, message: PeerInit.Request, connection: PeerConnection):
@@ -422,7 +430,8 @@ class Network:
         else:
             connection.set_connection_state(PeerConnectionState.ESTABLISHED)
 
-        await self.add_peer_connection(connection, requested=False)
+        await self._internal_event_bus.emit(
+            PeerInitializedEvent(connection, requested=False))
 
     async def queue_peer_messages(self, username: str, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
         """Sends messages to the specified peer
@@ -480,8 +489,12 @@ class Network:
             # For registering with UPNP we need to know our own IP first, we can
             # get this from the server connection but we first need to be
             # fully connected to it before we can request a valid IP
-            if self._settings.get('network.use_upnp'):
-                self.enable_upnp()
+            if self._settings.get('network.upnp.enabled'):
+                self._upnp_task = asyncio.create_task(
+                    self.map_upnp_ports(),
+                    name=f'enable-upnp-{task_counter()}'
+                )
+                self._upnp_task.add_done_callback(self._map_upnp_ports_callback)
 
         elif state == ConnectionState.CLOSED:
 
@@ -504,7 +517,7 @@ class Network:
 
     # Peer related
     def on_peer_accepted(self, connection: PeerConnection):
-        pass
+        self.peer_connections.append(connection)
 
     async def on_message_received(self, message, connection: Connection):
         # Complete expected response futures
@@ -553,9 +566,11 @@ class Network:
     def _connect_to_peer_task_callback(self, message: ConnectToPeer.Response, task: asyncio.Task):
         try:
             task.result()
+        except asyncio.CancelledError:
+            logger.debug(f"cancelled ConnectToPeer request : {message}")
         except Exception as exc:
             logger.warning(f"failed to fulfill ConnectToPeer request : {exc!r} : {message}")
         else:
             logger.info(f"successfully fulfilled ConnectToPeer request : {message}")
         finally:
-            self._connect_to_peer_tasks.remove(task)
+            self._create_peer_connection_tasks.remove(task)

@@ -14,8 +14,9 @@ from .shares import (
 from .model import Room, User
 from .network.network import Network
 from .peer import PeerManager
-from .server_manager import ServerManager
 from .scheduler import Scheduler
+from .server_manager import ServerManager
+from .search import SearchQuery
 from .state import State
 from .settings import Settings
 from .transfer import Transfer, TransferDirection, TransferManager
@@ -117,7 +118,10 @@ class SoulSeek:
 
     async def run_until_stopped(self):
         await self._stop_event.wait()
+        await self.peer_manager.stop()
         await self._network.disconnect()
+
+        logger.debug(f"tasks after disconnect : {asyncio.all_tasks()}")
 
         # Writing database needs to be last, as transfers need to go into the
         # incomplete state if they were still transfering
@@ -136,8 +140,8 @@ class SoulSeek:
         pass
 
     def _exception_handler(self, loop, context):
-        logger.exception(
-            f"unhandled exception in task {context['future']}", exc_info=context['exception'])
+        message = f"unhandled exception on loop {loop!r} : context : {context!r}"
+        logger.exception(message, exc_info=context.get('exception', None))
 
     @property
     def transfers(self):
@@ -207,7 +211,7 @@ class SoulSeek:
         else:
             await self.server_manager.send_room_message(room, message)
 
-    async def search(self, query: str):
+    async def search(self, query: str) -> SearchQuery:
         """Performs a search, returns the generated ticket number for the search
         """
         logger.info(f"Starting search for query: {query}")

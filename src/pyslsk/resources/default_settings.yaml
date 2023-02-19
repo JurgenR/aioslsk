@@ -3,8 +3,9 @@ network:
   server_hostname: server.slsknet.org
   server_port: 2416
   listening_port: 61000
-  use_upnp: true
-  upnp_lease_duration: 0
+  upnp:
+    enabled: true
+    lease_duration: 0
   timeout:
     peer: 10
     distributed: 120
