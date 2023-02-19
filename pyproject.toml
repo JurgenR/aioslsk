@@ -20,6 +20,7 @@ watchdog = "^2.1.9"
 typing-extensions = "^4.4.0"
 qasync = "^0.23.0"
 aiofiles = "^22.1.0"
+async-upnp-client = "^0.33.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.1.1"
