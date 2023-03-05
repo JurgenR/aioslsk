@@ -9,7 +9,7 @@ import struct
 from ..protocol import obfuscation
 from ..constants import (
     PEER_CONNECT_TIMEOUT,
-    PEER_RESPONSE_TIMEOUT,
+    PEER_READ_TIMEOUT,
     SERVER_CONNECT_TIMEOUT,
     TRANSFER_TIMEOUT,
 )
@@ -268,13 +268,13 @@ class DataConnection(Connection):
     async def _read_message(self):
         header_size = HEADER_SIZE_OBFUSCATED if self.obfuscated else HEADER_SIZE_UNOBFUSCATED
         header = await asyncio.wait_for(
-            self._reader.readexactly(header_size), PEER_RESPONSE_TIMEOUT)
+            self._reader.readexactly(header_size), PEER_READ_TIMEOUT)
 
         message_len_buf = obfuscation.decode(header) if self.obfuscated else header
         _, message_len = uint32.deserialize(0, message_len_buf)
 
         message = await asyncio.wait_for(
-            self._reader.readexactly(message_len), PEER_RESPONSE_TIMEOUT)
+            self._reader.readexactly(message_len), PEER_READ_TIMEOUT)
 
         return header + message
 
@@ -341,6 +341,13 @@ class DataConnection(Connection):
         return tasks
 
     async def send_message(self, message: Union[bytes, MessageDataclass]):
+        """Sends a message or a set of bytes over the connection. In case an
+        object of `MessageDataClass` is provided the object will first be
+        serialized. If the `obfuscated` flag is set for the connection the
+        message or bytes will first be obfuscated
+
+        :raise ConnectionWriteError:
+        """
         logger.debug(f"{self.hostname}:{self.port} : send message : {message!r}")
         # Serialize the message
         data = self._serialize_message(message)

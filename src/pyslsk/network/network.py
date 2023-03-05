@@ -19,7 +19,11 @@ from .connection import (
     PeerConnectionType,
     ServerConnection,
 )
-from ..exceptions import PeerConnectionError, ConnectionFailedError
+from ..exceptions import (
+    ConnectionFailedError,
+    ConnectionWriteError,
+    PeerConnectionError,
+)
 from ..events import (
     build_message_map,
     on_message,
@@ -83,7 +87,7 @@ class Network:
         self._upnp = upnp.UPNP(self._settings)
         self._ticket_generator = ticket_generator()
         self._stop_event = stop_event
-        self._response_futures: List[ExpectedResponse] = []
+        self._expected_response_futures: List[ExpectedResponse] = []
 
         # List of connections
         self.server: ServerConnection = ServerConnection(
@@ -233,21 +237,30 @@ class Network:
             obfuscated=False
         )
         self.peer_connections.append(connection)
+
         try:
             await connection.connect()
-
-        except Exception as exc:
-            logger.debug(f"direct connection to peer failed : {username} {ip}:{port} : {exc!r}")
-
-        else:
-            await connection.send_message(PeerInit.Request(
-                self._settings.get('credentials.username'), typ, ticket))
+            await connection.send_message(
+                PeerInit.Request(
+                    self._settings.get('credentials.username'),
+                    typ,
+                    ticket
+                )
+            )
 
             connection.set_connection_state(initial_state)
 
             await self._internal_event_bus.emit(
                 PeerInitializedEvent(connection, requested=True))
             return connection
+
+        except ConnectionFailedError as exc:
+            logger.debug(
+                f"direct connection to peer failed : {username} {ip}:{port} : {exc!r}")
+
+        except ConnectionWriteError as exc:
+            logger.debug(
+                f"direct connection succeeded but failed to deliver init message : {username} {ip}:{port} : {exc!r}")
 
         # Make indirect connection
         connection = await self._make_indirect_connection(
@@ -256,11 +269,11 @@ class Network:
 
         return connection
 
-    async def get_peer_connection(self, username: str) -> PeerConnection:
-        """Gets a peer connection for the given `username`, the type will always
-
+    async def get_peer_connection(self, username: str, typ: PeerConnectionType = PeerConnectionType.PEER) -> PeerConnection:
+        """Gets a peer connection for the given `username`. It will first try to
+        re-use an existing connection, otherwise it will create a new connection
         """
-        connections = self.get_active_peer_connections(username, PeerConnectionType.PEER)
+        connections = self.get_active_peer_connections(username, typ)
         if connections:
             return connections[0]
 
@@ -271,7 +284,7 @@ class Network:
 
     def _remove_response_future(self, expected_response):
         try:
-            self._response_futures.remove(expected_response)
+            self._expected_response_futures.remove(expected_response)
         except ValueError:
             pass
 
@@ -286,15 +299,16 @@ class Network:
             message_class=message_class,
             fields=kwargs
         )
-        self._response_futures.append(future)
+        self._expected_response_futures.append(future)
         future.add_done_callback(self._remove_response_future)
         return future
 
-    def wait_for_peer_message(self, peer, message_class, **kwargs) -> asyncio.Future:
+    def wait_for_peer_message(self, peer: str, message_class, **kwargs) -> asyncio.Future:
         """Waits for a peer message to arrive, the message must match the
         `message_class` and fields defined in the keyword arguments and must be
         coming from a connection by `peer`.
 
+        :param peer: name of the peer for which the message should be received
         :return: `asyncio.Future` object
         """
         future = ExpectedResponse(
@@ -303,7 +317,7 @@ class Network:
             peer=peer,
             fields=kwargs
         )
-        self._response_futures.append(future)
+        self._expected_response_futures.append(future)
         future.add_done_callback(self._remove_response_future)
         return future
 
@@ -316,7 +330,8 @@ class Network:
             if connection.username == username and connection.connection_type == typ
         ]
 
-    def get_active_peer_connections(self, username: str, typ: str) -> List[PeerConnection]:
+    def get_active_peer_connections(
+            self, username: str, typ: PeerConnectionType) -> List[PeerConnection]:
         """Return a list of currently active messaging connections for given
         peer connection type.
 
@@ -345,10 +360,24 @@ class Network:
             name=f'connect-to-peer-{task_counter()}'
         )
         task.add_done_callback(
-            partial(self._connect_to_peer_task_callback, message))
+            partial(self._handle_indirect_connection_callback, message))
         self._create_peer_connection_tasks.append(task)
 
-    async def _make_indirect_connection(self, ticket: int, username: str, typ: str, initial_state: PeerConnectionState) -> PeerConnection:
+    async def _make_indirect_connection(
+            self, ticket: int, username: str, typ: str, initial_state: PeerConnectionState) -> PeerConnection:
+        """Attempts to make an indirect connection by sending a `ConnectToPeer`
+        message to the server and waiting for an incoming connection and
+        `PeerPierceFirewall` message.
+
+        A `PeerInitializedEvent` will be emitted in case of success
+
+        :param initial_state: the initial state of the connection after the
+            connection is established and the init message received. This is
+            going to be one of two values: PeerConnectionState.ESTABLISHED or
+            PeerConnectionState.AWAITING_OFFSET
+        :raise PeerConnectionError: in case timeout was reached or we received a
+            `CannotConnect` message from the server containing the `ticket`
+        """
         await self.server.send_message(ConnectToPeer.Request(ticket, username, typ))
 
         # Wait for either a PierceFirewall from the peer or a CannotConnect from
@@ -369,13 +398,15 @@ class Network:
 
         # `done` will be empty in case of timeout
         if not done:
-            raise PeerConnectionError(f"indirect connection timed out (username={username}, ticket={ticket})")
+            raise PeerConnectionError(
+                f"indirect connection timed out (username={username}, ticket={ticket})")
 
         connection, response = done.pop().result()
 
         if response.__class__ == CannotConnect.Response:
             logger.debug(f"received cannot connect (ticket={ticket})")
-            raise PeerConnectionError(f"indirect connection failed (username={username}, ticket={ticket})")
+            raise PeerConnectionError(
+                f"indirect connection failed (username={username}, ticket={ticket})")
 
         connection.username = username
         connection.connection_type = typ
@@ -385,6 +416,7 @@ class Network:
             PeerInitializedEvent(connection, requested=True))
 
     async def _handle_indirect_connection(self, message: ConnectToPeer.Response):
+        """Handles an indirect connection request received from the server"""
         obfuscate = self._settings.get('network.peer.obfuscate') and bool(message.obfuscated_port)
 
         ip = self._user_ip_overrides.get(message.username, message.ip)
@@ -521,7 +553,7 @@ class Network:
 
     async def on_message_received(self, message, connection: Connection):
         # Complete expected response futures
-        for expected_response in self._response_futures:
+        for expected_response in self._expected_response_futures:
             if expected_response.matches(connection, message):
                 expected_response.set_result((connection, message, ))
 
@@ -563,7 +595,7 @@ class Network:
             self.download_rate_limiter = new_limiter
 
     # Task callbacks
-    def _connect_to_peer_task_callback(self, message: ConnectToPeer.Response, task: asyncio.Task):
+    def _handle_indirect_connection_callback(self, message: ConnectToPeer.Response, task: asyncio.Task):
         try:
             task.result()
         except asyncio.CancelledError:

@@ -3,7 +3,6 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Deque, Dict, List
 
-from .scheduler import Scheduler
 from .model import ChatMessage, Room, User
 
 if TYPE_CHECKING:
@@ -50,9 +49,6 @@ class State:
     # Search related
     received_searches: Deque[ReceivedSearch] = field(default_factory=lambda: deque(list(), 500))
     search_queries: Dict[int, SearchQuery] = field(default_factory=dict)
-
-    # Global state
-    scheduler: Scheduler = None
 
     def get_or_create_user(self, username) -> User:
         try:

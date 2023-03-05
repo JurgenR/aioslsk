@@ -14,25 +14,41 @@ class MessageSerializationError(PySlskException):
     pass
 
 
-class FileNotSharedError(PySlskException):
+class FileError(PySlskException):
     pass
 
 
-class PeerConnectionError(PySlskException):
+class FileNotFoundError(FileError):
     pass
 
 
-class ConnectionFailedError(PySlskException):
+class FileNotSharedError(FileError):
     pass
 
 
-class ConnectionReadError(PySlskException):
+class NetworkError(PySlskException):
     pass
 
 
-class ConnectionWriteError(PySlskException):
+class PeerConnectionError(NetworkError):
+    pass
+
+
+class ConnectionFailedError(NetworkError):
+    pass
+
+
+class ConnectionReadError(NetworkError):
+    pass
+
+
+class ConnectionWriteError(NetworkError):
     pass
 
 
 class NoSuchUserError(PySlskException):
+    pass
+
+
+class LoginFailedError(PySlskException):
     pass

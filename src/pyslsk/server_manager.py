@@ -29,7 +29,7 @@ from .events import (
     UserStatsEvent,
     UserStatusEvent,
 )
-from .exceptions import NoSuchUserError
+from .exceptions import LoginFailedError, NoSuchUserError
 from .protocol.primitives import calc_md5
 from .protocol.messages import (
     AcceptChildren,
@@ -87,7 +87,6 @@ from .protocol.messages import (
 from .model import ChatMessage, RoomMessage, User, UserStatus
 from .network.network import Network
 from .shares import SharesManager
-from .scheduler import Job
 from .search import SearchQuery
 from .settings import Settings
 from .state import State
@@ -115,7 +114,6 @@ class ServerManager:
 
         self._ping_task: asyncio.Task = None
         self._wishlist_task: asyncio.Task = None
-        self._report_shares_job = Job(30, self.report_shares)
 
         self.MESSAGE_MAP = build_message_map(self)
 
@@ -155,7 +153,10 @@ class ServerManager:
                 minor_version=100
             )
         )
-        _, response = await asyncio.wait_for(expected_response, SERVER_RESPONSE_TIMEOUT)
+        try:
+            _, response = await asyncio.wait_for(expected_response, SERVER_RESPONSE_TIMEOUT)
+        except asyncio.TimeoutError:
+            raise LoginFailedError("login timed out waiting for response")
 
         # First value indicates success
         if response.success:
@@ -163,6 +164,7 @@ class ServerManager:
             logger.info("Successfully logged on")
         else:
             logger.error(f"Failed to login, reason: {response.reason!r}")
+            raise LoginFailedError(response.reason)
 
         # Make setup calls
         dir_count, file_count = self.shares_manager.get_stats()

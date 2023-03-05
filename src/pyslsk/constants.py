@@ -5,9 +5,10 @@ PEER_INDIRECT_CONNECT_TIMEOUT: float = 60
 """Indirect connection timeout"""
 PEER_INIT_TIMEOUT: float = 5
 """Timeout waiting for Peer Initialization message"""
-PEER_RESPONSE_TIMEOUT: float = 60
-"""Timeout waiting for message"""
+PEER_READ_TIMEOUT: float = 60
+"""Timeout waiting for message on a peer or distributed connection"""
 TRANSFER_TIMEOUT: float = 180
+"""Timeout waiting for new data on a file connection"""
 SERVER_CONNECT_TIMEOUT: float = 30
 SERVER_RESPONSE_TIMEOUT: float = 30
 DISCONNECT_TIMEOUT: float = 10

@@ -1,4 +1,5 @@
-from concurrent.futures import Future, ThreadPoolExecutor
+import asyncio
+from concurrent.futures import Future
 from dataclasses import dataclass, field
 from functools import partial
 import logging
@@ -9,10 +10,11 @@ import os
 import re
 import shelve
 import sys
-from threading import RLock
-from typing import Callable, Dict, List, Set, Tuple
+import time
+from typing import Dict, List, Set, Tuple
 import uuid
 
+from .exceptions import FileNotFoundError
 from .protocol.primitives import Attribute, DirectoryData, FileData
 from .settings import Settings
 
@@ -36,18 +38,48 @@ _QUERY_WORD_SEPERATORS = re.compile(r"[\-_\/\.,]")
 
 
 @dataclass(eq=True, unsafe_hash=True)
+class SharedDirectory:
+    something: str
+    absolute_path: str
+    alias: str
+    items: Set['SharedItem'] = field(default_factory=set, init=False, compare=False, hash=False, repr=False)
+
+    def get_remote_path(self):
+        return '@@' + self.alias
+
+    def get_item_by_remote_path(self, remote_path: str):
+        for item in self.items:
+            if item.get_remote_path() == remote_path:
+                return item
+        else:
+            raise FileNotFoundError(
+                f"file with remote path {remote_path!r} not found in directory {self!r}")
+
+
+@dataclass(eq=True, unsafe_hash=True)
 class SharedItem:
-    root: str
+    shared_directory: SharedDirectory
     subdir: str
     filename: str
     modified: float
     attributes: bytes = field(default=None, init=False, compare=False, hash=False)
 
+    def get_absolute_path(self):
+        return os.path.join(
+            self.shared_directory.absolute_path, self.subdir,self.filename)
+
     def get_remote_path(self):
-        return '@@' + os.path.join(self.root, self.subdir, self.filename)
+        return '@@' + os.path.join(
+            self.shared_directory.alias, self.subdir, self.filename)
 
     def get_remote_directory_path(self):
-        return '@@' + os.path.join(self.root, self.subdir)
+        return '@@' + os.path.join(
+            self.shared_directory.alias, self.subdir)
+
+    def __getstate__(self):
+        fields = self.__dict__.copy()
+        fields['shared_directory'] = None
+        return fields
 
 
 def extract_attributes(filepath: str):
@@ -84,89 +116,16 @@ def extract_attributes(filepath: str):
     return attributes
 
 
-class IndexingTask:
-    pass
-
-
-class ScanDirectoryTask(IndexingTask):
-
-    def __init__(self, directory: str, alias: str):
-        self.directory = directory
-        self.alias = alias
-
-    def __call__(self) -> Tuple[IndexingTask, Set[SharedItem]]:
-        shared_items = set()
-        for directory, _, files in os.walk(self.directory):
-            subdir = os.path.relpath(directory, self.directory)
-
-            if subdir == '.':
-                subdir = ''
-
-            for filename in files:
-                filepath = os.path.join(directory, filename)
-                try:
-                    modified = os.path.getmtime(os.path.join(directory, filename))
-                except OSError:
-                    logger.debug(f"could not get modified time for file {filepath!r}")
-                else:
-                    shared_items.add(SharedItem(self.alias, subdir, filename, modified))
-
-        return shared_items
-
-
-class GetItemAttributesTask(IndexingTask):
-
-    def __init__(self, item_path: str, shared_item: SharedItem):
-        self.item_path = item_path
-        self.shared_item = shared_item
-
-    def __call__(self):
-        return extract_attributes(self.item_path)
-
-
-class SharesIndexer:
-    DEFAULT_FILENAME = 'shares_index'
-
-    def __init__(self):
-        self._tasks = []
-        self._thread_pool = ThreadPoolExecutor(
-            thread_name_prefix='pyslsk-index',
-            max_workers=5
-        )
-
-    def _submit_task(self, task: IndexingTask, callback: Callable):
-        future = self._thread_pool.submit(task)
-        future.add_done_callback(partial(callback, task))
-        return task
-
-    def scan_directory(self, directory: str, alias: str, callback: Callable) -> ScanDirectoryTask:
-        """Starts scanning a directory
-
-        :param directory: absolute path to the directory
-        :param alias: directory alias, used when building the SharedItem objects
-        :param callback:
-        """
-        task = ScanDirectoryTask(directory, alias)
-        return self._submit_task(task, callback)
-
-    def extract_attributes(self, item_path: str, shared_item: SharedItem, callback: Callable) -> GetItemAttributesTask:
-        task = GetItemAttributesTask(item_path, shared_item)
-        return self._submit_task(task, callback)
-
-    def stop(self):
-        self._thread_pool.shutdown(wait=False)
-
-
 class SharesStorage:
     """Abstract base class for storing shares"""
 
-    def load_items(self) -> Set[SharedItem]:
+    def load_index(self) -> List[SharedDirectory]:
         raise NotImplementedError(
-            "'load_items' needs to be overwritten in a subclass")
+            "'load_index' needs to be overwritten in a subclass")
 
-    def store_items(self, shared_items: Set[SharedItem]):
+    def store_index(self, shared_directories: List[SharedDirectory]):
         raise NotImplementedError(
-            "'store_items' needs to be overwritten in a subclass")
+            "'store_index' needs to be overwritten in a subclass")
 
 
 class SharesShelveStorage(SharesStorage):
@@ -178,34 +137,37 @@ class SharesShelveStorage(SharesStorage):
     def _get_index_path(self):
         return os.path.join(self.data_directory, self.DEFAULT_FILENAME)
 
-    def load_items(self) -> Set[SharedItem]:
+    def load_index(self) -> List[SharedDirectory]:
         with shelve.open(self._get_index_path(), 'c') as db:
-            return db.get('index', set())
+            directories = db.get('index', list())
+            for directory in directories:
+                new_items = set()
+                for item in directory.items:
+                    item.shared_directory = directory
+                    new_items.add(item)
+                directory.items = new_items
+            return directories
 
-    def store_items(self, shared_items: Set[SharedItem]):
+    def store_index(self, shared_directories: List[SharedDirectory]):
         with shelve.open(self._get_index_path(), 'c') as db:
-            db['index'] = shared_items
+            db['index'] = shared_directories
 
 
 class SharesManager:
     _ALIAS_LENGTH = 5
 
-    def __init__(self, settings: Settings, indexer: SharesIndexer, storage: SharesStorage):
+    def __init__(self, settings: Settings, storage: SharesStorage):
         self._settings: Settings = settings
         self.term_map: Dict[str, Set[SharedItem]] = {}
-        self.shared_items: Set[SharedItem] = set()
-        self.directory_aliases: Dict[str, str] = {}
+        self.shared_directories: List[SharedDirectory] = list()
+        self._directory_aliases: Dict[str, str] = {}
 
-        self.indexer: SharesIndexer = indexer
         self.storage: SharesStorage = storage
-
-        self._directory_lock: RLock = RLock()
-        self._shared_items_lock: RLock = RLock()
 
     def generate_alias(self, path: str, offset: int = 0) -> str:
         """Generates a directory alias for the given path, this method will be
         called recursively increasing the offset in case the alias is already
-        found in the directory_aliases.
+        found in the `shared_directories`.
 
         The hardware address is mixed in to avoid getting the same alias for the
         same directory on different machines. Admittedly this is a lousy
@@ -234,50 +196,28 @@ class SharesManager:
         alias_bytes = bytes([(byte % 26) + 0x61 for byte in alias_bytes])
         alias_string = alias_bytes.decode('utf8')
 
-        # Check if alias exists, otherwise try to append an offset and run again
-        if alias_string in self.directory_aliases:
-            return self.generate_alias(path, offset=offset + 1)
         return alias_string
 
     def load_from_settings(self):
+        """Loads the directories from the settings"""
         for shared_directory in self._settings.get('sharing.directories'):
             self.add_shared_directory(shared_directory)
 
-        self._prune_index()
-
-    def _prune_index(self):
-        items_to_remove = set()
-        with self._shared_items_lock:
-            for item in self.shared_items:
-                if item.root not in self.directory_aliases.keys():
-                    items_to_remove.add(item)
-
-            logger.debug(f"pruning {len(items_to_remove)} shared items")
-            self.shared_items -= items_to_remove
-
-    def read_items_from_storage(self):
-        """Read the items from the storage. Rebuilding of the term map needs to
-        be called independently.
+    def read_cache(self):
+        """Read the directories from the storage. Rebuilding of the term map
+        needs to be called independently.
         """
-        with self._shared_items_lock:
-            self.shared_items = self.storage.load_items()
+        directories = self.storage.load_index()
+        self.shared_directories = directories
 
-    def write_items_to_storage(self):
-        logger.debug(f"writing {len(self.shared_items)} items to storage")
-        with self._shared_items_lock:
-            self.storage.store_items(self.shared_items)
+    def write_cache(self):
+        logger.debug(f"writing {len(self.shared_directories)} directories to storage")
+        self.storage.store_index(self.shared_directories)
 
-    def build_term_map(self, rebuild=True):
-        """Builds a list of valid terms for the current list of shared items
-
-        :param rebuild: rebuilds the term map from scratch
-        """
-        if rebuild:
-            self.term_map = {}
-
-        with self._shared_items_lock:
-            for item in self.shared_items:
-                self._add_item_to_term_map(item)
+    def build_term_map(self, shared_directory: SharedDirectory):
+        """Builds a list of valid terms for the given shared directory"""
+        for item in shared_directory.items:
+            self._add_item_to_term_map(item)
 
     def _add_item_to_term_map(self, item: SharedItem):
         path = (item.subdir + "/" + item.filename).lower()
@@ -290,119 +230,145 @@ class SharesManager:
                 self.term_map[term] = WeakSet()
             self.term_map[term].add(item)
 
-    def get_shared_item(self, filename: str) -> SharedItem:
+    def get_shared_item(self, remote_path: str) -> SharedItem:
         """Gets a shared item from the cache based on the given file path. If
         the file does not exist in the L{shared_items} or the file is present
-        in the cache but does not exist on disk a C{LookupError} is raised.
+        in the cache but does not exist on disk a C{FileNotFoundError} is raised
 
-        This method should be called when an upload is requested from the user
-
-        :param filename: the filename
-        :raise LookupError: filename was not found in shared_items or was found
+        :param remote_path: the remote_path
+        :raise FileNotFoundError: filename was not found in shared_items or was found
             but did not exist on disk
         """
-        for item in self.shared_items:
-            if item.get_remote_path() == filename:
-                local_path = self.resolve_path(item)
-                if not os.path.exists(local_path):
-                    raise LookupError(f"file name {filename} found in cache but not on disk")
+        for shared_directory in self.shared_directories:
+            try:
+                item = shared_directory.get_item_by_remote_path(remote_path)
+            except FileNotFoundError:
+                pass
+            else:
+                if not os.path.exists(item.get_absolute_path()):
+                    raise FileNotFoundError(
+                        f"file with remote_path {remote_path} found in cache but not on disk"
+                    )
                 return item
         else:
-            raise LookupError(f"file name {filename} not found in shared items")
+            raise FileNotFoundError(f"file name {remote_path} not found in cache")
 
-    def add_shared_directory(self, shared_directory: str):
-        """Adds a shared directory. This method will:
-            - call `generate_alias` and append the directory to the list of
-              `directory_aliases`
-            - recurse down the given path and add the items to the shared items
-              list
-            - rebuild the `term_map`
+    def add_shared_directory(self, shared_directory: str) -> SharedDirectory:
+        """Adds a shared directory. This method will call `generate_alias` and
+        add the directory to the directory map
 
-        :param shared_directory: path of the shared directory, the absolute path
-            will be calculated before performing the rest of the functions
+        :param shared_directory: path of the shared directory
+        :return: a `SharedDirectory` object
         """
         # Calc absolute path, generate an alias and store it
-        with self._directory_lock:
-            abs_directory = os.path.abspath(shared_directory)
-            alias = self.generate_alias(abs_directory)
-            self.directory_aliases[alias] = abs_directory
+        abs_directory = os.path.abspath(shared_directory)
+        alias = self.generate_alias(abs_directory)
 
-        logger.debug(f"scheduling scan for directory : {abs_directory!r} (alias={alias})")
-        self.indexer.scan_directory(
-            abs_directory, alias, self._scan_directory_callback)
+        # Check if we have an existing shared directory, otherwise return it
+        directory_object = SharedDirectory(
+            shared_directory,
+            abs_directory,
+            alias
+        )
+        for shared_directory in self.shared_directories:
+            if shared_directory == directory_object:
+                return shared_directory
 
-    def _scan_directory_callback(self, task: ScanDirectoryTask, future: Future):
+        # TODO: Check if the alias already exists
+
+        self.shared_directories.append(directory_object)
+        return directory_object
+
+    async def scan(self):
+        """Scans all directories in `shared_directories` list"""
+        scan_futures = []
+        loop = asyncio.get_running_loop()
+
+        start_time = time.time()
+
+        # Scan files
+        for shared_directory in self.shared_directories:
+            logger.info(f"scheduling scan for directory : {shared_directory!r})")
+            scan_future = loop.run_in_executor(
+                None,
+                partial(self.scan_directory, shared_directory)
+            )
+            scan_future.add_done_callback(
+                partial(self._scan_directory_callback, shared_directory)
+            )
+            scan_futures.append(scan_future)
+
+        await asyncio.gather(*scan_futures, return_exceptions=True)
+
+        for shared_directory in self.shared_directories:
+            self.build_term_map(shared_directory)
+
+        # Scan attributes
+        for shared_directory in self.shared_directories:
+            amount_scheduled = 0
+            for item in shared_directory.items:
+                if item.attributes is None:
+                    future = loop.run_in_executor(
+                        None,
+                        partial(self.extract_attributes, item)
+                    )
+                    future.add_done_callback(
+                        partial(self._extract_attributes_callback, item)
+                    )
+                    amount_scheduled += 1
+            logger.debug(
+                f"scheduled {amount_scheduled} items for attribute extracting for directory {shared_directory}")
+
+        logger.info(f"completed scan in {time.time() - start_time} seconds")
+
+    def scan_directory(self, shared_directory: SharedDirectory) -> Set[SharedItem]:
+        """Starts scanning a directory
+
+        :param shared_dir: absolute path to the directory
+        :param alias: directory alias, used when building the SharedItem objects
+        """
+        shared_items = set()
+        for directory, _, files in os.walk(shared_directory.absolute_path):
+            subdir = os.path.relpath(directory, shared_directory.absolute_path)
+
+            if subdir == '.':
+                subdir = ''
+
+            for filename in files:
+                filepath = os.path.join(directory, filename)
+                try:
+                    modified = os.path.getmtime(os.path.join(directory, filename))
+                except OSError:
+                    logger.debug(f"could not get modified time for file {filepath!r}")
+                else:
+                    shared_items.add(
+                        SharedItem(shared_directory, subdir, filename, modified)
+                    )
+
+        return shared_items
+
+    def _scan_directory_callback(self, shared_directory: SharedDirectory, future: Future):
         try:
             shared_items: Set[SharedItem] = future.result()
         except Exception:
-            # Rollback adding the directory?
-            logger.exception(f"exception adding directory : {task.directory}")
+            logger.exception(f"exception adding directory : {shared_directory!r}")
         else:
-            logger.debug(f"scan found {len(shared_items)} files for directory {task.directory!r}")
-            with self._shared_items_lock:
-                self.shared_items |= shared_items
+            logger.debug(f"scan found {len(shared_items)} files for directory {shared_directory!r}")
 
-                # Go over the current shared items and filter out those that
-                # aren't returned in the scan. Also schedule a task to get the
-                # attributes if they weren't set yet for this item
-                items_to_remove = set()
-                for shared_item in self.shared_items:
-                    if shared_item.root != task.alias:
-                        continue
+            # Adds all new items to the directory items
+            shared_directory.items |= shared_items
+            # Remove all items from the cache that weren't in the returned items
+            # set
+            shared_directory.items -= (shared_directory.items ^ shared_items)
 
-                    if shared_item not in shared_items:
-                        items_to_remove.add(shared_item)
-                        continue
+    def extract_attributes(self, shared_item: SharedItem):
+        return extract_attributes(shared_item.get_absolute_path())
 
-                    if shared_item.attributes is None:
-                        self.indexer.extract_attributes(
-                            self.resolve_path(shared_item),
-                            shared_item,
-                            self._get_attributes_callback
-                        )
-                logger.debug(f"removing {len(items_to_remove)} items from cache")
-                self.shared_items -= items_to_remove
-
-            self.build_term_map(rebuild=False)
-
-    def _get_attributes_callback(self, task: GetItemAttributesTask, future: Future):
+    def _extract_attributes_callback(self, shared_item: SharedItem, future: Future):
         try:
-            attributes = future.result()
+            shared_item.attributes = future.result()
         except Exception:
-            logger.exception(f"exception fetching shared item attributes : {task!r}")
-        else:
-            task.shared_item.attributes = attributes
-
-    def remove_shared_directory(self, shared_directory: str):
-        """Removes a shared directory. This method will
-            - remove the alias from `directory_aliases`
-            - remove all shared items with the `root` as the alias
-            - rebuild the `term_map`
-
-        :param shared_directory: path of the shared directory to be removed (
-            not the alias)
-        """
-        shared_dir_abs = os.path.abspath(shared_directory)
-
-        with self._shared_items_lock:
-            aliases_rev = {v: k for k, v in self.directory_aliases.items()}
-            alias = aliases_rev[shared_dir_abs]
-
-            self.shared_items -= {
-                item for item in self.shared_items if item.root == alias
-            }
-
-        with self._directory_lock:
-            del self.directory_aliases[alias]
-
-    def resolve_path(self, item: SharedItem) -> str:
-        """Resolves the absolute path of the given `item`
-
-        :param item: `SharedItem` instance to be resolved
-        :return: absolute path to the shared item
-        """
-        root_path = self.directory_aliases[item.root]
-        return os.path.join(root_path, item.subdir, item.filename)
+            logger.warn(f"exception fetching shared item attributes : {shared_item!r}")
 
     def get_filesize(self, filename: str) -> int:
         return os.path.getsize(filename)
@@ -450,13 +416,15 @@ class SharesManager:
     def get_stats(self) -> Tuple[int, int]:
         """Gets the total amount of shared directories and files.
 
-        Directory count will include the root directories only if they contain
-        files.
-
         :return: Directory and file count as a C{tuple}
         """
-        file_count = len(self.shared_items)
-        dir_count = len(set(shared_item.subdir for shared_item in self.shared_items))
+        file_count = sum(
+            len(directory.items) for directory in self.shared_directories
+        )
+        dir_count = sum(
+            len(set(item.subdir for item in directory.items))
+            for directory in self.shared_directories
+        )
         return dir_count, file_count
 
     def get_download_path(self, filename: str):
@@ -472,17 +440,18 @@ class SharesManager:
         a PeerSharesRequest messages
         """
         # Sort files under unique directories
-        directories = {}
-        for item in self.shared_items:
-            directory = item.get_remote_directory_path()
-            if directory in directories:
-                directories[directory].append(item)
-            else:
-                directories[directory] = [item, ]
+        response_dirs: Dict[str, SharedItem] = {}
+        for shared_dir in self.shared_directories:
+            for item in shared_dir.items:
+                directory = item.get_remote_directory_path()
+                if directory in response_dirs:
+                    response_dirs[directory].append(item)
+                else:
+                    response_dirs[directory] = [item, ]
 
         # Create shares reply
         shares_reply = []
-        for directory, files in directories.items():
+        for directory, files in response_dirs.items():
             shares_reply.append(
                 DirectoryData(
                     name=directory,
@@ -492,17 +461,18 @@ class SharesManager:
 
         return shares_reply
 
-    def create_directory_reply(self, directory: str) -> List[DirectoryData]:
-        response_dirs = {}
-        for item in self.shared_items:
-            item_dir = item.get_remote_directory_path()
-            if item_dir != directory:
-                continue
+    def create_directory_reply(self, remote_directory: str) -> List[DirectoryData]:
+        response_dirs: Dict[str, SharedItem] = {}
+        for shared_dir in self.shared_directories:
+            for item in shared_dir.items:
+                item_dir = item.get_remote_directory_path()
+                if item_dir != remote_directory:
+                    continue
 
-            if directory in response_dirs:
-                response_dirs[directory].append(item)
-            else:
-                response_dirs[directory] = [item, ]
+                if directory in response_dirs:
+                    response_dirs[directory].append(item)
+                else:
+                    response_dirs[directory] = [item, ]
 
         reply = []
         for directory, files in response_dirs.items():
@@ -516,20 +486,20 @@ class SharesManager:
         return reply
 
     def convert_item_to_file_data(
-            self, shared_item: SharedItem, use_full_path=True) -> FileData:
+            self, shared_item: SharedItem, use_full_path: bool = True) -> FileData:
         """Convert a L{SharedItem} object to a L{FileData} object
 
-        :param use_full_path: use the full path of the file as 'filename' if
-            C{True} sotherwise use just the filename. Should be false when
-            generating a shares reply, true when generating search reply
+        :param use_full_path: use the full path of the file as `filename` if
+            `True` otherwise use just the filename. Should be `False` when
+            generating a shares reply, `True` when generating search reply
         """
-        file_path = self.resolve_path(shared_item)
+        file_path = shared_item.get_absolute_path()
         file_size = os.path.getsize(file_path)
         file_ext = os.path.splitext(shared_item.filename)[-1]
-        if not shared_item.attributes:
-            attributes = []
-        else:
+        if shared_item.attributes:
             attributes = [Attribute(*attr) for attr in shared_item.attributes]
+        else:
+            attributes = []
 
         return FileData(
             unknown=1,
@@ -541,8 +511,8 @@ class SharesManager:
 
     def convert_items_to_file_data(self, shared_items: List[SharedItem], use_full_path=True) -> List[FileData]:
         """Converts a list of L{SharedItem} instances to a list of L{FileData}
-        instances. If an exception occurs when converting the item an error will be
-        logged and the item will be omitted from the list
+        instances. If an exception occurs when converting the item an error will
+        be logged and the item will be omitted from the list
         """
         file_datas = []
         for shared_item in shared_items:

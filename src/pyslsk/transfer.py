@@ -17,6 +17,7 @@ from .configuration import Configuration
 from .exceptions import (
     ConnectionReadError,
     ConnectionWriteError,
+    FileNotFoundError,
     PeerConnectionError,
 )
 from .network.connection import (
@@ -644,7 +645,7 @@ class TransferManager:
             if not upload._current_task:
                 upload._current_task = asyncio.create_task(
                     self._initialize_upload(upload),
-                    name=f'initialize-upload-{task_counter()}'
+                name=f'initialize-upload-{task_counter()}'
                 )
                 upload._current_task.add_done_callback(upload._upload_task_complete)
 
@@ -956,9 +957,9 @@ class TransferManager:
         # Check if the shared file exists
         try:
             shared_item = self._shares_manager.get_shared_item(message.filename)
-            transfer.local_path = self._shares_manager.resolve_path(shared_item)
+            transfer.local_path = shared_item.get_absolute_path()
             transfer.filesize = self._shares_manager.get_filesize(transfer.local_path)
-        except LookupError:
+        except FileNotFoundError:
             self.fail(transfer, reason="File not shared.")
             await connection.queue_message(
                 PeerTransferQueueFailed.Request(

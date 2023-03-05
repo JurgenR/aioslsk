@@ -7,14 +7,12 @@ from .configuration import Configuration
 from .events import EventBus, InternalEventBus
 from .shares import (
     SharesManager,
-    SharesIndexer,
     SharesShelveStorage,
     SharesStorage,
 )
 from .model import Room, User
 from .network.network import Network
 from .peer import PeerManager
-from .scheduler import Scheduler
 from .server_manager import ServerManager
 from .search import SearchQuery
 from .state import State
@@ -44,7 +42,6 @@ class SoulSeek:
         self.internal_events: InternalEventBus = InternalEventBus()
 
         self.state: State = State()
-        self.state.scheduler = Scheduler()
 
         self._network: Network = Network(
             self.state,
@@ -53,20 +50,10 @@ class SoulSeek:
             self._stop_event
         )
 
-        shares_indexer: SharesIndexer = SharesIndexer()
         shares_storage: SharesStorage = SharesShelveStorage(self.configuration.data_directory)
         self.shares_manager: SharesManager = SharesManager(
             self.settings,
-            shares_indexer,
             shares_storage
-        )
-        # Perform the initial read of the index from storage, restart the
-        self.shares_manager.read_items_from_storage()
-        self.shares_manager.build_term_map(rebuild=True)
-        # Schedule a task to run as soon as the event loop starts
-        self.state.scheduler.add(
-            self.settings.get('sharing.index.store_interval'),
-            self.shares_manager.write_items_to_storage
         )
 
         self.transfer_manager: TransferManager = TransferManager(
@@ -105,20 +92,31 @@ class SoulSeek:
         self._stop_event = asyncio.Event()
         self._network._stop_event = self._stop_event
 
+        await self.start_shares_manager()
+
+        await self.connect()
+
+        await self.start_transfer_manager()
+
+    async def connect(self):
         await self._network.initialize()
         await self.server_manager.login(
             self.settings.get('credentials.username'),
             self.settings.get('credentials.password')
         )
 
+    async def start_shares_manager(self):
+        self.shares_manager.read_cache()
         self.shares_manager.load_from_settings()
+        asyncio.create_task(self.shares_manager.scan())
+
+    async def start_transfer_manager(self):
         transfers = self.transfer_manager.read_transfers_from_storage()
         for transfer in transfers:
             await self.transfer_manager.add(transfer)
 
     async def run_until_stopped(self):
         await self._stop_event.wait()
-        await self.peer_manager.stop()
         await self._network.disconnect()
 
         logger.debug(f"tasks after disconnect : {asyncio.all_tasks()}")
@@ -127,11 +125,11 @@ class SoulSeek:
         # incomplete state if they were still transfering
         self.transfer_manager.write_transfers_to_storage()
 
-        self.shares_manager.indexer.stop()
-
     async def stop(self):
         logger.info("signaling client to exit")
         self._stop_event.set()
+        await self.peer_manager.stop()
+        self.shares_manager.write_cache()
 
     async def __aenter__(self):
         return self

@@ -199,7 +199,7 @@ class PeerManager:
 
         except asyncio.CancelledError:
             logger.debug(
-                f"cancelled delivery of search results : (ticket={ticket}, username={username}, query={query})")
+                f"cancelled delivery of search results (ticket={ticket}, username={username}, query={query})")
         except Exception as exc:
             logger.warning(
                 f"failed to deliver search results : {exc!r} (ticket={ticket}, username={username}, query={query})")
@@ -221,7 +221,7 @@ class PeerManager:
         except Exception as exc:
             logger.warning(f"request for potential parent failed : {exc!r} (username={username})")
         else:
-            logger.warning(f"request for potential parent successful (username={username})")
+            logger.info(f"request for potential parent successful (username={username})")
         finally:
             self._potential_parent_tasks.remove(task)
 
