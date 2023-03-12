@@ -321,6 +321,12 @@ class SharesManager:
 
         logger.info(f"completed scan in {time.time() - start_time} seconds")
 
+    def scan_files(self, shared_directory: SharedDirectory):
+        pass
+
+    def scan_attributes(self, shared_directory: SharedDirectory):
+        pass
+
     def scan_directory(self, shared_directory: SharedDirectory) -> Set[SharedItem]:
         """Starts scanning a directory
 

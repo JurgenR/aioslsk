@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 from functools import partial
 import logging
-from typing import Dict, List, Union
+from typing import Any, Dict, List, Union
 
 
 from ..constants import (
@@ -53,14 +53,16 @@ logger = logging.getLogger(__name__)
 class ExpectedResponse(asyncio.Future):
     """Future for an expected response message"""
 
-    def __init__(self, connection_class, message_class, peer=None, fields=None, loop=None):
+    def __init__(
+            self, connection_class, message_class,
+            peer: str = None, fields: Dict[str, Any] = None, loop=None):
         super().__init__(loop=loop)
         self.connection_class = connection_class
         self.message_class = message_class
         self.peer: str = peer
-        self.fields = {} if fields is None else fields
+        self.fields: Dict[str, Any] = {} if fields is None else fields
 
-    def matches(self, connection, response):
+    def matches(self, connection: Union[PeerConnection, ServerConnection], response):
         if connection.__class__ != self.connection_class:
             return False
 
@@ -165,11 +167,10 @@ class Network:
 
         connections = [self.server, ] + self.listening_connections + self.peer_connections
         logger.info(f"waiting for network disconnect : {len(connections)} connections")
-        results = await asyncio.gather(
+        await asyncio.gather(
             *[conn.disconnect(CloseReason.REQUESTED) for conn in connections],
             return_exceptions=True
         )
-        logger.debug(f"disconnect results : {results!r}")
 
     async def _log_connections_job(self):
         while True:
@@ -414,6 +415,7 @@ class Network:
 
         await self._internal_event_bus.emit(
             PeerInitializedEvent(connection, requested=True))
+        return connection
 
     async def _handle_indirect_connection(self, message: ConnectToPeer.Response):
         """Handles an indirect connection request received from the server"""

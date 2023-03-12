@@ -30,7 +30,6 @@ class State:
     private_messages: Dict[int, ChatMessage] = field(default_factory=dict)
 
     # Distributed network related
-    potential_parents: List[str] = field(default_factory=list)
     """List of the last potential parents received by the PotentialParents
     commands
     """
@@ -50,7 +49,7 @@ class State:
     received_searches: Deque[ReceivedSearch] = field(default_factory=lambda: deque(list(), 500))
     search_queries: Dict[int, SearchQuery] = field(default_factory=dict)
 
-    def get_or_create_user(self, username) -> User:
+    def get_or_create_user(self, username: str) -> User:
         try:
             return self.users[username]
         except KeyError:
@@ -58,7 +57,7 @@ class State:
             self.users[username] = user
             return user
 
-    def get_or_create_room(self, room_name) -> Room:
+    def get_or_create_room(self, room_name: str) -> Room:
         try:
             return self.rooms[room_name]
         except KeyError:

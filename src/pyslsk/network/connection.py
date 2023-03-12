@@ -98,7 +98,7 @@ class Connection:
     def __repr__(self):
         return (
             f"{self.__class__.__name__}(hostname={self.hostname!r}, port={self.port}, "
-            f" state={self.state})")
+            f"state={self.state})")
 
 
 class ListeningConnection(Connection):
@@ -266,10 +266,13 @@ class DataConnection(Connection):
                     await self._process_message_data(message_data)
 
     async def _read_message(self):
+        header_obfuscated = self.obfuscated
         header_size = HEADER_SIZE_OBFUSCATED if self.obfuscated else HEADER_SIZE_UNOBFUSCATED
         header = await asyncio.wait_for(
             self._reader.readexactly(header_size), PEER_READ_TIMEOUT)
 
+        if header_obfuscated != self.obfuscated:
+            logger.warning(f"obfuscated differed {header_obfuscated} != {self.obfuscated}")
         message_len_buf = obfuscation.decode(header) if self.obfuscated else header
         _, message_len = uint32.deserialize(0, message_len_buf)
 
@@ -425,7 +428,7 @@ class PeerConnection(DataConnection):
             if self.connection_type != PeerConnectionType.PEER:
                 self.obfuscated = False
 
-        logger.debug(f"{self.hostname}:{self.port} setting state to {state}")
+        logger.debug(f"{self.hostname}:{self.port} setting state to {state} : {self!r}")
         self.connection_state = state
 
     async def _read_transfer_ticket(self) -> bytes:
@@ -518,3 +521,10 @@ class PeerConnection(DataConnection):
                 return PeerMessage.deserialize_request(message_data)
             else:
                 return DistributedMessage.deserialize_request(message_data)
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}("
+            f"hostname={self.hostname!r}, port={self.port}, state={self.state}, "
+            f"incoming={self.incoming}, obfuscated={self.obfuscated}, username={self.username!r}, "
+            f"connection_state={self.connection_state}, connection_type={self.connection_type!r})")

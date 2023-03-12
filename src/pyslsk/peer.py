@@ -44,6 +44,7 @@ from .protocol.messages import (
     PeerUploadQueueNotification,
     PotentialParents,
 )
+from .protocol.primitives import PotentialParent
 from .network.network import Network
 from .search import ReceivedSearch, SearchResult
 from .settings import Settings
@@ -71,6 +72,7 @@ class PeerManager:
 
         self._ticket_generator = ticket_generator()
 
+        self.potential_parents: List[str] = []
         self._distributed_peers: List[DistributedPeer] = []
 
         self._internal_event_bus.register(
@@ -112,8 +114,24 @@ class PeerManager:
 
     async def _set_parent(self, peer: DistributedPeer):
         logger.info(f"set parent : {peer!r}")
-
         self._state.parent = peer
+
+        self._cancel_potential_parent_tasks()
+        # Cancel all tasks related to potential parents and disconnect all other
+        # distributed connections except for children and the parent connection
+        # Other distributed connection from the parent that we have should also
+        # be disconnected
+        distributed_connections = [
+            distributed_peer.connection for distributed_peer in self._distributed_peers
+            if distributed_peer in [self._state.parent, ] + self._state.children
+        ]
+        for peer_connection in self.network.peer_connections:
+            if peer_connection.connection_type == PeerConnectionType.DISTRIBUTED:
+                if peer_connection not in distributed_connections:
+                    asyncio.create_task(
+                        peer_connection.disconnect(reason=CloseReason.REQUESTED),
+                        name=f'disconnect-distributed-{task_counter()}'
+                    )
 
         logger.info(f"notifying server of our parent : level={peer.branch_level} root={peer.branch_root}")
         # The original Windows client sends out the child depth (=0) and the
@@ -124,17 +142,6 @@ class PeerManager:
             ToggleParentSearch.Request(False),
             AcceptChildren.Request(True)
         )
-
-        # Remove all other distributed connections except for children and the
-        # current
-        # Even the distributed connections from the parent should be removed
-        distributed_peers_to_remove = [
-            distributed_peer for distributed_peer in self._distributed_peers
-            if distributed_peer not in [self._state.parent, ] + self._state.children
-        ]
-
-        for distributed_peer in distributed_peers_to_remove:
-            await distributed_peer.connection.disconnect(reason=CloseReason.REQUESTED)
 
         # Notify children of new parent
         await self.send_messages_to_children(
@@ -176,7 +183,7 @@ class PeerManager:
     async def _check_if_new_child(self, peer: DistributedPeer):
         """Potentially adds a distributed connection to our list of children.
         """
-        if peer.username in self._state.potential_parents:
+        if peer.username in self.potential_parents:
             return
 
         await self._add_child(peer)
@@ -242,7 +249,7 @@ class PeerManager:
         if len(results) == 0:
             return
 
-        logger.info(f"got {len(results)} results for query {query} (username={username})")
+        logger.info(f"found {len(results)} results for query {query!r} (username={username!r})")
 
         task = asyncio.create_task(
             self.network.send_peer_messages(
@@ -270,7 +277,7 @@ class PeerManager:
             logger.debug("ignoring NetInfo message : searching for parent is disabled")
             return
 
-        self._state.potential_parents = [
+        self.potential_parents = [
             entry.username for entry in message.entries
         ]
 
@@ -342,7 +349,7 @@ class PeerManager:
         try:
             query = self._state.search_queries[message.ticket]
         except KeyError:
-            logger.warning(f"search reply ticket '{message.ticket}' does not match any search query")
+            logger.warning(f"search reply ticket does not match any search query : {message.ticket}")
         else:
             query.results.append(search_result)
             await self._event_bus.emit(SearchResultEvent(query, search_result))
@@ -394,6 +401,9 @@ class PeerManager:
         if peer != self._state.parent:
             await self._check_if_new_parent(peer)
         else:
+            logger.info(f"parent advertised new branch level : {message.level}")
+            await self.network.send_server_messages(
+                BranchLevel.Request(message.level + 1))
             await self.send_messages_to_children(
                 DistributedBranchLevel.Request(message.level + 1))
 
@@ -407,6 +417,9 @@ class PeerManager:
         if peer != self._state.parent:
             await self._check_if_new_parent(peer)
         else:
+            logger.info(f"parent advertised new branch root : {message.username}")
+            await self.network.send_server_messages(
+                BranchRoot.Request(message.username))
             await self.send_messages_to_children(
                 DistributedBranchRoot.Request(message.username))
 
@@ -479,5 +492,8 @@ class PeerManager:
         for task in self._search_reply_tasks:
             task.cancel()
 
+        self._cancel_potential_parent_tasks()
+
+    def _cancel_potential_parent_tasks(self):
         for task in self._potential_parent_tasks:
             task.cancel()

@@ -161,9 +161,10 @@ class ServerManager:
         # First value indicates success
         if response.success:
             self._state.logged_in = True
-            logger.info("Successfully logged on")
+            logger.info(f"successfully logged on, greeting : {response.greeting!r}")
         else:
-            logger.error(f"Failed to login, reason: {response.reason!r}")
+            self._state.logged_in = False
+            logger.error(f"failed to login, reason: {response.reason!r}")
             raise LoginFailedError(response.reason)
 
         # Make setup calls
@@ -503,9 +504,8 @@ class ServerManager:
 
     @on_message(ServerSearchRequest.Response)
     async def _on_server_search_request(self, message: ServerSearchRequest.Response, connection):
-        message_to_send = message
         for child in self._state.children:
-            child.connection.queue_messages(message_to_send)
+            child.connection.queue_messages(message)
 
     # State related messages
     @on_message(CheckPrivileges.Response)
