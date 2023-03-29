@@ -70,8 +70,7 @@ class TestLimitedRateLimiter:
         limited_limiter.bucket = 0
         limited_limiter.last_refill = 0.0
 
-        current_time_mock = MagicMock(return_value=time_diff)
-        with patch('time.monotonic', current_time_mock):
+        with patch('time.monotonic', return_value=time_diff):
             limited_limiter.refill()
 
         assert limited_limiter.bucket == expected_bucket
@@ -91,9 +90,14 @@ class TestLimitedRateLimiter:
             LimitedRateLimiter.LOWER_LIMIT - 1
         ]
     )
-    def test_whenTakeTokens_andBucketEmpty_shouldReturnZero(self, limited_limiter: LimitedRateLimiter, bucket_size: int):
+    @pytest.mark.asyncio
+    async def test_whenTakeTokens_andBucketEmpty_shouldWaitForTokens(self, limited_limiter: LimitedRateLimiter, bucket_size: int):
         limited_limiter.bucket = bucket_size
-        assert limited_limiter.take_tokens() == 0
+        # Spy on the objects refill method
+        with patch.object(limited_limiter, 'refill', wraps=limited_limiter.refill) as wrapped_refill:
+            with patch('time.monotonic', side_effect=[0.0, 1000000.0, 1000000.0,1000000.0,1000000.0,1000000.0,1000000.0,1000000.0,]):
+                assert await limited_limiter.take_tokens() > 0
+                assert wrapped_refill.call_count == 2
 
     @pytest.mark.parametrize(
         "bucket_size,expected_bucket_size",
@@ -102,9 +106,10 @@ class TestLimitedRateLimiter:
             (LimitedRateLimiter.LOWER_LIMIT + 1, 1)
         ]
     )
-    def test_whenTakeTokens_andBucketNotEmpty_shouldReturnTokens(self, limited_limiter: LimitedRateLimiter, bucket_size: int, expected_bucket_size: int):
+    @pytest.mark.asyncio
+    async def test_whenTakeTokens_andBucketNotEmpty_shouldReturnTokens(self, limited_limiter: LimitedRateLimiter, bucket_size: int, expected_bucket_size: int):
         limited_limiter.bucket = bucket_size
-        assert limited_limiter.take_tokens() == LimitedRateLimiter.LOWER_LIMIT
+        assert await limited_limiter.take_tokens() == LimitedRateLimiter.LOWER_LIMIT
         assert limited_limiter.bucket == expected_bucket_size
 
 
@@ -122,5 +127,6 @@ class TestUnlimitedRateLimiter:
         assert unlimited_limiter.bucket == 0
         assert unlimited_limiter.last_refill == 0.0
 
-    def test_whenTakeTokens_shouldReturnUpperLimit(self, unlimited_limiter: UnlimitedRateLimiter):
-        assert unlimited_limiter.take_tokens() == UnlimitedRateLimiter.UPPER_LIMIT
+    @pytest.mark.asyncio
+    async def test_whenTakeTokens_shouldReturnUpperLimit(self, unlimited_limiter: UnlimitedRateLimiter):
+        assert await unlimited_limiter.take_tokens() == UnlimitedRateLimiter.UPPER_LIMIT

@@ -171,6 +171,7 @@ class DataConnection(Connection):
         self._reader: asyncio.StreamReader = None
         self._writer: asyncio.StreamWriter = None
         self._reader_task = None
+        self.read_timeout = None
 
     def get_connecting_ip(self) -> str:
         """Gets the IP address being used to connect to the server/peer.
@@ -269,7 +270,7 @@ class DataConnection(Connection):
         header_obfuscated = self.obfuscated
         header_size = HEADER_SIZE_OBFUSCATED if self.obfuscated else HEADER_SIZE_UNOBFUSCATED
         header = await asyncio.wait_for(
-            self._reader.readexactly(header_size), PEER_READ_TIMEOUT)
+            self._reader.readexactly(header_size), self.read_timeout)
 
         if header_obfuscated != self.obfuscated:
             logger.warning(f"obfuscated differed {header_obfuscated} != {self.obfuscated}")
@@ -277,7 +278,7 @@ class DataConnection(Connection):
         _, message_len = uint32.deserialize(0, message_len_buf)
 
         message = await asyncio.wait_for(
-            self._reader.readexactly(message_len), PEER_READ_TIMEOUT)
+            self._reader.readexactly(message_len), self.read_timeout)
 
         return header + message
 
@@ -413,6 +414,7 @@ class PeerConnection(DataConnection):
 
         self.username: str = username
         self.connection_type: str = connection_type
+        self.read_timeout = PEER_READ_TIMEOUT
 
     async def connect(self, timeout: float = PEER_CONNECT_TIMEOUT):
         await super().connect(timeout=timeout)

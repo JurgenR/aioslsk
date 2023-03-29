@@ -29,13 +29,6 @@ class State:
     users: Dict[str, User] = field(default_factory=dict)
     private_messages: Dict[int, ChatMessage] = field(default_factory=dict)
 
-    # Distributed network related
-    """List of the last potential parents received by the PotentialParents
-    commands
-    """
-    parent: DistributedPeer = None
-    children: List[DistributedPeer] = field(default_factory=list)
-
     # Server vars
     parent_min_speed: int = 0
     parent_speed_ratio: int = 0

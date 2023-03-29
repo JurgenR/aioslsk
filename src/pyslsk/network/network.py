@@ -137,7 +137,7 @@ class Network:
         """Initializes the server and listening connections"""
         logger.info("initializing network")
 
-        tasks = [asyncio.create_task(self._connect_server())]
+        tasks = [asyncio.create_task(self.connect_server())]
         for listening_connection in self.listening_connections:
             tasks.append(asyncio.create_task(listening_connection.connect()))
 
@@ -149,7 +149,7 @@ class Network:
                 name=f'log-connections-{task_counter()}'
             )
 
-    async def _connect_server(self):
+    async def connect_server(self):
         await self.server.connect()
 
     async def disconnect(self):
@@ -529,18 +529,6 @@ class Network:
                     name=f'enable-upnp-{task_counter()}'
                 )
                 self._upnp_task.add_done_callback(self._map_upnp_ports_callback)
-
-        elif state == ConnectionState.CLOSED:
-
-            if close_reason != CloseReason.REQUESTED:
-                if self._settings.get('network.reconnect.auto'):
-
-                    while not self.server.state == ConnectionState.CONNECTED:
-                        logger.info("attempting to reconnect to server in 5 seconds")
-                        try:
-                            await self.server.connect()
-                        except ConnectionFailedError:
-                            pass
 
     async def _on_peer_connection_state_changed(self, state: ConnectionState, connection: PeerConnection, close_reason: CloseReason = None):
         if state == ConnectionState.CLOSED:

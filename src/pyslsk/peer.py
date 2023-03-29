@@ -43,8 +43,8 @@ from .protocol.messages import (
     PeerUserInfoRequest,
     PeerUploadQueueNotification,
     PotentialParents,
+    ServerSearchRequest,
 )
-from .protocol.primitives import PotentialParent
 from .network.network import Network
 from .search import ReceivedSearch, SearchResult
 from .settings import Settings
@@ -66,14 +66,16 @@ class PeerManager:
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._internal_event_bus: InternalEventBus = internal_event_bus
-        self.shares_manager: SharesManager = shares_manager
-        self.transfer_manager: TransferManager = transfer_manager
-        self.network: Network = network
+        self._network: Network = network
+        self._shares_manager: SharesManager = shares_manager
+        self._transfer_manager: TransferManager = transfer_manager
 
         self._ticket_generator = ticket_generator()
 
+        self.parent: DistributedPeer = None
+        self.children: List[DistributedPeer] = []
         self.potential_parents: List[str] = []
-        self._distributed_peers: List[DistributedPeer] = []
+        self.distributed_peers: List[DistributedPeer] = []
 
         self._internal_event_bus.register(
             PeerInitializedEvent, self._on_peer_connection_initialized)
@@ -89,16 +91,16 @@ class PeerManager:
 
     # External methods
     async def get_user_info(self, username: str):
-        await self.network.send_peer_messages(
+        await self._network.send_peer_messages(
             username, PeerUserInfoRequest.Request())
 
     async def get_user_shares(self, username: str):
-        await self.network.send_peer_messages(
+        await self._network.send_peer_messages(
             username, PeerSharesRequest.Request())
 
     async def get_user_directory(self, username: str, directory: str) -> int:
         ticket = next(self._ticket_generator)
-        await self.network.send_peer_messages(
+        await self._network.send_peer_messages(
             username,
             PeerDirectoryContentsRequest.Request(
                 ticket=ticket,
@@ -108,13 +110,13 @@ class PeerManager:
         return ticket
 
     def get_distributed_peer(self, username: str, connection: PeerConnection) -> DistributedPeer:
-        for peer in self._distributed_peers:
+        for peer in self.distributed_peers:
             if peer.username == username and peer.connection == connection:
                 return peer
 
     async def _set_parent(self, peer: DistributedPeer):
         logger.info(f"set parent : {peer!r}")
-        self._state.parent = peer
+        self.parent = peer
 
         self._cancel_potential_parent_tasks()
         # Cancel all tasks related to potential parents and disconnect all other
@@ -122,10 +124,10 @@ class PeerManager:
         # Other distributed connection from the parent that we have should also
         # be disconnected
         distributed_connections = [
-            distributed_peer.connection for distributed_peer in self._distributed_peers
-            if distributed_peer in [self._state.parent, ] + self._state.children
+            distributed_peer.connection for distributed_peer in self.distributed_peers
+            if distributed_peer in [self.parent, ] + self.children
         ]
-        for peer_connection in self.network.peer_connections:
+        for peer_connection in self._network.peer_connections:
             if peer_connection.connection_type == PeerConnectionType.DISTRIBUTED:
                 if peer_connection not in distributed_connections:
                     asyncio.create_task(
@@ -136,7 +138,7 @@ class PeerManager:
         logger.info(f"notifying server of our parent : level={peer.branch_level} root={peer.branch_root}")
         # The original Windows client sends out the child depth (=0) and the
         # ParentIP
-        await self.network.send_server_messages(
+        await self._network.send_server_messages(
             BranchLevel.Request(peer.branch_level + 1),
             BranchRoot.Request(peer.branch_root),
             ToggleParentSearch.Request(False),
@@ -156,18 +158,18 @@ class PeerManager:
         """
         # Explicit None checks because we can get 0 as branch level
         if peer.branch_level is not None and peer.branch_root is not None:
-            if self._state.parent is None:
+            if self.parent is None:
                 await self._set_parent(peer)
             else:
                 await peer.connection.disconnect(reason=CloseReason.REQUESTED)
 
     async def _unset_parent(self):
-        logger.debug(f"unset parent {self._state.parent!r}")
+        logger.debug(f"unset parent {self.parent!r}")
 
-        self._state.parent = None
+        self.parent = None
 
         username = self._settings.get('credentials.username')
-        await self.network.send_server_messages(
+        await self._network.send_server_messages(
             BranchLevel.Request(0),
             BranchRoot.Request(username),
             ToggleParentSearch.Request(True)
@@ -190,11 +192,11 @@ class PeerManager:
 
     async def _add_child(self, peer: DistributedPeer):
         logger.debug(f"adding distributed connection as child : {peer!r}")
-        self._state.children.append(peer)
+        self.children.append(peer)
         # Let the child know where it is in the distributed tree
         await peer.connection.queue_messages(
-            DistributedBranchLevel.Request(self._state.parent.branch_level + 1),
-            DistributedBranchRoot.Request(self._state.parent.branch_root),
+            DistributedBranchLevel.Request(self.parent.branch_level + 1),
+            DistributedBranchRoot.Request(self.parent.branch_root),
         )
 
     def _search_reply_task_callback(self, ticket: int, username: str, query: str, task: asyncio.Task):
@@ -236,7 +238,7 @@ class PeerManager:
         """Performs a query on the shares manager and reports the results to the
         user
         """
-        results = self.shares_manager.query(query)
+        results = self._shares_manager.query(query)
 
         self._state.received_searches.append(
             ReceivedSearch(
@@ -252,15 +254,15 @@ class PeerManager:
         logger.info(f"found {len(results)} results for query {query!r} (username={username!r})")
 
         task = asyncio.create_task(
-            self.network.send_peer_messages(
+            self._network.send_peer_messages(
                 username,
                 PeerSearchReply.Request(
                     username=self._settings.get('credentials.username'),
                     ticket=ticket,
-                    results=self.shares_manager.convert_items_to_file_data(results, use_full_path=True),
-                    has_slots_free=self.transfer_manager.has_slots_free(),
-                    avg_speed=int(self.transfer_manager.get_average_upload_speed()),
-                    queue_size=self.transfer_manager.get_queue_size()
+                    results=self._shares_manager.convert_items_to_file_data(results, use_full_path=True),
+                    has_slots_free=self._transfer_manager.has_slots_free(),
+                    avg_speed=int(self._transfer_manager.get_average_upload_speed()),
+                    queue_size=self._transfer_manager.get_queue_size()
                 )
             ),
             name=f'search-reply-{task_counter()}'
@@ -283,7 +285,7 @@ class PeerManager:
 
         for entry in message.entries:
             task = asyncio.create_task(
-                self.network.create_peer_connection(
+                self._network.create_peer_connection(
                     entry.username,
                     PeerConnectionType.DISTRIBUTED,
                     ip=entry.ip,
@@ -296,12 +298,17 @@ class PeerManager:
             )
             self._potential_parent_tasks.append(task)
 
+    @on_message(ServerSearchRequest.Response)
+    async def _on_server_search_request(self, message: ServerSearchRequest.Response, connection):
+        for child in self.children:
+            child.connection.queue_messages(message)
+
     # Peer messages
 
     @on_message(PeerSharesRequest.Request)
     async def _on_peer_shares_request(self, message: PeerSharesRequest.Request, connection: PeerConnection):
         await connection.queue_message(
-            PeerSharesReply.Request(self.shares_manager.create_shares_reply())
+            PeerSharesReply.Request(self._shares_manager.create_shares_reply())
         )
 
     @on_message(PeerSharesReply.Request)
@@ -319,7 +326,7 @@ class PeerManager:
 
     @on_message(PeerDirectoryContentsRequest.Request)
     async def _on_peer_directory_contents_req(self, message: PeerDirectoryContentsRequest.Request, connection: PeerConnection):
-        directories = self.shares_manager.create_directory_reply(message.directory)
+        directories = self._shares_manager.create_directory_reply(message.directory)
         await connection.queue_message(
             PeerDirectoryContentsReply.Request(
                 ticket=message.ticket,
@@ -371,9 +378,9 @@ class PeerManager:
         await connection.send_message(
             PeerUserInfoReply.Request(
                 "No description",
-                self.transfer_manager.upload_slots,
-                self.transfer_manager.get_free_upload_slots(),
-                self.transfer_manager.has_slots_free()
+                self._transfer_manager.upload_slots,
+                self._transfer_manager.get_free_upload_slots(),
+                self._transfer_manager.has_slots_free()
             )
         )
 
@@ -398,11 +405,11 @@ class PeerManager:
         if message.level == 0:
             peer.branch_root = peer.username
 
-        if peer != self._state.parent:
+        if peer != self.parent:
             await self._check_if_new_parent(peer)
         else:
             logger.info(f"parent advertised new branch level : {message.level}")
-            await self.network.send_server_messages(
+            await self._network.send_server_messages(
                 BranchLevel.Request(message.level + 1))
             await self.send_messages_to_children(
                 DistributedBranchLevel.Request(message.level + 1))
@@ -414,11 +421,11 @@ class PeerManager:
         peer = self.get_distributed_peer(connection.username, connection)
         peer.branch_root = message.username
 
-        if peer != self._state.parent:
+        if peer != self.parent:
             await self._check_if_new_parent(peer)
         else:
             logger.info(f"parent advertised new branch root : {message.username}")
-            await self.network.send_server_messages(
+            await self._network.send_server_messages(
                 BranchRoot.Request(message.username))
             await self.send_messages_to_children(
                 DistributedBranchRoot.Request(message.username))
@@ -448,7 +455,7 @@ class PeerManager:
     async def _on_peer_connection_initialized(self, event: PeerInitializedEvent):
         if event.connection.connection_type == PeerConnectionType.DISTRIBUTED:
             peer = DistributedPeer(event.connection.username, event.connection)
-            self._distributed_peers.append(peer)
+            self.distributed_peers.append(peer)
             await self._check_if_new_child(peer)
 
     async def _on_message_received(self, event: MessageReceivedEvent):
@@ -464,28 +471,28 @@ class PeerManager:
         if event.state == ConnectionState.CLOSED:
             if event.connection.connection_type == PeerConnectionType.DISTRIBUTED:
                 # Check if it was the parent that was disconnected
-                parent = self._state.parent
+                parent = self.parent
                 if parent and event.connection == parent.connection:
                     await self._unset_parent()
                     return
 
                 # Check if it was a child
                 new_children = []
-                for child in self._state.children:
+                for child in self.children:
                     if child.connection == event.connection:
                         logger.debug(f"removing child {child!r}")
                     else:
                         new_children.append(child)
-                self._state.children = new_children
+                self.children = new_children
 
                 # Remove from the distributed connections
-                self._distributed_peers = [
-                    peer for peer in self._distributed_peers
+                self.distributed_peers = [
+                    peer for peer in self.distributed_peers
                     if peer.connection != event.connection
                 ]
 
     async def send_messages_to_children(self, *messages: Union[MessageDataclass, bytes]):
-        for child in self._state.children:
+        for child in self.children:
             await child.connection.queue_messages(*messages)
 
     async def stop(self):

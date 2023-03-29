@@ -1226,8 +1226,8 @@ class RequestResponseEntry:
         if response.__class__ != self.response_class:
             return False
 
-        for field in self.fields:
-            if getattr(request, field) != getattr(response, field):
+        for field_name in self.fields:
+            if getattr(request, field_name) != getattr(response, field_name):
                 return False
 
         return True

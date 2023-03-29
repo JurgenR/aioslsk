@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 
-from .network.connection import ConnectionState, ServerConnection
+from .network.connection import CloseReason, ConnectionState, ServerConnection
 from .constants import SERVER_RESPONSE_TIMEOUT
 from .events import (
     build_message_map,
@@ -29,7 +29,7 @@ from .events import (
     UserStatsEvent,
     UserStatusEvent,
 )
-from .exceptions import LoginFailedError, NoSuchUserError
+from .exceptions import ConnectionFailedError, LoginFailedError, NoSuchUserError
 from .protocol.primitives import calc_md5
 from .protocol.messages import (
     AcceptChildren,
@@ -77,7 +77,6 @@ from .protocol.messages import (
     RemoveUser,
     RoomList,
     SearchInactivityTimeout,
-    ServerSearchRequest,
     SetListenPort,
     SetStatus,
     SharedFoldersFiles,
@@ -502,11 +501,6 @@ class ServerManager:
 
         await self._event_bus.emit(PrivateMessageEvent(user, chat_message))
 
-    @on_message(ServerSearchRequest.Response)
-    async def _on_server_search_request(self, message: ServerSearchRequest.Response, connection):
-        for child in self._state.children:
-            child.connection.queue_messages(message)
-
     # State related messages
     @on_message(CheckPrivileges.Response)
     async def _on_check_privileges(self, message: CheckPrivileges.Response, connection):
@@ -681,3 +675,22 @@ class ServerManager:
                 self._ping_task = None
 
             await self._event_bus.emit(ServerDisconnectedEvent())
+
+        elif event.state == ConnectionState.CLOSED:
+
+            if event.close_reason != CloseReason.REQUESTED:
+                if self._settings.get('network.reconnect.auto'):
+                    logger.info("attempting to reconnect to server in 5 seconds")
+                    await asyncio.sleep(5)
+                    await self.reconnect()
+
+    async def reconnect(self):
+        try:
+            await self.network.connect_server()
+        except ConnectionFailedError:
+            logger.warning(f"failed to reconnect to server")
+        else:
+            await self.login(
+                self._settings('credentials.username'),
+                self._settings('credentials.password')
+            )

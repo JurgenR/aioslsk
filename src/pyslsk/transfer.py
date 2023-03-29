@@ -14,6 +14,7 @@ import shelve
 from typing import Dict, List, Tuple, TYPE_CHECKING
 
 from .configuration import Configuration
+from .constants import TRANSFER_REPLY_TIMEOUT
 from .exceptions import (
     ConnectionReadError,
     ConnectionWriteError,
@@ -752,7 +753,7 @@ class TransferManager:
                     PeerTransferReply.Request,
                     ticket=ticket
                 ),
-                30
+                TRANSFER_REPLY_TIMEOUT
             )
         except asyncio.TimeoutError:
             logger.debug(f"timeout waiting for transfer reply : {transfer!r}")
@@ -847,7 +848,7 @@ class TransferManager:
                 await connection.receive_file(
                     handle,
                     transfer.filesize - transfer._offset,
-                    partial(self._download_progress_callback , transfer)
+                    partial(self._download_progress_callback, transfer)
                 )
 
         except OSError:

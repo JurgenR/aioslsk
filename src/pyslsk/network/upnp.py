@@ -80,7 +80,7 @@ class UPNP:
 
             except UpnpActionResponseError as exc:
                 # SpecifiedArrayIndexInvalid
-                if not(exc.status == 500 and exc.error_code == 713):
+                if not (exc.status == 500 and exc.error_code == 713):
                     logger.debug(f"failed to get entry {idx} on device : {device.name!r}", exc_info=exc)
 
                 break
