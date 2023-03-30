@@ -1211,23 +1211,3 @@ class DistributedServerSearchRequest(DistributedMessage):
         username: str = field(metadata={'type': string})
         ticket: int = field(metadata={'type': uint32})
         query: str = field(metadata={'type': string})
-
-
-@dataclass
-class RequestResponseEntry:
-    request_class: str
-    response_class: str
-    fields: List[str] = field(default_factory=list)
-
-    def match(self, request, response) -> bool:
-        if request.__class__ != self.request_class:
-            return False
-
-        if response.__class__ != self.response_class:
-            return False
-
-        for field_name in self.fields:
-            if getattr(request, field_name) != getattr(response, field_name):
-                return False
-
-        return True
