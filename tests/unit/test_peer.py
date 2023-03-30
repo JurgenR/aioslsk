@@ -48,7 +48,7 @@ class TestPeer:
         manager = self._create_peer_manager()
 
         ticket = await manager.get_user_directory('user0', 'C:\\dir0')
-        manager.network.send_peer_messages.assert_awaited_once_with('user0', ANY)
+        manager._network.send_peer_messages.assert_awaited_once_with('user0', ANY)
 
         assert isinstance(ticket, int)
 
@@ -60,7 +60,7 @@ class TestPeer:
         TICKET = 1324
 
         manager = self._create_peer_manager()
-        manager.shares_manager.create_directory_reply.return_value = DIRECTORY_DATA
+        manager._shares_manager.create_directory_reply.return_value = DIRECTORY_DATA
 
         connection = AsyncMock()
         connection.username = USER
@@ -69,7 +69,7 @@ class TestPeer:
             PeerDirectoryContentsRequest.Request(TICKET, DIRECTORY), connection
         )
 
-        manager.shares_manager.create_directory_reply.assert_called_once_with(DIRECTORY)
+        manager._shares_manager.create_directory_reply.assert_called_once_with(DIRECTORY)
         connection.queue_message.assert_awaited_once_with(
             PeerDirectoryContentsReply.Request(TICKET, DIRECTORY, DIRECTORY_DATA)
         )
