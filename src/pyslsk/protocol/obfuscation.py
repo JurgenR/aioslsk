@@ -9,7 +9,7 @@ def generate_key() -> bytes:
     return secrets.token_bytes(KEY_SIZE)
 
 
-def rotate_key_orig(key: bytes, const: int = 31) -> bytes:
+def _rotate_key_orig(key: bytes, const: int = 31) -> bytes:  # pragma: no cover
     """Rotate the L{key} to the right by L{const} bits
 
     :type key: C{bytes}
