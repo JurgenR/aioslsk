@@ -688,7 +688,7 @@ class ServerManager:
         try:
             await self.network.connect_server()
         except ConnectionFailedError:
-            logger.warning(f"failed to reconnect to server")
+            logger.warning("failed to reconnect to server")
         else:
             await self.login(
                 self._settings('credentials.username'),

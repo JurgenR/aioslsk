@@ -646,7 +646,7 @@ class TransferManager:
             if not upload._current_task:
                 upload._current_task = asyncio.create_task(
                     self._initialize_upload(upload),
-                name=f'initialize-upload-{task_counter()}'
+                    name=f'initialize-upload-{task_counter()}'
                 )
                 upload._current_task.add_done_callback(upload._upload_task_complete)
 

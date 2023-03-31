@@ -86,7 +86,7 @@ class TestServerManager:
 
         await manager._on_chat_room_ticker_added(
             ChatRoomTickerAdded.Response(
-                room='room0', username= 'user0', ticker='hello'),
+                room='room0', username='user0', ticker='hello'),
             manager.network.server
         )
         # Check model
@@ -112,7 +112,7 @@ class TestServerManager:
         room.tickers['user0'] = 'hello'
 
         await manager._on_chat_room_ticker_removed(
-            ChatRoomTickerRemoved.Response(room='room0', username= 'user0'),
+            ChatRoomTickerRemoved.Response(room='room0', username='user0'),
             manager.network.server
         )
         # Check model
@@ -136,7 +136,7 @@ class TestServerManager:
         manager._state.get_or_create_room('room0')
 
         await manager._on_chat_room_ticker_removed(
-            ChatRoomTickerRemoved.Response(room='room0', username= 'user0'),
+            ChatRoomTickerRemoved.Response(room='room0', username='user0'),
             manager.network.server
         )
 

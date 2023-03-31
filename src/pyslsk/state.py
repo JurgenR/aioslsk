@@ -1,7 +1,7 @@
 from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Deque, Dict, List
+from typing import TYPE_CHECKING, Deque, Dict
 
 from .model import ChatMessage, Room, User
 
