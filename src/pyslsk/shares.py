@@ -3,7 +3,6 @@ from concurrent.futures import Future
 from dataclasses import dataclass, field
 from functools import partial
 import logging
-from weakref import WeakSet
 import mutagen
 from mutagen.mp3 import BitrateMode
 import os
@@ -13,6 +12,7 @@ import sys
 import time
 from typing import Dict, List, Set, Tuple
 import uuid
+from weakref import WeakSet
 
 from .exceptions import FileNotFoundError
 from .naming import (
@@ -94,6 +94,33 @@ class SharedItem:
         return fields
 
 
+def scan_directory(shared_directory: SharedDirectory) -> Set[SharedItem]:
+    """Performs the scanning of a directory
+
+    :param shared_dir: absolute path to the directory
+    :param alias: directory alias, used when building the SharedItem objects
+    """
+    shared_items = set()
+    for directory, _, files in os.walk(shared_directory.absolute_path):
+        subdir = os.path.relpath(directory, shared_directory.absolute_path)
+
+        if subdir == '.':
+            subdir = ''
+
+        for filename in files:
+            filepath = os.path.join(directory, filename)
+            try:
+                modified = os.path.getmtime(os.path.join(directory, filename))
+            except OSError:
+                logger.debug(f"could not get modified time for file {filepath!r}")
+            else:
+                shared_items.add(
+                    SharedItem(shared_directory, subdir, filename, modified)
+                )
+
+    return shared_items
+
+
 def extract_attributes(filepath: str) -> List[Tuple[int, int]]:
     """Attempts to extract attributes from the file at `filepath`"""
     attributes = []
@@ -122,8 +149,9 @@ def extract_attributes(filepath: str) -> List[Tuple[int, int]]:
                 (5, mutagen_file.info.bits_per_sample, ),
             ]
 
-    except mutagen.MutagenError:
-        logger.exception(f"failed retrieve audio file metadata. path={filepath!r}")
+    except mutagen.MutagenError as exc:
+        logger.warn(
+            f"failed retrieve audio file metadata. path={filepath!r}", exc_info=exc)
 
     return attributes
 
@@ -175,6 +203,7 @@ class SharesManager:
         self._directory_aliases: Dict[str, str] = {}
 
         self.storage: SharesStorage = storage
+        self.executor = None
 
     def generate_alias(self, path: str, offset: int = 0) -> str:
         """Generates a directory alias for the given path, this method will be
@@ -220,10 +249,11 @@ class SharesManager:
         needs to be called independently.
         """
         directories = self.storage.load_index()
+        logger.info(f"read {len(directories)} from storage")
         self.shared_directories = directories
 
     def write_cache(self):
-        logger.debug(f"writing {len(self.shared_directories)} directories to storage")
+        logger.info(f"writing {len(self.shared_directories)} directories to storage")
         self.storage.store_index(self.shared_directories)
 
     def create_download_directory(self) -> str:
@@ -317,8 +347,8 @@ class SharesManager:
         for shared_directory in self.shared_directories:
             logger.info(f"scheduling scan for directory : {shared_directory!r})")
             scan_future = loop.run_in_executor(
-                None,
-                partial(self.scan_directory, shared_directory)
+                self.executor,
+                partial(scan_directory, shared_directory)
             )
             scan_future.add_done_callback(
                 partial(self._scan_directory_callback, shared_directory)
@@ -326,6 +356,7 @@ class SharesManager:
             scan_futures.append(scan_future)
 
         await asyncio.gather(*scan_futures, return_exceptions=True)
+        asyncio.as_completed()
 
         for shared_directory in self.shared_directories:
             self.build_term_map(shared_directory)
@@ -336,8 +367,8 @@ class SharesManager:
             for item in shared_directory.items:
                 if item.attributes is None:
                     future = loop.run_in_executor(
-                        None,
-                        partial(self.extract_attributes, item)
+                        self.executor,
+                        partial(extract_attributes, item.get_absolute_path())
                     )
                     future.add_done_callback(
                         partial(self._extract_attributes_callback, item)
@@ -347,32 +378,6 @@ class SharesManager:
                 f"scheduled {amount_scheduled} items for attribute extracting for directory {shared_directory}")
 
         logger.info(f"completed scan in {time.time() - start_time} seconds")
-
-    def scan_directory(self, shared_directory: SharedDirectory) -> Set[SharedItem]:
-        """Starts scanning a directory
-
-        :param shared_dir: absolute path to the directory
-        :param alias: directory alias, used when building the SharedItem objects
-        """
-        shared_items = set()
-        for directory, _, files in os.walk(shared_directory.absolute_path):
-            subdir = os.path.relpath(directory, shared_directory.absolute_path)
-
-            if subdir == '.':
-                subdir = ''
-
-            for filename in files:
-                filepath = os.path.join(directory, filename)
-                try:
-                    modified = os.path.getmtime(os.path.join(directory, filename))
-                except OSError:
-                    logger.debug(f"could not get modified time for file {filepath!r}")
-                else:
-                    shared_items.add(
-                        SharedItem(shared_directory, subdir, filename, modified)
-                    )
-
-        return shared_items
 
     def _scan_directory_callback(self, shared_directory: SharedDirectory, future: Future):
         try:
@@ -397,8 +402,8 @@ class SharesManager:
         except Exception:
             logger.warn(f"exception fetching shared item attributes : {shared_item!r}")
 
-    def get_filesize(self, filename: str) -> int:
-        return os.path.getsize(filename)
+    def get_filesize(self, shared_item: SharedItem) -> int:
+        return os.path.getsize(shared_item.get_absolute_path())
 
     def query(self, query: str) -> List[SharedItem]:
         """Performs a query on the `shared_directories` returning the matching
@@ -461,8 +466,11 @@ class SharesManager:
         )
         return dir_count, file_count
 
-    def get_download_path(self, remote_path: str):
-        """Gets the local download path for a remote path returned by another peer"""
+    def get_download_path(self, remote_path: str) -> str:
+        """Gets the local download path for a remote path returned by another
+        peer. This method will attempt to create the download directory
+
+        """
         download_dir = self.create_download_directory()
 
         remote_dir, remote_filename = os.path.split(remote_path)
@@ -531,11 +539,13 @@ class SharesManager:
 
     def convert_item_to_file_data(
             self, shared_item: SharedItem, use_full_path: bool = True) -> FileData:
-        """Convert a L{SharedItem} object to a L{FileData} object
+        """Convert a `SharedItem` object to a `FileData` object
 
         :param use_full_path: use the full path of the file as `filename` if
             `True` otherwise use just the filename. Should be `False` when
             generating a shares reply, `True` when generating search reply
+        :return: the converted data
+        :raise OSError: raised when an error occurred accessing the file
         """
         file_path = shared_item.get_absolute_path()
         file_size = os.path.getsize(file_path)

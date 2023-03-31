@@ -1,3 +1,4 @@
+from pyslsk.exceptions import FileNotFoundError
 from pyslsk.shares import (
     extract_attributes,
     SharedDirectory,
@@ -53,19 +54,44 @@ def manager_query(tmp_path):
 
 class TestFunctions:
 
-    def test_whenExtractAttributesMP3File_shouldReturnAttributes(self):
+    def test_extractAttributes_MP3File_shouldReturnAttributes(self):
         filepath = os.path.join(RESOURCES, MP3_FILENAME)
 
         attributes = extract_attributes(filepath)
 
         assert attributes == [(0, 128), (1, 15)]
 
-    def test_whenExtractAttributesFLACFile_shouldReturnAttributes(self):
+    def test_extractAttributes_FLACFile_shouldReturnAttributes(self):
         filepath = os.path.join(RESOURCES, FLAC_FILENAME)
 
         attributes = extract_attributes(filepath)
 
         assert attributes == [(1, 15), (4, 44100), (5, 16)]
+
+
+class TestSharedDirectory:
+
+    def test_getRemotePath_shouldReturnPath(self):
+        alias = 'abcdef'
+        shared_directory = SharedDirectory('music', r"C:\\music", alias)
+        assert '@@' + alias == shared_directory.get_remote_path()
+
+    def test_getItemByRemotePath_itemExists_shouldReturnItem(self):
+        shared_directory = SharedDirectory('music', r"C:\\music", 'abcdef')
+        item = SharedItem(shared_directory, 'author', 'song.mp3', 1.0)
+        shared_directory.items = {item}
+
+        remote_path = '@@abcdef\\author\\song.mp3'
+        assert item == shared_directory.get_item_by_remote_path(remote_path)
+
+    def test_getItemByRemotePath_itemNotExists_shouldRaise(self):
+        shared_directory = SharedDirectory('music', r"C:\\music", 'abcdef')
+        item = SharedItem(shared_directory, 'author', 'song.mp3', 1.0)
+        shared_directory.items = {item}
+
+        remote_path = '@@abcdef\\author\\song2.mp3'
+        with pytest.raises(FileNotFoundError):
+            shared_directory.get_item_by_remote_path(remote_path)
 
 
 class TestSharesManager:
