@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+from typing import Tuple
 
 from .network.connection import CloseReason, ConnectionState, ServerConnection
 from .constants import SERVER_RESPONSE_TIMEOUT
@@ -305,7 +306,7 @@ class ServerManager:
             PrivateRoomDropMembership.Request(room_name)
         )
 
-    async def get_peer_address(self, username: str):
+    async def get_peer_address(self, username: str) -> Tuple[str, int, int]:
         """Requests the IP address/port of the peer from the server
 
         :param username: username of the peer
@@ -343,7 +344,7 @@ class ServerManager:
         user.has_slots_free = message.slots_free
         user.country = message.country_code
 
-        room = self._state.get_or_create_room(message.username)
+        room = self._state.get_or_create_room(message.room)
         room.add_user(user)
 
         await self._event_bus.emit(UserJoinedRoomEvent(user=user, room=room))
@@ -353,7 +354,9 @@ class ServerManager:
         user = self._state.get_or_create_user(message.username)
         room = self._state.get_or_create_room(message.room)
 
-        await self._event_bus.emit(UserLeftRoomEvent(user=user, room=room))
+        room.remove_user(user)
+
+        await self._event_bus.emit(UserLeftRoomEvent(room, user))
 
     @on_message(ChatJoinRoom.Response)
     async def _on_join_room(self, message: ChatJoinRoom.Response, connection):
@@ -481,7 +484,7 @@ class ServerManager:
     async def _on_private_room_remove_operators(self, message: PrivateRoomRemoveOperator.Response, connection):
         room = self._state.get_or_create_room(message.room)
         user = self._state.get_or_create_user(message.username)
-        room.operators.remove(user)
+        room.remove_operator(user)
 
     @on_message(ChatPrivateMessage.Response)
     async def _on_private_message(self, message: ChatPrivateMessage.Response, connection):

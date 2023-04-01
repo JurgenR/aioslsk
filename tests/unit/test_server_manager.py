@@ -1,21 +1,30 @@
 from pyslsk.events import (
     EventBus,
+    RoomMessageEvent,
     RoomTickersEvent,
     RoomTickerAddedEvent,
     RoomTickerRemovedEvent,
+    UserJoinedRoomEvent,
+    UserLeftRoomEvent,
+    UserStatsEvent,
 )
+from pyslsk.model import RoomMessage, UserStatus
 from pyslsk.protocol.messages import (
+    GetUserStats,
+    ChatUserJoinedRoom,
+    ChatUserLeftRoom,
+    ChatRoomMessage,
     ChatRoomTickerAdded,
     ChatRoomTickers,
     ChatRoomTickerRemoved,
 )
-from pyslsk.protocol.primitives import RoomTicker
+from pyslsk.protocol.primitives import RoomTicker, UserData
 from pyslsk.settings import Settings
 from pyslsk.server_manager import ServerManager
 from pyslsk.state import State
 
 import pytest
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 
 DEFAULT_SETTINGS = {
@@ -141,13 +150,86 @@ class TestServerManager:
         )
 
         assert caplog.records[-1].levelname == 'WARNING'
-        # Check model
         callback.assert_called_once_with(
             RoomTickerRemovedEvent(
                 manager._state.rooms['room0'],
                 manager._state.users['user0']
             )
         )
+
+    @pytest.mark.asyncio
+    async def test_onChatRoomMessage_shouldEmitEvent(self):
+        manager = self._create_server_manager()
+
+        callback = Mock()
+        manager._event_bus.register(RoomMessageEvent, callback)
+
+        room = manager._state.get_or_create_room('room0')
+        user = manager._state.get_or_create_user('user0')
+
+        with patch('time.time', return_value=100.0):
+            await manager._on_chat_room_message(
+                ChatRoomMessage.Response(
+                    room='room0',
+                    username='user0',
+                    message='hello'
+                ),
+                manager.network.server
+            )
+
+        message = RoomMessage(timestamp=100.0, room=room, user=user, message='hello')
+        assert message == room.messages[-1]
+        callback.assert_called_once_with(RoomMessageEvent(message))
+
+    @pytest.mark.asyncio
+    async def test_onUserJoinedRoom_shouldAddUser(self):
+        manager = self._create_server_manager()
+
+        callback = Mock()
+        manager._event_bus.register(UserJoinedRoomEvent, callback)
+
+        room = manager._state.get_or_create_room('room0')
+        user = manager._state.get_or_create_user('user0')
+
+        user_data = (1, 2, 3, 4)
+        await manager._on_user_joined_room(
+            ChatUserJoinedRoom.Response(
+                room='room0',
+                username='user0',
+                status=UserStatus.ONLINE,
+                user_data=UserData(*user_data),
+                slots_free=10,
+                country_code='US'
+            ),
+            manager.network.server
+        )
+
+        assert user in room.users
+
+        assert user_data == (user.avg_speed, user.downloads, user.files, user.directories)
+        assert 'US' == user.country
+        assert 10 == user.has_slots_free
+        assert UserStatus.ONLINE == user.status
+        callback.assert_called_once_with(UserJoinedRoomEvent(room, user))
+
+    @pytest.mark.asyncio
+    async def test_onUserLeftRoom_shouldRemoveUser(self):
+        manager = self._create_server_manager()
+
+        callback = Mock()
+        manager._event_bus.register(UserLeftRoomEvent, callback)
+
+        room = manager._state.get_or_create_room('room0')
+        user = manager._state.get_or_create_user('user0')
+        room.add_user(user)
+
+        await manager._on_user_left_room(
+            ChatUserLeftRoom.Response(room='room0', username='user0'),
+            manager.network.server
+        )
+
+        assert 0 == len(room.users)
+        callback.assert_called_once_with(UserLeftRoomEvent(room, user))
 
     @pytest.mark.asyncio
     async def test_whenSetRoomTicker_shouldSetRoomTicker(self):

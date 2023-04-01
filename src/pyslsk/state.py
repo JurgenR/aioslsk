@@ -6,16 +6,7 @@ from typing import TYPE_CHECKING, Deque, Dict
 from .model import ChatMessage, Room, User
 
 if TYPE_CHECKING:
-    from .network.connection import PeerConnection
     from .search import ReceivedSearch, SearchQuery
-
-
-@dataclass
-class DistributedPeer:
-    username: str
-    connection: PeerConnection
-    branch_level: int = None
-    branch_root: int = None
 
 
 @dataclass
