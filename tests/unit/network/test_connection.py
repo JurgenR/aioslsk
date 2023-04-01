@@ -1,176 +1,316 @@
+from pyslsk.exceptions import (
+    ConnectionFailedError,
+    ConnectionReadError,
+    ConnectionWriteError,
+)
+from pyslsk.protocol.messages import (
+    ChatLeaveRoom,
+    DistributedBranchLevel,
+    MessageDataclass,
+    PeerInit,
+    PeerPlaceInQueueRequest,
+)
+from pyslsk.protocol.obfuscation import decode, encode
 from pyslsk.network.connection import (
     Connection,
     CloseReason,
     ConnectionState,
     DataConnection,
-    ListeningConnection,
     PeerConnection,
     PeerConnectionState,
     PeerConnectionType,
 )
+
+from asyncio import IncompleteReadError, TimeoutError
 import pytest
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import AsyncMock, call, MagicMock, Mock, patch
 
 
 @pytest.fixture
 def network():
-    return Mock()
+    return AsyncMock()
 
 
 class TestConnection:
 
-    def test_whenDisconnect_shouldCallCloseAndSetState(self, network):
-        conn = Connection(hostname='test', port=1234, network=network)
-        conn.fileobj = Mock()
+    @pytest.mark.asyncio
+    async def test_setState_setStateAndCallback(self, network):
+        connection = Connection('1.2.3.4', 1234, network)
+        connection.state = ConnectionState.CONNECTED
 
-        conn.disconnect()
+        await connection.set_state(ConnectionState.CLOSED, close_reason=CloseReason.EOF)
 
-        conn.fileobj.close.assert_called_once()
-        assert conn.state == ConnectionState.CLOSED
-
-    def test_whenDisconnectAndCloseRaisesException_shouldSetState(self, network):
-        conn = Connection(hostname='test', port=1234, network=network)
-        conn.fileobj = Mock(side_effect=OSError('error closing'))
-
-        conn.disconnect()
-
-        conn.fileobj.close.assert_called_once()
-        assert conn.state == ConnectionState.CLOSED
+        assert ConnectionState.CLOSED == connection.state
+        network.on_state_changed.assert_awaited_once_with(
+            ConnectionState.CLOSED,
+            connection,
+            close_reason=CloseReason.EOF
+        )
 
 
 class TestDataConnection:
-    # read
 
-    @patch('pyslsk.connection.DataConnection.process_buffer')
-    def test_whenReadSuccessful_shouldBufferAndReturnTrue(self, process_buffer, network):
-        data = b"050000000095000000"
+    # connect
+    @pytest.mark.asyncio
+    async def test_connectSuccessful_shouldSetState(self, network):
+        connection = DataConnection('1.2.3.4', 1234, network)
+        connection._start_reader_task = MagicMock()
+        reader, writer = Mock(), Mock()
+        with patch('asyncio.open_connection', return_value=(reader, writer)):
+            await connection.connect()
 
-        conn = DataConnection(hostname='test', port=1234, network=network)
-        conn.fileobj = Mock()
-        conn.fileobj.recv.return_value = data
+        assert ConnectionState.CONNECTED == connection.state
+        assert connection._reader is not None
+        assert connection._writer is not None
+        connection._start_reader_task.assert_called_once()
 
-        result = conn.read()
+    @pytest.mark.asyncio
+    async def test_connectUnsuccessful_shouldDisconnectAndRaise(self, network):
+        connection = DataConnection('1.2.3.4', 1234, network)
+        connection.disconnect = AsyncMock()
 
-        assert result is True
-        assert conn._buffer == data
-        assert conn.bytes_received == len(data)
-        assert conn.last_interaction != 0
-        conn.process_buffer.assert_called_once()
+        with patch('asyncio.open_connection', side_effect=OSError):
+            with pytest.raises(ConnectionFailedError):
+                await connection.connect()
 
-    @patch('pyslsk.connection.DataConnection.disconnect')
-    def test_whenReadReturnsEmptyData_shouldDisconnectAndReturnFalse(self, disconnect, network):
-        data = b""
+        assert connection._reader is None
+        assert connection._writer is None
+        connection.disconnect.assert_awaited_once_with(CloseReason.CONNECT_FAILED)
 
-        conn = DataConnection(hostname='test', port=1234, network=network)
-        conn.fileobj = Mock()
-        conn.fileobj.recv.return_value = data
+    @pytest.mark.asyncio
+    async def test_connectTimeout_shouldDisconnectAndRaise(self, network):
+        connection = DataConnection('1.2.3.4', 1234, network)
+        connection.disconnect = AsyncMock()
 
-        result = conn.read()
+        with patch('asyncio.wait_for', side_effect=TimeoutError):
+            with pytest.raises(ConnectionFailedError):
+                await connection.connect()
 
-        assert result is False
-        assert conn._buffer == b""
-        assert conn.bytes_received == 0
-        assert conn.last_interaction != 0
-        conn.disconnect.assert_called_once_with(reason=CloseReason.EOF)
+        assert connection._reader is None
+        assert connection._writer is None
+        connection.disconnect.assert_awaited_once_with(CloseReason.CONNECT_FAILED)
 
-    @patch('pyslsk.connection.DataConnection.disconnect')
-    def test_whenReadUnsuccessful_shouldCallDisconnectAndReturnFalse(self, disconnect, network):
+    # disconnect
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('state', [ConnectionState.CLOSED, ConnectionState.CLOSING])
+    async def test_disconnect_alreadyDisconnected_shouldDoNothing(self, network, state: ConnectionState):
+        connection = connection = self._create_connection(network, state)
+        connection.set_state = AsyncMock()
 
-        conn = DataConnection(hostname='test', port=1234, network=network)
-        conn.fileobj = Mock()
-        conn.fileobj.recv.side_effect = OSError("read error")
+        await connection.disconnect(CloseReason.EOF)
 
-        result = conn.read()
+        connection.set_state.assert_not_awaited()
+        assert connection.state == state
 
-        assert result is False
-        assert conn._buffer == b""
-        assert conn.bytes_received == 0
-        assert conn.last_interaction == 0
-        conn.disconnect.assert_called_once_with(reason=CloseReason.READ_ERROR)
+    @pytest.mark.asyncio
+    async def test_disconnect_shouldSetState(self, network):
+        connection = self._create_connection(network)
+        connection.set_state = AsyncMock()
+        connection._stop_reader_task = Mock()
+        connection._writer = Mock()
+        connection._writer.close = Mock()
+        connection._writer.wait_closed = AsyncMock()
+        connection._writer.is_closing = Mock(return_value=False)
 
-    # buffer
+        await connection.disconnect(CloseReason.EOF)
 
-    def test_whenBuffer_shouldStoreData(self, network):
-        conn = DataConnection(hostname='test', port=1234, network=network)
+        self._validate_disconnected(connection)
 
-        data_to_send = b"abc"
-        conn.buffer(data_to_send)
+    @pytest.mark.asyncio
+    async def test_disconnectWithException_shouldSetState(self, network):
+        connection = self._create_connection(network)
+        connection.set_state = AsyncMock()
+        connection._stop_reader_task = Mock()
+        connection._writer = Mock()
+        connection._writer.close = Mock()
+        connection._writer.wait_closed = AsyncMock(side_effect=OSError)
+        connection._writer.is_closing = Mock(return_value=False)
 
-        assert conn.bytes_received == len(data_to_send)
-        assert conn._buffer == data_to_send
+        await connection.disconnect(CloseReason.EOF)
+
+        self._validate_disconnected(connection)
+
+    # receive_message
+    @pytest.mark.asyncio
+    async def test_receiveMessage_unobfuscatedConnection(self, network):
+        expected_message = ChatLeaveRoom.Response('room').serialize()
+        header, content = expected_message[:4], expected_message[4:]
+
+        connection = self._create_connection(network)
+        connection._reader = Mock()
+        connection._reader.readexactly = AsyncMock(side_effect=(header, content))
+
+        actual_message = await connection.receive_message()
+        assert expected_message == actual_message
+
+    @pytest.mark.asyncio
+    async def test_receiveMessage_obfuscatedConnection(self, network):
+        expected_message = encode(
+            ChatLeaveRoom.Response('room').serialize(), key=bytes.fromhex('12345678'))
+        header, content = expected_message[:8], expected_message[8:]
+
+        connection = self._create_connection(network)
+        connection.obfuscated = True
+        connection._reader = Mock()
+        connection._reader.readexactly = AsyncMock(side_effect=(header, content))
+
+        actual_message = await connection.receive_message()
+        assert expected_message == actual_message
+
+    @pytest.mark.asyncio
+    async def test_receiveMessage_exception_shouldDisconnectAndRaise(self, network):
+        connection = self._create_connection(network)
+        connection._reader = Mock()
+        connection._reader.readexactly = AsyncMock(side_effect=OSError)
+        connection.disconnect = AsyncMock()
+
+        with pytest.raises(ConnectionReadError):
+            await connection.receive_message()
+
+        connection.disconnect.assert_awaited_once_with(CloseReason.READ_ERROR)
+
+    @pytest.mark.asyncio
+    async def test_receiveMessage_timeoutException_shouldDisconnectAndRaise(self, network):
+        connection = self._create_connection(network)
+        connection._reader = Mock()
+        connection.disconnect = AsyncMock()
+
+        with patch('asyncio.wait_for', side_effect=TimeoutError):
+            with pytest.raises(ConnectionReadError):
+                await connection.receive_message()
+
+        connection.disconnect.assert_awaited_once_with(CloseReason.TIMEOUT)
+
+    @pytest.mark.asyncio
+    async def test_receiveMessage_incompleteReadException_eof_shouldDisconnect(self, network):
+        connection = self._create_connection(network)
+        connection._reader = Mock()
+        connection._reader.readexactly = AsyncMock(
+            side_effect=IncompleteReadError('', None))
+        connection.disconnect = AsyncMock()
+
+        await connection.receive_message()
+
+        connection.disconnect.assert_awaited_once_with(CloseReason.EOF)
+
+    @pytest.mark.asyncio
+    async def test_receiveMessage_incompleteReadException_notEof_shouldDisconnectAndRaise(self, network):
+        connection = self._create_connection(network)
+        connection._reader = Mock()
+        connection._reader.readexactly = AsyncMock(
+            side_effect=IncompleteReadError(bytes.fromhex('11'), None))
+        connection.disconnect = AsyncMock()
+
+        with pytest.raises(ConnectionReadError):
+            await connection.receive_message()
+
+        connection.disconnect.assert_awaited_once_with(CloseReason.READ_ERROR)
 
     # send_message
+    @pytest.mark.asyncio
+    async def test_sendMessage_unobfuscatedConnection(self, network):
+        expected_message = ChatLeaveRoom.Response('room').serialize()
 
-    def test_whenSendMessageNoMessageQueued_shouldReturnTrue(self, network):
-        conn = DataConnection(hostname='test', port=1234, network=network)
-        conn.fileobj = Mock()
+        connection = self._create_connection(network)
+        connection._writer = Mock()
+        connection._writer.write = Mock()
+        connection._writer.drain = AsyncMock()
 
-        res = conn.send_message()
+        await connection.send_message(expected_message)
+        connection._writer.write.assert_called_once_with(expected_message)
+        connection._writer.drain.assert_awaited_once()
 
-        assert res is True
-        assert conn.bytes_sent == 0
-        assert conn.last_interaction == 0.0
+    @pytest.mark.asyncio
+    async def test_sendMessage_obfuscatedConnection(self, network):
+        expected_message = ChatLeaveRoom.Response('room').serialize()
+        enc_message = encode(expected_message, key=bytes.fromhex('11223344'))
 
-    def test_whenSendMessageSuccessful_shouldReturnTrue(self, network):
-        conn = DataConnection(hostname='test', port=1234, network=network)
-        conn.fileobj = Mock()
+        connection = self._create_connection(network)
+        connection.obfuscated = True
+        connection._writer = Mock()
+        connection._writer.write = Mock()
+        connection._writer.drain = AsyncMock()
 
-        data_to_send = b"abc"
-        conn.queue_messages(data_to_send)
+        with patch('pyslsk.protocol.obfuscation.encode', return_value=enc_message) as encode_func:
+            await connection.send_message(expected_message)
 
-        res = conn.send_message()
+        encode_func.assert_called_once_with(expected_message)
+        connection._writer.write.assert_called_once_with(enc_message)
+        connection._writer.drain.assert_awaited_once()
 
-        conn.fileobj.sendall.assert_called_once_with(data_to_send)
-        assert res is True
-        assert conn.bytes_sent == len(data_to_send)
-        assert conn.last_interaction != 0
+    @pytest.mark.asyncio
+    async def test_sendMessage_exception_shouldDisconnectAndRaise(self, network):
+        expected_message = ChatLeaveRoom.Response('room').serialize()
 
-    @patch('pyslsk.connection.DataConnection.disconnect')
-    def test_whenSendMessageFails_shouldDisconnectAndReturnFalse(self, disconnect, network):
-        conn = DataConnection(hostname='test', port=1234, network=network)
-        conn.fileobj = Mock()
-        conn.fileobj.sendall.side_effect = OSError("write error")
+        connection = self._create_connection(network)
+        connection._writer = Mock()
+        connection._writer.write = Mock()
+        connection._writer.drain = AsyncMock(side_effect=OSError)
+        connection.disconnect = AsyncMock()
 
-        data_to_send = b"abc"
-        conn.queue_messages(data_to_send)
+        with pytest.raises(ConnectionWriteError):
+            await connection.send_message(expected_message)
 
-        res = conn.send_message()
+        connection._writer.drain.assert_awaited_once()
+        connection.disconnect.assert_awaited_once_with(CloseReason.WRITE_ERROR)
 
-        conn.fileobj.sendall.assert_called_once_with(data_to_send)
-        assert res is False
-        assert conn.bytes_sent == 0
-        assert conn.last_interaction != 0
-        conn.disconnect.assert_called_once_with(reason=CloseReason.WRITE_ERROR)
+    @pytest.mark.asyncio
+    async def test_sendMessage_timeoutException_shouldDisconnectAndRaise(self, network):
+        expected_message = ChatLeaveRoom.Response('room').serialize()
+
+        connection = self._create_connection(network)
+        connection._writer = Mock()
+        connection._writer.write = Mock()
+        connection._writer.drain = AsyncMock()
+        connection.disconnect = AsyncMock()
+
+        with patch('asyncio.wait_for', side_effect=TimeoutError):
+            with pytest.raises(ConnectionWriteError):
+                await connection.send_message(expected_message)
+
+        connection.disconnect.assert_awaited_once_with(CloseReason.TIMEOUT)
+
+    # helpers
+    def _create_connection(self, network, state: ConnectionState = ConnectionState.CONNECTED) -> DataConnection:
+        connection = DataConnection('1.2.3.4', 1234, network)
+        connection.state = state
+        return connection
+
+    def _validate_disconnected(self, connection: DataConnection):
+        connection._writer.close.assert_called_once()
+        connection._writer.wait_closed.assert_awaited_once()
+        assert 2 == connection.set_state.call_count
+        connection.set_state.assert_has_awaits(
+            [
+                call(ConnectionState.CLOSING, close_reason=CloseReason.EOF),
+                call(ConnectionState.CLOSED, close_reason=CloseReason.EOF)
+            ]
+        )
+        connection._stop_reader_task.assert_called_once()
 
 
 class TestPeerConnection:
 
-    def test_whenCreatePeerConnection_verifyInitialState(self, network):
+    def test_createPeerConnection_verifyInitialState(self, network):
         ip, port = '1.2.3.4', 1234
         conn = PeerConnection(hostname=ip, port=port, network=network)
         assert conn.state == ConnectionState.UNINITIALIZED
         assert conn.connection_state == PeerConnectionState.AWAITING_INIT
 
-    @patch('pyslsk.connection.socket.socket', autospec=True)
-    def test_whenConnect_shouldSetConnectingState(self, sock_mock, network):
+    @pytest.mark.parametrize(
+        "peer_state,peer_type,message",
+        [
+            (PeerConnectionState.AWAITING_INIT, PeerConnectionType.PEER, PeerInit.Request('user', 'P', 1)),
+            (PeerConnectionState.ESTABLISHED, PeerConnectionType.PEER, PeerPlaceInQueueRequest.Request('myfile.mp3')),
+            (PeerConnectionState.ESTABLISHED, PeerConnectionType.DISTRIBUTED, DistributedBranchLevel.Request(1)),
+        ]
+    )
+    def test_parseMessage_shouldReturnMessage(self, peer_state: PeerConnectionState, peer_type: PeerConnectionType, message: MessageDataclass):
         ip, port = '1.2.3.4', 1234
-        conn = PeerConnection(hostname=ip, port=port, network=network)
+        conn = PeerConnection(
+            hostname=ip, port=port, network=network,
+            connection_type=peer_type)
+        conn.connection_state = peer_state
 
-        fileobj = MagicMock()
-        fileobj.connect_ex.return_value = 10035
-        sock_mock.return_value = fileobj
-
-        conn.connect()
-
-        fileobj.connect_ex.assert_called_once()
-        assert conn.state == ConnectionState.CONNECTING
-        assert conn.last_interaction != 0
-
-    def test_whenStateChanged_shouldSetStateAndCallNetwork(self, network):
-        ip, port = '1.2.3.4', 1234
-        conn = PeerConnection(hostname=ip, port=port, network=network)
-        conn.set_state(ConnectionState.CLOSED, close_reason=CloseReason.READ_ERROR)
-
-        network.on_state_changed.assert_called_once_with(
-            ConnectionState.CLOSED, conn, close_reason=CloseReason.READ_ERROR)
-        assert conn.state == ConnectionState.CLOSED
+        actual_message = conn.parse_message(message.serialize())
+        assert message == actual_message

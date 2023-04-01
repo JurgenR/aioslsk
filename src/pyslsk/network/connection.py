@@ -282,7 +282,7 @@ class DataConnection(Connection):
 
         return header + message
 
-    async def receive_message(self):
+    async def receive_message(self) -> bytes:
         return await self._read(self._read_message)
 
     async def _process_message_data(self, data: bytes):
@@ -301,7 +301,7 @@ class DataConnection(Connection):
         except Exception:
             logger.exception(f"error during callback : {message!r}")
 
-    async def _read(self, reader_func, timeout: float = None):
+    async def _read(self, reader_func, timeout: float = None) -> bytes:
         """Read data from the connection using the passed `reader_func`. When an
         error occurs during reading the connection will be CLOSED
 
@@ -350,7 +350,7 @@ class DataConnection(Connection):
         serialized. If the `obfuscated` flag is set for the connection the
         message or bytes will first be obfuscated
 
-        :raise ConnectionWriteError:
+        :raise ConnectionWriteError: error or timeout occured during writing
         """
         logger.debug(f"{self.hostname}:{self.port} : send message : {message!r}")
         # Serialize the message
@@ -451,10 +451,10 @@ class PeerConnection(DataConnection):
         _, offset = uint64.deserialize(0, data)
         return offset
 
-    async def receive_data(self, n_bytes: int, timeout=TRANSFER_TIMEOUT) -> bytes:
+    async def receive_data(self, n_bytes: int, timeout: int = TRANSFER_TIMEOUT) -> bytes:
         try:
             data = await asyncio.wait_for(
-                self._reader.read(n_bytes), TRANSFER_TIMEOUT)
+                self._reader.read(n_bytes), timeout)
 
         except asyncio.TimeoutError as exc:
             await self.disconnect(CloseReason.TIMEOUT)
