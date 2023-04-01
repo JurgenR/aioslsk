@@ -37,7 +37,6 @@ SHARED_ITEMS = {
 SHARED_DIRECTORY.items = set(SHARED_ITEMS.values())
 
 
-
 @pytest.fixture
 def manager(tmp_path):
     return SharesManager(Settings(DEFAULT_SETTINGS), SharesStorage())

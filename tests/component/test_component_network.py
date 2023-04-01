@@ -19,7 +19,6 @@ from pyslsk.network.connection import (
 )
 from pyslsk.network.network import Network
 from pyslsk.network.rate_limiter import LimitedRateLimiter, UnlimitedRateLimiter
-from pyslsk.scheduler import Scheduler
 from pyslsk.state import State
 from pyslsk.settings import Settings
 
@@ -54,7 +53,6 @@ class _BaseTestComponentNetwork:
     def _create_network(self, settings=None) -> Network:
         settings = settings or DEFAULT_SETTINGS
         state = State()
-        state.scheduler = Scheduler()
         network = Network(state, Settings(settings), InternalEventBus())
 
         # Mock UPNP

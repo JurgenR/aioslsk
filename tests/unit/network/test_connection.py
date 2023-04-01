@@ -10,7 +10,7 @@ from pyslsk.protocol.messages import (
     PeerInit,
     PeerPlaceInQueueRequest,
 )
-from pyslsk.protocol.obfuscation import decode, encode
+from pyslsk.protocol.obfuscation import encode
 from pyslsk.network.connection import (
     Connection,
     CloseReason,

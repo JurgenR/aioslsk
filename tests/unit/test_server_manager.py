@@ -6,18 +6,15 @@ from pyslsk.events import (
     RoomTickerRemovedEvent,
     UserJoinedRoomEvent,
     UserLeftRoomEvent,
-    UserStatsEvent,
 )
 from pyslsk.model import RoomMessage, UserStatus
 from pyslsk.protocol.messages import (
-    GetUserStats,
     ChatUserJoinedRoom,
     ChatUserLeftRoom,
     ChatRoomMessage,
     ChatRoomTickerAdded,
     ChatRoomTickers,
     ChatRoomTickerRemoved,
-    FileSearch,
 )
 from pyslsk.protocol.primitives import RoomTicker, UserData
 from pyslsk.search import SearchType
@@ -35,6 +32,7 @@ DEFAULT_SETTINGS = {
         'password': 'Test1234'
     }
 }
+
 
 class TestServerManager:
 

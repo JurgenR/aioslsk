@@ -40,7 +40,7 @@ class TestModel:
         room.add_operator(user)
         assert room.operators == [user]
 
-    def test_removeOperator_userExists_shouldRemoveOperator(self):
+    def test_removeOperator_operatorExists_shouldRemoveOperator(self):
         user = User(name='myuser')
         room = Room(name='myroom')
         room.operators = [user]
@@ -48,7 +48,7 @@ class TestModel:
         room.remove_operator(user)
         assert [] == room.operators
 
-    def test_removeUser_userDoesNotExist_shouldDoNothing(self):
+    def test_removeOperator_operatorDoesNotExist_shouldDoNothing(self):
         user = User(name='myuser')
         room = Room(name='myroom')
 

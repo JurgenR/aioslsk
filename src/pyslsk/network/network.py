@@ -195,8 +195,7 @@ class Network:
 
     async def create_peer_connection(
             self, username: str, typ: str, ip: str = None, port: int = None,
-            initial_state: PeerConnectionState = PeerConnectionState.ESTABLISHED
-        ) -> PeerConnection:
+            initial_state: PeerConnectionState = PeerConnectionState.ESTABLISHED) -> PeerConnection:
         """Creates a new peer connection to the given `username` and connection
         type.
 
