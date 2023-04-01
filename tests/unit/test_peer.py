@@ -25,7 +25,7 @@ class TestPeer:
     def _create_peer_manager(self) -> PeerManager:
         state = State()
         event_bus = AsyncMock()
-        internal_event_bus = AsyncMock()
+        internal_event_bus = Mock()
         shares_manager = Mock()
         transfer_manager = Mock()
         network = AsyncMock()
