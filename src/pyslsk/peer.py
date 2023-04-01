@@ -1,6 +1,7 @@
 import asyncio
-import logging
+from dataclasses import dataclass
 from functools import partial
+import logging
 from typing import List, Union
 
 from .network.connection import (
@@ -48,12 +49,20 @@ from .protocol.messages import (
 from .network.network import Network
 from .search import ReceivedSearch, SearchResult
 from .settings import Settings
-from .state import DistributedPeer, State
+from .state import State
 from .transfer import TransferManager
 from .utils import task_counter, ticket_generator
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class DistributedPeer:
+    username: str
+    connection: PeerConnection
+    branch_level: int = None
+    branch_root: str = None
 
 
 class PeerManager:

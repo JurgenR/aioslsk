@@ -45,6 +45,7 @@ from .protocol.messages import (
     ChatLeaveRoom,
     ChatPrivateMessage,
     ChatAckPrivateMessage,
+    ChatRoomSearch,
     ChatRoomTickers,
     ChatRoomTickerAdded,
     ChatRoomTickerRemoved,
@@ -81,13 +82,14 @@ from .protocol.messages import (
     SetListenPort,
     SetStatus,
     SharedFoldersFiles,
+    UserSearch,
     WishlistInterval,
     WishlistSearch,
 )
 from .model import ChatMessage, RoomMessage, User, UserStatus
 from .network.network import Network
 from .shares import SharesManager
-from .search import SearchQuery
+from .search import SearchQuery, SearchType
 from .settings import Settings
 from .state import State
 from .utils import task_counter, ticket_generator
@@ -168,6 +170,7 @@ class ServerManager:
             raise LoginFailedError(response.reason)
 
         # Make setup calls
+
         dir_count, file_count = self.shares_manager.get_stats()
         logger.debug(f"Sharing {dir_count} directories and {file_count} files")
 
@@ -189,6 +192,17 @@ class ServerManager:
         )
 
         # Perform AddUser for all in the friendlist
+        await self.track_friends()
+
+        # Auto-join rooms
+        await self.auto_join_rooms()
+
+        await self._internal_event_bus.emit(LoginEvent(success=response.success))
+
+    async def track_friends(self):
+        """Sends an `AddUser` request to our friends list defined in the
+        settings to start tracking changes
+        """
         await self.network.queue_server_messages(
             *[
                 AddUser.Request(friend)
@@ -196,22 +210,59 @@ class ServerManager:
             ]
         )
 
-        # Auto-join rooms
-        if self._settings.get('chats.auto_join'):
-            rooms = self._settings.get('chats.rooms')
-            logger.info(f"automatically rejoining {len(rooms)} rooms")
-            await self.network.queue_server_messages(
-                *[ChatJoinRoom.Request(room) for room in rooms]
-            )
+    async def auto_join_rooms(self):
+        """Automatically joins rooms stored in the settings"""
+        if not self._settings.get('chats.auto_join'):
+            return
 
-        await self._internal_event_bus.emit(LoginEvent(success=response.success))
+        rooms = self._settings.get('chats.rooms')
+        logger.info(f"automatically rejoining {len(rooms)} rooms")
+        await self.network.queue_server_messages(
+            *[ChatJoinRoom.Request(room) for room in rooms]
+        )
+
+    async def search_room(self, room: str, query: str) -> SearchQuery:
+        """Performs a search query on all users in a room"""
+        ticket = next(self._ticket_generator)
+
+        await self.network.queue_server_messages(
+            ChatRoomSearch.Request(room, ticket, query)
+        )
+        self._state.search_queries[ticket] = SearchQuery(
+            ticket=ticket,
+            query=query,
+            search_type=SearchType.ROOM,
+            room=room
+        )
+        return self._state.search_queries[ticket]
+
+    async def search_user(self, username: str, query: str) -> SearchQuery:
+        """Performs a search query on a user"""
+        ticket = next(self._ticket_generator)
+
+        await self.network.queue_server_messages(
+            UserSearch.Request(username, ticket, query)
+        )
+        self._state.search_queries[ticket] = SearchQuery(
+            ticket=ticket,
+            query=query,
+            search_type=SearchType.USER,
+            username=username
+        )
+        return self._state.search_queries[ticket]
 
     async def search(self, query: str) -> SearchQuery:
+        """Performs a global search query"""
         ticket = next(self._ticket_generator)
+
         await self.network.queue_server_messages(
             FileSearch.Request(ticket, query)
         )
-        self._state.search_queries[ticket] = SearchQuery(ticket=ticket, query=query)
+        self._state.search_queries[ticket] = SearchQuery(
+            ticket=ticket,
+            query=query,
+            search_type=SearchType.NETWORK
+        )
         return self._state.search_queries[ticket]
 
     async def add_user(self, username: str) -> User:
@@ -261,6 +312,7 @@ class ServerManager:
             self.network.wait_for_server_message(GetUserStatus.Response, username=username),
             SERVER_RESPONSE_TIMEOUT
         )
+        return UserStatus(response.status)
 
     async def get_room_list(self):
         await self.network.send_server_messages(RoomList.Request())
@@ -630,7 +682,7 @@ class ServerManager:
             # Remove all current wishlist searches
             self._state.search_queries = {
                 ticket: qry for ticket, qry in self._state.search_queries.items()
-                if not qry.is_wishlist_query
+                if qry.search_type != SearchType.WISHLIST
             }
 
             logger.info(f"starting wishlist search of {len(items)} items")
@@ -643,7 +695,7 @@ class ServerManager:
                 self._state.search_queries[ticket] = SearchQuery(
                     ticket,
                     item['query'],
-                    is_wishlist_query=True
+                    search_type=SearchType.WISHLIST
                 )
                 await self.network.queue_server_messages(
                     WishlistSearch.Request(ticket, item['query'])

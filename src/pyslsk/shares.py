@@ -455,7 +455,7 @@ class SharesManager:
     def get_stats(self) -> Tuple[int, int]:
         """Gets the total amount of shared directories and files.
 
-        :return: Directory and file count as a C{tuple}
+        :return: directory and file count as a `tuple`
         """
         file_count = sum(
             len(directory.items) for directory in self.shared_directories

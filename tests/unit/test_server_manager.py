@@ -17,8 +17,10 @@ from pyslsk.protocol.messages import (
     ChatRoomTickerAdded,
     ChatRoomTickers,
     ChatRoomTickerRemoved,
+    FileSearch,
 )
 from pyslsk.protocol.primitives import RoomTicker, UserData
+from pyslsk.search import SearchType
 from pyslsk.settings import Settings
 from pyslsk.server_manager import ServerManager
 from pyslsk.state import State
@@ -237,3 +239,44 @@ class TestServerManager:
 
         await manager.set_room_ticker('room0', 'hello')
         manager.network.send_server_messages.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_searchNetwork_shouldSearchAndCreateEntry(self):
+        manager = self._create_server_manager()
+
+        search_query = await manager.search('my query')
+        assert 'my query' == search_query.query
+        assert isinstance(search_query.ticket, int)
+        assert SearchType.NETWORK == search_query.search_type
+
+        manager.network.queue_server_messages.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_searchRoom_shouldSearchAndCreateEntry(self):
+        manager = self._create_server_manager()
+
+        query = 'my query'
+        room_name = 'room0'
+
+        search_query = await manager.search_room(room_name, query)
+        assert query == search_query.query
+        assert isinstance(search_query.ticket, int)
+        assert SearchType.ROOM == search_query.search_type
+        assert room_name == search_query.room
+
+        manager.network.queue_server_messages.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_searchUser_shouldSearchAndCreateEntry(self):
+        manager = self._create_server_manager()
+
+        query = 'my query'
+        username = 'room0'
+
+        search_query = await manager.search_user(username, query)
+        assert query == search_query.query
+        assert isinstance(search_query.ticket, int)
+        assert SearchType.USER == search_query.search_type
+        assert username == search_query.username
+
+        manager.network.queue_server_messages.assert_called_once()

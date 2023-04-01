@@ -150,14 +150,14 @@ class RoomTickerRemovedEvent:
 
 @dataclass(frozen=True)
 class UserJoinedRoomEvent(Event):
-    user: User
     room: Room
+    user: User
 
 
 @dataclass(frozen=True)
 class UserLeftRoomEvent(Event):
-    user: User
     room: Room
+    user: User
 
 
 @dataclass(frozen=True)
