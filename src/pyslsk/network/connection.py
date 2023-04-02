@@ -115,15 +115,16 @@ class ListeningConnection(Connection):
 
     async def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
         logger.debug(f"{self.hostname}:{self.port} : disconnecting : {reason.name}")
+        await self.set_state(ConnectionState.CLOSING, close_reason=reason)
         try:
             if self._server is not None:
                 if self._server.is_serving():
                     self._server.close()
-                logger.debug(f"{self.hostname}:{self.port} : waiting disconnecting : {reason.name}")
                 await self._server.wait_closed()
 
-        except Exception:
-            logger.exception(f"{self.hostname}:{self.port} : exception while disconnecting")
+        except Exception as exc:
+            logger.warning(
+                f"{self.hostname}:{self.port} : exception while disconnecting", exc_info=exc)
 
         finally:
             logger.debug(f"{self.hostname}:{self.port} : disconnected : {reason.name}")
@@ -132,6 +133,7 @@ class ListeningConnection(Connection):
     async def connect(self):
         logger.info(
             f"open {self.hostname}:{self.port} : listening connection")
+        await self.set_state(ConnectionState.CONNECTING)
 
         self._server = await asyncio.start_server(
             self.accept,
