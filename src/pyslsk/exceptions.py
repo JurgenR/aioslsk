@@ -46,6 +46,10 @@ class ConnectionWriteError(NetworkError):
     pass
 
 
+class IncompleteFileReceiveError(NetworkError):
+    pass
+
+
 class NoSuchUserError(PySlskException):
     pass
 

@@ -356,7 +356,6 @@ class SharesManager:
             scan_futures.append(scan_future)
 
         await asyncio.gather(*scan_futures, return_exceptions=True)
-        asyncio.as_completed()
 
         for shared_directory in self.shared_directories:
             self.build_term_map(shared_directory)

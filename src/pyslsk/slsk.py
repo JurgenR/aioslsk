@@ -111,9 +111,7 @@ class SoulSeek:
         asyncio.create_task(self.shares_manager.scan())
 
     async def start_transfer_manager(self):
-        transfers = self.transfer_manager.read_transfers_from_storage()
-        for transfer in transfers:
-            await self.transfer_manager.add(transfer)
+        await self.transfer_manager.read_transfers_from_storage()
 
     async def run_until_stopped(self):
         await self._stop_event.wait()

@@ -9,6 +9,12 @@ INTERVAL = 0.01
 
 class RateLimiter:
 
+    def __init__(self, limit_bps: int):
+        self.limit_bps: int = limit_bps
+        self.bucket: int = 0
+        self.transfer_amount: int = 0
+        self.last_refill: float = 0.0
+
     @classmethod
     def create_limiter(cls, limit_kbps: int) -> Type[RateLimiter]:
         if limit_kbps == 0:
@@ -33,10 +39,7 @@ class UnlimitedRateLimiter(RateLimiter):
     UPPER_LIMIT = 8192
 
     def __init__(self):
-        self.limit_bps: int = 0
-        self.bucket: int = 0
-        self.transfer_amount: int = 0
-        self.last_refill: float = 0.0
+        super().__init__(limit_bps=0)
 
     def is_empty(self) -> bool:
         return False
@@ -56,10 +59,7 @@ class LimitedRateLimiter(RateLimiter):
     UPPER_LIMIT = 1024
 
     def __init__(self, limit_kbps: int):
-        self.limit_bps: int = limit_kbps * 1024
-        self.bucket: int = 0
-        self.transfer_amount: int = 0
-        self.last_refill: float = 0.0
+        super().__init__(limit_bps=limit_kbps * 1024)
 
     def is_empty(self) -> bool:
         return self.bucket < self.LOWER_LIMIT

@@ -454,6 +454,17 @@ class PeerConnection(DataConnection):
         return offset
 
     async def receive_data(self, n_bytes: int, timeout: int = TRANSFER_TIMEOUT) -> bytes:
+        """Receives given amount of bytes on the connection.
+
+        In case of error the socket will be disconnected. If no data is received
+        it is assumed to be EOF and the connection will be disconnected.
+
+        :param n_bytes: amount of bytes to receive
+        :param timeout: timeout in seconds
+        :raise ConnectionReadError: in case timeout occured on an error on the
+            socket
+        :return: `bytes` object containing the received data
+        """
         try:
             data = await asyncio.wait_for(
                 self._reader.read(n_bytes), timeout)
@@ -482,7 +493,8 @@ class PeerConnection(DataConnection):
                 return None
 
             await file_handle.write(data)
-            callback(data)
+            if callback is not None:
+                callback(data)
 
             # Check if all data received and return
             bytes_received += len(data)
