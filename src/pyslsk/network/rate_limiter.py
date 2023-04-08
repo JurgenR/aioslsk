@@ -80,8 +80,8 @@ class LimitedRateLimiter(RateLimiter):
 
     async def take_tokens(self) -> int:
         while True:
-            self.refill()
-            if self.bucket >= self.LOWER_LIMIT:
+            is_empty = self.refill()
+            if not is_empty:
                 self.bucket -= self.LOWER_LIMIT
                 return self.LOWER_LIMIT
 

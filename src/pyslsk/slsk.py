@@ -126,14 +126,9 @@ class SoulSeek:
     async def stop(self):
         logger.info("signaling client to exit")
         self._stop_event.set()
-        await self.peer_manager.stop()
+        self.peer_manager.stop()
+        self.transfer_manager.stop()
         self.shares_manager.write_cache()
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self):
-        pass
 
     def _exception_handler(self, loop, context):
         message = f"unhandled exception on loop {loop!r} : context : {context!r}"

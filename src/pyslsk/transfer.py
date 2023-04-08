@@ -397,16 +397,6 @@ class Transfer:
 
     def _queue_remotely_task_complete(self, task: asyncio.Task):
         self._current_task = None
-        # try:
-        #     task.result()
-        # except asyncio.CancelledError:
-        #     pass
-        # except Exception as exc:
-        #     logger.warning(f"uploading failed : {self!r}")
-        #     self.upload_request_attempts += 1
-        # else:
-        #     self.upload_request_attempts = 0
-        #     self.last_upload_request_attempt = 0.0
 
     def _upload_task_complete(self, task: asyncio.Task):
         self._current_task = None
@@ -449,12 +439,28 @@ class TransferManager:
         self._internal_event_bus.register(PeerInitializedEvent, self._on_peer_initialized)
 
     async def read_transfers_from_storage(self) -> List[Transfer]:
-        transfers = self._storage.read_database()
+        transfers: List[Transfer] = self._storage.read_database()
         for transfer in transfers:
             await self.add(transfer)
 
+            # Analyze the current state of the stored transfers and set them to
+            # the correct state
+            if transfer.state in (TransferState.INITIALIZING, TransferState.REMOTELY_QUEUED):
+                transfer.set_state(TransferState.QUEUED, force=True)
+
+            elif transfer.is_transfering():
+                state = TransferState.COMPLETE if transfer.is_transfered() else TransferState.INCOMPLETE
+                transfer.set_state(state, force=True)
+
+        await self.manage_transfers()
+
     def write_transfers_to_storage(self):
         self._storage.write_database(self._transfers)
+
+    def stop(self):
+        for transfer in self.transfers:
+            if transfer._current_task:
+                transfer._current_task.cancel()
 
     @property
     def transfers(self):
@@ -473,16 +479,18 @@ class TransferManager:
 
         transfer.set_state(state, force=force)
         transfer.fail_reason = fail_reason
-        await self.manage_transfers()
 
     async def incomplete(self, transfer: Transfer):
         await self._set_transfer_state(transfer, TransferState.INCOMPLETE)
+        await self.manage_transfers()
 
     async def complete(self, transfer: Transfer):
         await self._set_transfer_state(transfer, TransferState.COMPLETE)
+        await self.manage_transfers()
 
     async def abort(self, transfer: Transfer):
         await self._set_transfer_state(transfer, TransferState.ABORTED)
+        await self.manage_transfers()
 
     async def fail(self, transfer: Transfer, reason: str = None):
         await self._set_transfer_state(
@@ -490,23 +498,28 @@ class TransferManager:
             TransferState.FAILED,
             fail_reason=reason
         )
+        await self.manage_transfers()
 
     async def uploading(self, transfer: Transfer):
         await self._set_transfer_state(transfer, TransferState.UPLOADING)
         self._network.upload_rate_limiter.transfer_amount += 1
+        await self.manage_transfers()
 
     async def downloading(self, transfer: Transfer):
         await self._set_transfer_state(transfer, TransferState.DOWNLOADING)
         self._network.download_rate_limiter.transfer_amount += 1
+        await self.manage_transfers()
 
     async def queue(self, transfer: Transfer, force: bool = False):
         await self._set_transfer_state(transfer, TransferState.QUEUED, force=force)
         await self._network.send_server_messages(
             AddUser.Request(transfer.username)
         )
+        await self.manage_transfers()
 
     async def remotely_queue(self, transfer: Transfer):
         await self._set_transfer_state(transfer, TransferState.REMOTELY_QUEUED)
+        await self.manage_transfers()
 
     async def add(self, transfer: Transfer) -> Transfer:
         """Adds a transfer if it does not already exist, otherwise it returns
@@ -776,7 +789,7 @@ class TransferManager:
 
         except PeerConnectionError:
             logger.info(f"failed to create peer connection for transfer : {transfer!r}")
-            await self.queue(transfer)
+            await self.queue(transfer, force=True)
             return
 
         # Send transfer ticket
@@ -784,7 +797,7 @@ class TransferManager:
             await connection.send_message(uint32.serialize(ticket))
         except ConnectionWriteError:
             logger.info(f"failed to send transfer ticket : {transfer!r}")
-            await self.queue(transfer)
+            await self.queue(transfer, force=True)
             return
 
         connection.set_connection_state(PeerConnectionState.AWAITING_OFFSET)
@@ -794,7 +807,7 @@ class TransferManager:
             offset = await connection.receive_transfer_offset()
         except ConnectionReadError:
             logger.info(f"failed to receive transfer offset : {transfer!r}")
-            await self.queue(transfer)
+            await self.queue(transfer, force=True)
             return
 
         else:

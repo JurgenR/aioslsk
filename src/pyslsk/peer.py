@@ -504,7 +504,7 @@ class PeerManager:
         for child in self.children:
             await child.connection.queue_messages(*messages)
 
-    async def stop(self):
+    def stop(self):
         for task in self._search_reply_tasks:
             task.cancel()
 

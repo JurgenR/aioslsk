@@ -228,8 +228,8 @@ class DataConnection(Connection):
                     self._writer.close()
                 await self._writer.wait_closed()
 
-        except Exception:
-            logger.exception(f"{self.hostname}:{self.port} : exception while disconnecting")
+        except Exception as exc:
+            logger.warning(f"{self.hostname}:{self.port} : exception while disconnecting", exc_info=exc)
 
         finally:
             self._stop_reader_task()
