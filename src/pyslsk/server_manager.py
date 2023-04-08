@@ -4,7 +4,10 @@ import time
 from typing import Tuple
 
 from .network.connection import CloseReason, ConnectionState, ServerConnection
-from .constants import SERVER_RESPONSE_TIMEOUT
+from .constants import (
+    SERVER_PING_INTERVAL,
+    SERVER_RESPONSE_TIMEOUT,
+)
 from .events import (
     build_message_map,
     on_message,
@@ -96,10 +99,6 @@ from .utils import task_counter, ticket_generator
 
 
 logger = logging.getLogger()
-
-
-LOGIN_TIMEOUT = 30
-PING_INTERVAL = 1 * 60
 
 
 class ServerManager:
@@ -672,8 +671,8 @@ class ServerManager:
 
     async def _ping_job(self):
         while True:
-            await asyncio.sleep(PING_INTERVAL)
-            await self.network.queue_server_messages(Ping.Request())
+            await asyncio.sleep(SERVER_PING_INTERVAL)
+            await self.send_ping()
 
     async def _wishlist_job(self, interval: int):
         while True:

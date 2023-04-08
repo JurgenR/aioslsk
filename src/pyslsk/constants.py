@@ -11,5 +11,7 @@ TRANSFER_TIMEOUT: float = 180
 """Timeout waiting for new data on a file connection"""
 TRANSFER_REPLY_TIMEOUT = 30
 SERVER_CONNECT_TIMEOUT: float = 30
+SERVER_LOGIN_TIMEOUT: float = 30
+SERVER_PING_INTERVAL: float = 5 * 60
 SERVER_RESPONSE_TIMEOUT: float = 30
 DISCONNECT_TIMEOUT: float = 10

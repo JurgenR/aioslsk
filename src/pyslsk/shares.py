@@ -406,7 +406,7 @@ class SharesManager:
 
     def query(self, query: str) -> List[SharedItem]:
         """Performs a query on the `shared_directories` returning the matching
-
+        items
         """
         terms = query.split()
         if not terms:
