@@ -271,8 +271,8 @@ class TestDataConnection:
 
         connection.disconnect.assert_awaited_once_with(CloseReason.TIMEOUT)
 
-
     # helpers
+
     def _create_connection(self, network, state: ConnectionState = ConnectionState.CONNECTED) -> DataConnection:
         connection = DataConnection('1.2.3.4', 1234, network)
         connection.state = state
@@ -374,6 +374,31 @@ class TestPeerConnection:
                 await connection.receive_data(to_read)
 
         connection.disconnect.assert_awaited_once_with(CloseReason.TIMEOUT)
+
+    # receive_file
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('callback', [None, Mock()])
+    async def test_receiveFile(self, network, callback):
+        data = bytes.fromhex('AABBCCDDEEFF1122')
+        split_data = (data[0:2], data[2:4], data[4:6], data[6:8])
+        # Mock rate limiter
+        network.download_rate_limiter = Mock()
+        network.download_rate_limiter.take_tokens = AsyncMock(return_value=2)
+
+        # Mock receiving connection
+        connection = self._create_connection(network)
+        connection.receive_data = AsyncMock(side_effect=split_data)
+
+        # Mock target file handle
+        file_handle = Mock()
+        file_handle.write = AsyncMock()
+
+        await connection.receive_file(file_handle, len(data), callback=callback)
+
+        expected_calls = [call(data_part) for data_part in split_data]
+        file_handle.write.assert_has_awaits(expected_calls)
+        if callback:
+            callback.assert_has_calls(expected_calls)
 
     # send_data
     @pytest.mark.asyncio
