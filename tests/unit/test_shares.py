@@ -203,4 +203,3 @@ class TestSharesManager:
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
         actual_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
-

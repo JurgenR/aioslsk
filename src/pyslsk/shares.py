@@ -421,7 +421,7 @@ class SharesManager:
         for term in terms:
             # Ignore terms containing only non-word chars
             l_term = term.lower()
-            if not re.search('[^\W_]', l_term):
+            if not re.search(r'[^\W_]', l_term):
                 continue
 
             if term.startswith('*'):
