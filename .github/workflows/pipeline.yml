@@ -15,6 +15,12 @@ jobs:
       matrix:
         python-version: ["3.8", "3.9", "3.10"]
 
+    permissions:
+      contents: read
+      issues: read
+      checks: write
+      pull-requests: write
+
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
@@ -38,14 +44,13 @@ jobs:
       run: |
         poetry run pytest --junitxml=test-reports/report-${{ matrix.python-version }}.xml
 
-    - uses: actions/upload-artifact@v2
-      if: success() || failure()
+    - uses: actions/upload-artifact@v3
+      if: always()
       with:
         name: test-results-${{ matrix.python-version }}
         path: test-reports/report-${{ matrix.python-version }}.xml
-    - uses: dorny/test-reporter@v1
+    - uses: EnricoMi/publish-unit-test-result-action@v2
       with:
         artifact: test-results-${{ matrix.python-version }}
-        name: Test Results
-        path: 'test-reports/*.xml'                     # Path to test results (inside artifact .zip)
-        reporter: java-junit
+        files: |
+          test-reports/*.xml
