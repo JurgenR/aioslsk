@@ -1,4 +1,4 @@
-from pyslsk.protocol.primitives import (
+from aioslsk.protocol.primitives import (
     calc_md5,
     DirectoryData,
     FileData,
@@ -9,7 +9,7 @@ from pyslsk.protocol.primitives import (
     RoomTicker,
     UserData,
 )
-from pyslsk.protocol.messages import (
+from aioslsk.protocol.messages import (
     Login,
     SetListenPort,
     GetPeerAddress,
@@ -109,7 +109,7 @@ from pyslsk.protocol.messages import (
 )
 
 import pytest
-from pyslsk.exceptions import UnknownMessageError
+from aioslsk.exceptions import UnknownMessageError
 
 
 class TestMessageDeserializers:

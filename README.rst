@@ -157,4 +157,4 @@ Running all tests with code coverage report:
 
 .. code-block:: bash
 
-    poetry run pytest --cov=pyslsk --cov-report term-missing tests/
+    poetry run pytest --cov=aioslsk --cov-report term-missing tests/

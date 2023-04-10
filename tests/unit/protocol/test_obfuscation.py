@@ -1,4 +1,4 @@
-from pyslsk.protocol.obfuscation import KEY_SIZE, decode, encode, generate_key
+from aioslsk.protocol.obfuscation import KEY_SIZE, decode, encode, generate_key
 
 import pytest
 

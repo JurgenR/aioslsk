@@ -3,7 +3,7 @@ import logging
 from typing import ClassVar
 import pytest
 
-from pyslsk.protocol.primitives import decode_string, uint32, MessageDataclass
+from aioslsk.protocol.primitives import decode_string, uint32, MessageDataclass
 
 
 logger = logging.getLogger()

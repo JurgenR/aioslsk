@@ -232,7 +232,7 @@ class TestDataConnection:
         connection._writer.write = Mock()
         connection._writer.drain = AsyncMock()
 
-        with patch('pyslsk.protocol.obfuscation.encode', return_value=enc_message) as encode_func:
+        with patch('aioslsk.protocol.obfuscation.encode', return_value=enc_message) as encode_func:
             await connection.send_message(expected_message)
 
         encode_func.assert_called_once_with(expected_message)
