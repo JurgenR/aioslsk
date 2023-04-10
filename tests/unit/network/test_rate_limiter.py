@@ -1,5 +1,5 @@
 from unittest.mock import patch, MagicMock
-from pyslsk.network.rate_limiter import LimitedRateLimiter, RateLimiter, UnlimitedRateLimiter
+from aioslsk.network.rate_limiter import LimitedRateLimiter, RateLimiter, UnlimitedRateLimiter
 import pytest
 
 

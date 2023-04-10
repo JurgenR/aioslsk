@@ -2,20 +2,20 @@ from asyncio import Event
 import copy
 from unittest.mock import Mock, patch
 
-from pyslsk.events import InternalEventBus
-from pyslsk.protocol.messages import (
+from aioslsk.events import InternalEventBus
+from aioslsk.protocol.messages import (
     PeerInit,
 )
-from pyslsk.network.connection import (
+from aioslsk.network.connection import (
     ConnectionState,
     PeerConnection,
     PeerConnectionState,
     ServerConnection
 )
-from pyslsk.network.network import Network
-from pyslsk.network.rate_limiter import LimitedRateLimiter, UnlimitedRateLimiter
-from pyslsk.state import State
-from pyslsk.settings import Settings
+from aioslsk.network.network import Network
+from aioslsk.network.rate_limiter import LimitedRateLimiter, UnlimitedRateLimiter
+from aioslsk.state import State
+from aioslsk.settings import Settings
 
 
 DEFAULT_SETTINGS = {

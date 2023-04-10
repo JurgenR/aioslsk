@@ -2,12 +2,12 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
-from pyslsk.configuration import Configuration
-from pyslsk.model import UserStatus
-from pyslsk.protocol.messages import AddUser
-from pyslsk.transfer import Transfer, TransferDirection, TransferState, TransferManager
-from pyslsk.settings import Settings
-from pyslsk.state import State
+from aioslsk.configuration import Configuration
+from aioslsk.model import UserStatus
+from aioslsk.protocol.messages import AddUser
+from aioslsk.transfer import Transfer, TransferDirection, TransferState, TransferManager
+from aioslsk.settings import Settings
+from aioslsk.state import State
 
 
 FRIEND = 'friend0'

@@ -1,17 +1,17 @@
-from pyslsk.exceptions import (
+from aioslsk.exceptions import (
     ConnectionFailedError,
     ConnectionReadError,
     ConnectionWriteError,
 )
-from pyslsk.protocol.messages import (
+from aioslsk.protocol.messages import (
     ChatLeaveRoom,
     DistributedBranchLevel,
     MessageDataclass,
     PeerInit,
     PeerPlaceInQueueRequest,
 )
-from pyslsk.protocol.obfuscation import encode
-from pyslsk.network.connection import (
+from aioslsk.protocol.obfuscation import encode
+from aioslsk.network.connection import (
     Connection,
     CloseReason,
     ConnectionState,

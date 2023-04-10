@@ -1,5 +1,5 @@
-from pyslsk.model import Room, User
-from pyslsk.state import State
+from aioslsk.model import Room, User
+from aioslsk.state import State
 
 
 class TestState:

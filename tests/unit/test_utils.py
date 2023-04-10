@@ -1,5 +1,5 @@
-from pyslsk.protocol.primitives import Attribute
-from pyslsk.utils import (
+from aioslsk.protocol.primitives import Attribute
+from aioslsk.utils import (
     get_attribute_string,
     get_duration,
     ticket_generator,

@@ -1,12 +1,12 @@
-from pyslsk.events import UserDirectoryEvent
-from pyslsk.protocol.primitives import DirectoryData
-from pyslsk.protocol.messages import (
+from aioslsk.events import UserDirectoryEvent
+from aioslsk.protocol.primitives import DirectoryData
+from aioslsk.protocol.messages import (
     PeerDirectoryContentsRequest,
     PeerDirectoryContentsReply,
 )
-from pyslsk.peer import PeerManager
-from pyslsk.settings import Settings
-from pyslsk.state import State
+from aioslsk.peer import PeerManager
+from aioslsk.settings import Settings
+from aioslsk.state import State
 
 import pytest
 from unittest.mock import ANY, AsyncMock, Mock

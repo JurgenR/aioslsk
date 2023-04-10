@@ -1,6 +1,6 @@
-from pyslsk.events import build_message_map, on_message, EventBus, UserAddEvent
-from pyslsk.model import User
-from pyslsk.protocol.messages import Login, AddUser
+from aioslsk.events import build_message_map, on_message, EventBus, UserAddEvent
+from aioslsk.model import User
+from aioslsk.protocol.messages import Login, AddUser
 
 import pytest
 from unittest.mock import create_autospec

@@ -1,4 +1,4 @@
-from pyslsk.model import Room, User
+from aioslsk.model import Room, User
 
 
 class TestModel:

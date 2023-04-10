@@ -1,5 +1,5 @@
-from pyslsk.configuration import Configuration
-from pyslsk.settings import Settings
+from aioslsk.configuration import Configuration
+from aioslsk.settings import Settings
 import os
 import pytest
 

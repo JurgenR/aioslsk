@@ -1,6 +1,6 @@
 from unittest.mock import Mock, patch
 
-from pyslsk.naming import (
+from aioslsk.naming import (
     chain_strategies,
     DefaultNamingStrategy,
     NumberDuplicateStrategy,

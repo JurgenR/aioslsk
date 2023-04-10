@@ -1,4 +1,4 @@
-from pyslsk.events import (
+from aioslsk.events import (
     EventBus,
     RoomMessageEvent,
     RoomTickersEvent,
@@ -7,8 +7,8 @@ from pyslsk.events import (
     UserJoinedRoomEvent,
     UserLeftRoomEvent,
 )
-from pyslsk.model import RoomMessage, UserStatus
-from pyslsk.protocol.messages import (
+from aioslsk.model import RoomMessage, UserStatus
+from aioslsk.protocol.messages import (
     ChatUserJoinedRoom,
     ChatUserLeftRoom,
     ChatRoomMessage,
@@ -16,11 +16,11 @@ from pyslsk.protocol.messages import (
     ChatRoomTickers,
     ChatRoomTickerRemoved,
 )
-from pyslsk.protocol.primitives import RoomTicker, UserData
-from pyslsk.search import SearchType
-from pyslsk.settings import Settings
-from pyslsk.server_manager import ServerManager
-from pyslsk.state import State
+from aioslsk.protocol.primitives import RoomTicker, UserData
+from aioslsk.search import SearchType
+from aioslsk.settings import Settings
+from aioslsk.server_manager import ServerManager
+from aioslsk.state import State
 
 import pytest
 from unittest.mock import AsyncMock, Mock, patch

@@ -1,4 +1,4 @@
-from pyslsk.settings import Settings
+from aioslsk.settings import Settings
 
 import pytest
 from unittest.mock import Mock

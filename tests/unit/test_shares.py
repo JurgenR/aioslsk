@@ -1,12 +1,12 @@
-from pyslsk.exceptions import FileNotFoundError
-from pyslsk.shares import (
+from aioslsk.exceptions import FileNotFoundError
+from aioslsk.shares import (
     extract_attributes,
     SharedDirectory,
     SharedItem,
     SharesManager,
     SharesStorage,
 )
-from pyslsk.settings import Settings
+from aioslsk.settings import Settings
 
 import pytest
 from pytest_unordered import unordered
