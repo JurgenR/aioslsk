@@ -2,10 +2,25 @@
 aioslsk
 =======
 
+aioslsk is a Python library for the SoulSeek protocol built on top of asyncio
+
 .. contents::
 
 Installation
 ============
+
+Package
+-------
+
+
+Development
+-----------
+
+Install poetry_ and setup the project dependencies by running:
+
+.. code-block:: shell
+
+    poetry install
 
 
 Usage
@@ -126,24 +141,6 @@ Debug
 +-------------------------+-------------------------------------------------+---------+
 
 
-Code Structure
-==============
-
-
-Connection Management
----------------------
-
-The `connection` module is based on the Python built-in `socket` and `selector` modules. By default there are 3 types of connections all inheriting from the `Connection` class:
-
-- ServerConnection: Represents the connection to the SoulSeek server
-- ListeningConnection: Listens for incoming sockets and creates PeerConnection objects
-- PeerConnection: Connections made by peers and to peers
-
-The `NetworkLoop` class contains the `selector` and a `run` for the main network loop.
-
-All sockets are configured to be non-blocking sockets.
-
-
 Running Tests
 =============
 
@@ -158,3 +155,6 @@ Running all tests with code coverage report:
 .. code-block:: bash
 
     poetry run pytest --cov=aioslsk --cov-report term-missing tests/
+
+
+.. _poetry: https://python-poetry.org/

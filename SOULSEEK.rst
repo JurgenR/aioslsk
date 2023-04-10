@@ -231,9 +231,6 @@ Rooms and Chats
 After joining a room, we will automatically be receiving GetUserStatus_ updates from the server
 
 
-
-Reference:
-
 .. _Login: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode1
 .. _GetPeerAddress: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode3
 .. _AddUser: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode5
