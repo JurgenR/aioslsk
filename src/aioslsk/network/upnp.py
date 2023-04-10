@@ -121,7 +121,7 @@ class UPNP:
                 internal_client=IPv4Address(source_ip),
                 internal_port=port,
                 enabled=True,
-                description='PySlsk',
+                description='AioSlsk',
                 lease_duration=self._settings.get('network.upnp.lease_duration')
             )
         except UpnpActionResponseError as exc:

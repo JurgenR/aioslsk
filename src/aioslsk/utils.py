@@ -2,7 +2,7 @@ import itertools
 import logging
 from typing import List
 
-from pyslsk.protocol.primitives import Attribute
+from .protocol.primitives import Attribute
 
 
 logger = logging.getLogger(__name__)

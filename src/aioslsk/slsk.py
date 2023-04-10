@@ -22,7 +22,7 @@ from .utils import ticket_generator
 
 
 CLIENT_VERSION = 157
-DEFAULT_SETTINGS_NAME = 'pyslsk'
+DEFAULT_SETTINGS_NAME = 'aioslsk'
 
 
 logger = logging.getLogger(__name__)

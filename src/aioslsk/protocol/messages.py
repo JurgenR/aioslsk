@@ -34,8 +34,8 @@ from dataclasses import dataclass, field
 import logging
 from typing import ClassVar, List
 
-from pyslsk.exceptions import UnknownMessageError
-from pyslsk.protocol.primitives import (
+from .exceptions import UnknownMessageError
+from .protocol.primitives import (
     boolean,
     uint8,
     uint16,

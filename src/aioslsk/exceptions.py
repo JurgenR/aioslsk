@@ -1,8 +1,8 @@
-class PySlskException(Exception):
+class AioSlskException(Exception):
     pass
 
 
-class UnknownMessageError(PySlskException):
+class UnknownMessageError(AioSlskException):
 
     def __init__(self, message_id: int, data: bytes, message):
         self.message_id = message_id
@@ -10,11 +10,11 @@ class UnknownMessageError(PySlskException):
         self.message = message
 
 
-class MessageSerializationError(PySlskException):
+class MessageSerializationError(AioSlskException):
     pass
 
 
-class FileError(PySlskException):
+class FileError(AioSlskException):
     pass
 
 
@@ -26,7 +26,7 @@ class FileNotSharedError(FileError):
     pass
 
 
-class NetworkError(PySlskException):
+class NetworkError(AioSlskException):
     pass
 
 
@@ -50,9 +50,9 @@ class IncompleteFileReceiveError(NetworkError):
     pass
 
 
-class NoSuchUserError(PySlskException):
+class NoSuchUserError(AioSlskException):
     pass
 
 
-class LoginFailedError(PySlskException):
+class LoginFailedError(AioSlskException):
     pass
