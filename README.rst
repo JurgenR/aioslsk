@@ -2,7 +2,7 @@
 aioslsk
 =======
 
-aioslsk is a Python library for the SoulSeek protocol built on top of asyncio
+aioslsk is a Python library for the SoulSeek protocol built on top of asyncio.
 
 .. contents::
 
@@ -36,10 +36,8 @@ Create a `Configuration` object pointing with the locations in which to store se
     )
 
 
-
-
-Parameters
-==========
+Configuration Parameters
+========================
 
 User
 ----

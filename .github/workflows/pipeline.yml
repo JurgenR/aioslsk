@@ -1,7 +1,4 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
-
-name: Python package
+name: aioslsk library
 
 on:
   push:
@@ -26,16 +23,29 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install Poetry Action
       uses: snok/install-poetry@v1.3.3
-
     - name: Install dependencies
       run: |
         poetry install --no-interaction
+
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
         poetry run flake8 . --count --select=E9,F63,F7,F82 --ignore=E501,E261,W503,W504 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         poetry run flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
     - name: Test with pytest
       run: |
-        poetry run pytest
+        poetry run pytest --junitxml=test-reports/report-${{ matrix.python-version }}.xml
+
+    - uses: actions/upload-artifact@v2
+      if: success() || failure()
+      with:
+        name: test-results-${{ matrix.python-version }}
+        path: test-reports/report-${{ matrix.python-version }}.xml
+    - uses: dorny/test-reporter@v1
+      with:
+        artifact: test-results-${{ matrix.python-version }}
+        name: Test Results
+        path: 'test-reports/*.xml'                     # Path to test results (inside artifact .zip)
+        reporter: java-junit
