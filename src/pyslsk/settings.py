@@ -9,8 +9,8 @@ RESOURCES_DIRECTORY: str = os.path.join(
 class Settings:
     DEFAULT_SETTINGS: str = os.path.join(RESOURCES_DIRECTORY, 'default_settings.yaml')
 
-    def __init__(self, settings):
-        self._settings = settings
+    def __init__(self, settings: dict):
+        self._settings: dict = settings
         self.listeners: Dict[str, List[Callable]] = {}
 
     def add_listener(self, key, callback):

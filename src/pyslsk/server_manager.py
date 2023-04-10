@@ -1,7 +1,13 @@
+import asyncio
 import logging
 import time
+from typing import Tuple
 
-from .connection import ConnectionState, PeerConnectionType, ServerConnection
+from .network.connection import CloseReason, ConnectionState, ServerConnection
+from .constants import (
+    SERVER_PING_INTERVAL,
+    SERVER_RESPONSE_TIMEOUT,
+)
 from .events import (
     build_message_map,
     on_message,
@@ -27,7 +33,7 @@ from .events import (
     UserStatsEvent,
     UserStatusEvent,
 )
-from .shares import SharesManager
+from .exceptions import ConnectionFailedError, LoginFailedError, NoSuchUserError
 from .protocol.primitives import calc_md5
 from .protocol.messages import (
     AcceptChildren,
@@ -42,6 +48,7 @@ from .protocol.messages import (
     ChatLeaveRoom,
     ChatPrivateMessage,
     ChatAckPrivateMessage,
+    ChatRoomSearch,
     ChatRoomTickers,
     ChatRoomTickerAdded,
     ChatRoomTickerRemoved,
@@ -50,12 +57,13 @@ from .protocol.messages import (
     ChatUserLeftRoom,
     CheckPrivileges,
     DistributedAliveInterval,
+    FileSearch,
+    GetPeerAddress,
     GetUserStatus,
     GetUserStats,
     ToggleParentSearch,
     Login,
     MinParentsInCache,
-    PotentialParents,
     ParentInactivityTimeout,
     ParentMinSpeed,
     ParentSpeedRatio,
@@ -74,23 +82,23 @@ from .protocol.messages import (
     RemoveUser,
     RoomList,
     SearchInactivityTimeout,
-    ServerSearchRequest,
     SetListenPort,
     SetStatus,
     SharedFoldersFiles,
+    UserSearch,
     WishlistInterval,
+    WishlistSearch,
 )
-from .model import ChatMessage, RoomMessage, UserStatus
-from .network import Network
-from .scheduler import Job
+from .model import ChatMessage, RoomMessage, User, UserStatus
+from .network.network import Network
+from .shares import SharesManager
+from .search import SearchQuery, SearchType
 from .settings import Settings
 from .state import State
+from .utils import task_counter, ticket_generator
 
 
 logger = logging.getLogger()
-
-
-LOGIN_TIMEOUT = 30
 
 
 class ServerManager:
@@ -103,8 +111,10 @@ class ServerManager:
         self.shares_manager: SharesManager = shares_manager
         self.network: Network = network
 
-        self._ping_job = Job(5 * 60, self.send_ping)
-        self._report_shares_job = Job(30, self.report_shares)
+        self._ticket_generator = ticket_generator()
+
+        self._ping_task: asyncio.Task = None
+        self._wishlist_task: asyncio.Task = None
 
         self.MESSAGE_MAP = build_message_map(self)
 
@@ -117,115 +127,53 @@ class ServerManager:
     def connection_state(self) -> ConnectionState:
         return self.network.server.state
 
-    def send_ping(self):
+    async def send_ping(self):
         """Send ping to the server"""
-        self.network.send_server_messages(Ping.Request())
+        await self.network.queue_server_messages(Ping.Request())
 
-    def report_shares(self):
+    async def report_shares(self):
         """Reports the shares amount to the server"""
         dir_count, file_count = self.shares_manager.get_stats()
         logger.debug(f"reporting shares to the server (dirs={dir_count}, file_count={file_count})")
-        self.network.send_server_messages(
+        await self.network.queue_server_messages(
             SharedFoldersFiles.Request(
                 directory_count=dir_count,
                 file_count=file_count
             )
         )
 
-    def login(self, username: str, password: str, version: int = 157):
+    async def login(self, username: str, password: str, version: int = 157):
         logger.info(f"sending request to login: username={username}, password={password}")
-        self.network.send_server_messages(
+        expected_response = self.network.wait_for_server_message(Login.Response)
+        await self.network.send_server_messages(
             Login.Request(
                 username=username,
                 password=password,
                 client_version=version,
                 md5hash=calc_md5(username + password),
                 minor_version=100
-            ),
-            # Login needs to be the first message that's sent over the connection
-            prepend=True
+            )
         )
+        try:
+            _, response = await asyncio.wait_for(expected_response, SERVER_RESPONSE_TIMEOUT)
+        except asyncio.TimeoutError:
+            raise LoginFailedError("login timed out waiting for response")
 
-    def add_user(self, username: str):
-        self.network.send_server_messages(
-            AddUser.Request(username)
-        )
-
-    def remove_user(self, username: str):
-        self.network.send_server_messages(
-            RemoveUser.Request(username)
-        )
-        # Reset user status, this is needed for the transfer manager who will
-        # skip attempting to transfer for offline user. But if we don't know if
-        # a user is online we will never know
-        user = self._state.get_or_create_user(username)
-        user.status = UserStatus.UNKNOWN
-
-    def get_user_stats(self, username: str):
-        self.network.send_server_messages(
-            GetUserStats.Request(username)
-        )
-
-    def get_user_status(self, username: str):
-        self.network.send_server_messages(
-            GetUserStatus.Request(username)
-        )
-
-    def get_room_list(self):
-        self.network.send_server_messages(RoomList.Request())
-
-    def join_room(self, name: str):
-        self.network.send_server_messages(
-            ChatJoinRoom.Request(name)
-        )
-
-    def leave_room(self, name: str):
-        self.network.send_server_messages(
-            ChatLeaveRoom.Request(name)
-        )
-
-    def set_room_ticker(self, room_name: str, ticker: str):
-        # No need to update the ticker in the model, a ChatRoomTickerAdded will
-        # be sent back to us
-        self.network.send_server_messages(
-            ChatRoomTickerSet.Request(room=room_name, ticker=ticker)
-        )
-
-    def send_private_message(self, username: str, message: str):
-        self.network.send_server_messages(
-            ChatPrivateMessage.Request(username, message)
-        )
-
-    def send_room_message(self, room_name: str, message: str):
-        self.network.send_server_messages(
-            ChatRoomMessage.Request(room_name, message)
-        )
-
-    def drop_private_room_ownership(self, room_name: str):
-        self.network.send_server_messages(
-            PrivateRoomDropOwnership.Request(room_name)
-        )
-
-    def drop_private_room_membership(self, room_name: str):
-        self.network.send_server_messages(
-            PrivateRoomDropMembership.Request(room_name)
-        )
-
-    @on_message(Login.Response)
-    def _on_login(self, message: Login.Response, connection):
-        """Called when a response is received to a logon call"""
         # First value indicates success
-        if message.success:
+        if response.success:
             self._state.logged_in = True
-            logger.info("Successfully logged on")
+            logger.info(f"successfully logged on, greeting : {response.greeting!r}")
         else:
-            logger.error(f"Failed to login, reason: {message.reason!r}")
+            self._state.logged_in = False
+            logger.error(f"failed to login, reason: {response.reason!r}")
+            raise LoginFailedError(response.reason)
 
         # Make setup calls
+
         dir_count, file_count = self.shares_manager.get_stats()
         logger.debug(f"Sharing {dir_count} directories and {file_count} files")
 
-        self.network.send_server_messages(
+        await self.network.queue_server_messages(
             CheckPrivileges.Request(),
             SetListenPort.Request(
                 self._settings.get('network.listening_port'),
@@ -243,25 +191,187 @@ class ServerManager:
         )
 
         # Perform AddUser for all in the friendlist
-        self.network.send_server_messages(
+        await self.track_friends()
+
+        # Auto-join rooms
+        await self.auto_join_rooms()
+
+        await self._internal_event_bus.emit(LoginEvent(success=response.success))
+
+    async def track_friends(self):
+        """Sends an `AddUser` request to our friends list defined in the
+        settings to start tracking changes
+        """
+        await self.network.queue_server_messages(
             *[
                 AddUser.Request(friend)
                 for friend in self._settings.get('users.friends')
             ]
         )
 
-        # Auto-join rooms
-        if self._settings.get('chats.auto_join'):
-            rooms = self._settings.get('chats.rooms')
-            logger.info(f"automatically rejoining {len(rooms)} rooms")
-            self.network.send_server_messages(
-                *[ChatJoinRoom.Request(room) for room in rooms]
-            )
+    async def auto_join_rooms(self):
+        """Automatically joins rooms stored in the settings"""
+        if not self._settings.get('chats.auto_join'):
+            return
 
-        self._internal_event_bus.emit(LoginEvent(success=message.success))
+        rooms = self._settings.get('chats.rooms')
+        logger.info(f"automatically rejoining {len(rooms)} rooms")
+        await self.network.queue_server_messages(
+            *[ChatJoinRoom.Request(room) for room in rooms]
+        )
+
+    async def search_room(self, room: str, query: str) -> SearchQuery:
+        """Performs a search query on all users in a room"""
+        ticket = next(self._ticket_generator)
+
+        await self.network.queue_server_messages(
+            ChatRoomSearch.Request(room, ticket, query)
+        )
+        self._state.search_queries[ticket] = SearchQuery(
+            ticket=ticket,
+            query=query,
+            search_type=SearchType.ROOM,
+            room=room
+        )
+        return self._state.search_queries[ticket]
+
+    async def search_user(self, username: str, query: str) -> SearchQuery:
+        """Performs a search query on a user"""
+        ticket = next(self._ticket_generator)
+
+        await self.network.queue_server_messages(
+            UserSearch.Request(username, ticket, query)
+        )
+        self._state.search_queries[ticket] = SearchQuery(
+            ticket=ticket,
+            query=query,
+            search_type=SearchType.USER,
+            username=username
+        )
+        return self._state.search_queries[ticket]
+
+    async def search(self, query: str) -> SearchQuery:
+        """Performs a global search query"""
+        ticket = next(self._ticket_generator)
+
+        await self.network.queue_server_messages(
+            FileSearch.Request(ticket, query)
+        )
+        self._state.search_queries[ticket] = SearchQuery(
+            ticket=ticket,
+            query=query,
+            search_type=SearchType.NETWORK
+        )
+        return self._state.search_queries[ticket]
+
+    async def add_user(self, username: str) -> User:
+        """Request the server to track the user
+
+        :raise asnycio.TimeoutError: raised when the timeout is reached before a
+            response is received
+        :raise NoSuchUserError: raised when user does not exist
+        :return: `User` object
+        """
+        await self.network.send_server_messages(
+            AddUser.Request(username)
+        )
+        _, response = await asyncio.wait_for(
+            self.network.wait_for_server_message(AddUser.Response, username=username),
+            SERVER_RESPONSE_TIMEOUT
+        )
+        if not response.exists:
+            raise NoSuchUserError(f"user {username} does not exist")
+        else:
+            return await self._handle_add_user_response(response)
+
+    async def remove_user(self, username: str):
+        await self.network.send_server_messages(
+            RemoveUser.Request(username)
+        )
+        # Reset user status, this is needed for the transfer manager who will
+        # skip attempting to transfer for offline user. But if we don't know if
+        # a user is online we will never know
+        user = self._state.get_or_create_user(username)
+        user.status = UserStatus.UNKNOWN
+
+    async def get_user_stats(self, username: str) -> bool:
+        await self.network.send_server_messages(
+            GetUserStats.Request(username)
+        )
+        _, response = await asyncio.wait_for(
+            self.network.wait_for_server_message(GetUserStats.Response, username=username),
+            SERVER_RESPONSE_TIMEOUT
+        )
+
+    async def get_user_status(self, username: str):
+        await self.network.send_server_messages(
+            GetUserStatus.Request(username)
+        )
+        _, response = await asyncio.wait_for(
+            self.network.wait_for_server_message(GetUserStatus.Response, username=username),
+            SERVER_RESPONSE_TIMEOUT
+        )
+        return UserStatus(response.status)
+
+    async def get_room_list(self):
+        await self.network.send_server_messages(RoomList.Request())
+        _, response = await asyncio.wait_for(
+            self.network.wait_for_server_message(RoomList.Response),
+            SERVER_RESPONSE_TIMEOUT
+        )
+
+    async def join_room(self, name: str):
+        await self.network.send_server_messages(
+            ChatJoinRoom.Request(name)
+        )
+
+    async def leave_room(self, name: str):
+        await self.network.send_server_messages(
+            ChatLeaveRoom.Request(name)
+        )
+
+    async def set_room_ticker(self, room_name: str, ticker: str):
+        # No need to update the ticker in the model, a ChatRoomTickerAdded will
+        # be sent back to us
+        await self.network.send_server_messages(
+            ChatRoomTickerSet.Request(room=room_name, ticker=ticker)
+        )
+
+    async def send_private_message(self, username: str, message: str):
+        await self.network.send_server_messages(
+            ChatPrivateMessage.Request(username, message)
+        )
+
+    async def send_room_message(self, room_name: str, message: str):
+        await self.network.send_server_messages(
+            ChatRoomMessage.Request(room_name, message)
+        )
+
+    async def drop_private_room_ownership(self, room_name: str):
+        await self.network.send_server_messages(
+            PrivateRoomDropOwnership.Request(room_name)
+        )
+
+    async def drop_private_room_membership(self, room_name: str):
+        await self.network.send_server_messages(
+            PrivateRoomDropMembership.Request(room_name)
+        )
+
+    async def get_peer_address(self, username: str) -> Tuple[str, int, int]:
+        """Requests the IP address/port of the peer from the server
+
+        :param username: username of the peer
+        """
+        await self.network.send_server_messages(
+            GetPeerAddress.Request(username)
+        )
+        response = await self.network.wait_for_server_message(
+            GetPeerAddress.Response, username=username)
+
+        return response.ip, response.port, response.obfuscated_port
 
     @on_message(ChatRoomMessage.Response)
-    def _on_chat_room_message(self, message: ChatRoomMessage.Response, connection):
+    async def _on_chat_room_message(self, message: ChatRoomMessage.Response, connection):
         user = self._state.get_or_create_user(message.username)
         room = self._state.get_or_create_room(message.room)
         room_message = RoomMessage(
@@ -272,10 +382,10 @@ class ServerManager:
         )
         room.messages.append(room_message)
 
-        self._event_bus.emit(RoomMessageEvent(room_message))
+        await self._event_bus.emit(RoomMessageEvent(room_message))
 
     @on_message(ChatUserJoinedRoom.Response)
-    def _on_user_joined_room(self, message: ChatUserJoinedRoom.Response, connection):
+    async def _on_user_joined_room(self, message: ChatUserJoinedRoom.Response, connection):
         user = self._state.get_or_create_user(message.username)
         user.status = UserStatus(message.status)
         user.avg_speed = message.user_data.avg_speed
@@ -285,20 +395,22 @@ class ServerManager:
         user.has_slots_free = message.slots_free
         user.country = message.country_code
 
-        room = self._state.get_or_create_room(message.username)
+        room = self._state.get_or_create_room(message.room)
         room.add_user(user)
 
-        self._event_bus.emit(UserJoinedRoomEvent(user=user, room=room))
+        await self._event_bus.emit(UserJoinedRoomEvent(user=user, room=room))
 
     @on_message(ChatUserLeftRoom.Response)
-    def _on_user_left_room(self, message: ChatUserLeftRoom.Response, connection):
+    async def _on_user_left_room(self, message: ChatUserLeftRoom.Response, connection):
         user = self._state.get_or_create_user(message.username)
         room = self._state.get_or_create_room(message.room)
 
-        self._event_bus.emit(UserLeftRoomEvent(user=user, room=room))
+        room.remove_user(user)
+
+        await self._event_bus.emit(UserLeftRoomEvent(room, user))
 
     @on_message(ChatJoinRoom.Response)
-    def _on_join_room(self, message: ChatJoinRoom.Response, connection):
+    async def _on_join_room(self, message: ChatJoinRoom.Response, connection):
         room = self._state.get_or_create_room(message.room)
         for idx, name in enumerate(message.users):
             user_data = message.users_data[idx]
@@ -319,17 +431,17 @@ class ServerManager:
         for operator in message.operators or []:
             room.add_operator(self._state.get_or_create_user(operator))
 
-        self._event_bus.emit(RoomJoinedEvent(room=room))
+        await self._event_bus.emit(RoomJoinedEvent(room=room))
 
     @on_message(ChatLeaveRoom.Response)
-    def _on_leave_room(self, message: ChatLeaveRoom.Response, connection):
+    async def _on_leave_room(self, message: ChatLeaveRoom.Response, connection):
         room = self._state.get_or_create_room(message.room)
         room.joined = False
 
-        self._event_bus.emit(RoomLeftEvent(room=room))
+        await self._event_bus.emit(RoomLeftEvent(room=room))
 
     @on_message(ChatRoomTickers.Response)
-    def _on_chat_room_tickers(self, message: ChatRoomTickers.Response, connection):
+    async def _on_chat_room_tickers(self, message: ChatRoomTickers.Response, connection):
         room = self._state.get_or_create_room(message.room)
         tickers = {}
         for ticker in message.tickers:
@@ -339,19 +451,19 @@ class ServerManager:
         # Just replace all tickers instead of modifying the existing dict
         room.tickers = tickers
 
-        self._event_bus.emit(RoomTickersEvent(room, tickers))
+        await self._event_bus.emit(RoomTickersEvent(room, tickers))
 
     @on_message(ChatRoomTickerAdded.Response)
-    def _on_chat_room_ticker_added(self, message: ChatRoomTickerAdded.Response, connection):
+    async def _on_chat_room_ticker_added(self, message: ChatRoomTickerAdded.Response, connection):
         room = self._state.get_or_create_room(message.room)
         user = self._state.get_or_create_user(message.username)
 
         room.tickers[user.name] = message.ticker
 
-        self._event_bus.emit(RoomTickerAddedEvent(room, user, message.ticker))
+        await self._event_bus.emit(RoomTickerAddedEvent(room, user, message.ticker))
 
     @on_message(ChatRoomTickerRemoved.Response)
-    def _on_chat_room_ticker_removed(self, message: ChatRoomTickerRemoved.Response, connection):
+    async def _on_chat_room_ticker_removed(self, message: ChatRoomTickerRemoved.Response, connection):
         room = self._state.get_or_create_room(message.room)
         user = self._state.get_or_create_user(message.username)
 
@@ -362,71 +474,71 @@ class ServerManager:
                 f"attempted to remove room ticker for user {user.name} in room {room.name} "
                 "but it wasn't present")
 
-        self._event_bus.emit(RoomTickerRemovedEvent(room, user))
+        await self._event_bus.emit(RoomTickerRemovedEvent(room, user))
 
     @on_message(TogglePrivateRooms.Response)
-    def _on_private_room_toggle(self, message, connection):
+    async def _on_private_room_toggle(self, message, connection):
         logger.debug(f"private rooms enabled : {message.enabled}")
 
     @on_message(PrivateRoomAdded.Response)
-    def _on_private_room_added(self, message: PrivateRoomAdded.Response, connection):
+    async def _on_private_room_added(self, message: PrivateRoomAdded.Response, connection):
         room = self._state.get_or_create_room(message.room)
         room.joined = True
         room.is_private = True
 
-        self._event_bus.emit(UserJoinedPrivateRoomEvent(room))
+        await self._event_bus.emit(UserJoinedPrivateRoomEvent(room))
 
     @on_message(PrivateRoomRemoved.Response)
-    def _on_private_room_removed(self, message: PrivateRoomRemoved.Response, connection):
+    async def _on_private_room_removed(self, message: PrivateRoomRemoved.Response, connection):
         room = self._state.get_or_create_room(message.room)
         room.joined = False
         room.is_private = True
 
-        self._event_bus.emit(UserLeftPrivateRoomEvent(room))
+        await self._event_bus.emit(UserLeftPrivateRoomEvent(room))
 
     @on_message(PrivateRoomUsers.Response)
-    def _on_private_room_users(self, message: PrivateRoomUsers.Response, connection):
+    async def _on_private_room_users(self, message: PrivateRoomUsers.Response, connection):
         room = self._state.get_or_create_room(message.room)
         for username in message.usernames:
             room.add_user(self._state.get_or_create_user(username))
 
     @on_message(PrivateRoomAddUser.Response)
-    def _on_private_room_add_user(self, message: PrivateRoomAddUser.Response, connection):
+    async def _on_private_room_add_user(self, message: PrivateRoomAddUser.Response, connection):
         room = self._state.get_or_create_room(message.room)
         user = self._state.get_or_create_user(message.username)
 
         room.add_user(user)
 
     @on_message(PrivateRoomOperators.Response)
-    def _on_private_room_operators(self, message: PrivateRoomOperators.Response, connection):
+    async def _on_private_room_operators(self, message: PrivateRoomOperators.Response, connection):
         room = self._state.get_or_create_room(message.room)
         for operator in message.usernames:
             room.add_operator(self._state.get_or_create_user(operator))
 
     @on_message(PrivateRoomOperatorAdded.Response)
-    def _on_private_room_operator_added(self, message: PrivateRoomOperatorAdded.Response, connection):
+    async def _on_private_room_operator_added(self, message: PrivateRoomOperatorAdded.Response, connection):
         room = self._state.get_or_create_room(message.room)
         room.is_operator = True
 
     @on_message(PrivateRoomOperatorRemoved.Response)
-    def _on_private_room_operator_removed(self, message: PrivateRoomOperatorRemoved.Response, connection):
+    async def _on_private_room_operator_removed(self, message: PrivateRoomOperatorRemoved.Response, connection):
         room = self._state.get_or_create_room(message.room)
         room.is_operator = False
 
     @on_message(PrivateRoomAddOperator.Response)
-    def _on_private_room_add_operator(self, message: PrivateRoomAddOperator.Response, connection):
+    async def _on_private_room_add_operator(self, message: PrivateRoomAddOperator.Response, connection):
         room = self._state.get_or_create_room(message.room)
         user = self._state.get_or_create_user(message.username)
         room.add_operator(user)
 
     @on_message(PrivateRoomRemoveOperator.Response)
-    def _on_private_room_remove_operators(self, message: PrivateRoomRemoveOperator.Response, connection):
+    async def _on_private_room_remove_operators(self, message: PrivateRoomRemoveOperator.Response, connection):
         room = self._state.get_or_create_room(message.room)
         user = self._state.get_or_create_user(message.username)
-        room.operators.remove(user)
+        room.remove_operator(user)
 
     @on_message(ChatPrivateMessage.Response)
-    def _on_private_message(self, message: ChatPrivateMessage.Response, connection):
+    async def _on_private_message(self, message: ChatPrivateMessage.Response, connection):
         user = self._state.get_or_create_user(message.username)
         chat_message = ChatMessage(
             id=message.chat_id,
@@ -437,25 +549,19 @@ class ServerManager:
         )
         self._state.private_messages[message.chat_id] = chat_message
 
-        self.network.send_server_messages(
+        await self.network.send_server_messages(
             ChatAckPrivateMessage.Request(message.chat_id)
         )
 
-        self._event_bus.emit(PrivateMessageEvent(user, chat_message))
-
-    @on_message(ServerSearchRequest.Response)
-    def _on_server_search_request(self, message: ServerSearchRequest.Response, connection):
-        message_to_send = message
-        for child in self._state.children:
-            child.connection.queue_messages(message_to_send)
+        await self._event_bus.emit(PrivateMessageEvent(user, chat_message))
 
     # State related messages
     @on_message(CheckPrivileges.Response)
-    def _on_check_privileges(self, message: CheckPrivileges.Response, connection):
+    async def _on_check_privileges(self, message: CheckPrivileges.Response, connection):
         self._state.privileges_time_left = message.time_left
 
     @on_message(RoomList.Response)
-    def _on_room_list(self, message: RoomList.Response, connection):
+    async def _on_room_list(self, message: RoomList.Response, connection):
         for idx, room_name in enumerate(message.rooms):
             room = self._state.get_or_create_room(room_name)
             room.user_count = message.rooms_user_count[idx]
@@ -476,117 +582,169 @@ class ServerManager:
             room.is_private = True
             room.is_operator = True
 
-        self._event_bus.emit(RoomListEvent(rooms=self._state.rooms.values()))
+        await self._event_bus.emit(RoomListEvent(rooms=self._state.rooms.values()))
 
     @on_message(ParentMinSpeed.Response)
-    def _on_parent_min_speed(self, message: ParentMinSpeed.Response, connection):
+    async def _on_parent_min_speed(self, message: ParentMinSpeed.Response, connection):
         self._state.parent_min_speed = message.speed
 
     @on_message(ParentSpeedRatio.Response)
-    def _on_parent_speed_ratio(self, message: ParentSpeedRatio.Response, connection):
+    async def _on_parent_speed_ratio(self, message: ParentSpeedRatio.Response, connection):
         self._state.parent_speed_ratio = message.ratio
 
     @on_message(MinParentsInCache.Response)
-    def _on_min_parents_in_cache(self, message: MinParentsInCache.Response, connection):
+    async def _on_min_parents_in_cache(self, message: MinParentsInCache.Response, connection):
         self._state.min_parents_in_cache = message.amount
 
     @on_message(DistributedAliveInterval.Response)
-    def _on_ditributed_alive_interval(self, message: DistributedAliveInterval.Response, connection):
+    async def _on_ditributed_alive_interval(self, message: DistributedAliveInterval.Response, connection):
         self._state.distributed_alive_interval = message.interval
 
     @on_message(ParentInactivityTimeout.Response)
-    def _on_parent_inactivity_timeout(self, message: ParentInactivityTimeout.Response, connection):
+    async def _on_parent_inactivity_timeout(self, message: ParentInactivityTimeout.Response, connection):
         self._state.parent_inactivity_timeout = message.timeout
 
     @on_message(SearchInactivityTimeout.Response)
-    def _on_search_inactivity_timeout(self, message: SearchInactivityTimeout.Response, connection):
+    async def _on_search_inactivity_timeout(self, message: SearchInactivityTimeout.Response, connection):
         self._state.search_inactivity_timeout = message.timeout
 
     @on_message(PrivilegedUsers.Response)
-    def _on_privileged_users(self, message: PrivilegedUsers.Response, connection):
+    async def _on_privileged_users(self, message: PrivilegedUsers.Response, connection):
         for username in message.users:
             user = self._state.get_or_create_user(username)
             user.privileged = True
 
     @on_message(AddPrivilegedUser.Response)
-    def _on_add_privileged_user(self, message: AddPrivilegedUser.Response, connection):
+    async def _on_add_privileged_user(self, message: AddPrivilegedUser.Response, connection):
         user = self._state.get_or_create_user(message.username)
         user.privileged = True
 
     @on_message(WishlistInterval.Response)
-    def _on_wish_list_interval(self, message: WishlistInterval.Response, connection):
+    async def _on_wish_list_interval(self, message: WishlistInterval.Response, connection):
         self._state.wishlist_interval = message.interval
+        # Cancel the current task
+        if self._wishlist_task is not None:
+            self._wishlist_task.cancel()
+
+        self._wishlist_task = asyncio.create_task(
+            self._wishlist_job(message.interval),
+            name=f'wishlist-job-{task_counter()}'
+        )
 
     @on_message(AddUser.Response)
-    def _on_add_user(self, message: AddUser.Response, connection):
-        if message.exists:
-            user = self._state.get_or_create_user(message.username)
-            user.name = message.username
-            user.status = UserStatus(message.status)
-            user.avg_speed = message.avg_speed
-            user.downloads = message.download_num
-            user.files = message.file_count
-            user.directories = message.dir_count
-            user.country = message.country_code
-
-            self._event_bus.emit(UserAddEvent(user))
+    async def _on_add_user(self, message: AddUser.Response, connection):
+        await self._handle_add_user_response(message)
 
     @on_message(GetUserStatus.Response)
-    def _on_get_user_status(self, message: GetUserStatus.Response, connection):
+    async def _on_get_user_status(self, message: GetUserStatus.Response, connection):
         user = self._state.get_or_create_user(message.username)
         user.status = UserStatus(message.status)
         user.privileged = message.privileged
 
-        self._event_bus.emit(UserStatusEvent(user))
+        await self._event_bus.emit(UserStatusEvent(user))
 
     @on_message(GetUserStats.Response)
-    def _on_get_user_stats(self, message: GetUserStats.Response, connection):
+    async def _on_get_user_stats(self, message: GetUserStats.Response, connection):
         user = self._state.get_or_create_user(message.username)
         user.avg_speed = message.avg_speed
         user.downloads = message.download_num
         user.files = message.file_count
         user.directories = message.dir_count
 
-        self._event_bus.emit(UserStatsEvent(user))
+        await self._event_bus.emit(UserStatsEvent(user))
 
-    @on_message(PotentialParents.Response)
-    def _on_net_info(self, message: PotentialParents.Response, connection):
-        if not self._settings.get('debug.search_for_parent'):
-            logger.debug("ignoring NetInfo message : searching for parent is disabled")
-            return
+    async def _handle_add_user_response(self, response: AddUser.Response) -> User:
+        if response.exists:
+            user = self._state.get_or_create_user(response.username)
+            user.name = response.username
+            user.status = UserStatus(response.status)
+            user.avg_speed = response.avg_speed
+            user.downloads = response.download_num
+            user.files = response.file_count
+            user.directories = response.dir_count
+            user.country = response.country_code
 
-        self._state.potential_parents = [
-            entry.username for entry in message.entries
-        ]
+            await self._event_bus.emit(UserAddEvent(user))
+            return user
 
-        for entry in message.entries:
-            self.network.init_peer_connection(
-                entry.username,
-                PeerConnectionType.DISTRIBUTED,
-                ip=entry.ip,
-                port=entry.port
-            )
+    # Job methods
 
-    def _on_message_received(self, event: MessageReceivedEvent):
+    async def _ping_job(self):
+        while True:
+            await asyncio.sleep(SERVER_PING_INTERVAL)
+            await self.send_ping()
+
+    async def _wishlist_job(self, interval: int):
+        while True:
+            items = self._settings.get('search.wishlist')
+
+            # Remove all current wishlist searches
+            self._state.search_queries = {
+                ticket: qry for ticket, qry in self._state.search_queries.items()
+                if qry.search_type != SearchType.WISHLIST
+            }
+
+            logger.info(f"starting wishlist search of {len(items)} items")
+            # Recreate
+            for item in items:
+                if not item['enabled']:
+                    continue
+
+                ticket = next(self._ticket_generator)
+                self._state.search_queries[ticket] = SearchQuery(
+                    ticket,
+                    item['query'],
+                    search_type=SearchType.WISHLIST
+                )
+                await self.network.queue_server_messages(
+                    WishlistSearch.Request(ticket, item['query'])
+                )
+
+            await asyncio.sleep(interval)
+
+    # Listeners
+
+    async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message
         if message.__class__ in self.MESSAGE_MAP:
-            self.MESSAGE_MAP[message.__class__](message, event.connection)
+            await self.MESSAGE_MAP[message.__class__](message, event.connection)
 
-    # Connection state listeners
-    def _on_state_changed(self, event: ConnectionStateChangedEvent):
+    async def _on_state_changed(self, event: ConnectionStateChangedEvent):
         if not isinstance(event.connection, ServerConnection):
             return
 
         if event.state == ConnectionState.CONNECTED:
-            self.login(
-                self._settings.get('credentials.username'),
-                self._settings.get('credentials.password')
-            )
-            self._state.scheduler.add_job(self._ping_job)
-            self._state.scheduler.add_job(self._report_shares_job)
+            self._ping_task = asyncio.create_task(
+                self._ping_job(), name=f'ping-task-{task_counter()}')
+
+        elif event.state == ConnectionState.CLOSING:
+            self._state.logged_in = False
+
+            if self._wishlist_task is not None:
+                self._wishlist_task.cancel()
+                self._wishlist_task = None
+
+            if self._ping_task is not None:
+                self._ping_task.cancel()
+                self._ping_task = None
+
+            await self._event_bus.emit(ServerDisconnectedEvent())
 
         elif event.state == ConnectionState.CLOSED:
-            self._state.logged_in = False
-            self._state.scheduler.remove(self._ping_job)
-            self._state.scheduler.remove(self._report_shares_job)
-            self._event_bus.emit(ServerDisconnectedEvent())
+
+            if event.close_reason != CloseReason.REQUESTED:
+                if self._settings.get('network.reconnect.auto'):
+                    logger.info("attempting to reconnect to server in 5 seconds")
+                    await asyncio.sleep(5)
+                    await self.reconnect()
+
+    async def reconnect(self):
+        try:
+            await self.network.connect_server()
+        except ConnectionFailedError:
+            logger.warning("failed to reconnect to server")
+        else:
+            await self.login(
+                self._settings('credentials.username'),
+                self._settings('credentials.password')
+            )

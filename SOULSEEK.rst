@@ -11,70 +11,6 @@ Messages
 
 The messages described can be found here: https://www.museek-plus.org/wiki/SoulseekProtocol . There are a lot of mistakes and missing details in this document.
 
-Datatypes (C-type : Python type):
-
-- uint32: int (32-bit)
-- uint64: int (64-bit)
-- uchar: char
-- uchar: bool
-- string (uint32 for length + hex encoded bytes) : str
-- off_t: described in the museek documentation, but seems to mostly be the same as uint64 : int
-
-_Note:_ Strings are mostly encoded as utf-8, but this isn't guaranteed as some clients seems to be using different encodings
-
-
-Server Messages
----------------
-
-Server messages are sent to and from the server, they always have the same structure:
-
-- Message length: `uint32`
-- Message ID: `uint32`
-
-
-Negotiation Messages
---------------------
-
-The first message sent over a peer connection are used to establish two pieces of information for the connection:
-
-- Connection Type: `P`, `D` or `F`
-- Username of the peer
-
-Following two messages are sent:
-
-- PeerInit_ : Received when we successfully initiated a connection.
-- PeerPierceFirewall_ : Received when we failed to connect to the peer and asked the peer to attempt to connection to us
-
-After the client has received this message it should now be assigned a connection type and should thus be able to interpret the messages.
-
-More information on establishing a peer connection can be found under
-
-
-Peer Messages
--------------
-
-Peer messages are sent between peers (using connection type `P`), their structure is a bit different from the server messages (`uchar` is used instead of `uint32` for message ID):
-
-- Message length: `uint32`
-- Message ID: `uchar`
-
-
-Distributed Messages
---------------------
-
-Distributed messages are similar to peer messages but are expected to only be sent/received if the negotiated connection type is distributed (type `D`).
-
-
-Transfer Messages
------------------
-
-Connection type `F` is used for actual file transfer. True formatted messages like those sent over connection types `P` and `D` aren't used (aside from the initial negotiation messages), instead 2 primitives are sent over:
-
-- Ticket number for the transfer: `uint32`
-- Offset for the transfer: `uint64`
-
-Which peer sends over ticket or offset depends on the transfer direction.
-
 
 Server Connection and Logon
 ===========================
@@ -149,6 +85,9 @@ _Question 2:_ Some clients appear to send a PeerInit_ instead of PeerPierceFirew
 Transfers
 =========
 
+Downloads
+---------
+
 For downloading we need the `username`, `filename` and `slotsfree` returned by a PeerSearchReply_ . Uploads are just the opposite of the download process.
 
 Request a file download (peer has slotsfree):
@@ -175,21 +114,31 @@ Queue a file download (peer does not have slotsfree):
 4. Receive: PeerPlaceInQueueReply_ which contains the filename and place in queue
 
 
+Uploads
+-------
+
+The original Windows SoulSeek client also has the ability to send files.
+
+
 Distributed Connections
 =======================
 
 Obtaining a parent
 ------------------
 
-Every 60 seconds the server will send the client a NetInfo_ command (containing 10 possible peers) until we have set a parent. The command contains a list with each entry containg: username, IP address and port. Upon receiving this command the client will attempt to open up a connection to each of the IP addresses in the list to find a suitable parent.
+When HaveNoParents_ is enabled then every 60 seconds the server will send the client a NetInfo_ command (containing 10 possible peers) until we disable our search for a parent using the HaveNoParents_ command. The NetInfo_ command contains a list with each entry containg: username, IP address and port. Upon receiving this command the client will attempt to open up a connection to each of the IP addresses in the list to find a suitable parent.
 
-After establishing a distributed connection the potential parents send out a Branch Level and Branch Root, the other potential parents are disconnected and the following messages are then send to the server to let it know where we are in the hierarchy:
+After establishing a distributed connection with one of the potential parents the peer will send out a DistributedBranchLevel and DistributedBranchRoot over the distributed connection. If the peer is selected to be the parent the other potential parents are disconnected and the following messages are then send to the server to let it know where we are in the hierarchy:
 
 * BranchLevel_ : BranchLevel from the parent + 1
 * BranchRoot_ : The BranchRoot received from the parent
-* HaveNoParents_ : Should be set to false
+* HaveNoParents_ : Set to false to disable receiving NetInfo_ commands
 
-_Note:_ Branch Root is not always sent when the potential parent has branch level 0s
+Once the parent is set our parent will send us search requests in the form of
+DistributedSearchRequest commands.
+
+
+_Note:_ Branch Root is not always sent when the potential parent has branch level 0
 
 _Question 1:_ Is there a picking process for the parent? It seems to be first come first serve.
 
@@ -199,10 +148,49 @@ _Question 2:_ When a parent disconnects, are all the children disconnected?
 Obtaining children
 ------------------
 
+The AcceptChildren_ command tells the server whether we want to have any children, this is probably used in combination with the HaveNoParents_ command which enables searching for parents. Enabling it will cause us to be listed in NetInfo_ commands sent to other peers. It is not mandatory to have a parent and to obtain children if we ourselves are the branch root (branch level is 0).
+
+The process is very similar to the one to obtain a parent except that this time we are in the role of the other peer; we need to advertise the branch level and branch root using the DistributedBranchLevel and DistributedBranchRoot commands.
 
 
-Search Results
-==============
+Searches on the network
+-----------------------
+
+Searches for the branch root (level = 0) will come from the server in the form of a ServerSearchRequest.
+
+
+Searching
+=========
+
+Query rules
+-----------
+
+* Exclusion: dash-character gets used to exclude terms. Example: `-mp3`, would exclude all mp3 files
+* Wildcard: asterisk-character for wildcard searches. Example: `*oney`, would match 'honey' and 'money'
+* Sentence matching: double quotes would get used to keep terms together. Example: `"my song"` would perform an exact match for those terms. This no longer seems to be implemented.
+
+Undescribed rules (matching):
+
+* Searches are case-insensitive
+* Placement of terms is irrelevant. This also applies to exclusions `-mp3 song` is the same as `song -mp3`
+* Wildcard/exclusion: placement is irrelevant
+* Wildcard: can only be used in the beginning of the word. `some*` is not valid and neither is `some*thing`
+* Wildcard: doesn't need to match a character. Query `*song.mp3` will match `song.mp3`
+* Wildcard: query `song *` will return something
+* Exclusion: there are results for queries using only exclusions but it does not seem official. Example `-mp3`, returns a limited number of results and some results even containing string `mp3`
+
+The algorithm for matching can be described as:
+
+1. Split the query into search terms using whitespace
+2. Foreach term match the item's path in the form of:
+
+   a. <non-word character or start of string>
+   b. when using wildcard: <0 or more word characters>
+   c. escaped search term
+   d. <non-word character or end of string>
+
+Word characters are alphanumeric characters or unicode word characters
+
 
 Attributes
 ----------
@@ -233,7 +221,7 @@ Attribute table:
 
 _Note:_ extension is empty for anything but mp3 and flac
 
-_Note:_ Couldn't find any other than these. Number 3 seems to be missing, could this be something used in the past or maybe for video?
+_Note:_ Couldn't find any other than these. Number 3 seems to be missing, could this be something used in the past or maybe for video? Theoretically we could invent new attributes here, like something for video, images, extra metadata for music files. The official clients don't seem to do anything with the extra attributes
 
 
 Rooms and Chats

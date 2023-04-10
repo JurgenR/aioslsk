@@ -1,7 +1,16 @@
 from dataclasses import dataclass, field
+import datetime
+from enum import auto, Enum
 from typing import List
 
 from .protocol.primitives import FileData
+
+
+class SearchType(Enum):
+    NETWORK = auto()
+    USER = auto()
+    ROOM = auto()
+    WISHLIST = auto()
 
 
 @dataclass
@@ -31,4 +40,9 @@ class SearchQuery:
     """Search query we have made"""
     ticket: int
     query: str
+    search_type: SearchType = SearchType.NETWORK
+
+    room: str = None
+    username: str = None
     results: List[SearchResult] = field(default_factory=list)
+    started: float = field(default_factory=datetime.datetime.now)

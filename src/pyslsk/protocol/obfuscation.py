@@ -2,21 +2,21 @@ import secrets
 
 
 KEY_SIZE = 4
-"""@var KEY_SIZE: Amount of bytes in the key"""
+""":var KEY_SIZE: Amount of bytes in the key"""
 
 
 def generate_key() -> bytes:
     return secrets.token_bytes(KEY_SIZE)
 
 
-def rotate_key_orig(key: bytes, const: int = 31) -> bytes:
+def _rotate_key_orig(key: bytes, const: int = 31) -> bytes:  # pragma: no cover
     """Rotate the L{key} to the right by L{const} bits
 
-    @type key: C{bytes}
-    @param key: Key to rotate
-    @param const: Amount of bits to rotate
-    @rtype: C{bytes}
-    @return: The rotated key
+    :type key: C{bytes}
+    :param key: Key to rotate
+    :param const: Amount of bits to rotate
+    :rtype: C{bytes}
+    :return: The rotated key
     """
     key_i = int.from_bytes(key, 'little')
     char_bit = 8
@@ -30,11 +30,11 @@ def rotate_key_orig(key: bytes, const: int = 31) -> bytes:
 def rotate_key(key: bytes, rot_bits: int = 31) -> bytes:
     """Rotate the L{key} to the right by L{const} bits
 
-    @type key: C{bytes}
-    @param key: Key to rotate
-    @param rot_bits: Amount of bits to rotate
-    @rtype: C{bytes}
-    @return: The rotated key
+    :type key: C{bytes}
+    :param key: Key to rotate
+    :param rot_bits: Amount of bits to rotate
+    :rtype: C{bytes}
+    :return: The rotated key
     """
     key_i = int.from_bytes(key, 'little')
     key_i_rot = (key_i >> rot_bits) | ((key_i << (0x20 - rot_bits)) & 0xFFFFFFFF)
@@ -45,11 +45,11 @@ def decode(data: bytes) -> bytes:
     """De-obfuscate given L{data}, the key should be the first 4 bytes of the
     data
 
-    @type data: bytes like object
-    @param data: Data to be de-obfuscated
+    :type data: bytes like object
+    :param data: Data to be de-obfuscated
 
-    @rtype: bytes like object
-    @return: De-obfuscated data
+    :rtype: bytes like object
+    :return: De-obfuscated data
     """
     key = data[:KEY_SIZE]
     enc_message = data[KEY_SIZE:]

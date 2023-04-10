@@ -1,5 +1,5 @@
 from unittest.mock import patch, MagicMock
-from pyslsk.network import LimitedRateLimiter, RateLimiter, UnlimitedRateLimiter
+from pyslsk.network.rate_limiter import LimitedRateLimiter, RateLimiter, UnlimitedRateLimiter
 import pytest
 
 
@@ -70,8 +70,7 @@ class TestLimitedRateLimiter:
         limited_limiter.bucket = 0
         limited_limiter.last_refill = 0.0
 
-        current_time_mock = MagicMock(return_value=time_diff)
-        with patch('time.monotonic', current_time_mock):
+        with patch('time.monotonic', return_value=time_diff):
             limited_limiter.refill()
 
         assert limited_limiter.bucket == expected_bucket
@@ -91,9 +90,23 @@ class TestLimitedRateLimiter:
             LimitedRateLimiter.LOWER_LIMIT - 1
         ]
     )
-    def test_whenTakeTokens_andBucketEmpty_shouldReturnZero(self, limited_limiter: LimitedRateLimiter, bucket_size: int):
+    @pytest.mark.asyncio
+    async def test_whenTakeTokens_andBucketEmpty_shouldWaitForTokens(self, limited_limiter: LimitedRateLimiter, bucket_size: int):
         limited_limiter.bucket = bucket_size
-        assert limited_limiter.take_tokens() == 0
+        # Spy on the objects refill method
+        with patch.object(limited_limiter, 'refill', wraps=limited_limiter.refill) as wrapped_refill:
+            # Patch asyncio.sleep and time.monotonic:
+            # 1. asyncio.sleep to verify how many times it is called
+            # 2. asyncio.sleep will internally called time.monotonic and mess
+            #    with our time.monotonic side_effect
+            # 3. asyncio.sleep to not delay the execution
+            # 4. time.monotonic returns 0.0 the first time to verify the wait
+            #    sleep is executed when take_tokens is called. And a value to
+            #    verify tokens are returned when the bucket is refilled
+            with patch('time.monotonic', side_effect=[0.0, 1.0, ]), patch('asyncio.sleep') as sleep_func:
+                assert await limited_limiter.take_tokens() > 0
+                assert wrapped_refill.call_count == 2
+                assert sleep_func.call_count == 1
 
     @pytest.mark.parametrize(
         "bucket_size,expected_bucket_size",
@@ -102,9 +115,11 @@ class TestLimitedRateLimiter:
             (LimitedRateLimiter.LOWER_LIMIT + 1, 1)
         ]
     )
-    def test_whenTakeTokens_andBucketNotEmpty_shouldReturnTokens(self, limited_limiter: LimitedRateLimiter, bucket_size: int, expected_bucket_size: int):
+    @pytest.mark.asyncio
+    async def test_whenTakeTokens_andBucketNotEmpty_shouldReturnTokens(self, limited_limiter: LimitedRateLimiter, bucket_size: int, expected_bucket_size: int):
         limited_limiter.bucket = bucket_size
-        assert limited_limiter.take_tokens() == LimitedRateLimiter.LOWER_LIMIT
+        limited_limiter.refill = MagicMock(return_value=False)
+        assert await limited_limiter.take_tokens() == LimitedRateLimiter.LOWER_LIMIT
         assert limited_limiter.bucket == expected_bucket_size
 
 
@@ -122,5 +137,6 @@ class TestUnlimitedRateLimiter:
         assert unlimited_limiter.bucket == 0
         assert unlimited_limiter.last_refill == 0.0
 
-    def test_whenTakeTokens_shouldReturnUpperLimit(self, unlimited_limiter: UnlimitedRateLimiter):
-        assert unlimited_limiter.take_tokens() == UnlimitedRateLimiter.UPPER_LIMIT
+    @pytest.mark.asyncio
+    async def test_whenTakeTokens_shouldReturnUpperLimit(self, unlimited_limiter: UnlimitedRateLimiter):
+        assert await unlimited_limiter.take_tokens() == UnlimitedRateLimiter.UPPER_LIMIT

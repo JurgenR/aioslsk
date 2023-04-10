@@ -1,8 +1,9 @@
+from pyslsk.exceptions import FileNotFoundError
 from pyslsk.shares import (
     extract_attributes,
-    SharesManager,
+    SharedDirectory,
     SharedItem,
-    SharesIndexer,
+    SharesManager,
     SharesStorage,
 )
 from pyslsk.settings import Settings
@@ -10,6 +11,7 @@ from pyslsk.settings import Settings
 import pytest
 from pytest_unordered import unordered
 import os
+from typing import List
 
 
 RESOURCES = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'resources', 'shared')
@@ -26,27 +28,39 @@ DEFAULT_SETTINGS = {
     }
 }
 
+SHARED_DIRECTORY = SharedDirectory('music', 'C:\\music', 'abcdef')
+SHARED_ITEMS = {
+    'item1': SharedItem(SHARED_DIRECTORY, 'folk\\folkalbum, release\\', 'simple band(contrib. singer) - isn\'t easy song.mp3', 0.0),
+    'item2': SharedItem(SHARED_DIRECTORY, 'metal\\metalalbum release\\', 'simple band (contrib. singer)_-_don\'t easy song 片仮名.flac', 0.0),
+    'item3': SharedItem(SHARED_DIRECTORY, 'rap\\rapalbum_release\\', 'simple_band(contributer. singer)-don\'t_easy_song 片仮名.mp3', 0.0),
+}
+SHARED_DIRECTORY.items = set(SHARED_ITEMS.values())
 
-# A bit of a hacky way to get the alias
-# RESOURCES_ALIAS = list(
-#     SharesManager(Settings(DEFAULT_SETTINGS), SharesIndexer(), SharesStorage()).directory_aliases.keys())[0]
+
+@pytest.fixture
+def manager(tmp_path):
+    return SharesManager(Settings(DEFAULT_SETTINGS), SharesStorage())
 
 
-# @pytest.fixture
-# def manager(tmp_path):
-#     return SharesManager(Settings(DEFAULT_SETTINGS), SharesIndexer(), SharesStorage())
+@pytest.fixture
+def manager_query(tmp_path):
+    manager = SharesManager(Settings(DEFAULT_SETTINGS), SharesStorage())
+    manager.shared_directories = [SHARED_DIRECTORY]
+    manager.build_term_map(SHARED_DIRECTORY)
+
+    return manager
 
 
 class TestFunctions:
 
-    def test_whenExtractAttributesMP3File_shouldReturnAttributes(self):
+    def test_extractAttributes_MP3File_shouldReturnAttributes(self):
         filepath = os.path.join(RESOURCES, MP3_FILENAME)
 
         attributes = extract_attributes(filepath)
 
         assert attributes == [(0, 128), (1, 15)]
 
-    def test_whenExtractAttributesFLACFile_shouldReturnAttributes(self):
+    def test_extractAttributes_FLACFile_shouldReturnAttributes(self):
         filepath = os.path.join(RESOURCES, FLAC_FILENAME)
 
         attributes = extract_attributes(filepath)
@@ -54,115 +68,138 @@ class TestFunctions:
         assert attributes == [(1, 15), (4, 44100), (5, 16)]
 
 
-# class TestSharesManager:
+class TestSharedDirectory:
 
-#     def test_whenLoadFromSettings(self, manager: SharesManager):
-#         assert manager.shared_items == unordered([
-#             SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.flac'),
-#             SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.mp3'),
-#             SharedItem(root=RESOURCES_ALIAS, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
-#         ])
+    def test_getRemotePath_shouldReturnPath(self):
+        alias = 'abcdef'
+        shared_directory = SharedDirectory('music', r"C:\\music", alias)
+        assert '@@' + alias == shared_directory.get_remote_path()
 
-#     def test_whenAddDirectory_shouldAddDirectory(self):
-#         manager = SharesManager(Settings({'sharing': {'directories': []}}))
-#         manager.add_shared_directory(RESOURCES)
-#         assert manager.shared_items == unordered([
-#             SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.flac'),
-#             SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.mp3'),
-#             SharedItem(root=RESOURCES_ALIAS, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
-#         ])
-#         assert RESOURCES_ALIAS in manager.directory_aliases
-#         assert manager.directory_aliases[RESOURCES_ALIAS] == RESOURCES
+    def test_getItemByRemotePath_itemExists_shouldReturnItem(self):
+        shared_directory = SharedDirectory('music', r"C:\\music", 'abcdef')
+        item = SharedItem(shared_directory, 'author', 'song.mp3', 1.0)
+        shared_directory.items = {item}
 
-#     def test_whenRemoveDirectory_shouldRemoveSharedFilesAndAlias(self, manager: SharesManager):
-#         manager.remove_shared_directory(RESOURCES)
-#         assert len(manager.directory_aliases) == 0
-#         assert len(manager.shared_items) == 0
+        remote_path = os.path.join('@@abcdef', 'author', 'song.mp3')
+        assert item == shared_directory.get_item_by_remote_path(remote_path)
 
-#     def test_whenGetStats_shouldReturnStats(self, manager):
-#         dirs, files = manager.get_stats()
+    def test_getItemByRemotePath_itemNotExists_shouldRaise(self):
+        shared_directory = SharedDirectory('music', r"C:\\music", 'abcdef')
+        item = SharedItem(shared_directory, 'author', 'song.mp3', 1.0)
+        shared_directory.items = {item}
 
-#         assert dirs == 2
-#         assert files == 3
+        remote_path = '@@abcdef\\author\\song2.mp3'
+        with pytest.raises(FileNotFoundError):
+            shared_directory.get_item_by_remote_path(remote_path)
 
-#     def test_whenGetSharedItemMatches_shouldReturnSharedItem(self, manager: SharesManager):
-#         filepath = os.path.join('@@' + RESOURCES_ALIAS, 'Cool_Test_Album', 'Strange_Drone_Impact.mp3')
-#         item = manager.get_shared_item(filepath)
 
-#         assert item == SharedItem(root=RESOURCES_ALIAS, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
+class TestSharesManager:
 
-#     def test_whenGetSharedItemDoesNotMatch_shouldRaiseException(self, manager: SharesManager):
-#         filepath = os.path.join('@@' + RESOURCES_ALIAS, 'Cool_Test_Album', 'nonexistant.mp3')
+    @pytest.mark.parametrize(
+        'query,expected_items',
+        [
+            # 1 term matching
+            ('rap', ['item3']),
+            # 1 term matching, case sensitive
+            ('mETAl', ['item2']),
+            # multiple terms, out of order
+            ('simple folk', ['item1']),
+            # multiple terms, include part of directory and filename
+            ('song folkalbum', ['item1']),
+            # term surrounded by special chars
+            ('contrib', ['item1', 'item2']),
+            # unicode characters
+            ('片仮名', ['item2', 'item3'])
+        ]
+    )
+    def test_querySimpleTerms_matching(self, manager_query: SharesManager, query: str, expected_items: List[str]):
+        expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
+        actual_items = manager_query.query(query)
+        assert expected_items == unordered(actual_items)
 
-#         with pytest.raises(LookupError):
-#             manager.get_shared_item(filepath)
+    @pytest.mark.parametrize(
+        'query',
+        [
+            # not fully matching term
+            ('simpl'),
+            # not matching because there is a seperator in between
+            ('simpleband'),
+            # only 1 term matches
+            ('simple notfound'),
+            # wildcard chars no match
+            ('*impler'),
+            # only exclusion
+            ('-mp3'),
+        ]
+    )
+    def test_querySimpleTerms_notMatching(self, manager_query: SharesManager, query: str):
+        actual_items = manager_query.query(query)
+        assert actual_items == []
 
-#     def test_whenGetSharedItemDoesNotExistOnDisk_shouldRaiseException(self, manager: SharesManager):
-#         item_not_on_disk = SharedItem(RESOURCES_ALIAS, '', 'InItemsButNotOnDisk.mp3')
-#         manager.shared_items.append(item_not_on_disk)
-#         filepath = os.path.join('@@' + RESOURCES_ALIAS, '', 'InItemsButNotOnDisk.mp3')
+    @pytest.mark.parametrize(
+        'query,expected_items',
+        [
+            # matching simple term, and containing special chars
+            ('simple isn\'t', ['item1']),
+            # seperator in between
+            ('simple_band', ['item3']),
+        ]
+    )
+    def test_querySpecialCharactersInTerm_matching(self, manager_query: SharesManager, query: str, expected_items: List[str]):
+        expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
+        actual_items = manager_query.query(query)
+        assert expected_items == unordered(actual_items)
 
-#         with pytest.raises(LookupError):
-#             manager.get_shared_item(filepath)
+    @pytest.mark.parametrize(
+        'query,expected_items',
+        [
+            # wildcard
+            ('*tributer', ['item3']),
+            # wildcard special chars
+            ('*on\'t', ['item2', 'item3']),
+            # wildcard start of line
+            ('*etal', ['item2']),
+            # wildcard end of line
+            ('*lac', ['item2']),
+            # wildcard unicode characters
+            ('*仮名', ['item2', 'item3']),
+        ]
+    )
+    def test_queryWildcard_matching(self, manager_query: SharesManager, query: str, expected_items: List[str]):
+        expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
+        actual_items = manager_query.query(query)
+        assert expected_items == unordered(actual_items)
 
-#     @pytest.mark.parametrize(
-#         "query,expected_items",
-#         [
-#             (
-#                 'nomatchhere', []
-#             ),
-#             # Single word match
-#             (
-#                 'Kevin',
-#                 [
-#                     SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.flac'),
-#                     SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.mp3')
-#                 ]
-#             ),
-#             # Words in different order
-#             (
-#                 'Galway Kevin',
-#                 [
-#                     SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.flac'),
-#                     SharedItem(root=RESOURCES_ALIAS, subdir='', filename='Kevin_MacLeod-Galway.mp3')
-#                 ]
-#             ),
-#             # Subdir name + case sensitivity
-#             (
-#                 'cOOL iMPACT',
-#                 [
-#                     SharedItem(root=RESOURCES_ALIAS, subdir='Cool_Test_Album', filename='Strange_Drone_Impact.mp3')
-#                 ]
-#             )
-#         ]
-#     )
-#     def test_whenQuery_shouldReturnMatches(self, query, expected_items, manager: SharesManager):
-#         results = manager.query(query)
+    @pytest.mark.parametrize(
+        'query,expected_items',
+        [
+            # exclude, start of line
+            ('simple -mp3', ['item2']),
+            # exclude, end of line
+            ('simple -rap', ['item1', 'item2']),
+            # exclude, multiple end of line
+            ('simple -mp3 -contributer', ['item2']),
+            # exclude unicode characters
+            ('simple -片仮名', ['item1'])
+        ]
+    )
+    def test_queryExcludeTerm(self, manager_query: SharesManager, query: str, expected_items: List[str]):
+        expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
+        actual_items = manager_query.query(query)
+        assert expected_items == unordered(actual_items)
 
-#         assert expected_items == unordered(results)
-
-#     @pytest.mark.parametrize(
-#         "query",
-#         [
-#             # Just spaces
-#             ('  '),
-#             # None matching at all
-#             ('something'),
-#             # Partial match
-#             ('kevin bacon')
-#         ]
-#     )
-#     def test_whenQueryNoMatches_shouldReturnEmptyList(self, query, manager: SharesManager):
-#         results = manager.query(query)
-
-#         assert results == []
-
-#     def test_whenGetDownloadPath_shouldCreateDir(self, manager: SharesManager, tmpdir):
-#         download_dir = os.path.join(tmpdir, 'downloads')
-#         manager._settings.set('sharing.download', download_dir)
-
-#         to_download_file = os.path.join(RESOURCES, 'Cool_Test_Album', 'Strange_Drone_Impact.mp3')
-#         download_path = manager.get_download_path(to_download_file)
-
-#         assert os.path.exists(download_dir)
-#         assert os.path.join(download_dir, 'Strange_Drone_Impact.mp3') == download_path
+    @pytest.mark.parametrize(
+        'query,expected_items',
+        [
+            # something with loads of special characters between words
+            ('singer)_-_don\'t', ['item2']),
+            # wildcard, something with loads of special characters between words
+            ('*inger)_-_don\'t', ['item2']),
+            # exclude, something with loads of special characters between words
+            ('simple -singer)_-_don\'t', ['item1', 'item3']),
+        ]
+    )
+    def test_edgeCases(self, manager_query: SharesManager, query: str, expected_items: List[str]):
+        expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
+        actual_items = manager_query.query(query)
+        assert expected_items == unordered(actual_items)

@@ -18,7 +18,6 @@ from pyslsk.protocol.messages import (
     GetUserStatus,
     ChatRoomMessage,
     ChatLeaveRoom,
-    ChatJoinRoom,
     ChatUserLeftRoom,
     ChatUserJoinedRoom,
     GetUserStats,

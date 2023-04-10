@@ -1,4 +1,4 @@
-from pyslsk.events import EventBus, UserDirectoryEvent
+from pyslsk.events import UserDirectoryEvent
 from pyslsk.protocol.primitives import DirectoryData
 from pyslsk.protocol.messages import (
     PeerDirectoryContentsRequest,
@@ -8,7 +8,8 @@ from pyslsk.peer import PeerManager
 from pyslsk.settings import Settings
 from pyslsk.state import State
 
-from unittest.mock import ANY, Mock
+import pytest
+from unittest.mock import ANY, AsyncMock, Mock
 
 
 DEFAULT_SETTINGS = {
@@ -23,12 +24,12 @@ class TestPeer:
 
     def _create_peer_manager(self) -> PeerManager:
         state = State()
-        event_bus = Mock()
+        event_bus = AsyncMock()
         internal_event_bus = Mock()
         shares_manager = Mock()
         transfer_manager = Mock()
-        network = Mock()
-        network.server = Mock()
+        network = AsyncMock()
+        network.server = AsyncMock()
 
         manager = PeerManager(
             state,
@@ -42,35 +43,39 @@ class TestPeer:
 
         return manager
 
-    def test_whenGetUserDirectory_shouldSendRequest(self):
+    @pytest.mark.asyncio
+    async def test_whenGetUserDirectory_shouldSendRequest(self):
         manager = self._create_peer_manager()
 
-        ticket = manager.get_user_directory('user0', 'C:\\dir0')
-        manager.network.send_peer_messages.assert_called_once_with('user0', ANY)
+        ticket = await manager.get_user_directory('user0', 'C:\\dir0')
+        manager._network.send_peer_messages.assert_awaited_once_with('user0', ANY)
 
         assert isinstance(ticket, int)
 
-    def test_whenDirectoryRequestReceived_shouldRespond(self):
+    @pytest.mark.asyncio
+    async def test_whenDirectoryRequestReceived_shouldRespond(self):
         DIRECTORY = 'C:\\dir0'
         USER = 'user0'
+        DIRECTORY_DATA = [DirectoryData(DIRECTORY, files=[])]
+        TICKET = 1324
+
         manager = self._create_peer_manager()
+        manager._shares_manager.create_directory_reply.return_value = DIRECTORY_DATA
 
-        manager.shares_manager.create_directory_reply.return_value = [
-            DirectoryData(DIRECTORY, files=[])
-        ]
-
-        connection = Mock()
+        connection = AsyncMock()
         connection.username = USER
 
-        manager._on_peer_directory_contents_req(
-            PeerDirectoryContentsRequest.Request(1234, DIRECTORY), connection
+        await manager._on_peer_directory_contents_req(
+            PeerDirectoryContentsRequest.Request(TICKET, DIRECTORY), connection
         )
 
-        manager.shares_manager.create_directory_reply.assert_called_once_with(DIRECTORY)
-        manager.network.send_peer_messages.assert_called_once_with(
-            'user0', ANY, connection=connection)
+        manager._shares_manager.create_directory_reply.assert_called_once_with(DIRECTORY)
+        connection.queue_message.assert_awaited_once_with(
+            PeerDirectoryContentsReply.Request(TICKET, DIRECTORY, DIRECTORY_DATA)
+        )
 
-    def test_whenDirectoryReplyReceived_shouldEmitEvent(self):
+    @pytest.mark.asyncio
+    async def test_whenDirectoryReplyReceived_shouldEmitEvent(self):
         DIRECTORY = 'C:\\dir0'
         USER = 'user0'
         DIRECTORIES = [DirectoryData(DIRECTORY, files=[])]
@@ -78,14 +83,14 @@ class TestPeer:
         manager = self._create_peer_manager()
         user = manager._state.get_or_create_user(USER)
 
-        connection = Mock()
+        connection = AsyncMock()
         connection.username = USER
 
-        manager._on_peer_directory_contents_reply(
+        await manager._on_peer_directory_contents_reply(
             PeerDirectoryContentsReply.Request(1234, DIRECTORY, DIRECTORIES),
             connection
         )
 
-        manager._event_bus.emit.assert_called_once_with(
+        manager._event_bus.emit.assert_awaited_once_with(
             UserDirectoryEvent(user, DIRECTORY, DIRECTORIES)
         )

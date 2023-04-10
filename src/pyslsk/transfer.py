@@ -1,4 +1,6 @@
 from __future__ import annotations
+import aiofiles
+import asyncio
 from collections import deque
 from dataclasses import dataclass
 from enum import auto, Enum
@@ -12,27 +14,27 @@ import shelve
 from typing import Dict, List, Tuple, TYPE_CHECKING
 
 from .configuration import Configuration
-from .connection import (
-    ConnectionState,
+from .constants import TRANSFER_REPLY_TIMEOUT
+from .exceptions import (
+    ConnectionReadError,
+    ConnectionWriteError,
+    FileNotFoundError,
+    PeerConnectionError,
+)
+from .network.connection import (
     CloseReason,
     PeerConnection,
     PeerConnectionState,
     PeerConnectionType,
-    ProtocolMessage,
 )
 from .events import (
     build_message_map,
     on_message,
     EventBus,
-    ConnectionStateChangedEvent,
     InternalEventBus,
-    LoginEvent,
     MessageReceivedEvent,
+    PeerInitializedEvent,
     TransferAddedEvent,
-    TransferOffsetEvent,
-    TransferTicketEvent,
-    TransferDataSentEvent,
-    TransferDataReceivedEvent,
 )
 from .protocol.primitives import uint32, uint64
 from .protocol.messages import (
@@ -51,10 +53,10 @@ from .model import UserStatus
 from .settings import Settings
 from .shares import SharesManager
 from .state import State
-from .utils import ticket_generator
+from .utils import task_counter, ticket_generator
 
 if TYPE_CHECKING:
-    from .network import Network
+    from .network.network import Network
 
 
 logger = logging.getLogger(__name__)
@@ -93,6 +95,7 @@ class TransferState(Enum):
     """
     ABORTED = auto()
     """Aborted upon user request"""
+    REMOTELY_QUEUED = auto()
 
 
 @dataclass
@@ -125,10 +128,14 @@ class TransferStorage:
 
                 transfers.append(transfer)
 
+        logger.info(f"read {len(transfers)} transfers from : {db_path}")
+
         return transfers
 
     def write_database(self, transfers):
         db_path = os.path.join(self.data_directory, self.DEFAULT_FILENAME)
+
+        logger.info(f"writing {len(transfers)} transfers to : {db_path}")
 
         with shelve.open(db_path, flag='c') as database:
             # Update/add transfers
@@ -153,7 +160,7 @@ class TransferStorage:
 
 class Transfer:
     """Class representing a transfer"""
-    _UNPICKABLE_FIELDS = ('_fileobj', 'connection', '_speed_log')
+    _UNPICKABLE_FIELDS = ('_speed_log', '_current_task')
 
     def __init__(self, username: str, remote_path: str, direction: TransferDirection):
         self.state = TransferState.VIRGIN
@@ -197,18 +204,14 @@ class Transfer:
         transfer entered the complete or incomplete state
         """
 
-        self.connection: PeerConnection = None
-        """Connection related to the transfer (connection type 'F')"""
-        self._fileobj = None
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
+        self._current_task: asyncio.Task = None
 
     def __setstate__(self, state):
         """Called when unpickling"""
         self.__dict__.update(state)
-
-        self._fileobj = None
-        self.connection = None
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
+        self._current_task = None
 
     def __getstate__(self):
         """Called when pickling, removes unpickable fields from the fields to
@@ -225,9 +228,17 @@ class Transfer:
         self.queue_attempts += 1
         self.last_queue_attempt = time.monotonic()
 
+    def reset_queue_attempts(self):
+        self.queue_attempts = 0
+        self.last_queue_attempt = 0.0
+
     def increase_upload_request_attempt(self):
         self.upload_request_attempts += 1
         self.last_upload_request_attempt = time.monotonic()
+
+    def reset_upload_request_attempt(self):
+        self.upload_request_attempts = 0
+        self.last_upload_request_attempt = 0.0
 
     def set_state(self, state: TransferState, force: bool = False):
         """Sets the current state for the transfer. This will do nothing in case
@@ -250,6 +261,9 @@ class Transfer:
             elif self.is_processing():
                 # Not allowed to queue processing transfers
                 return None
+
+        elif state == TransferState.REMOTELY_QUEUED:
+            pass
 
         elif state == TransferState.INITIALIZING:
             pass
@@ -279,16 +293,12 @@ class Transfer:
                 return None
             self._finalize()
 
-        logger.debug(f"setting transfer state to {state} : {self!r}")
-
         old_state = state
         self.state = state
         return old_state
 
     def _finalize(self):
         self.complete_time = time.time()
-        self.close_file()
-        self.close_connection()
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
 
     def calculate_offset(self) -> int:
@@ -305,6 +315,9 @@ class Transfer:
     def set_offset(self, offset: int):
         self._offset = offset
         self.bytes_transfered = offset
+
+    def get_offset(self) -> int:
+        return self._offset
 
     def reset_times(self):
         self.start_time = None
@@ -377,61 +390,25 @@ class Transfer:
     def is_transfered(self) -> bool:
         return self.filesize == self.bytes_transfered
 
-    def read(self, bytes_amount: int) -> bytes:
-        """Read the given amount of bytes from the file object"""
-        if self._fileobj is None:
-            self._fileobj = open(self.local_path, 'rb')
-
-        if self._offset is not None:
-            self._fileobj.seek(self._offset)
-            self._offset = None
-
-        self._fileobj.seek(self.bytes_transfered)
-        data = self._fileobj.read(bytes_amount)
-        self.bytes_read += len(data)
-
-        return data
-
-    def write(self, data: bytes) -> bool:
-        """Write data to the file object. A file object will be created if it
-        does not yet exist and will be closed when the transfer was complete.
-
-        This method updates the internal L{bytes_transfered} and
-        L{bytes_written} variables.
-
-        :return: a C{bool} indicating whether the transfer was complete or more
-            data is expected
-        """
-        self.bytes_transfered += len(data)
-        if self._fileobj is None:
-            self._fileobj = open(self.local_path, 'ab')
-
-        bytes_written = self._fileobj.write(data)
-        self.bytes_written += bytes_written
-
-        return self.is_transfered()
-
-    def close_file(self):
-        """Closes the local file object in case it is present"""
-        if self._fileobj is not None:
-            self._fileobj.close()
-            self._fileobj = None
-
-    def close_connection(self):
-        """Closes the transfer connection in case it is present"""
-        if self.connection is not None:
-            self.connection.set_state(ConnectionState.SHOULD_CLOSE)
-            self.connection = None
-
     def equals(self, transfer):
         other = (transfer.remote_path, transfer.username, transfer.direction, )
         own = (self.remote_path, self.username, self.direction, )
         return other == own
 
+    def _queue_remotely_task_complete(self, task: asyncio.Task):
+        self._current_task = None
+
+    def _upload_task_complete(self, task: asyncio.Task):
+        self._current_task = None
+
+    def _download_task_complete(self, task: asyncio.Task):
+        self._current_task = None
+
     def __repr__(self):
         return (
             f"Transfer(username={self.username!r}, remote_path={self.remote_path!r}, "
-            f"local_path={self.local_path!r}, direction={self.direction})"
+            f"local_path={self.local_path!r}, direction={self.direction}, "
+            f"state={self.state}, _current_task={self._current_task!r})"
         )
 
 
@@ -458,22 +435,32 @@ class TransferManager:
 
         self.MESSAGE_MAP = build_message_map(self)
 
-        self._internal_event_bus.register(ConnectionStateChangedEvent, self._on_connection_state_changed)
-        self._internal_event_bus.register(LoginEvent, self._on_server_login)
         self._internal_event_bus.register(MessageReceivedEvent, self._on_message_received)
-        self._internal_event_bus.register(TransferOffsetEvent, self._on_transfer_offset)
-        self._internal_event_bus.register(TransferTicketEvent, self._on_transfer_ticket)
-        self._internal_event_bus.register(TransferDataReceivedEvent, self._on_transfer_data_received)
-        self._internal_event_bus.register(TransferDataSentEvent, self._on_transfer_data_sent)
+        self._internal_event_bus.register(PeerInitializedEvent, self._on_peer_initialized)
 
-    def read_transfers_from_storage(self):
-        transfers = self._storage.read_database()
-        logger.debug(f"read {len(transfers)} transfers from storage")
+    async def read_transfers_from_storage(self) -> List[Transfer]:
+        transfers: List[Transfer] = self._storage.read_database()
         for transfer in transfers:
-            self.add(transfer)
+            await self.add(transfer)
+
+            # Analyze the current state of the stored transfers and set them to
+            # the correct state
+            if transfer.state in (TransferState.INITIALIZING, TransferState.REMOTELY_QUEUED):
+                transfer.set_state(TransferState.QUEUED, force=True)
+
+            elif transfer.is_transfering():
+                state = TransferState.COMPLETE if transfer.is_transfered() else TransferState.INCOMPLETE
+                transfer.set_state(state, force=True)
+
+        await self.manage_transfers()
 
     def write_transfers_to_storage(self):
         self._storage.write_database(self._transfers)
+
+    def stop(self):
+        for transfer in self.transfers:
+            if transfer._current_task:
+                transfer._current_task.cancel()
 
     @property
     def transfers(self):
@@ -484,53 +471,63 @@ class TransferManager:
         return self._settings.get('sharing.limits.upload_slots')
 
     # Methods for state changes on the transfers
-    def _set_transfer_state(
+    async def _set_transfer_state(
             self, transfer: Transfer, state: TransferState,
             fail_reason: str = None, force: bool = False):
+        logger.info(
+            f"setting transfer state to {state} (fail_reason={fail_reason} : {transfer})")
+
         transfer.set_state(state, force=force)
         transfer.fail_reason = fail_reason
-        self.manage_transfers()
 
-    def incomplete(self, transfer: Transfer):
-        self._set_transfer_state(transfer, TransferState.INCOMPLETE)
+    async def incomplete(self, transfer: Transfer):
+        await self._set_transfer_state(transfer, TransferState.INCOMPLETE)
+        await self.manage_transfers()
 
-    def complete(self, transfer: Transfer):
-        logger.info(f"completing transfer : {transfer!r}")
-        self._set_transfer_state(transfer, TransferState.COMPLETE)
+    async def complete(self, transfer: Transfer):
+        await self._set_transfer_state(transfer, TransferState.COMPLETE)
+        await self.manage_transfers()
 
-    def abort(self, transfer: Transfer):
-        logger.info(f"aborting transfer : {transfer!r}")
-        self._set_transfer_state(transfer, TransferState.ABORTED)
+    async def abort(self, transfer: Transfer):
+        await self._set_transfer_state(transfer, TransferState.ABORTED)
+        await self.manage_transfers()
 
-    def fail(self, transfer: Transfer, reason: str = None):
-        logger.info(f"failing transfer, reason = {reason!r} : {transfer!r}")
-        self._set_transfer_state(
+    async def fail(self, transfer: Transfer, reason: str = None):
+        await self._set_transfer_state(
             transfer,
             TransferState.FAILED,
             fail_reason=reason
         )
+        await self.manage_transfers()
 
-    def uploading(self, transfer: Transfer):
-        logger.info(f"uploading starting : {transfer!r}")
-        self._set_transfer_state(transfer, TransferState.UPLOADING)
+    async def uploading(self, transfer: Transfer):
+        await self._set_transfer_state(transfer, TransferState.UPLOADING)
         self._network.upload_rate_limiter.transfer_amount += 1
+        await self.manage_transfers()
 
-    def downloading(self, transfer: Transfer):
-        logger.info(f"downloading starting : {transfer!r}")
-        self._set_transfer_state(transfer, TransferState.DOWNLOADING)
+    async def downloading(self, transfer: Transfer):
+        await self._set_transfer_state(transfer, TransferState.DOWNLOADING)
         self._network.download_rate_limiter.transfer_amount += 1
+        await self.manage_transfers()
 
-    def queue(self, transfer: Transfer, force: bool = False):
-        logger.debug(f"queueing transfer : {transfer!r}")
-        self._set_transfer_state(transfer, TransferState.QUEUED, force=force)
+    async def queue(self, transfer: Transfer, force: bool = False):
+        await self._set_transfer_state(transfer, TransferState.QUEUED, force=force)
+        await self._network.send_server_messages(
+            AddUser.Request(transfer.username)
+        )
+        await self.manage_transfers()
 
-    def add(self, transfer: Transfer) -> Transfer:
+    async def remotely_queue(self, transfer: Transfer):
+        await self._set_transfer_state(transfer, TransferState.REMOTELY_QUEUED)
+        await self.manage_transfers()
+
+    async def add(self, transfer: Transfer) -> Transfer:
         """Adds a transfer if it does not already exist, otherwise it returns
         the already existing transfer.
 
-        This will emit a TransferAddedEvent but only if the transfer did not
-        exist. This will also perform an AddUser command on the server in case
-        the transfer isn't finalized yet
+        This method will emit a `TransferAddedEvent` only if the transfer did
+        not exist and will also perform an `AddUser` command on the server in
+        case the transfer isn't finalized yet
 
         :return: either the transfer we have passed or the already existing
             transfer
@@ -541,16 +538,16 @@ class TransferManager:
                 return queued_transfer
 
         if not transfer.is_finalized():
-            self._network.send_server_messages(
+            await self._network.send_server_messages(
                 AddUser.Request(transfer.username)
             )
 
         logger.info(f"adding transfer : {transfer!r}")
         self._transfers.append(transfer)
-        self._event_bus.emit(TransferAddedEvent(transfer))
+        await self._event_bus.emit(TransferAddedEvent(transfer))
         return transfer
 
-    def remove(self, transfer: Transfer):
+    async def remove(self, transfer: Transfer):
         """Remove a transfer from the list of transfers. This will attempt to
         abort the transfer.
         """
@@ -559,7 +556,7 @@ class TransferManager:
         except ValueError:
             return
         else:
-            self.abort(transfer)
+            await self.abort(transfer)
 
     def get_uploads(self) -> List[Transfer]:
         return [transfer for transfer in self._transfers if transfer.is_upload()]
@@ -616,13 +613,13 @@ class TransferManager:
             return 0.0
         return sum(upload_speeds) / len(upload_speeds)
 
-    def get_place_in_queue(self, transfer: Transfer) -> int:
+    async def get_place_in_queue(self, transfer: Transfer) -> int:
         """Gets the place of the given upload in the transfer queue
 
         :return: The place in the queue, 0 if not in the queue a value equal or
             greater than 1 indicating the position otherwise
         """
-        _, uploads = self._get_queued_transfers()
+        _, uploads = await self._get_queued_transfers()
         try:
             return uploads.index(transfer)
         except ValueError:
@@ -637,33 +634,46 @@ class TransferManager:
         raise LookupError(
             f"transfer for user {username} and remote_path {remote_path} (direction={direction}) not found")
 
-    def manage_transfers(self):
+    async def manage_transfers(self):
         """Manages the transfers. This method analyzes the state of the current
         downloads/uploads and starts them up in case there are free slots
         available
         """
-        downloads, uploads = self._get_queued_transfers()
+        for transfer in self._transfers:
+            if transfer.state == TransferState.QUEUED and transfer.direction == TransferDirection.DOWNLOAD:
+                # import pdb; pdb.set_trace()
+                pass
+
+        downloads, uploads = await self._get_queued_transfers()
         free_upload_slots = self.get_free_upload_slots()
 
+        # Downloads will just get remotely queued
+        # logger.debug(f"downloads to queue remotely : {downloads!r}")
+        # logger.debug(f"uploads to start : {uploads!r}")
         for download in downloads:
-            self._initialize_download(download)
+            if not download._current_task:
+                download._current_task = asyncio.create_task(
+                    self._queue_remotely(download),
+                    name=f'queue-remotely-{task_counter()}'
+                )
+                download._current_task.add_done_callback(transfer._queue_remotely_task_complete)
 
         for upload in uploads[:free_upload_slots]:
-            self._initialize_upload(upload)
+            if not upload._current_task:
+                upload._current_task = asyncio.create_task(
+                    self._initialize_upload(upload),
+                    name=f'initialize-upload-{task_counter()}'
+                )
+                upload._current_task.add_done_callback(upload._upload_task_complete)
 
-    def _get_queued_transfers(self) -> Tuple[List[Transfer], List[Transfer]]:
-        """Returns all transfers eligable for being initialized"""
+    async def _get_queued_transfers(self) -> Tuple[List[Transfer], List[Transfer]]:
+        """Returns all transfers eligeble for being initialized"""
         queued_downloads = []
         queued_uploads = []
         for transfer in self._transfers:
             user = self._state.get_or_create_user(transfer.username)
             if user.status == UserStatus.OFFLINE:
                 continue
-            elif user.status == UserStatus.UNKNOWN:
-                self._network.send_server_messages(
-                    AddUser.Request(transfer.username)
-                )
-                pass
 
             if transfer.direction == TransferDirection.UPLOAD:
                 if transfer.state == TransferState.QUEUED:
@@ -679,7 +689,7 @@ class TransferManager:
 
         return queued_downloads, queued_uploads
 
-    def _rank_queued_uploads(self, uploads: List[Transfer]):
+    def _rank_queued_uploads(self, uploads: List[Transfer]) -> List[Transfer]:
         """Ranks the queued uploads based on certain parameters"""
         friends = self._settings.get('users.friends')
 
@@ -703,242 +713,253 @@ class TransferManager:
         ranking.sort(key=itemgetter(0))
         return list(reversed([upload for _, upload in ranking]))
 
-    def _request_place_in_queue(self, transfer: Transfer):
-        if transfer.direction != TransferDirection.DOWNLOAD:
-            logger.warning(
-                f"not requesting place in queue, transfer is not a download state (transfer={transfer!r})")
-            return
+    async def _queue_remotely(self, transfer: Transfer):
+        """Remotely queue the given transfer. If the message was successfully
+        delivered the transfer will go in REMOTELY_QUEUED state. Otherwise the
+        transfer will remain in QUEUED state
+        """
+        logger.debug(f"attempting to queue transfer remotely : {transfer!r}")
+        try:
+            await self._network.send_peer_messages(
+                transfer.username,
+                PeerTransferQueue.Request(transfer.remote_path)
+            )
 
-        if transfer.state != TransferState.QUEUED:
-            logger.warning(
-                f"not requesting place in queue, transfer is not in QUEUED state (transfer={transfer!r})")
-            return
+        except (ConnectionWriteError, PeerConnectionError) as exc:
+            logger.debug(f"failed to queue transfer remotely : {transfer!r} : {exc!r}")
+            transfer.increase_queue_attempts()
+            await self.queue(transfer)
 
-        self._network.send_peer_messages(
+        else:
+            transfer.reset_queue_attempts()
+            await self.remotely_queue(transfer)
+
+    async def _request_place_in_queue(self, transfer: Transfer):
+        await self._network.queue_peer_messages(
             transfer.username,
             PeerPlaceInQueueRequest.Request(transfer.remote_path)
         )
 
-    def _initialize_download(self, transfer: Transfer):
-        logger.debug(f"initializing download {transfer!r}")
-
-        self._network.send_peer_messages(
-            transfer.username,
-            ProtocolMessage(
-                PeerTransferQueue.Request(transfer.remote_path),
-                on_success=partial(self._on_transfer_queue_success, transfer),
-                on_failure=partial(self._on_transfer_queue_failed, transfer)
-            )
-        )
-
-    def _initialize_upload(self, transfer: Transfer):
+    async def _initialize_upload(self, transfer: Transfer):
         logger.debug(f"initializing upload {transfer!r}")
-        self._set_transfer_state(transfer, TransferState.INITIALIZING)
+        await self._set_transfer_state(transfer, TransferState.INITIALIZING)
 
         ticket = next(self._ticket_generator)
-        request = TransferRequest(ticket, transfer)
-        self._transfer_requests[ticket] = request
 
-        self._network.send_peer_messages(
-            transfer.username,
-            ProtocolMessage(
+        try:
+            await self._network.send_peer_messages(
+                transfer.username,
                 PeerTransferRequest.Request(
                     TransferDirection.DOWNLOAD.value,
                     ticket,
                     transfer.remote_path,
                     filesize=transfer.filesize
-                ),
-                on_failure=partial(self._on_upload_request_failed, request)
+                )
             )
-        )
 
-    def _complete_transfer_request(self, request: TransferRequest):
-        logger.info(f"completing transfer request : {request!r}")
-        del self._transfer_requests[request.ticket]
-
-    def _fail_transfer_request(self, request: TransferRequest):
-        logger.info(f"failing transfer request : {request!r}")
-        del self._transfer_requests[request.ticket]
-
-    def _on_transfer_queue_success(self, transfer: Transfer):
-        transfer.increase_queue_attempts()
-
-        # Set a job to request the place in queue
-        self._state.scheduler.add(
-            30,
-            self._request_place_in_queue,
-            args=[transfer, ],
-            times=1
-        )
-
-    def _on_transfer_queue_failed(self, transfer: Transfer):
-        """Called when we attempted to queue a download but it failed because we
-        couldn't deliver the message to the peer (peer was offline,
-        connection failed, ...).
-
-        Keep track of how many times this has failed, schedule to request again.
-        """
-        transfer.increase_queue_attempts()
-
-        # Calculate backoff
-        backoff = min(transfer.queue_attempts * 120, 600)
-        self._state.scheduler.add(
-            backoff,
-            self._initialize_download,
-            args=[transfer],
-            times=1
-        )
-
-    def _on_upload_request_failed(self, request: TransferRequest):
-        request.transfer.increase_upload_request_attempt()
-
-        self.queue(request.transfer, force=True)
-        self._fail_transfer_request(request)
-
-    def _on_connection_state_changed(self, event: ConnectionStateChangedEvent):
-
-        if isinstance(event.connection, PeerConnection):
-
-            if event.state == ConnectionState.CLOSED:
-                if event.connection.connection_type == PeerConnectionType.FILE:
-                    self._on_transfer_connection_closed(event.connection, close_reason=event.close_reason)
-
-    def _on_server_login(self, event: LoginEvent):
-        if event.success:
-            self.manage_transfers()
-
-    # Events coming from the connection (connection type 'F')
-    def _on_transfer_offset(self, event: TransferOffsetEvent):
-        """Called when the transfer offset has been received. This can only
-        occur during upload and denotes from which offset in the file we need
-        to start sending data
-        """
-        logger.info(f"received transfer offset (offset={event.offset})")
-
-        transfer = event.connection.transfer
-        if transfer is None:
-            logger.error(f"got a transfer offset for a connection without transfer. connection={event.connection!r}")
+        except (ConnectionWriteError, PeerConnectionError) as exc:
+            logger.debug(f"failed to send request to upload : {transfer!r} : {exc!r}")
+            await self.queue(transfer, force=True)
             return
 
-        transfer.set_offset(event.offset)
-        transfer.filesize = self._shares_manager.get_filesize(transfer.local_path)
-
-        event.connection.set_connection_state(PeerConnectionState.TRANSFERING)
-        self.uploading(transfer)
-
-    def _on_transfer_ticket(self, event: TransferTicketEvent):
-        """Called when the transfer ticket has been received. This can only
-        occur during download and denotes which transfer is going to be starting
-        on this connection. We respond here with the transfer offset after which
-        data transfer should start
-
-        :param ticket: ticket number
-        :param connection: connection on which the ticket was received
-        """
-        logger.info(f"got transfer ticket event {event}")
         try:
-            request = self._transfer_requests[event.ticket]
-            transfer = request.transfer
-        except KeyError:
-            logger.exception(f"got a ticket for an unknown transfer (ticket={event.ticket})")
-            return
-        else:
-            self._complete_transfer_request(request)
-
-        # We can only know the transfer when we get the ticket. Link them
-        # together here
-        transfer.connection = event.connection
-        event.connection.transfer = transfer
-
-        # Send the offset
-        event.connection.queue_messages(
-            ProtocolMessage(
-                uint64.serialize(transfer.calculate_offset()),
-                on_success=partial(self._on_transfer_offset_sent, event.connection)
+            connection, response = await asyncio.wait_for(
+                self._network.wait_for_peer_message(
+                    transfer.username,
+                    PeerTransferReply.Request,
+                    ticket=ticket
+                ),
+                TRANSFER_REPLY_TIMEOUT
             )
+        except asyncio.TimeoutError:
+            logger.debug(f"timeout waiting for transfer reply : {transfer!r}")
+            await self.queue(transfer, force=True)
+            return
+
+        if not response.allowed:
+            await self.fail(transfer, reason=response.reason)
+            return
+
+        try:
+            connection = await self._network.create_peer_connection(
+                transfer.username,
+                PeerConnectionType.FILE,
+                initial_state=PeerConnectionState.AWAITING_OFFSET
+            )
+
+        except PeerConnectionError:
+            logger.info(f"failed to create peer connection for transfer : {transfer!r}")
+            await self.queue(transfer, force=True)
+            return
+
+        # Send transfer ticket
+        try:
+            await connection.send_message(uint32.serialize(ticket))
+        except ConnectionWriteError:
+            logger.info(f"failed to send transfer ticket : {transfer!r}")
+            await self.queue(transfer, force=True)
+            return
+
+        connection.set_connection_state(PeerConnectionState.AWAITING_OFFSET)
+
+        # Receive transfer offset
+        try:
+            offset = await connection.receive_transfer_offset()
+        except ConnectionReadError:
+            logger.info(f"failed to receive transfer offset : {transfer!r}")
+            await self.queue(transfer, force=True)
+            return
+
+        else:
+            logger.debug(f"received offset {offset} for transfer : {transfer!r}")
+            transfer.set_offset(offset)
+
+        await self._upload_file(transfer, connection)
+
+        # Send transfer speed
+        await self._network.queue_server_messages(
+            SendUploadSpeed.Request(int(self.get_average_upload_speed()))
         )
 
-    def _on_transfer_offset_sent(self, connection: PeerConnection):
-        """Called when the transfer offset has been successfully delivered to
-        the peer (download)
+    async def _upload_file(self, transfer: Transfer, connection: PeerConnection):
+        """Uploads the transfer over the connection. This method will set the
+        appropriate states on the passed `transfer` and `connection` objects.
+
+        :param transfer: `Transfer` object
+        :param connection: connection on which file should be sent
         """
         connection.set_connection_state(PeerConnectionState.TRANSFERING)
-        self.downloading(connection.transfer)
+        await self.uploading(transfer)
+        try:
+            async with aiofiles.open(transfer.local_path, 'rb') as handle:
+                await handle.seek(transfer.get_offset())
+                await connection.send_file(
+                    handle,
+                    partial(self._upload_progress_callback, transfer)
+                )
 
-    def _on_transfer_data_received(self, event: TransferDataReceivedEvent):
-        """Called when data has been received in the context of a transfer.
-        If the download path hasn't been set yet (ie. it is the first data we
-        received for this transfer) it will be determined and data will start to
-        be written.
+        except OSError:
+            logger.exception(f"error opening on local file : {transfer.local_path}")
+            await self.fail(transfer)
+            await connection.disconnect(CloseReason.REQUESTED)
+
+        except ConnectionWriteError:
+            logger.exception(f"error writing to socket : {transfer!r}")
+            await self.fail(transfer)
+            await self._network.queue_peer_messages(
+                PeerUploadFailed.Request(transfer.remote_path)
+            )
+        else:
+            await connection.receive_until_eof(raise_exception=False)
+            if transfer.is_transfered():
+                await self.complete(transfer)
+            else:
+                await self.fail(transfer)
+
+    async def _download_file(self, transfer: Transfer, connection: PeerConnection):
+        """Downloads the transfer over the connection. This method will set the
+        appropriate states on the passed `transfer` and `connection` objects.
+
+        :param transfer: `Transfer` object
+        :param connection: connection on which file should be received
         """
-        transfer = event.connection.transfer
+        connection.set_connection_state(PeerConnectionState.TRANSFERING)
+        await self.downloading(transfer)
+        try:
+            async with aiofiles.open(transfer.local_path, 'ab') as handle:
+                await connection.receive_file(
+                    handle,
+                    transfer.filesize - transfer._offset,
+                    partial(self._download_progress_callback, transfer)
+                )
 
-        # Set the local download path in case it was not yet set
-        if transfer.local_path is None:
-            download_path = self._shares_manager.get_download_path(transfer.remote_path)
-            transfer.local_path = download_path
-            logger.info(f"started receiving transfer data, download path : {download_path}")
+        except OSError:
+            logger.exception(f"error opening on local file : {transfer.local_path}")
+            await connection.disconnect(CloseReason.REQUESTED)
+            await self.fail(transfer)
 
-        transfer.write(event.data)
+        except ConnectionReadError:
+            logger.exception(f"error reading from socket : {transfer:!r}")
+            await self.incomplete(transfer)
 
-        transfer.add_speed_log_entry(len(event.data))
+        else:
+            await connection.disconnect(CloseReason.REQUESTED)
+            if transfer.is_transfered():
+                await self.complete(transfer)
+            else:
+                await self.incomplete(transfer)
 
-        if transfer.is_transfered():
-            self.complete(transfer)
+    def _upload_progress_callback(self, transfer: Transfer, data: bytes):
+        transfer.bytes_transfered += len(data)
+        transfer.add_speed_log_entry(len(data))
 
-    def _on_transfer_data_sent(self, event: TransferDataSentEvent):
-        """Called when data was sent to the peer during upload
+    def _download_progress_callback(self, transfer: Transfer, data: bytes):
+        transfer.bytes_transfered += len(data)
+        transfer.add_speed_log_entry(len(data))
 
-        :param bytes_sent: amount of bytes sent
-        :param connection: connection over which the data was sent
+    async def _handle_incoming_file_connection(self, connection: PeerConnection):
+        """Called only when a file connection was opened with PeerInit. Usually
+        this means the other peer attempting to upload a file but a request to
+        upload to the other peer is also handled here.
+
+        This method handles:
+        * receiving the ticket
+        * calculating and sending the file offset
+        * downloading/uploading
+
+        The received `ticket` must be present in the `_transfer_requests` (a
+        `PeerTransferRequest` must have preceded the opening of the connection)
         """
-        transfer = event.connection.transfer
-
-        transfer.bytes_transfered += event.bytes_sent
-
-        transfer.add_speed_log_entry(event.bytes_sent)
-
-    def _on_transfer_connection_closed(self, connection: PeerConnection, close_reason: CloseReason = None):
-        """Called when a file connection is closed"""
-        transfer = connection.transfer
-        if transfer is None:
-            logger.warning(
-                f"couldn't find transfer associated with closed connection (connection={connection!r})")
+        # Wait for the transfer ticket
+        try:
+            ticket = await connection.receive_transfer_ticket()
+        except ConnectionReadError:
+            logger.warning(f"failed to receive transfer ticket on file connection : {connection.hostname}:{connection.port}")
+            await connection.disconnect(CloseReason.REQUESTED)
             return
 
-        if transfer.is_transfered():
-            if transfer.is_upload():
-                # An upload is only complete when the other side confirms it by
-                # closing the connection
-                self.complete(transfer)
-
-                self._network.send_server_messages(
-                    SendUploadSpeed.Request(int(self.get_average_upload_speed()))
-                )
+        # Get the transfer from the transfer requests
+        try:
+            transfer = self._transfer_requests.pop(ticket).transfer
+        except KeyError:
+            logger.warning(f"file connection sent unknown transfer ticket: {ticket!r}")
+            return
         else:
-            self.incomplete(transfer)
-            if transfer.is_upload():
-                # Inform downloader that upload has failed
-                self._network.send_peer_messages(
-                    transfer.username,
-                    PeerUploadFailed.Request(transfer.remote_path)
-                )
+            transfer._current_task = asyncio.current_task()
+            transfer._current_task.add_done_callback(
+                transfer._download_task_complete)
+            await self._set_transfer_state(transfer, TransferState.INITIALIZING)
 
-    def _on_message_received(self, event: MessageReceivedEvent):
+        # Calculate and send the file offset
+        offset = transfer.calculate_offset()
+        try:
+            await connection.send_message(uint64(offset).serialize())
+        except ConnectionWriteError:
+            logger.warning(f"failed to send offset: {transfer!r}")
+            await self.incomplete(transfer)
+            return
+
+        # Start transfer
+        if transfer.direction == TransferDirection.DOWNLOAD:
+            await self._download_file(transfer, connection)
+        else:
+            await self._upload_file(transfer, connection)
+
+    async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message
         if message.__class__ in self.MESSAGE_MAP:
-            self.MESSAGE_MAP[message.__class__](message, event.connection)
+            await self.MESSAGE_MAP[message.__class__](message, event.connection)
 
     @on_message(AddUser.Response)
-    def _on_add_user(self, message: AddUser.Response, connection: PeerConnection):
-        self.manage_transfers()
+    async def _on_add_user(self, message: AddUser.Response, connection: PeerConnection):
+        await self.manage_transfers()
 
     @on_message(GetUserStatus.Response)
-    def _on_get_user_status(self, message: GetUserStatus.Response, connection: PeerConnection):
-        self.manage_transfers()
+    async def _on_get_user_status(self, message: GetUserStatus.Response, connection: PeerConnection):
+        await self.manage_transfers()
 
     @on_message(PeerTransferQueue.Request)
-    def _on_peer_transfer_queue(self, message: PeerTransferQueue.Request, connection: PeerConnection):
+    async def _on_peer_transfer_queue(self, message: PeerTransferQueue.Request, connection: PeerConnection):
         """The peer is requesting to transfer a file to them or at least put it
         in the queue. This is usually the first message in the transfer process.
 
@@ -948,7 +969,7 @@ class TransferManager:
         """
         logger.info(f"PeerTransferQueue : {message.filename}")
 
-        transfer = self.add(
+        transfer = await self.add(
             Transfer(
                 username=connection.username,
                 remote_path=message.filename,
@@ -956,26 +977,33 @@ class TransferManager:
             )
         )
 
-        # Check if the shared file exists. Otherwise fail the error
+        # Check if the shared file exists
         try:
             shared_item = self._shares_manager.get_shared_item(message.filename)
-            transfer.local_path = self._shares_manager.resolve_path(shared_item)
-            transfer.filesize = self._shares_manager.get_filesize(transfer.local_path)
-        except LookupError:
-            self.fail(transfer, reason="File not shared.")
-            self._network.send_peer_messages(
-                connection.username,
+            transfer.local_path = shared_item.get_absolute_path()
+            transfer.filesize = self._shares_manager.get_filesize(shared_item)
+        except FileNotFoundError:
+            await self.fail(transfer, reason="File not shared.")
+            await connection.queue_message(
                 PeerTransferQueueFailed.Request(
                     filename=message.filename,
                     reason=transfer.fail_reason
-                ),
-                connection=connection
+                )
             )
         else:
-            self.queue(transfer)
+            await self.queue(transfer)
+
+    async def _on_peer_initialized(self, event: PeerInitializedEvent):
+        """Handle incoming file connections that we did not request"""
+        if event.connection.connection_type == PeerConnectionType.FILE:
+            if not event.requested:
+                asyncio.create_task(
+                    self._handle_incoming_file_connection(event.connection),
+                    name=f'incoming-file-connection-task-{task_counter()}'
+                )
 
     @on_message(PeerTransferRequest.Request)
-    def _on_peer_transfer_request(self, message: PeerTransferRequest.Request, connection: PeerConnection):
+    async def _on_peer_transfer_request(self, message: PeerTransferRequest.Request, connection: PeerConnection):
         """The PeerTransferRequest message is sent when the peer is ready to
         transfer the file. The message contains more information about the
         transfer.
@@ -1004,17 +1032,15 @@ class TransferManager:
                 # Send before queueing: queueing will trigger the transfer
                 # manager to re-asses the tranfers and possibly immediatly start
                 # the upload
-                self._network.send_peer_messages(
-                    connection.username,
+                await connection.queue_message(
                     PeerTransferReply.Request(
                         ticket=message.ticket,
                         allowed=False,
                         reason='Queued'
-                    ),
-                    connection=connection
+                    )
                 )
-                transfer = self.add(transfer)
-                self.queue(transfer)
+                transfer = await self.add(transfer)
+                await self.queue(transfer)
             else:
                 # The peer is asking us to upload.
                 # Possibly needs a check for state here, perhaps:
@@ -1022,28 +1048,24 @@ class TransferManager:
                 # - ABORTED : Aborted (or Cancelled?)
                 # - COMPLETE : Should go back to QUEUED (reset values for transfer)?
                 # - INCOMPLETE : Should go back to QUEUED?
-                self._network.send_peer_messages(
-                    connection.username,
+                await connection.queue_message(
                     PeerTransferReply.Request(
                         ticket=message.ticket,
                         allowed=False,
                         reason='Queued'
-                    ),
-                    connection=connection
+                    )
                 )
 
         else:
             # Download
             if transfer is None:
                 # A download which we don't have in queue, assume we removed it
-                self._network.send_peer_messages(
-                    connection.username,
+                await connection.queue_message(
                     PeerTransferReply.Request(
                         ticket=message.ticket,
                         allowed=False,
                         reason='Cancelled'
-                    ),
-                    connection=connection
+                    )
                 )
             else:
                 # All clear to download
@@ -1054,60 +1076,39 @@ class TransferManager:
                 self._transfer_requests[message.ticket] = request
 
                 transfer.filesize = message.filesize
+                if transfer.local_path is None:
+                    download_path = self._shares_manager.get_download_path(transfer.remote_path)
+                    transfer.local_path = download_path
 
-                logger.debug(f"PeerTransferRequest : sending PeerTransferReply (ticket={message.ticket})")
-                self._network.send_peer_messages(
-                    connection.username,
+                await connection.queue_message(
                     PeerTransferReply.Request(
                         ticket=message.ticket,
                         allowed=True
-                    ),
-                    connection=connection
+                    )
                 )
 
-    @on_message(PeerTransferReply.Request)
-    def _on_peer_transfer_reply(self, message: PeerTransferReply.Request, connection: PeerConnection):
-        try:
-            request = self._transfer_requests[message.ticket]
-        except KeyError:
-            logger.warning(f"got a ticket for an unknown transfer request (ticket={message.ticket})")
-            return
-        else:
-            transfer = request.transfer
+    # @on_message(PeerTransferReply.Request)
+    # async def _on_peer_transfer_reply(self, message: PeerTransferReply.Request, connection: PeerConnection):
+    #     try:
+    #         request = self._transfer_requests[message.ticket]
+    #     except KeyError:
+    #         logger.warning(f"got a ticket for an unknown transfer request (ticket={message.ticket})")
+    #         return
+    #     else:
+    #         transfer = request.transfer
 
-        if not message.allowed:
-            if message.reason == 'Queued':
-                self.queue(transfer)
-            elif message.reason == 'Complete':
-                pass
-            else:
-                self.fail(transfer, reason=message.reason)
-                self._fail_transfer_request(request)
-            return
-
-        # Init the file connection for transfering the file
-        self._network.init_peer_connection(
-            transfer.username,
-            typ=PeerConnectionType.FILE,
-            transfer=transfer,
-            messages=[
-                ProtocolMessage(
-                    uint32.serialize(message.ticket),
-                    on_failure=partial(self._on_file_connection_failed, request)
-                )
-            ]
-        )
-
-    def _on_file_connection_failed(self, request: TransferRequest):
-        logger.debug(f"failed to initialize file connection for {request!r}")
-        self._network.send_peer_messages(
-            request.transfer.username,
-            PeerUploadFailed.Request(request.transfer.remote_path)
-        )
-        self._fail_transfer_request(request)
+    #     if not message.allowed:
+    #         if message.reason == 'Queued':
+    #             self.queue(transfer)
+    #         elif message.reason == 'Complete':
+    #             pass
+    #         else:
+    #             self.fail(transfer, reason=message.reason)
+    #             self._fail_transfer_request(request)
+    #         return
 
     @on_message(PeerPlaceInQueueRequest.Request)
-    def _on_peer_place_in_queue_request(self, message: PeerPlaceInQueueRequest.Request, connection: PeerConnection):
+    async def _on_peer_place_in_queue_request(self, message: PeerPlaceInQueueRequest.Request, connection: PeerConnection):
         filename = message.filename
         try:
             transfer = self.get_transfer(
@@ -1118,16 +1119,13 @@ class TransferManager:
         except LookupError:
             logger.error(f"PeerPlaceInQueueRequest : could not find transfer (upload) for {filename} from {connection.username}")
         else:
-            place = self.get_place_in_queue(transfer)
+            place = await self.get_place_in_queue(transfer)
             if place:
-                self._network.send_peer_messages(
-                    connection.username,
-                    PeerPlaceInQueueReply.Request(filename, place),
-                    connection=connection
-                )
+                await connection.queue_message(
+                    PeerPlaceInQueueReply.Request(filename, place))
 
     @on_message(PeerPlaceInQueueReply.Request)
-    def _on_peer_place_in_queue_reply(self, message: PeerPlaceInQueueReply.Request, connection: PeerConnection):
+    async def _on_peer_place_in_queue_reply(self, message: PeerPlaceInQueueReply.Request, connection: PeerConnection):
         try:
             transfer = self.get_transfer(
                 connection.username,
@@ -1140,7 +1138,7 @@ class TransferManager:
             transfer.place_in_queue = message.place
 
     @on_message(PeerUploadFailed.Request)
-    def _on_peer_upload_failed(self, message: PeerUploadFailed.Request, connection: PeerConnection):
+    async def _on_peer_upload_failed(self, message: PeerUploadFailed.Request, connection: PeerConnection):
         """Called when there is a problem on their end uploading the file. This
         is actually a common message that happens when we close the connection
         before the upload is finished
@@ -1154,10 +1152,10 @@ class TransferManager:
         except LookupError:
             logger.error(f"PeerUploadFailed : could not find transfer (download) for {message.filename} from {connection.username}")
         else:
-            self.fail(transfer)
+            await self.fail(transfer)
 
     @on_message(PeerTransferQueueFailed.Request)
-    def _on_peer_transfer_queue_failed(self, message: PeerTransferQueueFailed.Request, connection: PeerConnection):
+    async def _on_peer_transfer_queue_failed(self, message: PeerTransferQueueFailed.Request, connection: PeerConnection):
         filename = message.filename
         reason = message.reason
         try:
@@ -1166,4 +1164,4 @@ class TransferManager:
         except LookupError:
             logger.error(f"PeerTransferQueueFailed : could not find transfer for {filename} from {connection.username}")
         else:
-            self.fail(transfer, reason=reason)
+            await self.fail(transfer, reason=reason)

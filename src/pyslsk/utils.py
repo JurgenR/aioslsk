@@ -1,3 +1,4 @@
+import itertools
 import logging
 from typing import List
 
@@ -5,6 +6,7 @@ from pyslsk.protocol.primitives import Attribute
 
 
 logger = logging.getLogger(__name__)
+task_counter = itertools.count(1).__next__
 
 
 def try_decoding(value: bytes):

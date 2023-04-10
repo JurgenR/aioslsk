@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -31,14 +31,14 @@ DEFAULT_USERNAME = "username"
 
 @pytest.fixture
 def manager(tmpdir):
-    network = Mock()
+    network = AsyncMock()
     network.upload_rate_limiter = MagicMock()
     network.download_rate_limiter = MagicMock()
     return TransferManager(
         State(),
         Configuration(tmpdir, tmpdir),
         Settings(DEFAULT_SETTINGS),
-        Mock(), # event bus
+        AsyncMock(), # event bus
         Mock(), # internal event bus
         None, # file manager
         network # network
@@ -105,9 +105,10 @@ class TestTransfer:
 
 class TestTransferManager:
 
-    def test_whenAddTransfer_shouldAddTransferAndAddUser(self, manager: TransferManager):
+    @pytest.mark.asyncio
+    async def test_whenAddTransfer_shouldAddTransferAndAddUser(self, manager: TransferManager):
         transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
-        manager.add(transfer)
+        await manager.add(transfer)
 
         assert transfer.state == TransferState.VIRGIN
         assert transfer in manager.transfers
@@ -115,69 +116,76 @@ class TestTransferManager:
             AddUser.Request(DEFAULT_USERNAME)
         )
 
-    def test_whenQueueTransfer_shouldSetQueuedState(self, manager: TransferManager):
+    @pytest.mark.asyncio
+    async def test_whenQueueTransfer_shouldSetQueuedState(self, manager: TransferManager):
         transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
-        manager.add(transfer)
+        await manager.add(transfer)
 
-        manager.queue(transfer)
+        await manager.queue(transfer)
 
         assert transfer.state == TransferState.QUEUED
 
-    def test_whenDownloadingTransfer_shouldSetDownloadingState(self, manager: TransferManager):
+    @pytest.mark.asyncio
+    async def test_whenDownloadingTransfer_shouldSetDownloadingState(self, manager: TransferManager):
         transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
-        manager.add(transfer)
+        await manager.add(transfer)
 
         transfer.set_state(TransferState.QUEUED)
-        manager.downloading(transfer)
+        await manager.downloading(transfer)
 
         assert transfer.state == TransferState.DOWNLOADING
 
-    def test_whenUploadingTransfer_shouldSetUploadingState(self, manager: TransferManager):
+    @pytest.mark.asyncio
+    async def test_whenUploadingTransfer_shouldSetUploadingState(self, manager: TransferManager):
         transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
-        manager.add(transfer)
+        await manager.add(transfer)
 
         transfer.set_state(TransferState.QUEUED)
-        manager.uploading(transfer)
+        await manager.uploading(transfer)
 
         assert transfer.state == TransferState.UPLOADING
 
-    def test_whenCompleteTransfer_shouldSetCompleteState(self, manager: TransferManager):
+    @pytest.mark.asyncio
+    async def test_whenCompleteTransfer_shouldSetCompleteState(self, manager: TransferManager):
         transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
-        manager.add(transfer)
+        await manager.add(transfer)
 
         transfer.set_state(TransferState.QUEUED)
         transfer.set_state(TransferState.DOWNLOADING)
-        manager.complete(transfer)
+        await manager.complete(transfer)
 
         assert transfer.state == TransferState.COMPLETE
 
-    def test_whenIncompleteTransfer_shouldSetIncompleteState(self, manager: TransferManager):
+    @pytest.mark.asyncio
+    async def test_whenIncompleteTransfer_shouldSetIncompleteState(self, manager: TransferManager):
         transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
-        manager.add(transfer)
+        await manager.add(transfer)
 
         transfer.set_state(TransferState.QUEUED)
         transfer.set_state(TransferState.DOWNLOADING)
-        manager.incomplete(transfer)
+        await manager.incomplete(transfer)
 
         assert transfer.state == TransferState.INCOMPLETE
 
-    def test_whenAbortTransfer_shouldSetAbortState(self, manager: TransferManager):
+    @pytest.mark.asyncio
+    async def test_whenAbortTransfer_shouldSetAbortState(self, manager: TransferManager):
         transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
-        manager.add(transfer)
+        await manager.add(transfer)
 
         transfer.set_state(TransferState.QUEUED)
         transfer.set_state(TransferState.DOWNLOADING)
-        manager.abort(transfer)
+        await manager.abort(transfer)
 
         assert transfer.state == TransferState.ABORTED
 
-    def test_whenFailTransfer_shouldSetFailState(self, manager: TransferManager):
+    @pytest.mark.asyncio
+    async def test_whenFailTransfer_shouldSetFailState(self, manager: TransferManager):
         transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
-        manager.add(transfer)
+        await manager.add(transfer)
 
         transfer.set_state(TransferState.QUEUED)
         transfer.set_state(TransferState.DOWNLOADING)
-        manager.fail(transfer, reason="nok")
+        await manager.fail(transfer, reason="nok")
 
         assert transfer.state == TransferState.FAILED
         assert transfer.fail_reason == "nok"

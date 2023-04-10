@@ -18,7 +18,7 @@ class User:
     description: str = None
     picture: str = None
 
-    status: UserStatus = UserStatus.OFFLINE
+    status: UserStatus = UserStatus.UNKNOWN
     privileged: bool = False
 
     avg_speed: int = None
@@ -47,9 +47,17 @@ class Room:
         if user not in self.users:
             self.users.append(user)
 
+    def remove_user(self, user: User):
+        if user in self.users:
+            self.users.remove(user)
+
     def add_operator(self, user: User):
         if user not in self.operators:
             self.operators.append(user)
+
+    def remove_operator(self, user: User):
+        if user in self.operators:
+            self.operators.remove(user)
 
 
 @dataclass

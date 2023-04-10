@@ -1,22 +1,12 @@
 from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Deque, Dict, List
+from typing import TYPE_CHECKING, Deque, Dict
 
-from .scheduler import Scheduler
 from .model import ChatMessage, Room, User
 
 if TYPE_CHECKING:
-    from .connection import PeerConnection
     from .search import ReceivedSearch, SearchQuery
-
-
-@dataclass
-class DistributedPeer:
-    username: str
-    connection: PeerConnection
-    branch_level: int = None
-    branch_root: int = None
 
 
 @dataclass
@@ -29,14 +19,6 @@ class State:
     rooms: Dict[str, Room] = field(default_factory=dict)
     users: Dict[str, User] = field(default_factory=dict)
     private_messages: Dict[int, ChatMessage] = field(default_factory=dict)
-
-    # Distributed network related
-    potential_parents: List[str] = field(default_factory=list)
-    """List of the last potential parents received by the PotentialParents
-    commands
-    """
-    parent: DistributedPeer = None
-    children: List[DistributedPeer] = field(default_factory=list)
 
     # Server vars
     parent_min_speed: int = 0
@@ -51,10 +33,7 @@ class State:
     received_searches: Deque[ReceivedSearch] = field(default_factory=lambda: deque(list(), 500))
     search_queries: Dict[int, SearchQuery] = field(default_factory=dict)
 
-    # Global state
-    scheduler: Scheduler = None
-
-    def get_or_create_user(self, username) -> User:
+    def get_or_create_user(self, username: str) -> User:
         try:
             return self.users[username]
         except KeyError:
@@ -62,7 +41,7 @@ class State:
             self.users[username] = user
             return user
 
-    def get_or_create_room(self, room_name) -> Room:
+    def get_or_create_room(self, room_name: str) -> Room:
         try:
             return self.rooms[room_name]
         except KeyError:

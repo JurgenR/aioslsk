@@ -1,24 +1,21 @@
 from __future__ import annotations
+import asyncio
 import logging
-import threading
 from typing import List, Union
 
 from .configuration import Configuration
 from .events import EventBus, InternalEventBus
 from .shares import (
     SharesManager,
-    SharesIndexer,
     SharesShelveStorage,
     SharesStorage,
 )
 from .model import Room, User
-from .network import Network
-from .protocol.messages import FileSearch
+from .network.network import Network
 from .peer import PeerManager
 from .server_manager import ServerManager
-from .scheduler import Job, Scheduler
-from .state import State
 from .search import SearchQuery
+from .state import State
 from .settings import Settings
 from .transfer import Transfer, TransferDirection, TransferManager
 from .utils import ticket_generator
@@ -31,7 +28,7 @@ DEFAULT_SETTINGS_NAME = 'pyslsk'
 logger = logging.getLogger(__name__)
 
 
-class SoulSeek(threading.Thread):
+class SoulSeek:
 
     def __init__(self, configuration: Configuration, event_bus: EventBus = None):
         super().__init__()
@@ -39,38 +36,24 @@ class SoulSeek(threading.Thread):
         self.settings: Settings = configuration.load_settings(DEFAULT_SETTINGS_NAME)
 
         self._ticket_generator = ticket_generator()
-        self._stop_event = threading.Event()
+        self._stop_event: asyncio.Event = None
 
         self.events: EventBus = event_bus or EventBus()
         self.internal_events: InternalEventBus = InternalEventBus()
 
         self.state: State = State()
-        self.state.scheduler = Scheduler()
 
         self._network: Network = Network(
             self.state,
             self.settings,
-            self.internal_events
+            self.internal_events,
+            self._stop_event
         )
 
-        self._cache_expiration_job = Job(60, self._network.expire_caches)
-        self.state.scheduler.add_job(self._cache_expiration_job)
-
-        shares_indexer: SharesIndexer = SharesIndexer()
         shares_storage: SharesStorage = SharesShelveStorage(self.configuration.data_directory)
         self.shares_manager: SharesManager = SharesManager(
             self.settings,
-            shares_indexer,
             shares_storage
-        )
-        # Perform the initial read of the index from storage, restart the
-        self.shares_manager.read_items_from_storage()
-        self.shares_manager.build_term_map(rebuild=True)
-        # Schedule a task to run as soon as the event loop starts
-        self.state.scheduler.add(0, self.shares_manager.load_from_settings, times=1)
-        self.state.scheduler.add(
-            self.settings.get('sharing.index.store_interval'),
-            self.shares_manager.write_items_to_storage
         )
 
         self.transfer_manager: TransferManager = TransferManager(
@@ -82,8 +65,6 @@ class SoulSeek(threading.Thread):
             self.shares_manager,
             self._network
         )
-        self.transfer_manager.read_transfers_from_storage()
-
         self.peer_manager: PeerManager = PeerManager(
             self.state,
             self.settings,
@@ -102,43 +83,56 @@ class SoulSeek(threading.Thread):
             self._network
         )
 
-        self._loops = [
-            self._network,
-            self.state.scheduler
-        ]
+    async def start(self):
+        # Allows creating client before actually calling asyncio.run(client.start())
+        # see https://stackoverflow.com/questions/55918048/asyncio-semaphore-runtimeerror-task-got-future-attached-to-a-different-loop
+        loop = asyncio.get_running_loop()
+        loop.set_exception_handler(self._exception_handler)
 
-    def run(self):
-        super().run()
+        self._stop_event = asyncio.Event()
+        self._network._stop_event = self._stop_event
 
-        self._network.initialize()
-        while not self._stop_event.is_set():
-            for loop in self._loops:
-                try:
-                    loop.loop()
-                except Exception:
-                    logger.exception(f"exception running loop {loop!r}")
+        await self.start_shares_manager()
 
-        for loop in self._loops:
-            loop.exit()
+        await self.connect()
 
-    def stop(self):
-        logging.info("signaling client to exit")
-        self._stop_event.set()
-        if self.is_alive():
-            logger.debug(f"wait for thread {self!r} to finish")
-            self.join(timeout=30)
-            if self.is_alive():
-                logger.warning(f"thread is still alive after 30s : {self!r}")
+        await self.start_transfer_manager()
+
+    async def connect(self):
+        await self._network.initialize()
+        await self.server_manager.login(
+            self.settings.get('credentials.username'),
+            self.settings.get('credentials.password')
+        )
+
+    async def start_shares_manager(self):
+        self.shares_manager.read_cache()
+        self.shares_manager.load_from_settings()
+        asyncio.create_task(self.shares_manager.scan())
+
+    async def start_transfer_manager(self):
+        await self.transfer_manager.read_transfers_from_storage()
+
+    async def run_until_stopped(self):
+        await self._stop_event.wait()
+        await self._network.disconnect()
+
+        logger.debug(f"tasks after disconnect : {asyncio.all_tasks()}")
 
         # Writing database needs to be last, as transfers need to go into the
         # incomplete state if they were still transfering
         self.transfer_manager.write_transfers_to_storage()
 
-        self.shares_manager.indexer.stop()
+    async def stop(self):
+        logger.info("signaling client to exit")
+        self._stop_event.set()
+        self.peer_manager.stop()
+        self.transfer_manager.stop()
+        self.shares_manager.write_cache()
 
-    @property
-    def connections(self):
-        return self._network.get_connections()
+    def _exception_handler(self, loop, context):
+        message = f"unhandled exception on loop {loop!r} : context : {context!r}"
+        logger.exception(message, exc_info=context.get('exception', None))
 
     @property
     def transfers(self):
@@ -147,17 +141,17 @@ class SoulSeek(threading.Thread):
     def save_settings(self):
         self.configuration.save_settings(DEFAULT_SETTINGS_NAME, self.settings)
 
-    def download(self, user: Union[str, User], filename: str):
+    async def download(self, user: Union[str, User], filename: str):
         if isinstance(user, User):
             user = user.name
-        transfer = self.transfer_manager.add(
+        transfer = await self.transfer_manager.add(
             Transfer(
                 user,
                 filename,
                 TransferDirection.DOWNLOAD
             )
         )
-        self.transfer_manager.queue(transfer)
+        await self.transfer_manager.queue(transfer)
         return transfer
 
     def get_uploads(self) -> List[Transfer]:
@@ -166,58 +160,53 @@ class SoulSeek(threading.Thread):
     def get_downloads(self) -> List[Transfer]:
         return self.transfer_manager.get_downloads()
 
-    def remove_transfer(self, transfer: Transfer):
-        self.transfer_manager.remove(transfer)
+    async def remove_transfer(self, transfer: Transfer):
+        await self.transfer_manager.remove(transfer)
 
-    def abort_transfer(self, transfer: Transfer):
-        self.transfer_manager.abort(transfer)
+    async def abort_transfer(self, transfer: Transfer):
+        await self.transfer_manager.abort(transfer)
 
-    def queue_transfer(self, transfer: Transfer):
-        self.transfer_manager.queue(transfer)
+    async def queue_transfer(self, transfer: Transfer):
+        await self.transfer_manager.queue(transfer)
 
-    def join_room(self, room: Union[str, Room]):
+    async def join_room(self, room: Union[str, Room]):
         if isinstance(room, Room):
-            self.server_manager.join_room(room.name)
+            await self.server_manager.join_room(room.name)
         else:
-            self.server_manager.join_room(room)
+            await self.server_manager.join_room(room)
 
-    def get_room_list(self):
-        self.server_manager.get_room_list()
+    async def get_room_list(self):
+        await self.server_manager.get_room_list()
 
-    def leave_room(self, room: Union[str, Room]):
+    async def leave_room(self, room: Union[str, Room]):
         if isinstance(room, Room):
-            self.server_manager.leave_room(room.name)
+            await self.server_manager.leave_room(room.name)
         else:
-            self.server_manager.leave_room(room)
+            await self.server_manager.leave_room(room)
 
-    def set_room_ticker(self, room: Union[str, Room]):
+    async def set_room_ticker(self, room: Union[str, Room]):
         if isinstance(room, Room):
-            self.server_manager.set_room_ticker(room.name)
+            await self.server_manager.set_room_ticker(room.name)
         else:
-            self.server_manager.set_room_ticker(room)
+            await self.server_manager.set_room_ticker(room)
 
-    def send_private_message(self, user: Union[str, User], message: str):
+    async def send_private_message(self, user: Union[str, User], message: str):
         if isinstance(user, User):
-            self.server_manager.send_private_message(user.name, message)
+            await self.server_manager.send_private_message(user.name, message)
         else:
-            self.server_manager.send_private_message(user, message)
+            await self.server_manager.send_private_message(user, message)
 
-    def send_room_message(self, room: Union[str, Room], message: str):
+    async def send_room_message(self, room: Union[str, Room], message: str):
         if isinstance(room, Room):
-            self.server_manager.send_room_message(room.name, message)
+            await self.server_manager.send_room_message(room.name, message)
         else:
-            self.server_manager.send_room_message(room, message)
+            await self.server_manager.send_room_message(room, message)
 
-    def search(self, query: str):
+    async def search(self, query: str) -> SearchQuery:
         """Performs a search, returns the generated ticket number for the search
         """
         logger.info(f"Starting search for query: {query}")
-        ticket = next(self._ticket_generator)
-        self._network.send_server_messages(
-            FileSearch.Request(ticket, query)
-        )
-        self.state.search_queries[ticket] = SearchQuery(ticket=ticket, query=query)
-        return ticket
+        return await self.server_manager.search(query)
 
     def get_search_results_by_ticket(self, ticket: int):
         """Returns all search results for given ticket"""
@@ -226,45 +215,45 @@ class SoulSeek(threading.Thread):
     def remove_search_results_by_ticket(self, ticket: int):
         return self.state.search_queries.pop(ticket)
 
-    def get_user_stats(self, user: Union[str, User]):
+    async def get_user_stats(self, user: Union[str, User]):
         if isinstance(user, User):
-            self.server_manager.get_user_stats(user.name)
+            await self.server_manager.get_user_stats(user.name)
         else:
-            self.server_manager.get_user_stats(user)
+            await self.server_manager.get_user_stats(user)
 
-    def get_user_status(self, user: Union[str, User]):
+    async def get_user_status(self, user: Union[str, User]):
         if isinstance(user, User):
-            self.server_manager.get_user_status(user.name)
+            await self.server_manager.get_user_status(user.name)
         else:
-            self.server_manager.get_user_status(user)
+            await self.server_manager.get_user_status(user)
 
-    def add_user(self, user: Union[str, User]):
+    async def add_user(self, user: Union[str, User]) -> User:
         if isinstance(user, User):
-            self.server_manager.add_user(user.name)
+            return await self.server_manager.add_user(user.name)
         else:
-            self.server_manager.add_user(user)
+            return await self.server_manager.add_user(user)
 
-    def remove_user(self, user: Union[str, User]):
+    async def remove_user(self, user: Union[str, User]):
         if isinstance(user, User):
-            self.server_manager.remove_user(user.name)
+            await self.server_manager.remove_user(user.name)
         else:
-            self.server_manager.remove_user(user)
+            await self.server_manager.remove_user(user)
 
     # Peer requests
-    def get_user_info(self, user: Union[str, User]):
+    async def get_user_info(self, user: Union[str, User]):
         if isinstance(user, User):
-            self.peer_manager.get_user_info(user.name)
+            await self.peer_manager.get_user_info(user.name)
         else:
-            self.peer_manager.get_user_info(user)
+            await self.peer_manager.get_user_info(user)
 
-    def get_user_shares(self, user: Union[str, User]):
+    async def get_user_shares(self, user: Union[str, User]):
         if isinstance(user, User):
-            self.peer_manager.get_user_shares(user.name)
+            await self.peer_manager.get_user_shares(user.name)
         else:
-            self.peer_manager.get_user_shares(user)
+            await self.peer_manager.get_user_shares(user)
 
-    def get_user_directory(self, user: Union[str, User], directory: List[str]):
+    async def get_user_directory(self, user: Union[str, User], directory: List[str]):
         if isinstance(user, User):
-            self.peer_manager.get_user_directory(user.name, directory)
+            await self.peer_manager.get_user_directory(user.name, directory)
         else:
-            self.peer_manager.get_user_directory(user, directory)
+            await self.peer_manager.get_user_directory(user, directory)
