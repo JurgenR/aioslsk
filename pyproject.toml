@@ -2,7 +2,7 @@
 name = "aioslsk"
 version = "0.1.0"
 description = ""
-authors = ["Jurgen <>"]
+authors = ["JurgenR <1249228+JurgenR@users.noreply.github.com>"]
 readme = "README.rst"
 
 [tool.poetry.dependencies]
