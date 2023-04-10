@@ -6,7 +6,7 @@ authors = ["JurgenR <1249228+JurgenR@users.noreply.github.com>"]
 readme = "README.rst"
 
 [tool.poetry.dependencies]
-python = "~3.8"
+python = ">=3.8,<3.11"
 mutagen = "^1.45.1"
 PyYAML = "^6.0"
 cachetools = "^5.0.0"
