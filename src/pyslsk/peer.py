@@ -247,7 +247,10 @@ class PeerManager:
         """Performs a query on the shares manager and reports the results to the
         user
         """
+        import time
+        start = time.time()
         results = self._shares_manager.query(query)
+        logger.debug(f"query took {time.time() - start} seconds")
 
         self._state.received_searches.append(
             ReceivedSearch(

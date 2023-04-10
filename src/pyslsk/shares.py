@@ -36,17 +36,21 @@ _LOSSLESS_FORMATS = [
     'FLAC',
     'WAVE'
 ]
-_QUERY_CLEAN_PATTERN = re.compile(r"[^\w\d]")
+_QUERY_CLEAN_PATTERN = re.compile(r"[\W_]")
 """Pattern to remove all non-word/digit characters from a string"""
 
-_QUERY_SEPERATORS = ['\\', '/', '-', '_', '.', '+', ',']
 
-_QUERY_SEPERATOR_PATTERN = re.compile("[" + re.escape(''.join(_QUERY_SEPERATORS)) + "]")
-
-
-def clean_terms(terms: List[str]) -> List[str]:
-    for term in terms:
-        yield re.sub(_QUERY_CLEAN_PATTERN, '', term.lower())
+def create_term_pattern(term: str, wildcard=False):
+    if wildcard:
+        return re.compile(
+            r"(?:(?<=\W|_)|^)[^\W_]*{}(?=[\W_]|$)".format(re.escape(term)),
+            flags=re.IGNORECASE
+        )
+    else:
+        return re.compile(
+            r"(?:(?<=\W|_)|^){}(?=[\W_]|$)".format(re.escape(term)),
+            flags=re.IGNORECASE
+        )
 
 
 @dataclass(eq=True, unsafe_hash=True)
@@ -87,6 +91,9 @@ class SharedItem:
     def get_remote_directory_path(self):
         return '@@' + os.path.join(
             self.shared_directory.alias, self.subdir)
+
+    def get_query_path(self):
+        return os.path.join(self.subdir, self.filename)
 
     def __getstate__(self):
         fields = self.__dict__.copy()
@@ -275,13 +282,14 @@ class SharesManager:
         """Builds a list of valid terms for the given shared directory"""
         for item in shared_directory.items:
             self._add_item_to_term_map(item)
+        logger.debug(f"term map contains {len(self.term_map)} terms")
 
     def _add_item_to_term_map(self, item: SharedItem):
         path = (item.subdir + "/" + item.filename).lower()
-        path = re.sub(_QUERY_SEPERATOR_PATTERN, ' ', path)
-        terms = path.split()
+        terms = re.split(_QUERY_CLEAN_PATTERN, path)
         for term in terms:
-            term = re.sub(_QUERY_CLEAN_PATTERN, '', term)
+            if not term:
+                continue
 
             if term not in self.term_map:
                 self.term_map[term] = WeakSet()
@@ -404,50 +412,104 @@ class SharesManager:
     def get_filesize(self, shared_item: SharedItem) -> int:
         return os.path.getsize(shared_item.get_absolute_path())
 
-    def query(self, query: str) -> List[SharedItem]:
-        """Performs a query on the `shared_directories` returning the matching
-        items
-        """
-        terms = query.split()
-        if not terms:
-            return []
-
+    def _categorize_query_terms(self, query: str) -> Dict[str, List[str]]:
         # Categorize
         include_terms = []
         exclude_terms = []
         wildcard_terms = []
+        terms = query.split()
         for term in terms:
-            if term.startswith('*'):
-                wildcard_terms.append(term[1:])
-            elif '*' in term:
-                # Ignore terms containing wildcard anywhere else
+            # Ignore terms containing only non-word chars
+            l_term = term.lower()
+            if not re.search('[^\W_]', l_term):
                 continue
+
+            if term.startswith('*'):
+                wildcard_terms.append(l_term[1:])
             elif term.startswith('-'):
-                exclude_terms.append(term[1:])
+                exclude_terms.append(l_term[1:])
             else:
-                include_terms.append(term)
+                include_terms.append(l_term)
 
-        # Find included terms
-        clean_include_terms = list(clean_terms(include_terms))
+        return {
+            'include': include_terms,
+            'exclude': exclude_terms,
+            'wildcard': wildcard_terms
+        }
 
-        if not all(term in self.term_map for term in clean_include_terms):
+    def query(self, query: str) -> List[SharedItem]:
+        """Performs a query on the `shared_directories` returning the matching
+        items
+        """
+        term_categories = self._categorize_query_terms(query)
+        # Ignore if no valid include or wildcard terms are given
+        if not (term_categories['include'] + term_categories['wildcard']):
             return []
 
-        found_items = self.term_map[clean_include_terms[0]].copy()
-        for include_term in clean_include_terms[1:]:
-            found_items &= self.term_map[include_term]
+        # First round using the term map
+        include_terms = []
+        for term in term_categories['include']:
+            subterms = re.split(_QUERY_CLEAN_PATTERN, term)
+            for subterm in subterms:
+                if not subterm:
+                    continue
 
-        # Reduce found_items based on excluded terms
-        for exclude_term in clean_terms(exclude_terms):
-            if not exclude_term:
-                continue
-            if exclude_term in self.term_map:
-                found_items -= self.term_map[exclude_term]
+                if subterm not in self.term_map:  # Optimization
+                    return []
 
-        # Wildcard matches
-        for wildcard_term in wildcard_terms:
-            if not wildcard_term:
-                continue
+                include_terms.append(subterm)
+
+        for term in term_categories['wildcard']:
+            subterms = re.split(_QUERY_CLEAN_PATTERN, term)
+            for idx, subterm in enumerate(subterms):
+                if not subterm:
+                    continue
+
+                if idx == 0:
+                    matching_terms = [
+                        map_term for map_term in self.term_map.keys()
+                        if map_term.endswith(subterm)
+                    ]
+
+                    if not matching_terms:  # Optimization
+                        return []
+
+                    include_terms.extend(matching_terms)
+                else:
+                    if subterm not in self.term_map:  # Optimization
+                        return []
+
+                    include_terms.append(subterm)
+
+        found_items = set(self.term_map[include_terms[0]])
+        for include_term in include_terms:
+            found_items &= set(self.term_map[include_term])
+
+        # Regular expressions using the remnants
+
+        for include_term in term_categories['include']:
+            to_remove = set()
+            for item in found_items:
+                pattern = create_term_pattern(include_term, wildcard=False)
+                if not re.search(pattern, item.get_query_path()):
+                    to_remove.add(item)
+            found_items -= to_remove
+
+        for wildcard_term in term_categories['wildcard']:
+            to_remove = set()
+            for item in found_items:
+                pattern = create_term_pattern(wildcard_term, wildcard=True)
+                if not re.search(pattern, item.get_query_path()):
+                    to_remove.add(item)
+            found_items -= to_remove
+
+        for exclude_term in term_categories['exclude']:
+            to_remove = set()
+            for item in found_items:
+                pattern = create_term_pattern(exclude_term, wildcard=False)
+                if re.search(pattern, item.get_query_path()):
+                    to_remove.add(item)
+            found_items -= to_remove
 
         return list(found_items)
 

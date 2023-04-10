@@ -4,17 +4,11 @@ from unittest.mock import Mock, patch
 
 from pyslsk.events import InternalEventBus
 from pyslsk.protocol.messages import (
-    CannotConnect,
-    ConnectToPeer,
-    GetPeerAddress,
     PeerInit,
-    PeerPierceFirewall,
 )
 from pyslsk.network.connection import (
     ConnectionState,
-    CloseReason,
     PeerConnection,
-    PeerConnectionType,
     PeerConnectionState,
     ServerConnection
 )

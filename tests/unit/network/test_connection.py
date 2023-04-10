@@ -272,7 +272,6 @@ class TestDataConnection:
         connection.disconnect.assert_awaited_once_with(CloseReason.TIMEOUT)
 
     # helpers
-
     def _create_connection(self, network, state: ConnectionState = ConnectionState.CONNECTED) -> DataConnection:
         connection = DataConnection('1.2.3.4', 1234, network)
         connection.state = state
@@ -441,8 +440,6 @@ class TestPeerConnection:
                 await connection.send_data(expected_data)
 
         connection.disconnect.assert_awaited_once_with(CloseReason.TIMEOUT)
-
-    # send_file
 
     # helpers
     def _create_connection(self, network, state: ConnectionState = ConnectionState.CONNECTED) -> PeerConnection:

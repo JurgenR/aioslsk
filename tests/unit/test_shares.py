@@ -30,9 +30,9 @@ DEFAULT_SETTINGS = {
 
 SHARED_DIRECTORY = SharedDirectory('music', 'C:\\music', 'abcdef')
 SHARED_ITEMS = {
-    'item1': SharedItem(SHARED_DIRECTORY, 'genre\\album, release\\', 'simple band(contrib. singer) - isn\'t easy song.mp3', 0.0),
-    'item2': SharedItem(SHARED_DIRECTORY, 'genre\\album release\\', 'simple band (contrib. singer) - isn\'t easy song.flac', 0.0),
-    'item3': SharedItem(SHARED_DIRECTORY, 'genre\\album_release\\', 'simple_band(contributer. singer)-_isn\'t_easy_song.mp3', 0.0),
+    'item1': SharedItem(SHARED_DIRECTORY, 'folk\\folkalbum, release\\', 'simple band(contrib. singer) - isn\'t easy song.mp3', 0.0),
+    'item2': SharedItem(SHARED_DIRECTORY, 'metal\\metalalbum release\\', 'simple band (contrib. singer)_-_don\'t easy song 片仮名.flac', 0.0),
+    'item3': SharedItem(SHARED_DIRECTORY, 'rap\\rapalbum_release\\', 'simple_band(contributer. singer)-don\'t_easy_song 片仮名.mp3', 0.0),
 }
 SHARED_DIRECTORY.items = set(SHARED_ITEMS.values())
 
@@ -80,7 +80,7 @@ class TestSharedDirectory:
         item = SharedItem(shared_directory, 'author', 'song.mp3', 1.0)
         shared_directory.items = {item}
 
-        remote_path = '@@abcdef\\author\\song.mp3'
+        remote_path = os.path.join('@@abcdef', 'author', 'song.mp3')
         assert item == shared_directory.get_item_by_remote_path(remote_path)
 
     def test_getItemByRemotePath_itemNotExists_shouldRaise(self):
@@ -99,13 +99,17 @@ class TestSharesManager:
         'query,expected_items',
         [
             # 1 term matching
-            ('simple', ['item1', 'item2', 'item3']),
+            ('rap', ['item3']),
             # 1 term matching, case sensitive
-            ('SIMPLE', ['item1', 'item2', 'item3']),
+            ('mETAl', ['item2']),
             # multiple terms, out of order
-            ('song easy', ['item1', 'item2', 'item3']),
+            ('simple folk', ['item1']),
             # multiple terms, include part of directory and filename
-            ('song album', ['item1', 'item2', 'item3']),
+            ('song folkalbum', ['item1']),
+            # term surrounded by special chars
+            ('contrib', ['item1', 'item2']),
+            # unicode characters
+            ('片仮名', ['item2', 'item3'])
         ]
     )
     def test_querySimpleTerms_matching(self, manager_query: SharesManager, query: str, expected_items: List[str]):
@@ -121,21 +125,82 @@ class TestSharesManager:
             # not matching because there is a seperator in between
             ('simpleband'),
             # only 1 term matches
-            ('simple notfound')
+            ('simple notfound'),
+            # wildcard chars no match
+            ('*impler'),
+            # only exclusion
+            ('-mp3'),
         ]
     )
     def test_querySimpleTerms_notMatching(self, manager_query: SharesManager, query: str):
         actual_items = manager_query.query(query)
         assert actual_items == []
 
-    def test_querySpecialCharactersInTerm_matching(self, manager_query: SharesManager):
-        pass
+    @pytest.mark.parametrize(
+        'query,expected_items',
+        [
+            # matching simple term, and containing special chars
+            ('simple isn\'t', ['item1']),
+            # seperator in between
+            ('simple_band', ['item3']),
+        ]
+    )
+    def test_querySpecialCharactersInTerm_matching(self, manager_query: SharesManager, query: str, expected_items: List[str]):
+        expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
+        actual_items = manager_query.query(query)
+        assert expected_items == unordered(actual_items)
 
-    def test_querySpecialCharactersAcrossTerms(self, manager_query: SharesManager):
-        pass
+    @pytest.mark.parametrize(
+        'query,expected_items',
+        [
+            # wildcard
+            ('*tributer', ['item3']),
+            # wildcard special chars
+            ('*on\'t', ['item2', 'item3']),
+            # wildcard start of line
+            ('*etal', ['item2']),
+            # wildcard end of line
+            ('*lac', ['item2']),
+            # wildcard unicode characters
+            ('*仮名', ['item2', 'item3']),
+        ]
+    )
+    def test_queryWildcard_matching(self, manager_query: SharesManager, query: str, expected_items: List[str]):
+        expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
+        actual_items = manager_query.query(query)
+        assert expected_items == unordered(actual_items)
 
-    def test_queryExcludeTerm(self, manager_query: SharesManager):
-        pass
+    @pytest.mark.parametrize(
+        'query,expected_items',
+        [
+            # exclude, start of line
+            ('simple -mp3', ['item2']),
+            # exclude, end of line
+            ('simple -rap', ['item1', 'item2']),
+            # exclude, multiple end of line
+            ('simple -mp3 -contributer', ['item2']),
+            # exclude unicode characters
+            ('simple -片仮名', ['item1'])
+        ]
+    )
+    def test_queryExcludeTerm(self, manager_query: SharesManager, query: str, expected_items: List[str]):
+        expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
+        actual_items = manager_query.query(query)
+        assert expected_items == unordered(actual_items)
 
-    def test_queryExcludeTermEdgeCases(self, manager_query: SharesManager):
-        pass
+    @pytest.mark.parametrize(
+        'query,expected_items',
+        [
+            # something with loads of special characters between words
+            ('singer)_-_don\'t', ['item2']),
+            # wildcard, something with loads of special characters between words
+            ('*inger)_-_don\'t', ['item2']),
+            # exclude, something with loads of special characters between words
+            ('simple -singer)_-_don\'t', ['item1', 'item3']),
+        ]
+    )
+    def test_edgeCases(self, manager_query: SharesManager, query: str, expected_items: List[str]):
+        expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
+        actual_items = manager_query.query(query)
+        assert expected_items == unordered(actual_items)
+
