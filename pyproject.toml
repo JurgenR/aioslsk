@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "pyslsk"
+name = "aioslsk"
 version = "0.1.0"
 description = ""
-authors = ["Jurgen <jurgen@mail.com>"]
+authors = ["Jurgen <>"]
 readme = "README.rst"
 
 [tool.poetry.dependencies]
