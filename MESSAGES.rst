@@ -1243,4 +1243,3 @@ PeerTransferReply (Code 41)
 4. If allowed==false
 
    1. **string**: reason
-
