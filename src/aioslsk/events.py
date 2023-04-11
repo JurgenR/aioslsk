@@ -7,7 +7,7 @@ from typing import Callable, Dict, List, Type, TYPE_CHECKING
 
 from .model import ChatMessage, Room, RoomMessage, User
 from .protocol.primitives import DirectoryData, MessageDataclass
-from .search import SearchQuery, SearchResult
+from .search import SearchRequest, SearchResult
 
 if TYPE_CHECKING:
     from .network.connection import (
@@ -178,7 +178,7 @@ class PrivateMessageEvent(Event):
 
 @dataclass(frozen=True)
 class SearchResultEvent(Event):
-    query: SearchQuery
+    query: SearchRequest
     result: SearchResult
 
 # Peer

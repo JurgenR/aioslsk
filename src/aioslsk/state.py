@@ -4,9 +4,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Deque, Dict
 
 from .model import ChatMessage, Room, User
-
-if TYPE_CHECKING:
-    from .search import ReceivedSearch, SearchQuery
+from .search import ReceivedSearch, SearchRequest
 
 
 @dataclass
@@ -31,7 +29,7 @@ class State:
 
     # Search related
     received_searches: Deque[ReceivedSearch] = field(default_factory=lambda: deque(list(), 500))
-    search_queries: Dict[int, SearchQuery] = field(default_factory=dict)
+    search_queries: Dict[int, SearchRequest] = field(default_factory=dict)
 
     def get_or_create_user(self, username: str) -> User:
         try:

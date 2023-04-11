@@ -14,7 +14,7 @@ from .model import Room, User
 from .network.network import Network
 from .peer import PeerManager
 from .server_manager import ServerManager
-from .search import SearchQuery
+from .search import SearchRequest
 from .state import State
 from .settings import Settings
 from .transfer import Transfer, TransferDirection, TransferManager
@@ -202,7 +202,7 @@ class SoulSeek:
         else:
             await self.server_manager.send_room_message(room, message)
 
-    async def search(self, query: str) -> SearchQuery:
+    async def search(self, query: str) -> SearchRequest:
         """Performs a search, returns the generated ticket number for the search
         """
         logger.info(f"Starting search for query: {query}")

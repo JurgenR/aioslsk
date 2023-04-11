@@ -92,7 +92,7 @@ from .protocol.messages import (
 from .model import ChatMessage, RoomMessage, User, UserStatus
 from .network.network import Network
 from .shares import SharesManager
-from .search import SearchQuery, SearchType
+from .search import SearchRequest, SearchType
 from .settings import Settings
 from .state import State
 from .utils import task_counter, ticket_generator
@@ -220,14 +220,14 @@ class ServerManager:
             *[ChatJoinRoom.Request(room) for room in rooms]
         )
 
-    async def search_room(self, room: str, query: str) -> SearchQuery:
+    async def search_room(self, room: str, query: str) -> SearchRequest:
         """Performs a search query on all users in a room"""
         ticket = next(self._ticket_generator)
 
         await self.network.queue_server_messages(
             ChatRoomSearch.Request(room, ticket, query)
         )
-        self._state.search_queries[ticket] = SearchQuery(
+        self._state.search_queries[ticket] = SearchRequest(
             ticket=ticket,
             query=query,
             search_type=SearchType.ROOM,
@@ -235,14 +235,14 @@ class ServerManager:
         )
         return self._state.search_queries[ticket]
 
-    async def search_user(self, username: str, query: str) -> SearchQuery:
+    async def search_user(self, username: str, query: str) -> SearchRequest:
         """Performs a search query on a user"""
         ticket = next(self._ticket_generator)
 
         await self.network.queue_server_messages(
             UserSearch.Request(username, ticket, query)
         )
-        self._state.search_queries[ticket] = SearchQuery(
+        self._state.search_queries[ticket] = SearchRequest(
             ticket=ticket,
             query=query,
             search_type=SearchType.USER,
@@ -250,14 +250,14 @@ class ServerManager:
         )
         return self._state.search_queries[ticket]
 
-    async def search(self, query: str) -> SearchQuery:
+    async def search(self, query: str) -> SearchRequest:
         """Performs a global search query"""
         ticket = next(self._ticket_generator)
 
         await self.network.queue_server_messages(
             FileSearch.Request(ticket, query)
         )
-        self._state.search_queries[ticket] = SearchQuery(
+        self._state.search_queries[ticket] = SearchRequest(
             ticket=ticket,
             query=query,
             search_type=SearchType.NETWORK
@@ -691,7 +691,7 @@ class ServerManager:
                     continue
 
                 ticket = next(self._ticket_generator)
-                self._state.search_queries[ticket] = SearchQuery(
+                self._state.search_queries[ticket] = SearchRequest(
                     ticket,
                     item['query'],
                     search_type=SearchType.WISHLIST

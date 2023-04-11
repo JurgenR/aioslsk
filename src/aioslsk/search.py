@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 import datetime
 from enum import auto, Enum
+import re
 from typing import List
 
 from .protocol.primitives import FileData
@@ -22,6 +23,37 @@ class ReceivedSearch:
 
 
 @dataclass
+class SearchQuery:
+    query: str
+    include_terms: List[str] = field(default_factory=list)
+    exclude_terms: List[str] = field(default_factory=list)
+    wildcard_terms: List[str] = field(default_factory=list)
+
+    @classmethod
+    def parse(cls, query: str) -> 'SearchQuery':
+        """Parses the given query string into terms and creates a new
+        `SearchQuery` object
+        """
+        obj = cls(query)
+
+        terms = query.split()
+        for term in terms:
+            # Ignore terms containing only non-word chars
+            l_term = term.lower()
+            if not re.search(r'[^\W_]', l_term):
+                continue
+
+            if term.startswith('*'):
+                obj.wildcard_terms.append(l_term[1:])
+            elif term.startswith('-'):
+                obj.exclude_terms.append(l_term[1:])
+            else:
+                obj.include_terms.append(l_term)
+
+        return obj
+
+
+@dataclass
 class SearchResult:
     """Search result received from a user"""
     ticket: int
@@ -36,8 +68,8 @@ class SearchResult:
 
 
 @dataclass
-class SearchQuery:
-    """Search query we have made"""
+class SearchRequest:
+    """Search request we have made"""
     ticket: int
     query: str
     search_type: SearchType = SearchType.NETWORK

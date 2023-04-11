@@ -21,6 +21,7 @@ from .naming import (
     NumberDuplicateStrategy,
 )
 from .protocol.primitives import Attribute, DirectoryData, FileData
+from .search import SearchQuery
 from .settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -412,43 +413,18 @@ class SharesManager:
     def get_filesize(self, shared_item: SharedItem) -> int:
         return os.path.getsize(shared_item.get_absolute_path())
 
-    def _categorize_query_terms(self, query: str) -> Dict[str, List[str]]:
-        # Categorize
-        include_terms = []
-        exclude_terms = []
-        wildcard_terms = []
-        terms = query.split()
-        for term in terms:
-            # Ignore terms containing only non-word chars
-            l_term = term.lower()
-            if not re.search(r'[^\W_]', l_term):
-                continue
-
-            if term.startswith('*'):
-                wildcard_terms.append(l_term[1:])
-            elif term.startswith('-'):
-                exclude_terms.append(l_term[1:])
-            else:
-                include_terms.append(l_term)
-
-        return {
-            'include': include_terms,
-            'exclude': exclude_terms,
-            'wildcard': wildcard_terms
-        }
-
     def query(self, query: str) -> List[SharedItem]:
         """Performs a query on the `shared_directories` returning the matching
         items
         """
-        term_categories = self._categorize_query_terms(query)
+        search_query = SearchQuery.parse(query)
         # Ignore if no valid include or wildcard terms are given
-        if not (term_categories['include'] + term_categories['wildcard']):
+        if not (search_query.include_terms + search_query.wildcard_terms):
             return []
 
         # First round using the term map
         include_terms = []
-        for term in term_categories['include']:
+        for term in search_query.include_terms:
             subterms = re.split(_QUERY_CLEAN_PATTERN, term)
             for subterm in subterms:
                 if not subterm:
@@ -459,7 +435,7 @@ class SharesManager:
 
                 include_terms.append(subterm)
 
-        for term in term_categories['wildcard']:
+        for term in search_query.wildcard_terms:
             subterms = re.split(_QUERY_CLEAN_PATTERN, term)
             for idx, subterm in enumerate(subterms):
                 if not subterm:
@@ -487,7 +463,7 @@ class SharesManager:
 
         # Regular expressions using the remnants
 
-        for include_term in term_categories['include']:
+        for include_term in search_query.include_terms:
             to_remove = set()
             for item in found_items:
                 pattern = create_term_pattern(include_term, wildcard=False)
@@ -495,7 +471,7 @@ class SharesManager:
                     to_remove.add(item)
             found_items -= to_remove
 
-        for wildcard_term in term_categories['wildcard']:
+        for wildcard_term in search_query.wildcard_terms:
             to_remove = set()
             for item in found_items:
                 pattern = create_term_pattern(wildcard_term, wildcard=True)
@@ -503,7 +479,7 @@ class SharesManager:
                     to_remove.add(item)
             found_items -= to_remove
 
-        for exclude_term in term_categories['exclude']:
+        for exclude_term in search_query.exclude_terms:
             to_remove = set()
             for item in found_items:
                 pattern = create_term_pattern(exclude_term, wildcard=False)

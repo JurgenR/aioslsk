@@ -130,6 +130,8 @@ class TestSharesManager:
             ('*impler'),
             # only exclusion
             ('-mp3'),
+            # only special characters
+            ('____')
         ]
     )
     def test_querySimpleTerms_notMatching(self, manager_query: SharesManager, query: str):
