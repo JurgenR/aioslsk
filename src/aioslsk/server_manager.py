@@ -161,18 +161,12 @@ class ServerManager:
 
         # First value indicates success
         if response.success:
-            self._state.logged_in = True
             logger.info(f"successfully logged on, greeting : {response.greeting!r}")
         else:
-            self._state.logged_in = False
             logger.error(f"failed to login, reason: {response.reason!r}")
             raise LoginFailedError(response.reason)
 
         # Make setup calls
-
-        dir_count, file_count = self.shares_manager.get_stats()
-        logger.debug(f"Sharing {dir_count} directories and {file_count} files")
-
         await self.network.queue_server_messages(
             CheckPrivileges.Request(),
             SetListenPort.Request(
@@ -184,30 +178,34 @@ class ServerManager:
             ToggleParentSearch.Request(True),
             BranchRoot.Request(self._settings.get('credentials.username')),
             BranchLevel.Request(0),
-            AcceptChildren.Request(False),
-            SharedFoldersFiles.Request(dir_count, file_count),
-            AddUser.Request(self._settings.get('credentials.username')),
-            TogglePrivateRooms.Request(self._settings.get('chats.private_room_invites'))
+            AcceptChildren.Request(False)
         )
 
+        await self.report_shares()
+        await self.track_users(self._settings.get('credentials.username'))
+        await self.network.queue_server_messages(
+            TogglePrivateRooms.Request(self._settings.get('chats.private_room_invites')))
+
         # Perform AddUser for all in the friendlist
-        await self.track_friends()
+        await self.track_users(*self._settings.get('users.friends'))
 
         # Auto-join rooms
         await self.auto_join_rooms()
 
         await self._internal_event_bus.emit(LoginEvent(success=response.success))
 
-    async def track_friends(self):
-        """Sends an `AddUser` request to our friends list defined in the
-        settings to start tracking changes
+    async def track_users(self, *users):
+        """Sends an `AddUser` request to start tracking changes
         """
-        await self.network.queue_server_messages(
-            *[
-                AddUser.Request(friend)
-                for friend in self._settings.get('users.friends')
-            ]
-        )
+        messages = []
+        for user in users:
+            if not isinstance(user, User):
+                user = self._state.get_or_create_user(user)
+
+            messages.append(AddUser.Request(user))
+            user.is_tracking = True
+
+        await self.network.queue_server_messages(*messages)
 
     async def auto_join_rooms(self):
         """Automatically joins rooms stored in the settings"""
@@ -622,9 +620,7 @@ class ServerManager:
     @on_message(WishlistInterval.Response)
     async def _on_wish_list_interval(self, message: WishlistInterval.Response, connection):
         self._state.wishlist_interval = message.interval
-        # Cancel the current task
-        if self._wishlist_task is not None:
-            self._wishlist_task.cancel()
+        self._cancel_wishlist_task()
 
         self._wishlist_task = asyncio.create_task(
             self._wishlist_job(message.interval),
@@ -674,6 +670,11 @@ class ServerManager:
             await asyncio.sleep(SERVER_PING_INTERVAL)
             await self.send_ping()
 
+    async def _cancel_ping_task(self):
+        if self._ping_task is not None:
+            self._ping_task.cancel()
+            self._ping_task = None
+
     async def _wishlist_job(self, interval: int):
         while True:
             items = self._settings.get('search.wishlist')
@@ -702,6 +703,11 @@ class ServerManager:
 
             await asyncio.sleep(interval)
 
+    async def _cancel_wishlist_task(self):
+        if self._wishlist_task is not None:
+            self._wishlist_task.cancel()
+            self._wishlist_task = None
+
     # Listeners
 
     async def _on_message_received(self, event: MessageReceivedEvent):
@@ -718,19 +724,15 @@ class ServerManager:
                 self._ping_job(), name=f'ping-task-{task_counter()}')
 
         elif event.state == ConnectionState.CLOSING:
-            self._state.logged_in = False
 
-            if self._wishlist_task is not None:
-                self._wishlist_task.cancel()
-                self._wishlist_task = None
-
-            if self._ping_task is not None:
-                self._ping_task.cancel()
-                self._ping_task = None
+            self._cancel_wishlist_task()
+            self._cancel_ping_task()
 
             await self._event_bus.emit(ServerDisconnectedEvent())
 
         elif event.state == ConnectionState.CLOSED:
+            for user in self._state.users.values():
+                user.is_tracking = False
 
             if event.close_reason != CloseReason.REQUESTED:
                 if self._settings.get('network.reconnect.auto'):

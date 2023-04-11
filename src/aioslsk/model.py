@@ -29,6 +29,8 @@ class User:
     queue_length: int = None
     total_uploads: int = None
 
+    is_tracking: bool = False
+
 
 @dataclass
 class Room:

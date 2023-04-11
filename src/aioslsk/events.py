@@ -85,6 +85,11 @@ class Event:
 
 
 @dataclass(frozen=True)
+class ServerConnectedEvent(Event):
+    pass
+
+
+@dataclass(frozen=True)
 class ServerDisconnectedEvent(Event):
     pass
 

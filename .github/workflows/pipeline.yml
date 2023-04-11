@@ -49,8 +49,8 @@ jobs:
       with:
         name: test-results-${{ matrix.python-version }}
         path: test-reports/report-${{ matrix.python-version }}.xml
-    - uses: EnricoMi/publish-unit-test-result-action@v2
+    - name: Test Results ${{ matrix.python-version }}
+      uses: EnricoMi/publish-unit-test-result-action@v2
       with:
-        artifact: test-results-${{ matrix.python-version }}
         files: |
           test-reports/*.xml

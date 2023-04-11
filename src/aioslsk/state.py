@@ -9,8 +9,6 @@ from .search import ReceivedSearch, SearchRequest
 
 @dataclass
 class State:
-    logged_in = False
-
     privileges_time_left: int = 0
 
     # Chat related

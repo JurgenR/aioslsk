@@ -512,6 +512,10 @@ class TransferManager:
 
     async def queue(self, transfer: Transfer, force: bool = False):
         await self._set_transfer_state(transfer, TransferState.QUEUED, force=force)
+
+        # Track user
+        user = self._state.get_or_create_user(transfer.username)
+        user.is_tracking = True
         await self._network.send_server_messages(
             AddUser.Request(transfer.username)
         )
@@ -538,6 +542,8 @@ class TransferManager:
                 return queued_transfer
 
         if not transfer.is_finalized():
+            user = self._state.get_or_create_user(transfer.username)
+            user.is_tracking = True
             await self._network.send_server_messages(
                 AddUser.Request(transfer.username)
             )
