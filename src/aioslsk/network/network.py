@@ -176,8 +176,8 @@ class Network:
         while True:
             await asyncio.sleep(1)
             count = len(self.peer_connections)
-            logger.info(f"currently {count} peer connections")
-            logger.info(f"currently {len(self._create_peer_connection_tasks)} connect to peer tasks")
+            logger.info(
+                f"currently {count} peer connections ({len(self._create_peer_connection_tasks)} tasks)")
 
     async def map_upnp_ports(self):
         """Maps the listening ports using UPNP on the gateway"""
@@ -190,8 +190,15 @@ class Network:
             for device in devices:
                 await self._upnp.map_port(device, ip_address, port)
 
-    def _map_upnp_ports_callback(self, future: asyncio.Future):
-        self._upnp_task = None
+    def _map_upnp_ports_callback(self, task: asyncio.Task):
+        try:
+            task.result()
+        except asyncio.CancelledError:
+            logger.warning("upnp: port mapping task cancelled")
+        except Exception:
+            logger.exception("upnp: failed to map ports")
+        finally:
+            self._upnp_task = None
 
     async def create_peer_connection(
             self, username: str, typ: str, ip: str = None, port: int = None,
@@ -277,10 +284,7 @@ class Network:
         if connections:
             return connections[0]
 
-        return await self.create_peer_connection(
-            username,
-            PeerConnectionType.PEER
-        )
+        return await self.create_peer_connection(username, typ)
 
     def _remove_response_future(self, expected_response):
         try:
@@ -424,9 +428,7 @@ class Network:
         port = message.obfuscated_port if obfuscate else message.port
 
         peer_connection = PeerConnection(
-            ip,
-            port,
-            self,
+            ip, port, self,
             connection_type=message.typ,
             obfuscated=obfuscate,
             username=message.username
@@ -435,14 +437,16 @@ class Network:
 
         try:
             await peer_connection.connect()
+            await peer_connection.send_message(
+                PeerPierceFirewall.Request(message.ticket)
+            )
 
         except Exception as exc:
             logger.warning(f"couldn't connect to peer : {exc!r}")
-            await self.server.queue_message(CannotConnect.Request(message.ticket))
-            return
-
-        await peer_connection.send_message(
-            PeerPierceFirewall.Request(message.ticket))
+            await self.server.queue_message(
+                CannotConnect.Request(message.ticket)
+            )
+            raise
 
         if message.typ == PeerConnectionType.FILE:
             peer_connection.set_connection_state(PeerConnectionState.AWAITING_TICKET)
@@ -466,29 +470,30 @@ class Network:
         await self._internal_event_bus.emit(
             PeerInitializedEvent(connection, requested=False))
 
-    async def queue_peer_messages(self, username: str, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
-        """Sends messages to the specified peer
+    async def send_peer_messages(self, username: str, *messages: List[Union[bytes, MessageDataclass]]):
+        """Sends a list of messages to the peer with given `username`. This uses
+        `get_peer_connection` and will attempt to re-use a connection or create
+        a new one
 
-        :param username: user to send the messages to
-        :param messages: list of messages to send
+        :return: a list of tuples containing the sent messages and the result
+            of the sent messages. If `None` is returned for a message it was
+            successfully sent, otherwise the result will contain the exception
         """
         connection = await self.get_peer_connection(username)
-        return await connection.queue_messages(*messages)
+        queue_tasks = connection.queue_messages(*messages)
+        results = await asyncio.gather(*queue_tasks, return_exceptions=True)
+        return list(zip(messages, results))
 
-    async def send_peer_messages(self, username: str, *messages: List[Union[bytes, MessageDataclass]]):
-        queue_tasks = await self.queue_peer_messages(username, *messages)
-        await asyncio.gather(*queue_tasks, return_exceptions=True)
-
-    async def queue_server_messages(self, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
+    def queue_server_messages(self, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
         """Queues server messages
 
         :param messages: list of messages to queue
         """
-        return await self.server.queue_messages(*messages)
+        return self.server.queue_messages(*messages)
 
     async def send_server_messages(self, *messages: List[Union[bytes, MessageDataclass]]):
         queue_tasks = await self.queue_server_messages(*messages)
-        await asyncio.gather(*queue_tasks, return_exceptions=True)
+        return await asyncio.gather(*queue_tasks, return_exceptions=True)
 
     # Methods called by connections
 
@@ -510,9 +515,6 @@ class Network:
         elif isinstance(connection, PeerConnection):
             await self._on_peer_connection_state_changed(state, connection, close_reason=close_reason)
 
-        elif isinstance(connection, ListeningConnection):
-            self._on_listening_connection_state_changed(state, connection)
-
         await self._internal_event_bus.emit(
             ConnectionStateChangedEvent(connection, state, close_reason)
         )
@@ -533,25 +535,24 @@ class Network:
         if state == ConnectionState.CLOSED:
             self.remove_peer_connection(connection)
 
-    def _on_listening_connection_state_changed(self, state: ConnectionState, connection: ListeningConnection):
-        pass
-
     # Peer related
     def on_peer_accepted(self, connection: PeerConnection):
         self.peer_connections.append(connection)
 
-    async def on_message_received(self, message, connection: Connection):
-        # Complete expected response futures
-        for expected_response in self._expected_response_futures:
-            if expected_response.matches(connection, message):
-                expected_response.set_result((connection, message, ))
-
+    async def on_message_received(self, message: MessageDataclass, connection: Connection):
+        """Method called by """
         # Call the message callbacks for this object
         if message.__class__ in self.MESSAGE_MAP:
             await self.MESSAGE_MAP[message.__class__](message, connection)
 
-        # Emit on the internal message bus
+        # Emit on the internal message bus. Internal handling has priority over
+        # completing the future responses
         await self._internal_event_bus.emit(MessageReceivedEvent(message, connection))
+
+        # Complete expected response futures
+        for expected_response in self._expected_response_futures:
+            if expected_response.matches(connection, message):
+                expected_response.set_result((connection, message, ))
 
     # Settings listeners
 

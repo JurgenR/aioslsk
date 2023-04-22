@@ -95,22 +95,12 @@ class ServerDisconnectedEvent(Event):
 
 
 @dataclass(frozen=True)
-class UserAddEvent(Event):
-    user: User
-
-
-@dataclass(frozen=True)
-class UserStatsEvent(Event):
+class UserInfoEvent(Event):
     user: User
 
 
 @dataclass(frozen=True)
 class UserStatusEvent(Event):
-    user: User
-
-
-@dataclass(frozen=True)
-class UserModifiedEvent(Event):
     user: User
 
 
@@ -190,11 +180,6 @@ class SearchResultEvent(Event):
 
 
 @dataclass(frozen=True)
-class UserInfoReplyEvent(Event):
-    user: User
-
-
-@dataclass(frozen=True)
 class UserSharesReplyEvent(Event):
     user: User
     directories: List[DirectoryData]
@@ -249,3 +234,13 @@ class PeerInitializedEvent(InternalEvent):
 @dataclass(frozen=True)
 class LoginEvent(InternalEvent):
     success: bool
+
+
+@dataclass(frozen=True)
+class TrackUserEvent(InternalEvent):
+    username: str
+
+
+@dataclass(frozen=True)
+class UntrackUserEvent(InternalEvent):
+    username: str

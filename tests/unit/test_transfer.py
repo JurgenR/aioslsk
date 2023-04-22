@@ -1,10 +1,10 @@
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from aioslsk.configuration import Configuration
+from aioslsk.events import TrackUserEvent
 from aioslsk.model import UserStatus
-from aioslsk.protocol.messages import AddUser
 from aioslsk.transfer import Transfer, TransferDirection, TransferState, TransferManager
 from aioslsk.settings import Settings
 from aioslsk.state import State
@@ -39,7 +39,7 @@ def manager(tmpdir):
         Configuration(tmpdir, tmpdir),
         Settings(DEFAULT_SETTINGS),
         AsyncMock(), # event bus
-        Mock(), # internal event bus
+        AsyncMock(), # internal event bus
         None, # file manager
         network # network
     )
@@ -112,8 +112,8 @@ class TestTransferManager:
 
         assert transfer.state == TransferState.VIRGIN
         assert transfer in manager.transfers
-        manager._network.send_server_messages.assert_called_once_with(
-            AddUser.Request(DEFAULT_USERNAME)
+        manager._internal_event_bus.emit.assert_awaited_once_with(
+            TrackUserEvent(DEFAULT_USERNAME)
         )
 
     @pytest.mark.asyncio

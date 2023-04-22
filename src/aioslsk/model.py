@@ -26,8 +26,9 @@ class User:
     files: int = None
     directories: int = None
     has_slots_free: bool = None
+    slots_free: int = None
+    upload_slots: int = None
     queue_length: int = None
-    total_uploads: int = None
 
     is_tracking: bool = False
 

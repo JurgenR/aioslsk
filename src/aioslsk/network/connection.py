@@ -333,16 +333,16 @@ class DataConnection(Connection):
             await self.disconnect(CloseReason.READ_ERROR)
             raise ConnectionReadError(f"{self.hostname}:{self.port} : exception during reading") from exc
 
-    async def queue_message(self, message: Union[bytes, MessageDataclass]) -> asyncio.Task:
+    def queue_message(self, message: Union[bytes, MessageDataclass]) -> asyncio.Task:
         return asyncio.create_task(
             self.send_message(message),
             name=f'queue-message-task-{task_counter()}'
         )
 
-    async def queue_messages(self, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
+    def queue_messages(self, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
         tasks = []
         for message in messages:
-            tasks.append(await self.queue_message(message))
+            tasks.append(self.queue_message(message))
 
         return tasks
 

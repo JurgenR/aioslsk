@@ -9,12 +9,14 @@ from aioslsk.events import (
 )
 from aioslsk.model import RoomMessage, UserStatus
 from aioslsk.protocol.messages import (
+    AddUser,
     ChatUserJoinedRoom,
     ChatUserLeftRoom,
     ChatRoomMessage,
     ChatRoomTickerAdded,
     ChatRoomTickers,
     ChatRoomTickerRemoved,
+    RemoveUser,
 )
 from aioslsk.protocol.primitives import RoomTicker, UserData
 from aioslsk.search import SearchType
@@ -56,6 +58,45 @@ class TestServerManager:
         return manager
 
     @pytest.mark.asyncio
+    async def test_trackUser_userNotTracked_shouldSendAddUser(self):
+        manager = self._create_server_manager()
+
+        user = manager._state.get_or_create_user('user0')
+
+        await manager.track_user('user0')
+
+        assert user.is_tracking is True
+        manager._network.send_server_messages.assert_awaited_once_with(
+            AddUser.Request('user0')
+        )
+
+    @pytest.mark.asyncio
+    async def test_trackUser_userTracked_shouldNotSendAddUser(self):
+        manager = self._create_server_manager()
+
+        user = manager._state.get_or_create_user('user0')
+        user.is_tracking = True
+
+        await manager.track_user('user0')
+
+        assert user.is_tracking is True
+        assert 0 == manager._network.send_server_messages.await_count
+
+    @pytest.mark.asyncio
+    async def test_untrackUser_userTracked_shouldSendRemoveUser(self):
+        manager = self._create_server_manager()
+
+        user = manager._state.get_or_create_user('user0')
+        user.is_tracking = True
+
+        await manager.untrack_user('user0')
+
+        assert user.is_tracking is False
+        manager._network.send_server_messages.assert_awaited_once_with(
+            RemoveUser.Request('user0')
+        )
+
+    @pytest.mark.asyncio
     async def test_whenRoomTickersReceived_shouldUpdateModelAndEmit(self):
         manager = self._create_server_manager()
 
@@ -70,7 +111,7 @@ class TestServerManager:
                     RoomTicker('user1', 'world')
                 ]
             ),
-            manager.network.server
+            manager._network.server
         )
         # Check model
         expected_tickers = {
@@ -96,7 +137,7 @@ class TestServerManager:
         await manager._on_chat_room_ticker_added(
             ChatRoomTickerAdded.Response(
                 room='room0', username='user0', ticker='hello'),
-            manager.network.server
+            manager._network.server
         )
         # Check model
         expected_tickers = {'user0': 'hello'}
@@ -122,7 +163,7 @@ class TestServerManager:
 
         await manager._on_chat_room_ticker_removed(
             ChatRoomTickerRemoved.Response(room='room0', username='user0'),
-            manager.network.server
+            manager._network.server
         )
         # Check model
         expected_tickers = {}
@@ -146,7 +187,7 @@ class TestServerManager:
 
         await manager._on_chat_room_ticker_removed(
             ChatRoomTickerRemoved.Response(room='room0', username='user0'),
-            manager.network.server
+            manager._network.server
         )
 
         assert caplog.records[-1].levelname == 'WARNING'
@@ -174,7 +215,7 @@ class TestServerManager:
                     username='user0',
                     message='hello'
                 ),
-                manager.network.server
+                manager._network.server
             )
 
         message = RoomMessage(timestamp=100.0, room=room, user=user, message='hello')
@@ -182,7 +223,7 @@ class TestServerManager:
         callback.assert_called_once_with(RoomMessageEvent(message))
 
     @pytest.mark.asyncio
-    async def test_onUserJoinedRoom_shouldAddUser(self):
+    async def test_onUserJoinedRoom_shouldAddUserToRoom(self):
         manager = self._create_server_manager()
 
         callback = Mock()
@@ -201,19 +242,19 @@ class TestServerManager:
                 slots_free=10,
                 country_code='US'
             ),
-            manager.network.server
+            manager._network.server
         )
 
         assert user in room.users
 
         assert user_data == (user.avg_speed, user.downloads, user.files, user.directories)
         assert 'US' == user.country
-        assert 10 == user.has_slots_free
+        assert 10 == user.slots_free
         assert UserStatus.ONLINE == user.status
         callback.assert_called_once_with(UserJoinedRoomEvent(room, user))
 
     @pytest.mark.asyncio
-    async def test_onUserLeftRoom_shouldRemoveUser(self):
+    async def test_onUserLeftRoom_shouldRemoveUserFromRoom(self):
         manager = self._create_server_manager()
 
         callback = Mock()
@@ -225,7 +266,7 @@ class TestServerManager:
 
         await manager._on_user_left_room(
             ChatUserLeftRoom.Response(room='room0', username='user0'),
-            manager.network.server
+            manager._network.server
         )
 
         assert 0 == len(room.users)
@@ -236,7 +277,7 @@ class TestServerManager:
         manager = self._create_server_manager()
 
         await manager.set_room_ticker('room0', 'hello')
-        manager.network.send_server_messages.assert_called_once()
+        manager._network.send_server_messages.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_searchNetwork_shouldSearchAndCreateEntry(self):
@@ -247,7 +288,7 @@ class TestServerManager:
         assert isinstance(search_query.ticket, int)
         assert SearchType.NETWORK == search_query.search_type
 
-        manager.network.queue_server_messages.assert_called_once()
+        manager._network.send_server_messages.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_searchRoom_shouldSearchAndCreateEntry(self):
@@ -262,7 +303,7 @@ class TestServerManager:
         assert SearchType.ROOM == search_query.search_type
         assert room_name == search_query.room
 
-        manager.network.queue_server_messages.assert_called_once()
+        manager._network.send_server_messages.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_searchUser_shouldSearchAndCreateEntry(self):
@@ -277,4 +318,4 @@ class TestServerManager:
         assert SearchType.USER == search_query.search_type
         assert username == search_query.username
 
-        manager.network.queue_server_messages.assert_called_once()
+        manager._network.send_server_messages.assert_awaited_once()

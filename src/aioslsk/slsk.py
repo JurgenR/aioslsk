@@ -39,14 +39,14 @@ class SoulSeek:
         self._stop_event: asyncio.Event = None
 
         self.events: EventBus = event_bus or EventBus()
-        self.internal_events: InternalEventBus = InternalEventBus()
+        self._internal_events: InternalEventBus = InternalEventBus()
 
         self.state: State = State()
 
-        self._network: Network = Network(
+        self.network: Network = Network(
             self.state,
             self.settings,
-            self.internal_events,
+            self._internal_events,
             self._stop_event
         )
 
@@ -61,26 +61,26 @@ class SoulSeek:
             self.configuration,
             self.settings,
             self.events,
-            self.internal_events,
+            self._internal_events,
             self.shares_manager,
-            self._network
+            self.network
         )
         self.peer_manager: PeerManager = PeerManager(
             self.state,
             self.settings,
             self.events,
-            self.internal_events,
+            self._internal_events,
             self.shares_manager,
             self.transfer_manager,
-            self._network
+            self.network
         )
         self.server_manager: ServerManager = ServerManager(
             self.state,
             self.settings,
             self.events,
-            self.internal_events,
+            self._internal_events,
             self.shares_manager,
-            self._network
+            self.network
         )
 
     async def start(self):
@@ -90,7 +90,7 @@ class SoulSeek:
         loop.set_exception_handler(self._exception_handler)
 
         self._stop_event = asyncio.Event()
-        self._network._stop_event = self._stop_event
+        self.network._stop_event = self._stop_event
 
         await self.start_shares_manager()
 
@@ -99,7 +99,7 @@ class SoulSeek:
         await self.start_transfer_manager()
 
     async def connect(self):
-        await self._network.initialize()
+        await self.network.initialize()
         await self.server_manager.login(
             self.settings.get('credentials.username'),
             self.settings.get('credentials.password')
@@ -115,7 +115,7 @@ class SoulSeek:
 
     async def run_until_stopped(self):
         await self._stop_event.wait()
-        await self._network.disconnect()
+        await self.network.disconnect()
 
         logger.debug(f"tasks after disconnect : {asyncio.all_tasks()}")
 
@@ -216,44 +216,30 @@ class SoulSeek:
         return self.state.search_queries.pop(ticket)
 
     async def get_user_stats(self, user: Union[str, User]):
-        if isinstance(user, User):
-            await self.server_manager.get_user_stats(user.name)
-        else:
-            await self.server_manager.get_user_stats(user)
+        await self.server_manager.get_user_stats(
+            self.state.get_or_create_user(user).name)
 
     async def get_user_status(self, user: Union[str, User]):
-        if isinstance(user, User):
-            await self.server_manager.get_user_status(user.name)
-        else:
-            await self.server_manager.get_user_status(user)
+        await self.server_manager.get_user_status(
+            self.state.get_or_create_user(user).name)
 
-    async def add_user(self, user: Union[str, User]) -> User:
-        if isinstance(user, User):
-            return await self.server_manager.add_user(user.name)
-        else:
-            return await self.server_manager.add_user(user)
+    async def track_user(self, user: Union[str, User]) -> User:
+        return await self.server_manager.track_users(
+            self.state.get_or_create_user(user).name)
 
     async def remove_user(self, user: Union[str, User]):
-        if isinstance(user, User):
-            await self.server_manager.remove_user(user.name)
-        else:
-            await self.server_manager.remove_user(user)
+        await self.server_manager.remove_user(
+            self.state.get_or_create_user(user).name)
 
     # Peer requests
     async def get_user_info(self, user: Union[str, User]):
-        if isinstance(user, User):
-            await self.peer_manager.get_user_info(user.name)
-        else:
-            await self.peer_manager.get_user_info(user)
+        await self.peer_manager.get_user_info(
+            self.state.get_or_create_user(user).name)
 
     async def get_user_shares(self, user: Union[str, User]):
-        if isinstance(user, User):
-            await self.peer_manager.get_user_shares(user.name)
-        else:
-            await self.peer_manager.get_user_shares(user)
+        await self.peer_manager.get_user_shares(
+            self.state.get_or_create_user(user).name)
 
     async def get_user_directory(self, user: Union[str, User], directory: List[str]):
-        if isinstance(user, User):
-            await self.peer_manager.get_user_directory(user.name, directory)
-        else:
-            await self.peer_manager.get_user_directory(user, directory)
+        await self.peer_manager.get_user_directory(
+            self.state.get_or_create_user(user).name, directory)

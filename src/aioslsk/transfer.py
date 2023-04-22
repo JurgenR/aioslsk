@@ -4,7 +4,6 @@ import asyncio
 from collections import deque
 from dataclasses import dataclass
 from enum import auto, Enum
-from functools import partial
 import hashlib
 import logging
 from operator import itemgetter
@@ -34,6 +33,7 @@ from .events import (
     InternalEventBus,
     MessageReceivedEvent,
     PeerInitializedEvent,
+    TrackUserEvent,
     TransferAddedEvent,
 )
 from .protocol.primitives import uint32, uint64
@@ -404,6 +404,10 @@ class Transfer:
     def _download_task_complete(self, task: asyncio.Task):
         self._current_task = None
 
+    def _transfer_progress_callback(self, transfer: Transfer, data: bytes):
+        transfer.bytes_transfered += len(data)
+        transfer.add_speed_log_entry(len(data))
+
     def __repr__(self):
         return (
             f"Transfer(username={self.username!r}, remote_path={self.remote_path!r}, "
@@ -514,12 +518,8 @@ class TransferManager:
         await self._set_transfer_state(transfer, TransferState.QUEUED, force=force)
 
         # Track user
-        user = self._state.get_or_create_user(transfer.username)
-        user.is_tracking = True
-        await self._network.send_server_messages(
-            AddUser.Request(transfer.username)
-        )
         await self.manage_transfers()
+        await self._internal_event_bus.emit(TrackUserEvent(transfer.username))
 
     async def remotely_queue(self, transfer: Transfer):
         await self._set_transfer_state(transfer, TransferState.REMOTELY_QUEUED)
@@ -542,11 +542,7 @@ class TransferManager:
                 return queued_transfer
 
         if not transfer.is_finalized():
-            user = self._state.get_or_create_user(transfer.username)
-            user.is_tracking = True
-            await self._network.send_server_messages(
-                AddUser.Request(transfer.username)
-            )
+            await self._internal_event_bus.emit(TrackUserEvent(transfer.username))
 
         logger.info(f"adding transfer : {transfer!r}")
         self._transfers.append(transfer)
@@ -654,8 +650,6 @@ class TransferManager:
         free_upload_slots = self.get_free_upload_slots()
 
         # Downloads will just get remotely queued
-        # logger.debug(f"downloads to queue remotely : {downloads!r}")
-        # logger.debug(f"uploads to start : {uploads!r}")
         for download in downloads:
             if not download._current_task:
                 download._current_task = asyncio.create_task(
@@ -741,7 +735,7 @@ class TransferManager:
             await self.remotely_queue(transfer)
 
     async def _request_place_in_queue(self, transfer: Transfer):
-        await self._network.queue_peer_messages(
+        await self._network.send_peer_messages(
             transfer.username,
             PeerPlaceInQueueRequest.Request(transfer.remote_path)
         )
@@ -823,7 +817,7 @@ class TransferManager:
         await self._upload_file(transfer, connection)
 
         # Send transfer speed
-        await self._network.queue_server_messages(
+        self._network.queue_server_messages(
             SendUploadSpeed.Request(int(self.get_average_upload_speed()))
         )
 
@@ -841,7 +835,7 @@ class TransferManager:
                 await handle.seek(transfer.get_offset())
                 await connection.send_file(
                     handle,
-                    partial(self._upload_progress_callback, transfer)
+                    transfer._transfer_progress_callback
                 )
 
         except OSError:
@@ -852,7 +846,7 @@ class TransferManager:
         except ConnectionWriteError:
             logger.exception(f"error writing to socket : {transfer!r}")
             await self.fail(transfer)
-            await self._network.queue_peer_messages(
+            await self._network.send_peer_messages(
                 PeerUploadFailed.Request(transfer.remote_path)
             )
         else:
@@ -876,7 +870,7 @@ class TransferManager:
                 await connection.receive_file(
                     handle,
                     transfer.filesize - transfer._offset,
-                    partial(self._download_progress_callback, transfer)
+                    transfer._transfer_progress_callback
                 )
 
         except OSError:
@@ -894,14 +888,6 @@ class TransferManager:
                 await self.complete(transfer)
             else:
                 await self.incomplete(transfer)
-
-    def _upload_progress_callback(self, transfer: Transfer, data: bytes):
-        transfer.bytes_transfered += len(data)
-        transfer.add_speed_log_entry(len(data))
-
-    def _download_progress_callback(self, transfer: Transfer, data: bytes):
-        transfer.bytes_transfered += len(data)
-        transfer.add_speed_log_entry(len(data))
 
     async def _handle_incoming_file_connection(self, connection: PeerConnection):
         """Called only when a file connection was opened with PeerInit. Usually

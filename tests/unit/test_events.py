@@ -1,4 +1,4 @@
-from aioslsk.events import build_message_map, on_message, EventBus, UserAddEvent
+from aioslsk.events import build_message_map, on_message, EventBus, UserInfoEvent
 from aioslsk.model import User
 from aioslsk.protocol.messages import Login, AddUser
 
@@ -6,15 +6,15 @@ import pytest
 from unittest.mock import create_autospec
 
 
-def listener1(event: UserAddEvent):
+def listener1(event: UserInfoEvent):
     pass
 
 
-def listener2(event: UserAddEvent):
+def listener2(event: UserInfoEvent):
     pass
 
 
-async def async_listener(event: UserAddEvent):
+async def async_listener(event: UserInfoEvent):
     pass
 
 
@@ -53,23 +53,23 @@ class TestEventBus:
     def test_whenRegisterNonExistingEvent_shouldAddListener(self):
         bus = EventBus()
 
-        bus.register(UserAddEvent, listener1)
+        bus.register(UserInfoEvent, listener1)
 
-        assert bus._events[UserAddEvent] == [listener1, ]
+        assert bus._events[UserInfoEvent] == [listener1, ]
 
     def test_whenRegisterExistingEvent_shouldAddListener(self):
         bus = EventBus()
 
-        bus.register(UserAddEvent, listener1)
-        bus.register(UserAddEvent, listener2)
+        bus.register(UserInfoEvent, listener1)
+        bus.register(UserInfoEvent, listener2)
 
-        assert bus._events[UserAddEvent] == [listener1, listener2, ]
+        assert bus._events[UserInfoEvent] == [listener1, listener2, ]
 
     @pytest.mark.asyncio
     async def test_whenEmitNoListenersRegister_shouldNotRaise(self):
         bus = EventBus()
 
-        await bus.emit(UserAddEvent(User("test")))
+        await bus.emit(UserInfoEvent(User("test")))
 
     @pytest.mark.asyncio
     async def test_whenEmit_shouldEmitToListeners(self):
@@ -77,10 +77,10 @@ class TestEventBus:
 
         mock_listener1 = create_autospec(listener1)
         mock_listener2 = create_autospec(listener2)
-        bus.register(UserAddEvent, mock_listener1)
-        bus.register(UserAddEvent, mock_listener2)
+        bus.register(UserInfoEvent, mock_listener1)
+        bus.register(UserInfoEvent, mock_listener2)
 
-        event = UserAddEvent(User("test"))
+        event = UserInfoEvent(User("test"))
 
         await bus.emit(event)
 
@@ -92,9 +92,9 @@ class TestEventBus:
         bus = EventBus()
 
         mock_listener1 = create_autospec(async_listener)
-        bus.register(UserAddEvent, mock_listener1)
+        bus.register(UserInfoEvent, mock_listener1)
 
-        event = UserAddEvent(User("test"))
+        event = UserInfoEvent(User("test"))
 
         await bus.emit(event)
 
@@ -106,10 +106,10 @@ class TestEventBus:
 
         mock_listener1 = create_autospec(listener1, side_effect=ValueError('error'))
         mock_listener2 = create_autospec(listener2)
-        bus.register(UserAddEvent, mock_listener1)
-        bus.register(UserAddEvent, mock_listener2)
+        bus.register(UserInfoEvent, mock_listener1)
+        bus.register(UserInfoEvent, mock_listener2)
 
-        event = UserAddEvent(User("test"))
+        event = UserInfoEvent(User("test"))
 
         await bus.emit(event)
 

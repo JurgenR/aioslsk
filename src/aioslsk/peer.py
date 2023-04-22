@@ -20,7 +20,7 @@ from .events import (
     PeerInitializedEvent,
     MessageReceivedEvent,
     UserDirectoryEvent,
-    UserInfoReplyEvent,
+    UserInfoEvent,
     UserSharesReplyEvent,
     SearchResultEvent,
 )
@@ -369,27 +369,47 @@ class PeerManager:
         else:
             query.results.append(search_result)
             await self._event_bus.emit(SearchResultEvent(query, search_result))
+
         await connection.disconnect(reason=CloseReason.REQUESTED)
+
+        # Update the user info
+        user = self._state.get_or_create_user(message.username)
+        user.avg_speed = message.avg_speed
+        user.queue_length = message.queue_size
+        user.has_slots_free = message.has_slots_free
+        await self._event_bus.emit(UserInfoEvent(user))
 
     @on_message(PeerUserInfoReply.Request)
     async def _on_peer_user_info_reply(self, message: PeerUserInfoReply.Request, connection: PeerConnection):
         user = self._state.get_or_create_user(connection.username)
         user.description = message
         user.picture = message.picture
-        user.total_uploads = message.upload_slots
+        user.upload_slots = message.upload_slots
         user.queue_length = message.queue_size
         user.has_slots_free = message.has_slots_free
 
-        self._event_bus.emit(UserInfoReplyEvent(user))
+        self._event_bus.emit(UserInfoEvent(user))
 
     @on_message(PeerUserInfoRequest.Request)
     async def _on_peer_user_info_request(self, message: PeerUserInfoRequest.Request, connection: PeerConnection):
+        try:
+            description = self._settings.get('credentials.info.description')
+        except KeyError:
+            description = ""
+
+        try:
+            picture = self._settings.get('credentials.info.picture')
+        except KeyError:
+            picture = None
+
         await connection.send_message(
             PeerUserInfoReply.Request(
-                "No description",
-                self._transfer_manager.upload_slots,
-                self._transfer_manager.get_free_upload_slots(),
-                self._transfer_manager.has_slots_free()
+                description=description,
+                has_picture=bool(picture),
+                picture=picture,
+                upload_slots=self._transfer_manager.upload_slots,
+                queue_size=self._transfer_manager.get_queue_size(),
+                has_slots_free=self._transfer_manager.has_slots_free()
             )
         )
 

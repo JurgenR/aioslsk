@@ -1,7 +1,7 @@
 from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Deque, Dict
+from typing import Deque, Dict, Union
 
 from .model import ChatMessage, Room, User
 from .search import ReceivedSearch, SearchRequest
@@ -29,13 +29,24 @@ class State:
     received_searches: Deque[ReceivedSearch] = field(default_factory=lambda: deque(list(), 500))
     search_queries: Dict[int, SearchRequest] = field(default_factory=dict)
 
-    def get_or_create_user(self, username: str) -> User:
+    def get_or_create_user(self, user: Union[str, User]) -> User:
+        """Retrieves the user with given name or return the existing `User`
+        object. If a `User` object is passed in it will be checked if it exists,
+        otherwise it will get added
+        """
+        if isinstance(user, User):
+            if user in self.users.values():
+                return user
+            else:
+                self.users[user.name] = user
+                return user
+
         try:
-            return self.users[username]
+            return self.users[user]
         except KeyError:
-            user = User(name=username)
-            self.users[username] = user
-            return user
+            user_object = User(name=user)
+            self.users[user] = user_object
+            return user_object
 
     def get_or_create_room(self, room_name: str) -> Room:
         try:

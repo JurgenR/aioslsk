@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from typing import Tuple
+from typing import List, Tuple
 
 from .network.connection import CloseReason, ConnectionState, ServerConnection
 from .constants import (
@@ -15,6 +15,7 @@ from .events import (
     EventBus,
     InternalEventBus,
     LoginEvent,
+    MessageReceivedEvent,
     PrivateMessageEvent,
     RoomMessageEvent,
     RoomListEvent,
@@ -24,13 +25,13 @@ from .events import (
     RoomTickerAddedEvent,
     RoomTickerRemovedEvent,
     ServerDisconnectedEvent,
-    MessageReceivedEvent,
-    UserAddEvent,
+    TrackUserEvent,
+    UntrackUserEvent,
+    UserInfoEvent,
     UserJoinedRoomEvent,
     UserJoinedPrivateRoomEvent,
     UserLeftRoomEvent,
     UserLeftPrivateRoomEvent,
-    UserStatsEvent,
     UserStatusEvent,
 )
 from .exceptions import ConnectionFailedError, LoginFailedError, NoSuchUserError
@@ -89,7 +90,7 @@ from .protocol.messages import (
     WishlistInterval,
     WishlistSearch,
 )
-from .model import ChatMessage, RoomMessage, User, UserStatus
+from .model import ChatMessage, Room, RoomMessage, User, UserStatus
 from .network.network import Network
 from .shares import SharesManager
 from .search import SearchRequest, SearchType
@@ -108,13 +109,14 @@ class ServerManager:
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._internal_event_bus: InternalEventBus = internal_event_bus
-        self.shares_manager: SharesManager = shares_manager
-        self.network: Network = network
+        self._shares_manager: SharesManager = shares_manager
+        self._network: Network = network
 
         self._ticket_generator = ticket_generator()
 
         self._ping_task: asyncio.Task = None
         self._wishlist_task: asyncio.Task = None
+        self._post_login_task: asyncio.Task = None
 
         self.MESSAGE_MAP = build_message_map(self)
 
@@ -122,20 +124,24 @@ class ServerManager:
             MessageReceivedEvent, self._on_message_received)
         self._internal_event_bus.register(
             ConnectionStateChangedEvent, self._on_state_changed)
+        self._internal_event_bus.register(
+            TrackUserEvent, self._on_track_user)
+        self._internal_event_bus.register(
+            UntrackUserEvent, self._on_untrack_user)
 
     @property
     def connection_state(self) -> ConnectionState:
-        return self.network.server.state
+        return self._network.server.state
 
     async def send_ping(self):
         """Send ping to the server"""
-        await self.network.queue_server_messages(Ping.Request())
+        await self._network.send_server_messages(Ping.Request())
 
     async def report_shares(self):
         """Reports the shares amount to the server"""
-        dir_count, file_count = self.shares_manager.get_stats()
+        dir_count, file_count = self._shares_manager.get_stats()
         logger.debug(f"reporting shares to the server (dirs={dir_count}, file_count={file_count})")
-        await self.network.queue_server_messages(
+        await self._network.send_server_messages(
             SharedFoldersFiles.Request(
                 directory_count=dir_count,
                 file_count=file_count
@@ -144,8 +150,8 @@ class ServerManager:
 
     async def login(self, username: str, password: str, version: int = 157):
         logger.info(f"sending request to login: username={username}, password={password}")
-        expected_response = self.network.wait_for_server_message(Login.Response)
-        await self.network.send_server_messages(
+        expected_response = self._network.wait_for_server_message(Login.Response)
+        await self._network.send_server_messages(
             Login.Request(
                 username=username,
                 password=password,
@@ -167,7 +173,7 @@ class ServerManager:
             raise LoginFailedError(response.reason)
 
         # Make setup calls
-        await self.network.queue_server_messages(
+        self._network.queue_server_messages(
             CheckPrivileges.Request(),
             SetListenPort.Request(
                 self._settings.get('network.listening_port'),
@@ -182,39 +188,56 @@ class ServerManager:
         )
 
         await self.report_shares()
-        await self.track_users(self._settings.get('credentials.username'))
-        await self.network.queue_server_messages(
+        await self.track_user(self._settings.get('credentials.username'))
+        self._network.queue_server_messages(
             TogglePrivateRooms.Request(self._settings.get('chats.private_room_invites')))
 
         # Perform AddUser for all in the friendlist
-        await self.track_users(*self._settings.get('users.friends'))
+        await self.track_friends()
 
         # Auto-join rooms
         await self.auto_join_rooms()
 
         await self._internal_event_bus.emit(LoginEvent(success=response.success))
 
-    async def track_users(self, *users):
-        """Sends an `AddUser` request to start tracking changes
+    async def track_user(self, username: str):
+        """Starts tracking a user. The method sends an `AddUser` only if the
+        `is_tracking` variable is set to False. Updates to the user will be
+        omitted through the `UserInfoEvent`
         """
-        messages = []
-        for user in users:
-            if not isinstance(user, User):
-                user = self._state.get_or_create_user(user)
+        user = self._state.get_or_create_user(username)
 
-            messages.append(AddUser.Request(user))
+        if not user.is_tracking:
+            await self._network.send_server_messages(AddUser.Request(username))
             user.is_tracking = True
 
-        await self.network.queue_server_messages(*messages)
+    async def track_friends(self):
+        tasks = []
+        for friend in self._settings.get('users'):
+            tasks.append(asyncio.create_task(self.track_user(friend)))
+
+        asyncio.gather(*tasks, return_exceptions=True)
+
+    async def untrack_user(self, user):
+        user = self._state.get_or_create_user(user)
+        # Reset user status, this is needed for the transfer manager who
+        # will skip attempting to transfer for offline user. But if we don't
+        # know if a user is online we will never attempt to start that
+        # transfer
+        await self._network.send_server_messages(RemoveUser.Request(user.name))
+        user.is_tracking = False
+        user.status = UserStatus.UNKNOWN
 
     async def auto_join_rooms(self):
-        """Automatically joins rooms stored in the settings"""
+        """Automatically joins rooms stored in the settings. This method will
+        do nothing if the `chats.auto_join` setting is not enabled
+        """
         if not self._settings.get('chats.auto_join'):
             return
 
         rooms = self._settings.get('chats.rooms')
         logger.info(f"automatically rejoining {len(rooms)} rooms")
-        await self.network.queue_server_messages(
+        await self._network.send_server_messages(
             *[ChatJoinRoom.Request(room) for room in rooms]
         )
 
@@ -222,7 +245,7 @@ class ServerManager:
         """Performs a search query on all users in a room"""
         ticket = next(self._ticket_generator)
 
-        await self.network.queue_server_messages(
+        await self._network.send_server_messages(
             ChatRoomSearch.Request(room, ticket, query)
         )
         self._state.search_queries[ticket] = SearchRequest(
@@ -237,7 +260,7 @@ class ServerManager:
         """Performs a search query on a user"""
         ticket = next(self._ticket_generator)
 
-        await self.network.queue_server_messages(
+        await self._network.send_server_messages(
             UserSearch.Request(username, ticket, query)
         )
         self._state.search_queries[ticket] = SearchRequest(
@@ -252,7 +275,7 @@ class ServerManager:
         """Performs a global search query"""
         ticket = next(self._ticket_generator)
 
-        await self.network.queue_server_messages(
+        await self._network.send_server_messages(
             FileSearch.Request(ticket, query)
         )
         self._state.search_queries[ticket] = SearchRequest(
@@ -263,107 +286,107 @@ class ServerManager:
         return self._state.search_queries[ticket]
 
     async def add_user(self, username: str) -> User:
-        """Request the server to track the user
+        """Request the server to track the user. This is similar to `track_user`
+        except that this method waits for a response. This method will also set
+        `is_tracking` on the user
 
-        :raise asnycio.TimeoutError: raised when the timeout is reached before a
+        :raise asyncio.TimeoutError: raised when the timeout is reached before a
             response is received
         :raise NoSuchUserError: raised when user does not exist
         :return: `User` object
         """
-        await self.network.send_server_messages(
-            AddUser.Request(username)
-        )
+        user = self._state.get_or_create_user(username)
+
+        await self._network.send_server_messages(AddUser.Request(username))
+        user.is_tracking = True
+
         _, response = await asyncio.wait_for(
-            self.network.wait_for_server_message(AddUser.Response, username=username),
+            self._network.wait_for_server_message(AddUser.Response, username=username),
             SERVER_RESPONSE_TIMEOUT
         )
+
         if not response.exists:
             raise NoSuchUserError(f"user {username} does not exist")
         else:
+            user = self._state.get_or_create_user(username)
+            user.is_tracking = True
             return await self._handle_add_user_response(response)
 
-    async def remove_user(self, username: str):
-        await self.network.send_server_messages(
-            RemoveUser.Request(username)
-        )
-        # Reset user status, this is needed for the transfer manager who will
-        # skip attempting to transfer for offline user. But if we don't know if
-        # a user is online we will never know
-        user = self._state.get_or_create_user(username)
-        user.status = UserStatus.UNKNOWN
-
-    async def get_user_stats(self, username: str) -> bool:
-        await self.network.send_server_messages(
-            GetUserStats.Request(username)
-        )
-        _, response = await asyncio.wait_for(
-            self.network.wait_for_server_message(GetUserStats.Response, username=username),
+    async def get_user_stats(self, username: str) -> User:
+        await self._network.send_server_messages(GetUserStats.Request(username))
+        await asyncio.wait_for(
+            self._network.wait_for_server_message(GetUserStats.Response, username=username),
             SERVER_RESPONSE_TIMEOUT
         )
+        return self._state.get_or_create_user(username)
 
     async def get_user_status(self, username: str):
-        await self.network.send_server_messages(
-            GetUserStatus.Request(username)
-        )
+        await self._network.send_server_messages(GetUserStatus.Request(username))
         _, response = await asyncio.wait_for(
-            self.network.wait_for_server_message(GetUserStatus.Response, username=username),
+            self._network.wait_for_server_message(GetUserStatus.Response, username=username),
             SERVER_RESPONSE_TIMEOUT
         )
         return UserStatus(response.status)
 
-    async def get_room_list(self):
-        await self.network.send_server_messages(RoomList.Request())
+    async def get_room_list(self) -> List[Room]:
+        """Request the list of chat rooms from the server"""
+        await self._network.send_server_messages(RoomList.Request())
         _, response = await asyncio.wait_for(
-            self.network.wait_for_server_message(RoomList.Response),
+            self._network.wait_for_server_message(RoomList.Response),
             SERVER_RESPONSE_TIMEOUT
         )
+        rooms = []
+        for room_name in response.rooms:
+            rooms.append(self._state.get_or_create_room(room_name))
+        return rooms
 
     async def join_room(self, name: str):
-        await self.network.send_server_messages(
+        await self._network.send_server_messages(
             ChatJoinRoom.Request(name)
         )
 
     async def leave_room(self, name: str):
-        await self.network.send_server_messages(
+        await self._network.send_server_messages(
             ChatLeaveRoom.Request(name)
         )
 
     async def set_room_ticker(self, room_name: str, ticker: str):
         # No need to update the ticker in the model, a ChatRoomTickerAdded will
         # be sent back to us
-        await self.network.send_server_messages(
+        await self._network.send_server_messages(
             ChatRoomTickerSet.Request(room=room_name, ticker=ticker)
         )
 
     async def send_private_message(self, username: str, message: str):
-        await self.network.send_server_messages(
+        await self._network.send_server_messages(
             ChatPrivateMessage.Request(username, message)
         )
 
     async def send_room_message(self, room_name: str, message: str):
-        await self.network.send_server_messages(
+        await self._network.send_server_messages(
             ChatRoomMessage.Request(room_name, message)
         )
 
     async def drop_private_room_ownership(self, room_name: str):
-        await self.network.send_server_messages(
+        await self._network.send_server_messages(
             PrivateRoomDropOwnership.Request(room_name)
         )
 
     async def drop_private_room_membership(self, room_name: str):
-        await self.network.send_server_messages(
+        await self._network.send_server_messages(
             PrivateRoomDropMembership.Request(room_name)
         )
 
     async def get_peer_address(self, username: str) -> Tuple[str, int, int]:
-        """Requests the IP address/port of the peer from the server
+        """Requests the IP address/port of the peer from the server.
 
         :param username: username of the peer
+        :return: tuple of 3 values: ip address, port and
         """
-        await self.network.send_server_messages(
+        await self._network.send_server_messages(
             GetPeerAddress.Request(username)
         )
-        response = await self.network.wait_for_server_message(
+        response = await self._network.wait_for_server_message(
             GetPeerAddress.Response, username=username)
 
         return response.ip, response.port, response.obfuscated_port
@@ -390,13 +413,14 @@ class ServerManager:
         user.downloads = message.user_data.download_num
         user.files = message.user_data.file_count
         user.directories = message.user_data.dir_count
-        user.has_slots_free = message.slots_free
+        user.slots_free = message.slots_free
         user.country = message.country_code
 
         room = self._state.get_or_create_room(message.room)
         room.add_user(user)
 
         await self._event_bus.emit(UserJoinedRoomEvent(user=user, room=room))
+        await self._event_bus.emit(UserInfoEvent(user))
 
     @on_message(ChatUserLeftRoom.Response)
     async def _on_user_left_room(self, message: ChatUserLeftRoom.Response, connection):
@@ -420,9 +444,10 @@ class ServerManager:
             user.files = user_data.file_count
             user.directories = user_data.dir_count
             user.country = message.users_countries[idx]
-            user.has_slots_free = message.users_slots_free[idx]
+            user.slots_free = message.users_slots_free[idx]
 
             room.add_user(user)
+            await self._event_bus.emit(UserInfoEvent(user))
 
         if message.owner:
             room.owner = message.owner
@@ -547,7 +572,7 @@ class ServerManager:
         )
         self._state.private_messages[message.chat_id] = chat_message
 
-        await self.network.send_server_messages(
+        await self._network.send_server_messages(
             ChatAckPrivateMessage.Request(message.chat_id)
         )
 
@@ -647,7 +672,7 @@ class ServerManager:
         user.files = message.file_count
         user.directories = message.dir_count
 
-        await self._event_bus.emit(UserStatsEvent(user))
+        await self._event_bus.emit(UserInfoEvent(user))
 
     async def _handle_add_user_response(self, response: AddUser.Response) -> User:
         if response.exists:
@@ -660,7 +685,7 @@ class ServerManager:
             user.directories = response.dir_count
             user.country = response.country_code
 
-            await self._event_bus.emit(UserAddEvent(user))
+            await self._event_bus.emit(UserInfoEvent(user))
             return user
 
     # Job methods
@@ -668,7 +693,10 @@ class ServerManager:
     async def _ping_job(self):
         while True:
             await asyncio.sleep(SERVER_PING_INTERVAL)
-            await self.send_ping()
+            try:
+                await self.send_ping()
+            except Exception as exc:
+                logger.warning(f"failed to ping server. exception={exc!r}")
 
     async def _cancel_ping_task(self):
         if self._ping_task is not None:
@@ -697,7 +725,7 @@ class ServerManager:
                     item['query'],
                     search_type=SearchType.WISHLIST
                 )
-                await self.network.queue_server_messages(
+                self._network.queue_server_messages(
                     WishlistSearch.Request(ticket, item['query'])
                 )
 
@@ -709,6 +737,12 @@ class ServerManager:
             self._wishlist_task = None
 
     # Listeners
+
+    async def _on_track_user(self, event: TrackUserEvent):
+        await self.track_user(event.username)
+
+    async def _on_untrack_user(self, event: UntrackUserEvent):
+        await self.untrack_user(event.username)
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message
@@ -742,7 +776,7 @@ class ServerManager:
 
     async def reconnect(self):
         try:
-            await self.network.connect_server()
+            await self._network.connect_server()
         except ConnectionFailedError:
             logger.warning("failed to reconnect to server")
         else:
