@@ -253,9 +253,7 @@ class SharesManager:
             self.add_shared_directory(shared_directory)
 
     def read_cache(self):
-        """Read the directories from the storage. Rebuilding of the term map
-        needs to be called independently.
-        """
+        """Read the directories from the storage"""
         directories = self.storage.load_index()
         logger.info(f"read {len(directories)} from storage")
         self.shared_directories = directories

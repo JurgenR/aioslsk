@@ -58,8 +58,8 @@ Login (Code 1)
 
    1. **string**: greeting
    2. **ip**: ip_address
-   3. **string**: md5_hash
-   4. **uint8**: unknown
+   3. **string**: md5_hash , hash of just the password
+   4. **uint8**: privileged
 
 3. If result==false
 

@@ -698,7 +698,7 @@ class ServerManager:
             except Exception as exc:
                 logger.warning(f"failed to ping server. exception={exc!r}")
 
-    async def _cancel_ping_task(self):
+    def _cancel_ping_task(self):
         if self._ping_task is not None:
             self._ping_task.cancel()
             self._ping_task = None
@@ -731,7 +731,7 @@ class ServerManager:
 
             await asyncio.sleep(interval)
 
-    async def _cancel_wishlist_task(self):
+    def _cancel_wishlist_task(self):
         if self._wishlist_task is not None:
             self._wishlist_task.cancel()
             self._wishlist_task = None

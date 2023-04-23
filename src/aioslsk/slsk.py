@@ -83,6 +83,10 @@ class SoulSeek:
             self.network
         )
 
+    @property
+    def event_loop(self):
+        return asyncio.get_running_loop()
+
     async def start(self):
         # Allows creating client before actually calling asyncio.run(client.start())
         # see https://stackoverflow.com/questions/55918048/asyncio-semaphore-runtimeerror-task-got-future-attached-to-a-different-loop
@@ -93,9 +97,7 @@ class SoulSeek:
         self.network._stop_event = self._stop_event
 
         await self.start_shares_manager()
-
         await self.connect()
-
         await self.start_transfer_manager()
 
     async def connect(self):
@@ -119,16 +121,14 @@ class SoulSeek:
 
         logger.debug(f"tasks after disconnect : {asyncio.all_tasks()}")
 
-        # Writing database needs to be last, as transfers need to go into the
-        # incomplete state if they were still transfering
+        self.peer_manager.stop()
+        self.transfer_manager.stop()
+        self.shares_manager.write_cache()
         self.transfer_manager.write_transfers_to_storage()
 
     async def stop(self):
         logger.info("signaling client to exit")
         self._stop_event.set()
-        self.peer_manager.stop()
-        self.transfer_manager.stop()
-        self.shares_manager.write_cache()
 
     def _exception_handler(self, loop, context):
         message = f"unhandled exception on loop {loop!r} : context : {context!r}"
