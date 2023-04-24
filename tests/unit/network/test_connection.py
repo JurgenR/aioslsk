@@ -24,12 +24,17 @@ from aioslsk.network.connection import (
 
 from asyncio import IncompleteReadError, TimeoutError
 import pytest
-from unittest.mock import AsyncMock, call, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, call, Mock, patch
 
 
 @pytest.fixture
 def network():
-    return AsyncMock()
+    nw = Mock()
+    nw.set_state = AsyncMock()
+    nw.connect = AsyncMock()
+    nw.disconnect = AsyncMock()
+    nw.on_state_changed = AsyncMock()
+    return nw
 
 
 class TestConnection:
@@ -55,28 +60,30 @@ class TestDataConnection:
     @pytest.mark.asyncio
     async def test_connectSuccessful_shouldSetState(self, network):
         connection = DataConnection('1.2.3.4', 1234, network)
-        connection._start_reader_task = MagicMock()
+        connection._start_reader_task = Mock()
         reader, writer = Mock(), Mock()
-        with patch('asyncio.open_connection', return_value=(reader, writer)):
+        with patch('asyncio.open_connection', return_value=(reader, writer)) as open_mock:
             await connection.connect()
 
         assert ConnectionState.CONNECTED == connection.state
         assert connection._reader is not None
         assert connection._writer is not None
         connection._start_reader_task.assert_called_once()
+        open_mock.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_connectUnsuccessful_shouldDisconnectAndRaise(self, network):
         connection = DataConnection('1.2.3.4', 1234, network)
         connection.disconnect = AsyncMock()
 
-        with patch('asyncio.open_connection', side_effect=OSError):
+        with patch('asyncio.open_connection', side_effect=OSError) as open_mock:
             with pytest.raises(ConnectionFailedError):
                 await connection.connect()
 
         assert connection._reader is None
         assert connection._writer is None
         connection.disconnect.assert_awaited_once_with(CloseReason.CONNECT_FAILED)
+        open_mock.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_connectTimeout_shouldDisconnectAndRaise(self, network):
@@ -95,7 +102,7 @@ class TestDataConnection:
     @pytest.mark.asyncio
     @pytest.mark.parametrize('state', [ConnectionState.CLOSED, ConnectionState.CLOSING])
     async def test_disconnect_alreadyDisconnected_shouldDoNothing(self, network, state: ConnectionState):
-        connection = connection = self._create_connection(network, state)
+        connection = self._create_connection(network, state)
         connection.set_state = AsyncMock()
 
         await connection.disconnect(CloseReason.EOF)

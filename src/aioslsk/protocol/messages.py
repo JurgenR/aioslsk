@@ -410,6 +410,13 @@ class GetUserStats(ServerMessage):
         dir_count: int = field(metadata={'type': uint32})
 
 
+class Kicked(ServerMessage):
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x29)
+
+
 class UserSearch(ServerMessage):
 
     @dataclass(order=True)

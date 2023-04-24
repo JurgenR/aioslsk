@@ -95,6 +95,11 @@ class ServerDisconnectedEvent(Event):
 
 
 @dataclass(frozen=True)
+class KickedEvent(Event):
+    pass
+
+
+@dataclass(frozen=True)
 class UserInfoEvent(Event):
     user: User
 
@@ -229,11 +234,6 @@ class MessageReceivedEvent(InternalEvent):
 class PeerInitializedEvent(InternalEvent):
     connection: PeerConnection
     requested: bool
-
-
-@dataclass(frozen=True)
-class LoginEvent(InternalEvent):
-    success: bool
 
 
 @dataclass(frozen=True)

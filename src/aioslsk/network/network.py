@@ -492,7 +492,7 @@ class Network:
         return self.server.queue_messages(*messages)
 
     async def send_server_messages(self, *messages: List[Union[bytes, MessageDataclass]]):
-        queue_tasks = await self.queue_server_messages(*messages)
+        queue_tasks = self.queue_server_messages(*messages)
         return await asyncio.gather(*queue_tasks, return_exceptions=True)
 
     # Methods called by connections
@@ -540,7 +540,8 @@ class Network:
         self.peer_connections.append(connection)
 
     async def on_message_received(self, message: MessageDataclass, connection: Connection):
-        """Method called by """
+        """Method called by `connection` instances when a message is received
+        """
         # Call the message callbacks for this object
         if message.__class__ in self.MESSAGE_MAP:
             await self.MESSAGE_MAP[message.__class__](message, connection)

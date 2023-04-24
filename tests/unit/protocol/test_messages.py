@@ -21,6 +21,7 @@ from aioslsk.protocol.messages import (
     ChatUserLeftRoom,
     ChatUserJoinedRoom,
     GetUserStats,
+    Kicked,
     ConnectToPeer,
     ChatPrivateMessage,
     ChatAckPrivateMessage,
@@ -832,6 +833,19 @@ class TestGetUserStats:
         )
         data = bytes.fromhex('2100000024000000050000007573657230a086010040420f000000000010270000e8030000')
         assert GetUserStats.Response.deserialize(data) == message
+
+
+class TestKicked:
+
+    def test_Kicked_Response_serialize(self):
+        message = Kicked.Response()
+        data = bytes.fromhex('0400000029000000')
+        assert message.serialize() == data
+
+    def test_Kicked_Response_deserialize(self):
+        message = Kicked.Response()
+        data = bytes.fromhex('0400000029000000')
+        assert Kicked.Response.deserialize(data) == message
 
 
 class TestUserSearch:

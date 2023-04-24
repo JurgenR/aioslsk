@@ -1,17 +1,20 @@
-from aioslsk.events import UserDirectoryEvent
-from aioslsk.protocol.primitives import DirectoryData
+from aioslsk.events import UserDirectoryEvent, UserInfoEvent, SearchResultEvent
+from aioslsk.protocol.primitives import DirectoryData, FileData
 from aioslsk.protocol.messages import (
     PeerDirectoryContentsRequest,
     PeerDirectoryContentsReply,
     PeerUserInfoReply,
     PeerUserInfoRequest,
+    PeerSearchReply,
 )
 from aioslsk.peer import PeerManager
+from aioslsk.search import SearchRequest, SearchType
 from aioslsk.settings import Settings
 from aioslsk.state import State
 
 import pytest
-from unittest.mock import ANY, AsyncMock, Mock, patch, PropertyMock
+from unittest.mock import ANY, AsyncMock, call, Mock, PropertyMock
+
 
 USER_DESCRIPTION = 'describes the user'
 USER_PICTURE = 'https://example.com/picture.png'
@@ -154,4 +157,39 @@ class TestPeer:
 
         manager._event_bus.emit.assert_awaited_once_with(
             UserDirectoryEvent(user, DIRECTORY, DIRECTORIES)
+        )
+
+    @pytest.mark.asyncio
+    async def test_onPeerSearchReply_shouldStoreResultsAndEmit(self):
+        manager = self._create_peer_manager()
+        TICKET = 1234
+        connection = AsyncMock()
+
+        manager._state.search_queries[TICKET] = SearchRequest(
+            TICKET, 'search', SearchType.NETWORK)
+
+        reply_message = PeerSearchReply.Request(
+            'user0',
+            TICKET,
+            results=[FileData(1, 'myfile.mp3', 10000, 'mp3', attributes=[])],
+            has_slots_free=True,
+            avg_speed=100,
+            queue_size=2,
+            locked_results=[FileData(1, 'locked.mp3', 10000, 'mp3', attributes=[])]
+        )
+        await manager._on_peer_search_reply(reply_message, connection)
+
+        assert 1 == len(manager._state.search_queries[TICKET].results)
+
+        manager._event_bus.emit.assert_has_awaits(
+            [
+                call(
+                    SearchResultEvent(
+                        manager._state.search_queries[TICKET],
+                        manager._state.search_queries[TICKET].results[0]
+                    )
+                ),
+                call(UserInfoEvent(manager._state.get_or_create_user('user0')))
+            ]
+
         )

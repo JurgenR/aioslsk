@@ -9,7 +9,7 @@ This document describes different flows and details for the SoulSeek protocol
 Messages
 ========
 
-The messages described can be found here: https://www.museek-plus.org/wiki/SoulseekProtocol . There are a lot of mistakes and missing details in this document.
+The messages described can be found here: https://www.museek-plus.org/wiki/SoulseekProtocol
 
 
 Server Connection and Logon
@@ -21,25 +21,34 @@ Server Connection and Logon
 
 A login response will be received which determines whether the login was successful or not along with the following commands providing some information:
 
-- RoomList: List of chatrooms
-- ParentMinSpeed: No idea yet
-- ParentSpeedRatio: No idea yet
-- WishlistInterval: No idea yet
-- PrivilegedUsers
+* RoomList
+* ParentMinSpeed
+* ParentSpeedRatio
+* WishlistInterval
+* PrivilegedUsers
 
 After the response we send the following requests back to the server with some information about us:
 
-- CheckPrivileges: Check if we have privileges
-- SetListenPort: The listening port(s), obfuscated and non-obfuscated
-- SetStatus: Our status (offline, away, available)
-- HaveNoParents_ : Related to Distributed Connections, should initually be true
-- BranchRoot_ : Related to Distributed Connections, should initially be our own username
-- BranchLevel_ : Related to Distributed Connections, should initially be 0
-- SharedFoldersFiles: Number of directories and files we are sharing
-- AddUser_ : Using our own username as parameter
-- AcceptChildren: This is used to prevent the server from advertising us through NetInfo_
+* CheckPrivileges: Check if we have privileges
+* SetListenPort: The listening port(s), obfuscated and non*obfuscated
+* SetStatus: Our status (offline, away, available)
+* HaveNoParents_ : Related to Distributed Connections, should initually be true
+* BranchRoot_ : Related to Distributed Connections, should initially be our own username
+* BranchLevel_ : Related to Distributed Connections, should initially be 0
+* SharedFoldersFiles: Number of directories and files we are sharing
+* AddUser_ : Using our own username as parameter
+* AcceptChildren: This is used to prevent the server from advertising us through NetInfo_
 
 After connection is complete, send a Ping_ command out every 5 minutes.
+
+Exception Cases
+---------------
+
+* No check on hash seems currently performed
+* No check on password length seems currently performed (empty password allowed)
+* Logon with an empty username results in failure reason `INVALIDUSERNAME`
+* If the user was previously logged in with and the password does not match results in failure reason `INVALIDPASS`
+* If the credentials are valid but the user is logged in the other user will receive message Kicked_ and the connection will be terminated
 
 
 _Question 1:_ I'm assuming the client version has some impact on how the server communicates to the peer, but the differences are unknown.
@@ -237,6 +246,7 @@ After joining a room, we will automatically be receiving GetUserStatus_ updates 
 .. _GetUserStatus: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode7
 .. _ConnectToPeer: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode18
 .. _Ping: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode32
+.. _Kicked: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode41
 .. _HaveNoParents: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode71
 .. _BranchLevel: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode126
 .. _BranchRoot: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode127

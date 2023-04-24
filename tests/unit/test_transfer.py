@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, Mock, MagicMock, patch
 
 import pytest
 
@@ -34,12 +34,19 @@ def manager(tmpdir):
     network = AsyncMock()
     network.upload_rate_limiter = MagicMock()
     network.download_rate_limiter = MagicMock()
+    event_bus = Mock()
+    event_bus.emit = AsyncMock()
+    event_bus.register = Mock()
+    internal_event_bus = Mock()
+    internal_event_bus.emit = AsyncMock()
+    internal_event_bus.register = Mock()
+
     return TransferManager(
         State(),
         Configuration(tmpdir, tmpdir),
         Settings(DEFAULT_SETTINGS),
-        AsyncMock(), # event bus
-        AsyncMock(), # internal event bus
+        event_bus, # event bus
+        internal_event_bus, # internal event bus
         None, # file manager
         network # network
     )
