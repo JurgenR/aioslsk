@@ -212,7 +212,7 @@ class ServerManager:
 
     async def track_friends(self):
         tasks = []
-        for friend in self._settings.get('users'):
+        for friend in self._settings.get('users.friends'):
             tasks.append(asyncio.create_task(self.track_user(friend)))
 
         asyncio.gather(*tasks, return_exceptions=True)
