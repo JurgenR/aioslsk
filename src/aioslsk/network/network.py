@@ -540,7 +540,8 @@ class Network:
         self.peer_connections.append(connection)
 
     async def on_message_received(self, message: MessageDataclass, connection: Connection):
-        """Method called by """
+        """Method called by `connection` instances when a message is received
+        """
         # Call the message callbacks for this object
         if message.__class__ in self.MESSAGE_MAP:
             await self.MESSAGE_MAP[message.__class__](message, connection)

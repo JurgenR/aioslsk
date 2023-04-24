@@ -88,20 +88,25 @@ class SoulSeek:
         return asyncio.get_running_loop()
 
     async def start(self):
+        self.event_loop.set_exception_handler(self._exception_handler)
+
         # Allows creating client before actually calling asyncio.run(client.start())
         # see https://stackoverflow.com/questions/55918048/asyncio-semaphore-runtimeerror-task-got-future-attached-to-a-different-loop
-        loop = asyncio.get_running_loop()
-        loop.set_exception_handler(self._exception_handler)
-
         self._stop_event = asyncio.Event()
         self.network._stop_event = self._stop_event
 
         await self.start_shares_manager()
         await self.connect()
+        await self.login()
         await self.start_transfer_manager()
 
     async def connect(self):
         await self.network.initialize()
+
+    async def login(self):
+        """Performs a logon to the server with the `credentials` defined in the
+        `settings`
+        """
         await self.server_manager.login(
             self.settings.get('credentials.username'),
             self.settings.get('credentials.password')

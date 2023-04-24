@@ -58,7 +58,7 @@ Login (Code 1)
 
    1. **string**: greeting
    2. **ip**: ip_address
-   3. **string**: md5_hash , hash of just the password
+   3. **string**: md5_hash , hash of the password
    4. **uint8**: privileged
 
 3. If result==false
@@ -69,7 +69,7 @@ Login (Code 1)
 SetListenPort (Code 2)
 ----------------------
 
-*Code:* 2 (0x02)
+:Code: 2 (0x02)
 
 :Usage: Advertise our listening ports to the server
 
@@ -115,7 +115,7 @@ AddUser (Code 5)
 
 :Code: 5 (0x05)
 
-:Usage: Track a user status
+:Usage: Track a user
 
 :Send:
 
@@ -400,6 +400,19 @@ GetUserStats (Code 36)
 3. **uint64**: download_number
 4. **uint32**: shared_files
 5. **uint32**: shared_directories
+
+
+Kicked (Code 41)
+----------------
+
+:Code: 42 (0x2A)
+
+:Usage: You were kicked from the server. This message is sent when
+
+
+:Receive:
+
+Nothing
 
 
 UserSearch (Code 42)

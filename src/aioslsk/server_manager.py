@@ -14,7 +14,7 @@ from .events import (
     ConnectionStateChangedEvent,
     EventBus,
     InternalEventBus,
-    LoginEvent,
+    KickedEvent,
     MessageReceivedEvent,
     PrivateMessageEvent,
     RoomMessageEvent,
@@ -63,6 +63,7 @@ from .protocol.messages import (
     GetUserStatus,
     GetUserStats,
     ToggleParentSearch,
+    Kicked,
     Login,
     MinParentsInCache,
     ParentInactivityTimeout,
@@ -197,8 +198,6 @@ class ServerManager:
 
         # Auto-join rooms
         await self.auto_join_rooms()
-
-        await self._internal_event_bus.emit(LoginEvent(success=response.success))
 
     async def track_user(self, username: str):
         """Starts tracking a user. The method sends an `AddUser` only if the
@@ -390,6 +389,10 @@ class ServerManager:
             GetPeerAddress.Response, username=username)
 
         return response.ip, response.port, response.obfuscated_port
+
+    @on_message(Kicked.Response)
+    async def _on_kicked(self, message: Kicked.Response, connection):
+        await self._event_bus.emit(KickedEvent())
 
     @on_message(ChatRoomMessage.Response)
     async def _on_chat_room_message(self, message: ChatRoomMessage.Response, connection):
