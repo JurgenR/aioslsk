@@ -449,7 +449,7 @@ ParentIP (Code 73)
 
 :Code: 73 (0x49)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -461,7 +461,7 @@ ParentMinSpeed (Code 83)
 
 :Code: 83 (0x53)
 
-*Usage*:
+:Usage:
 
 :Receive:
 
@@ -473,7 +473,7 @@ ParentSpeedRatio (Code 84)
 
 :Code: 84 (0x54)
 
-*Usage*:
+:Usage:
 
 :Receive:
 
@@ -486,7 +486,7 @@ ParentInactivityTimeout (Code 86)
 
 :Code: 86 (0x56)
 
-*Usage*: Timeout for the distributed parent
+:Usage: Timeout for the distributed parent
 
 :Receive:
 
@@ -498,7 +498,7 @@ SearchInactivityTimeout (Code 87)
 
 :Code: 87 (0x57)
 
-*Usage*:
+:Usage:
 
 :Receive:
 
@@ -510,7 +510,7 @@ MinParentsInCache (Code 88)
 
 :Code: 88 (0x58)
 
-*Usage*:
+:Usage:
 
 :Receive:
 
@@ -522,7 +522,7 @@ DistributedAliveInterval (Code 90)
 
 :Code: 90 (0x5A)
 
-*Usage*:
+:Usage:
 
 :Receive:
 
@@ -534,7 +534,7 @@ AddPrivilegedUser (Code 91)
 
 :Code: 91 (0x5B)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -546,7 +546,7 @@ CheckPrivileges (Code 92)
 
 :Code: 92 (0x5C)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -562,7 +562,7 @@ ServerSearchRequest (Code 93)
 
 :Code: 93 (0x5D)
 
-*Usage*:
+:Usage:
 
 :Receive:
 
@@ -578,7 +578,7 @@ AcceptChildren (Code 100)
 
 :Code: 100 (0x64)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -590,7 +590,7 @@ PotentialParents (Code 102)
 
 :Code: 102 (0x66)
 
-*Usage*:
+:Usage:
 
 :Receive:
 
@@ -606,7 +606,7 @@ WishlistSearch (Code 103)
 
 :Code: 103 (0x67)
 
-*Usage*: Perform a wishlist search
+:Usage: Perform a wishlist search
 
 :Send:
 
@@ -619,7 +619,7 @@ WishlistInterval (Code 104)
 
 :Code: 104 (0x68)
 
-*Usage*: The server lets us know at what interval we should perform wishlist searches
+:Usage: The server lets us know at what interval we should perform wishlist searches
 
 :Receive:
 
@@ -631,7 +631,7 @@ GetSimilarUsers (Code 110)
 
 :Code: 110 (0x6E)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -650,7 +650,7 @@ GetItemRecommendations (Code 111)
 
 :Code: 111 (0x6F)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -669,7 +669,7 @@ ChatRoomTickers (Code 113)
 
 :Code: 113 (0x71)
 
-*Usage*: List of chat room tickers (room wall)
+:Usage: List of chat room tickers (room wall)
 
 :Receive:
 
@@ -685,7 +685,7 @@ ChatRoomTickerAdded (Code 114)
 
 :Code: 114 (0x72)
 
-*Usage*: A ticker has been added to the room (room wall)
+:Usage: A ticker has been added to the room (room wall)
 
 :Receive:
 
@@ -699,7 +699,7 @@ ChatRoomTickerRemoved (Code 115)
 
 :Code: 115 (0x73)
 
-*Usage*: A ticker has been removed to the room (room wall)
+:Usage: A ticker has been removed to the room (room wall)
 
 :Receive:
 
@@ -712,7 +712,7 @@ ChatRoomTickerSet (Code 116)
 
 :Code: 116 (0x74)
 
-*Usage*: Add or update a ticker for a room (room wall)
+:Usage: Add or update a ticker for a room (room wall)
 
 :Receive:
 
@@ -725,7 +725,7 @@ ChatRoomSearch (Code 120)
 
 :Code: 120 (0x78)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -739,7 +739,7 @@ ChatRoomSearch (Code 120)
 
 :Code: 120 (0x78)
 
-*Usage*: Send upload speed, sent to the server right after an upload completed
+:Usage: Send upload speed, sent to the server right after an upload completed
 
 :Send:
 
@@ -751,7 +751,7 @@ GetUserPrivileges (Code 122)
 
 :Code: 122 (0x7A)
 
-*Usage*: Retrieve whether a user has privileges
+:Usage: Retrieve whether a user has privileges
 
 :Send:
 
@@ -768,7 +768,7 @@ GiveUserPrivileges (Code 123)
 
 :Code: 123 (0x7B)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -780,7 +780,7 @@ PrivilegesNotification (Code 124)
 
 :Code: 124 (0x7C)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -793,7 +793,7 @@ PrivilegesNotificationAck (Code 125)
 
 :Code: 125 (0x7D)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -805,7 +805,7 @@ BranchLevel (Code 126)
 
 :Code: 126 (0x7E)
 
-*Usage*: Notify the server which branch level we are at in the distributed network
+:Usage: Notify the server which branch level we are at in the distributed network
 
 :Send:
 
@@ -817,7 +817,7 @@ BranchRoot (Code 127)
 
 :Code: 127 (0x7F)
 
-*Usage*: Notify the server who our branch root user is in the distributed network
+:Usage: Notify the server who our branch root user is in the distributed network
 
 :Send:
 
@@ -829,7 +829,7 @@ ChildDepth (Code 129)
 
 :Code: 129 (0x81)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -841,7 +841,7 @@ PrivateRoomUsers (Code 133)
 
 :Code: 133 (0x85)
 
-*Usage*:
+:Usage: List of all users that are part of the private room
 
 :Receive:
 
@@ -856,7 +856,7 @@ PrivateRoomAddUser (Code 134)
 
 :Code: 134 (0x86)
 
-*Usage*:
+:Usage: Add another user to the private room
 
 :Send:
 
@@ -874,7 +874,7 @@ PrivateRoomRemoveUser (Code 135)
 
 :Code: 135 (0x87)
 
-*Usage*:
+:Usage: Remove another user from the private room
 
 :Send:
 
@@ -892,7 +892,7 @@ PrivateRoomDropMembership (Code 136)
 
 :Code: 136 (0x88)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -904,12 +904,11 @@ PrivateRoomDropOwnership (Code 137)
 
 :Code: 137 (0x89)
 
-*Usage*:
+:Usage:
 
 :Send:
 
 1. **string**: room
-
 
 
 PrivateRoomAdded (Code 139)
@@ -917,7 +916,7 @@ PrivateRoomAdded (Code 139)
 
 :Code: 139 (0x8B)
 
-*Usage*:
+:Usage: The current user was added to the private room
 
 :Receive:
 
@@ -929,7 +928,7 @@ PrivateRoomRemoved (Code 140)
 
 :Code: 140 (0x8C)
 
-*Usage*:
+:Usage: The current user was removed from the private room
 
 :Receive:
 
@@ -941,7 +940,7 @@ TogglePrivateRooms (Code 141)
 
 :Code: 141 (0x8D)
 
-*Usage*:
+:Usage: Enables or disables private room invites (through `PrivateRoomAddUser`)
 
 :Send:
 
@@ -957,7 +956,7 @@ NewPassword (Code 142)
 
 :Code: 142 (0x8E)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -969,7 +968,7 @@ PrivateRoomAddOperator (Code 143)
 
 :Code: 143 (0x8F)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -987,7 +986,7 @@ PrivateRoomRemoveOperator (Code 144)
 
 :Code: 144 (0x90)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -1005,7 +1004,7 @@ PrivateRoomOperatorAdded (Code 145)
 
 :Code: 145 (0x91)
 
-*Usage*:
+:Usage:
 
 :Receive:
 
@@ -1017,7 +1016,7 @@ PrivateRoomOperatorRemoved (Code 146)
 
 :Code: 146 (0x92)
 
-*Usage*:
+:Usage:
 
 :Receive:
 
@@ -1029,7 +1028,7 @@ PrivateRoomOperators (Code 148)
 
 :Code: 148 (0x94)
 
-*Usage*:
+:Usage:
 
 :Receive:
 
@@ -1045,7 +1044,7 @@ ChatMessageUsers (Code 149)
 
 :Code: 149 (0x95)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -1063,7 +1062,7 @@ ChatEnablePublic (Code 150)
 
 :Code: 150 (0x96)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -1075,7 +1074,7 @@ ChatDisablePublic (Code 151)
 
 :Code: 151 (0x97)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -1087,7 +1086,7 @@ ChatPublicMessage (Code 152)
 
 :Code: 152 (0x98)
 
-*Usage*:
+:Usage:
 
 :Receive:
 
@@ -1101,7 +1100,7 @@ FileSearchEx (Code 153)
 
 :Code: 153 (0x99)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -1118,7 +1117,7 @@ CannotConnect (Code 1001)
 
 :Code: 1001 (0x03E9)
 
-*Usage*:
+:Usage:
 
 :Send:
 
@@ -1136,7 +1135,7 @@ CannotCreateRoom (Code 1003)
 
 :Code: 1003 (0x03EB)
 
-*Usage*: Sent by the server when attempting to create/join a private room which already exists or the user is not part of.
+:Usage: Sent by the server when attempting to create/join a private room which already exists or the user is not part of
 
 :Receive:
 

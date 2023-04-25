@@ -15,7 +15,10 @@ The messages described can be found here: https://www.museek-plus.org/wiki/Souls
 Server Connection and Logon
 ===========================
 
-1. Open a TCP connection to server.slsknet.org:2416
+SoulSeekQt: server.slsknet.org:2416
+SoulSeek: 208.76.170.59:2242
+
+1. Open a TCP connection to the server
 2. Open up at least one listening connection, a second one can be opened for obfuscated connections. The SoulSeekQt client always takes the configured port + 1 as the obfuscated port.
 3. Send the Login_ command on the server socket. Most of the parameters here are self explanatory except for the client version and minor version.
 
@@ -233,11 +236,98 @@ _Note:_ extension is empty for anything but mp3 and flac
 _Note:_ Couldn't find any other than these. Number 3 seems to be missing, could this be something used in the past or maybe for video? Theoretically we could invent new attributes here, like something for video, images, extra metadata for music files. The official clients don't seem to do anything with the extra attributes
 
 
-Rooms and Chats
-===============
+Rooms
+=====
+
+After joining a room, we will automatically be receiving GetUserStatus_ updates from the server.
+
+Only private rooms have an owner and operators.
+
+Room List
+---------
+
+The room list is received after login but can be refreshed by sending another RoomList_ request. The RoomList_ message consists of lists of rooms categorized by room type:
+
+* rooms : all public rooms
+* rooms_private_owned : private rooms which we own
+* rooms_private : private rooms which we are part of. this excludes the rooms in rooms_private_owned
+* rooms_private_operated : private rooms in which we are operator
+
+_Note:_ Not all public rooms are listed in the initial RoomList_ message after login. Possibly (needs investigation) it returns only the rooms with more than 5 members.
 
 
-After joining a room, we will automatically be receiving GetUserStatus_ updates from the server
+Room Joining / Creation
+-----------------------
+
+To join a public room a JoinRoom_ message is sent to the server, containing the name of the room and whether the room is private. If the room does not yet exist it is created.
+
+Creating a public room:
+
+1. Send ChatJoinRoom (is_private=0)
+2. Receive:
+
+  * ChatUserJoinedRoom
+  * ChatJoinRoom : with our own username
+  * ChatRoomTickers
+
+Creating a private room:
+
+1. Send ChatJoinRoom (is_private=1)
+2. Receive:
+
+  * RoomList : updated list of rooms. See 'Room List' section on what would be expected here
+  * PrivateRoomUsers : list of users in the room (exluding ourself)
+  * PrivateRoomOperators : list of operators
+  * ChatUserJoinedRoom : with our own username
+  * ChatJoinRoom : with our own username
+  * ChatRoomTickers
+
+_Note:_ Messages PrivateRoomUsers, PrivateRoomOperators seems to be repeated for private rooms we are already part of
+
+_Note:_ Possibly on the server side the joining happens after some of these messages are sent. In the RoomList_ message the `rooms_private_owned_user_count` is 0, in the PrivateRoomsUsers message the list of users is empty. The
+
+_Note:_ PrivateRoomUsers returns the users which are part of the room (excluding the owner) while RoomList_ rooms_private_user_count only return the amount of online users
+
+
+Add User to Private Room
+------------------------
+
+From the inviting user:
+
+1. Send: PrivateRoomAddUser : with room name and user name
+2. Receive:
+
+   * PrivateRoomAddUser : with room name and user name
+   * Server message: User <user_name> is now a member of room <room_name>
+
+From the invited user:
+
+1. Receive:
+
+   * PrivateRoomAddUser : with room name and user name
+   * PrivateRoomAdded : with room name
+   * RoomList : updated room list
+
+
+Exception cases
+---------------
+
+* Joining/creating a room that exists as a private room:
+
+  * CannotCreateRoom: with the room name
+  * Server message: The room you are trying to enter (<room_name>) is registered as private.
+
+* Spaces between or after room name:
+
+  * Server message: Could not create room. Reason: Room name <room_name> contains leading or trailing spaces.
+
+* Non-ascii characters:
+
+  * Server message: Could not create room. Reason: Room name <room_name> contains invalid characters.
+
+* Adding a user who does not have private rooms enabled:
+
+  * Server message: user <user_name> hasn't enabled private room add. please message them and ask them to do so before trying to add them again.
 
 
 .. _Login: https://www.museek-plus.org/wiki/SoulseekProtocol#ServerCode1
