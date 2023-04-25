@@ -1,3 +1,32 @@
+"""Module defining all data primitives used in the protocol messages
+
+Field metadata:
+
+During (de)serialization the `metadata` parameter of the `dataclasses.field`
+function to control how to perform (de)serialization. See
+`aioslsk.protocol.primitives` for how (de)serialization is performed
+
+These metadata keys are implemented:
+
+* 'type': <type_class>
+** defines the primary type of the data
+
+* 'subtype': <type_class>
+** used for arrays : the type of the elements contained in the array
+
+* 'if_true': <field_name>
+** serialization : only pack this field if the value of field with name <field_name> evaluates to True
+** deserialization : only parse this field if the value of field with name <field_name> evaluates to True
+
+* 'if_false': <field_name>
+** serialization : only pack this field if the value of field with name <field_name> evaluates to False
+** deserialization : only parse this field if the value of field with name <field_name> evaluates to False
+
+* 'optional': True
+** serialization : only pack this field if its value is anything other than None
+** deserialization : during deserialization the code will determine if the message
+    has been fully parsed. If not it will parse this field
+"""
 from dataclasses import dataclass, field, fields, is_dataclass
 import hashlib
 import logging
@@ -112,7 +141,7 @@ class array(list):
         return body
 
     @classmethod
-    def deserialize(cls, pos: int, data, element_type):
+    def deserialize(cls, pos: int, data: bytes, element_type):
         items = []
         pos_after_array_len, array_len = uint32.deserialize(pos, data)
         current_item_pos = pos_after_array_len
@@ -123,6 +152,19 @@ class array(list):
 
 
 class ProtocolDataclass:
+    """The `ProtocolDataclass` defines a collection of primitives that can be
+    serialized or deserialized. Classes inheriting from this class should use
+    the `@dataclass(order=True)` decorator. The order needs to be kept as the
+    fields definitions will be evaluated during (de)serialization.
+
+    Example definition:
+
+    @dataclass(order=True)
+    class CustomDataclass(ProtocolDataclass):
+        username: str = field(metadata={'type': string})
+        password: str = field(metadata={'type': string})
+        has_privileges: bool = field(metadata={'type': boolean})
+    """
 
     def serialize(self):
         message = bytes()
@@ -182,7 +224,7 @@ class ProtocolDataclass:
         return pos, cls(**field_map)
 
     @classmethod
-    def _field_needs_deserialization(cls, field, field_map, has_unparsed_bytes):
+    def _field_needs_deserialization(cls, field, field_map, has_unparsed_bytes: bool):
         # For if_true and if_false we need to return only if the condition is
         # is false as we still want to check the 'optional' field
         if 'if_true' in field.metadata:
@@ -218,8 +260,22 @@ class ProtocolDataclass:
 
 
 class MessageDataclass(ProtocolDataclass):
+    """Message data class for which protocol messages should inherit from. This
+    takes all behaviour from the `ProtocolDataclass` class but adds:
+
+    * Prepending the message with length and MESSAGE_ID
+    * Optionally the message data will (de)compressed
+    """
 
     def serialize(self, compress: bool = False) -> bytes:
+        """Serializes the current `MessageDataClass` object and prepends the
+        message length and `MESSAGE_ID`
+
+        In case the message needs to be compressed just override this method
+        in the subclass and simply call the super method with `compress=True`
+
+        :param compress: use gzip compression on the message contents
+        """
         message = super().serialize()
 
         if compress:
@@ -230,6 +286,16 @@ class MessageDataclass(ProtocolDataclass):
 
     @classmethod
     def deserialize(cls, message: bytes, decompress: bool = False):
+        """Deserializes the passed `message` into an object of the current type
+
+        In case the message needs to be decompressed just override this method
+        in the subclass and simply call the super method with `decompress=True`
+
+        :param decompress: use gzip decompression on the message contents
+        :raise ValueError: if the message_id found the data does not match the
+            `MESSAGE_ID` defined in the current class
+        :return: an object of the current class
+        """
         pos: int = 0
 
         # Parse length and header

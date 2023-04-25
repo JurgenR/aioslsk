@@ -184,6 +184,9 @@ ChatJoinRoom (Code 14)
 :Send:
 
 1. **string**: room_name
+2. Optional:
+
+   1. **uint32**: is_private
 
 :Receive:
 
@@ -1111,7 +1114,7 @@ FileSearchEx (Code 153)
 
 
 CannotConnect (Code 1001)
------------------------
+-------------------------
 
 :Code: 1001 (0x03E9)
 
@@ -1126,6 +1129,18 @@ CannotConnect (Code 1001)
 
 1. **uint32**: ticket
 2. **string**: username
+
+
+CannotCreateRoom (Code 1003)
+----------------------------
+
+:Code: 1003 (0x03EB)
+
+*Usage*: Sent by the server when attempting to create/join a private room which already exists or the user is not part of.
+
+:Receive:
+
+1. **string**: room_name
 
 
 Initialization Messages

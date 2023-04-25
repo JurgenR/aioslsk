@@ -82,6 +82,7 @@ from aioslsk.protocol.messages import (
     ChatPublicMessage,
     FileSearchEx,
     CannotConnect,
+    CannotCreateRoom,
     PeerPierceFirewall,
     PeerInit,
     PeerSharesRequest,
@@ -1882,6 +1883,23 @@ class TestCannotConnect:
         )
         data = bytes.fromhex('11000000e9030000d2040000050000007573657230')
         assert CannotConnect.Response.deserialize(data) == message
+
+
+class TestCannotCreateRoom:
+
+    def test_CannotCreateRoom_Response_serialize(self):
+        message = CannotCreateRoom.Response(
+            room='room0'
+        )
+        data = bytes.fromhex('0d000000eb03000005000000726f6f6d30')
+        assert message.serialize() == data
+
+    def test_CannotCreateRoom_Response_deserialize_withUsername(self):
+        message = CannotCreateRoom.Response(
+            room='room0'
+        )
+        data = bytes.fromhex('0d000000eb03000005000000726f6f6d30')
+        assert CannotCreateRoom.Response.deserialize(data) == message
 
 
 # Peer Initialization messages
