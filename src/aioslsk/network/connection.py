@@ -167,9 +167,6 @@ class DataConnection(Connection):
         super().__init__(hostname, port, network)
         self.obfuscated = obfuscated
 
-        self.bytes_received: int = 0
-        self.bytes_sent: int = 0
-
         self._reader: asyncio.StreamReader = None
         self._writer: asyncio.StreamWriter = None
         self._reader_task = None
@@ -232,8 +229,10 @@ class DataConnection(Connection):
             logger.warning(f"{self.hostname}:{self.port} : exception while disconnecting", exc_info=exc)
 
         finally:
-            self._stop_reader_task()
             await self.set_state(ConnectionState.CLOSED, close_reason=reason)
+            # Because disconnect can be called when read failed setting the
+            # reader task to none should be done last
+            self._reader_task = None
 
     def _start_reader_task(self):
         self._reader_task = asyncio.create_task(self._message_reader_loop())
@@ -265,17 +264,14 @@ class DataConnection(Connection):
             except ConnectionReadError as exc:
                 logger.warning(f"{self.hostname}:{self.port} : read error : {exc!r}")
             else:
-                if message_data:
+                if message_data and not self._is_closing():
                     await self._process_message_data(message_data)
 
     async def _read_message(self):
-        header_obfuscated = self.obfuscated
         header_size = HEADER_SIZE_OBFUSCATED if self.obfuscated else HEADER_SIZE_UNOBFUSCATED
         header = await asyncio.wait_for(
             self._reader.readexactly(header_size), self.read_timeout)
 
-        if header_obfuscated != self.obfuscated:
-            logger.warning(f"obfuscated differed {header_obfuscated} != {self.obfuscated}")
         message_len_buf = obfuscation.decode(header) if self.obfuscated else header
         _, message_len = uint32.deserialize(0, message_len_buf)
 
@@ -334,17 +330,17 @@ class DataConnection(Connection):
             raise ConnectionReadError(f"{self.hostname}:{self.port} : exception during reading") from exc
 
     def queue_message(self, message: Union[bytes, MessageDataclass]) -> asyncio.Task:
+        if self._is_closing():
+            logger.warning(f"{self.hostname}:{self.port} : not queueing message, connection is closing : {message}")
+            return
+
         return asyncio.create_task(
             self.send_message(message),
             name=f'queue-message-task-{task_counter()}'
         )
 
     def queue_messages(self, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
-        tasks = []
-        for message in messages:
-            tasks.append(self.queue_message(message))
-
-        return tasks
+        return [self.queue_message(message) for message in messages]
 
     async def send_message(self, message: Union[bytes, MessageDataclass]):
         """Sends a message or a set of bytes over the connection. In case an
@@ -356,7 +352,10 @@ class DataConnection(Connection):
         """
         logger.debug(f"{self.hostname}:{self.port} : send message : {message!r}")
         # Serialize the message
-        data = self._serialize_message(message)
+        try:
+            data = self._serialize_message(message)
+        except Exception:
+            logger.exception(f"{self.hostname}:{self.port} : failed to serialize message : {message!r}")
 
         if self.obfuscated:
             data = obfuscation.encode(data)
@@ -374,9 +373,6 @@ class DataConnection(Connection):
             await self.disconnect(CloseReason.WRITE_ERROR)
             raise ConnectionWriteError(f"{self.hostname}:{self.port} : exception during writing") from exc
 
-        else:
-            self.bytes_sent += len(data)
-
     def parse_message(self, message_data: bytes):
         """Should be called after a full message has been received. This method
         should parse the message and notify the listeners
@@ -385,14 +381,10 @@ class DataConnection(Connection):
             "parse_message should be overwritten by a subclass")
 
     def _serialize_message(self, message: Union[bytes, MessageDataclass]) -> bytes:
-        try:
-            if isinstance(message, MessageDataclass):
-                return message.serialize()
-            else:
-                return message
-
-        except Exception:
-            logger.exception(f"{self.hostname}:{self.port} : failed to serialize message : {message!r}")
+        if isinstance(message, MessageDataclass):
+            return message.serialize()
+        else:
+            return message
 
 
 class ServerConnection(DataConnection):

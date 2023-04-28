@@ -257,7 +257,6 @@ class ChatJoinRoom(ServerMessage):
 
 
 class ChatLeaveRoom(ServerMessage):
-    MESSAGE_ID = 0x0F
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -445,7 +444,7 @@ class ToggleParentSearch(ServerMessage):
     @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x47)
-        enabled: bool = field(metadata={'type': boolean})
+        enable: bool = field(metadata={'type': boolean})
 
 
 class ParentIP(ServerMessage):
@@ -1158,6 +1157,13 @@ class PeerUploadQueueNotification(PeerMessage):
 
 
 # Distributed messages
+
+class DistributedPing(DistributedMessage):
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint8] = uint8(0x00)
+
 
 class DistributedSearchRequest(DistributedMessage):
 

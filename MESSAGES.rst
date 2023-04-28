@@ -314,6 +314,7 @@ ChatPrivateMessage (Code 22)
 3. **string**: username
 4. **string**: message
 5. Optional:
+
    1. **bool**: is_admin
 
 
@@ -410,8 +411,7 @@ Kicked (Code 41)
 
 :Code: 42 (0x2A)
 
-:Usage: You were kicked from the server. This message is sent when
-
+:Usage: You were kicked from the server. This message is sent when the user was logged into at another location
 
 :Receive:
 
@@ -432,16 +432,16 @@ UserSearch (Code 42)
 3. **string**: query
 
 
-HaveNoParent (Code 71)
-----------------------
+ToggleParentSearch (Code 71)
+----------------------------
 
 :Code: 71 (0x47)
 
-:Usage: Indicates whether we have a distributed parent. If not the server will start sending us NetInfo messages every 60 seconds
+:Usage: Indicates whether we want to receive `PotentialParents` messages from the server. A message should be sent to disable if we have found a parent
 
 :Send:
 
-1. **bool**: have_no_parent
+1. **bool**: enable
 
 
 ParentIP (Code 73)
@@ -449,7 +449,7 @@ ParentIP (Code 73)
 
 :Code: 73 (0x49)
 
-:Usage:
+:Usage: IP address of the parent. Not sent by newer clients
 
 :Send:
 
@@ -510,7 +510,7 @@ MinParentsInCache (Code 88)
 
 :Code: 88 (0x58)
 
-:Usage:
+:Usage: Amount of parents (received through PotentialParents) we should keep in cache. Message has not been seen yet being sent by the server
 
 :Receive:
 
@@ -1249,6 +1249,7 @@ PeerTransferRequest (Code 40)
 2. **uint32**: ticket
 3. **string**: filename
 4. Optional:
+
    1. **uint64**: filesize . Can be omitted if the direction==1 however a value of `0` can be used in this case as well
 
 

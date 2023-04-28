@@ -95,6 +95,13 @@ class ServerDisconnectedEvent(Event):
 
 
 @dataclass(frozen=True)
+class LoginEvent:
+    is_success: bool
+    greeting: str = None
+    reason: str = None
+
+
+@dataclass(frozen=True)
 class KickedEvent(Event):
     pass
 
@@ -117,16 +124,6 @@ class RoomListEvent(Event):
 @dataclass(frozen=True)
 class RoomMessageEvent(Event):
     message: RoomMessage
-
-
-@dataclass(frozen=True)
-class RoomJoinedEvent(Event):
-    room: Room
-
-
-@dataclass(frozen=True)
-class RoomLeftEvent(Event):
-    room: Room
 
 
 @dataclass(frozen=True)
@@ -161,13 +158,33 @@ class UserLeftRoomEvent(Event):
 
 
 @dataclass(frozen=True)
-class UserJoinedPrivateRoomEvent(Event):
+class RoomJoinedEvent(Event):
     room: Room
 
 
 @dataclass(frozen=True)
-class UserLeftPrivateRoomEvent(Event):
+class RoomLeftEvent(Event):
     room: Room
+
+
+@dataclass(frozen=True)
+class AddedToPrivateRoomEvent(Event):
+    """Emitted when we are added to a private room"""
+    room: Room
+
+
+@dataclass(frozen=True)
+class RemovedFromPrivateRoomEvent(Event):
+    """Emitted when we were removed from a private room"""
+    room: Room
+
+
+@dataclass
+class ServerMessageEvent(Event):
+    """Emitted when the server sends us a message. This is usually a response
+    to an action you tried to perform (adding someone to a private room...)
+    """
+    message: str
 
 
 @dataclass(frozen=True)

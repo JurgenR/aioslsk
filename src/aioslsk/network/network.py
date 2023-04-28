@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 from functools import partial
 import logging
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Union, Tuple
 
 
 from ..constants import (
@@ -171,6 +171,7 @@ class Network:
             *[conn.disconnect(CloseReason.REQUESTED) for conn in connections],
             return_exceptions=True
         )
+        logger.info(f"disconnect complete")
 
     async def _log_connections_job(self):
         while True:
@@ -200,6 +201,26 @@ class Network:
         finally:
             self._upnp_task = None
 
+    async def _get_peer_address(self, username: str) -> Tuple[str, int, int]:
+        """Requests the peer address for the given `username` from the server.
+
+        :raise PeerConnectionError: if no IP address or no valid ports were
+            returned
+        """
+        await self.server.send_message(GetPeerAddress.Request(username))
+        _, response = await self.wait_for_server_message(
+            GetPeerAddress.Response, username=username)
+
+        if response.ip == '0.0.0.0':
+            logger.warning(f"GetPeerAddress : no address returned for username : {username}")
+            raise PeerConnectionError(f"no address for user : {username}")
+
+        elif not response.port and not response.obfuscated_port:
+            logger.warning(f"GetPeerAddress : no valid ports found for user : {username}")
+            raise PeerConnectionError(f"no valid ports for user : {username}")
+
+        return response.ip, response.port, response.obfuscated_port
+
     async def create_peer_connection(
             self, username: str, typ: str, ip: str = None, port: int = None,
             initial_state: PeerConnectionState = PeerConnectionState.ESTABLISHED) -> PeerConnection:
@@ -220,17 +241,7 @@ class Network:
 
         # Request peer address if ip and port are not given
         if ip is None or port is None:
-            # Request peer address if ip and port are not given
-            await self.server.send_message(GetPeerAddress.Request(username))
-            connection, response = await self.wait_for_server_message(
-                GetPeerAddress.Response, username=username)
-
-            if response.ip == '0.0.0.0':
-                logger.warning(f"GetPeerAddress : no address returned for username : {response.username}")
-                raise PeerConnectionError(f"no address for username : {response.username}")
-            else:
-                ip = response.ip
-                port = response.port
+            ip, port, obfuscated_port = await self._get_peer_address(username)
 
         # Override IP address if requested
         ip = self._user_ip_overrides.get(username, ip)
@@ -255,12 +266,6 @@ class Network:
                 )
             )
 
-            connection.set_connection_state(initial_state)
-
-            await self._internal_event_bus.emit(
-                PeerInitializedEvent(connection, requested=True))
-            return connection
-
         except ConnectionFailedError as exc:
             logger.debug(
                 f"direct connection to peer failed : {username} {ip}:{port} : {exc!r}")
@@ -268,6 +273,13 @@ class Network:
         except ConnectionWriteError as exc:
             logger.debug(
                 f"direct connection succeeded but failed to deliver init message : {username} {ip}:{port} : {exc!r}")
+
+        else:
+            connection.set_connection_state(initial_state)
+
+            await self._internal_event_bus.emit(
+                PeerInitializedEvent(connection, requested=True))
+            return connection
 
         # Make indirect connection
         connection = await self._make_indirect_connection(
@@ -292,11 +304,11 @@ class Network:
         except ValueError:
             pass
 
-    def wait_for_server_message(self, message_class, **kwargs) -> asyncio.Future:
+    def wait_for_server_message(self, message_class, **kwargs) -> ExpectedResponse:
         """Waits for a server message to arrive, the message must match the
         `message_class` and fields defined in the keyword arguments.
 
-        :return: `asyncio.Future` object
+        :return: `ExpectedResponse` object
         """
         future = ExpectedResponse(
             ServerConnection,
@@ -307,13 +319,13 @@ class Network:
         future.add_done_callback(self._remove_response_future)
         return future
 
-    def wait_for_peer_message(self, peer: str, message_class, **kwargs) -> asyncio.Future:
+    def wait_for_peer_message(self, peer: str, message_class, **kwargs) -> ExpectedResponse:
         """Waits for a peer message to arrive, the message must match the
         `message_class` and fields defined in the keyword arguments and must be
         coming from a connection by `peer`.
 
         :param peer: name of the peer for which the message should be received
-        :return: `asyncio.Future` object
+        :return: `ExpectedResponse` object
         """
         future = ExpectedResponse(
             PeerConnection,
@@ -493,7 +505,12 @@ class Network:
 
     async def send_server_messages(self, *messages: List[Union[bytes, MessageDataclass]]):
         queue_tasks = self.queue_server_messages(*messages)
-        return await asyncio.gather(*queue_tasks, return_exceptions=True)
+        logger.debug(f"tasks for send server messages : {queue_tasks!r}")
+        results = await asyncio.gather(*queue_tasks, return_exceptions=True)
+        for message, result in zip(messages, results):
+            if isinstance(result, BaseException):
+                logger.exception(f"failed to deliver message : {message!r}", exc_info=result)
+        return results
 
     # Methods called by connections
 

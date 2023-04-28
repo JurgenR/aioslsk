@@ -157,6 +157,8 @@ class TransferStorage:
             for key_to_delete in keys_to_delete:
                 database.pop(key_to_delete)
 
+        logger.info(f"successfully wrote {len(transfers)} transfers to : {db_path}")
+
 
 class Transfer:
     """Class representing a transfer"""
@@ -404,9 +406,9 @@ class Transfer:
     def _download_task_complete(self, task: asyncio.Task):
         self._current_task = None
 
-    def _transfer_progress_callback(self, transfer: Transfer, data: bytes):
-        transfer.bytes_transfered += len(data)
-        transfer.add_speed_log_entry(len(data))
+    def _transfer_progress_callback(self, data: bytes):
+        self.bytes_transfered += len(data)
+        self.add_speed_log_entry(len(data))
 
     def __repr__(self):
         return (
@@ -905,9 +907,8 @@ class TransferManager:
         # Wait for the transfer ticket
         try:
             ticket = await connection.receive_transfer_ticket()
-        except ConnectionReadError:
-            logger.warning(f"failed to receive transfer ticket on file connection : {connection.hostname}:{connection.port}")
-            await connection.disconnect(CloseReason.REQUESTED)
+        except ConnectionReadError as exc:
+            logger.warning(f"failed to receive transfer ticket on file connection : {connection.hostname}:{connection.port}", exc_info=exc)
             return
 
         # Get the transfer from the transfer requests

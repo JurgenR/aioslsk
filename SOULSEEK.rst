@@ -288,11 +288,29 @@ _Note:_ Possibly on the server side the joining happens after some of these mess
 
 _Note:_ PrivateRoomUsers returns the users which are part of the room (excluding the owner) while RoomList_ rooms_private_user_count only return the amount of online users
 
+Room Leaving
+------------
+
+From the user leaving the room:
+
+1. Send: ChatLeaveRoom : with room name
+2. Receive:
+
+   * ChatLeaveRoom : with room name
+
+Other users in the room:
+
+1. Receive:
+
+   * ChatUserLeftRoom : with room name and user name
+
 
 Add User to Private Room
 ------------------------
 
-From the inviting user:
+Owners and operators can add users to rooms.
+
+User adding another user:
 
 1. Send: PrivateRoomAddUser : with room name and user name
 2. Receive:
@@ -300,13 +318,192 @@ From the inviting user:
    * PrivateRoomAddUser : with room name and user name
    * Server message: User <user_name> is now a member of room <room_name>
 
-From the invited user:
+The added user:
 
 1. Receive:
 
    * PrivateRoomAddUser : with room name and user name
    * PrivateRoomAdded : with room name
-   * RoomList : updated room list
+   * RoomList
+
+The owner of the room:
+
+1. Receive:
+
+   * PrivateRoomAddUser : with room name and user name
+   * Server message: User [<user_name>] was added as a member of room [<room_name>] by operator [<operator_name>]
+
+
+Removing User from Private Room
+-------------------------------
+
+Owners can remove operators and members, operators can only remove members.
+
+User removing another user (owner):
+
+1. Send: PrivateRoomRemoveUser : with room name and user name
+2. Receive:
+
+   * PrivateRoomRemoveUser : with room name and user name
+   * Server message: User <user_name> is no longer a member of room <room_name>
+
+User being removed:
+
+1. Receive:
+
+   * PrivateRoomRemoved : with room name
+   * ChatLeaveRoom : with room name
+   * RoomList
+
+The owner of the room:
+
+1. Receive:
+
+   * PrivateRoomRemoveUser : with room name and user name
+   * Server message: User <user_name> is no longer a member of room <room_name>
+
+
+Granting Operator to Private Room
+---------------------------------
+
+User granting operator:
+
+1. Send: PrivateRoomAddOperator : with room name and user name
+2. Receive:
+
+   * PrivateRoomAddOperator : with room name and user name (got this twice for some reason, perhaps a bug in the server? Should probably be PrivateRoomOperatorAdded)
+   * Server message: User <user_name> is now an operator of room <room_name>
+
+
+Revoking Operator from Private Room
+-----------------------------------
+
+User revoking operator:
+
+1. Send: PrivateRoomRemoveOperator : with room name and user name
+2. Receive:
+
+   * PrivateRoomRemoveOperator : with room name and user name (got this twice for some reason, perhaps a bug in the server? Should probably be PrivateRoomRemoveOperator)
+   * Server message: User <user_name> is no longer an operator of room <room_name>
+
+User for which operator was revoked:
+
+1. Receive:
+
+   * PrivateRoomRemoveOperator : with room name and user name (got this twice)
+   * PrivateRoomOperatorRemoved : with room name
+   * RoomList
+   * PrivateRoomUsers : for all private rooms we are part of
+   * PrivateRoomOperators : for all private rooms we are part of
+
+
+Dropping Membership
+-------------------
+
+Dropping membership can only be done for a private room. This function does nothing for the owner, he needs to drop ownership.
+
+As regular member
+~~~~~~~~~~~~~~~~~
+
+Member dropping membership:
+
+1. Send: PrivateRoomDropMembership : with room name
+2. Receive:
+
+   * PrivateRoomRemoved : with room name
+   * ChatLeaveRoom : with room name
+   * RoomList
+
+
+Received by owner:
+
+1. Receive:
+
+   * PrivateRoomRemoveUser : with room name and user name
+   * Server message: User <user_name> is no longer a member of room <room_name>
+   * ChatUserLeftRoom : with room name and user name
+
+Received by operator:
+
+1. Receive:
+
+   * PrivateRoomRemoveUser : with room name and user name
+   * ChatUserLeftRoom : with room name and user name
+
+
+As operator
+~~~~~~~~~~~
+
+Operator dropping membership:
+
+1. Send: PrivateRoomDropMembership : with room name
+2. Receive:
+
+   * PrivateRoomRemoved : with room name
+   * ChatLeaveRoom : with room name
+   * RoomList
+   * PrivateRoomUsers : for private rooms we are still part of
+   * PrivateRoomOperators : for private rooms we are still part of
+   * PrivateRoomOperatorRemoved
+   * RoomList
+   * PrivateRoomUsers : for private rooms
+   * PrivateRoomOperators : for private rooms
+
+Received by owner:
+
+1. Receive:
+
+   * PrivateRoomRemoveUser
+   * Server message: User <user_name> is no longer a member of room <room_name>
+   * ChatUserLeftRoom
+   * PrivateRoomRemoveOperator (twice)
+   * Server message: User <user_name> is no longer an operator of room <room_name>
+
+Received by member:
+
+1. Receive:
+
+   * PrivateRoomRemoveUser
+   * ChatUserLeftRoom
+   * PrivateRoomRemoveOperator (twice)
+
+
+Dropping Ownership
+------------------
+
+Owner dropping ownership:
+
+1. Send: PrivateRoomDropOwnership : with room name
+2. Receive:
+
+   * ChatUserLeftRoom : with room name and user name for all other users in the room
+   * RoomList
+   * PrivateRoomUsers : for private rooms we are still part of
+   * PrivateRoomOperators : for private rooms we are still part of
+
+Received by operator:
+
+1. Receive:
+
+   * PrivateRoomRemoved : with room name
+   * ChatLeaveRoom : with room name
+   * RoomList
+   * PrivateRoomUsers : for private rooms we are still part of
+   * PrivateRoomOperators : for private rooms we are still part of
+   * PrivateRoomOperatorRemoved
+   * RoomList
+   * PrivateRoomUsers : for private rooms
+   * PrivateRoomOperators : for private rooms
+
+Received by member:
+
+1. Receive:
+
+   * ChatUserLeftRoom : for the operator that was in the room
+   * PrivateRoomRemoveOperator : for the operator that was in the room
+   * PrivateRoomRemoved
+   * ChatLeaveRoom
+   * RoomList
 
 
 Exception cases
@@ -317,13 +514,21 @@ Exception cases
   * CannotCreateRoom: with the room name
   * Server message: The room you are trying to enter (<room_name>) is registered as private.
 
-* Spaces between or after room name:
+* Multiple spaces in between words ("my   room"):
+
+  * Server message: Could not create room. Reason: Room name <room_name> contains multiple following spaces.
+
+* Spaces between or after room name ("room ", " room"):
 
   * Server message: Could not create room. Reason: Room name <room_name> contains leading or trailing spaces.
 
 * Non-ascii characters:
 
   * Server message: Could not create room. Reason: Room name <room_name> contains invalid characters.
+
+* Empty room name:
+
+  * Server message: Could not create room. Reason: Room name empty.
 
 * Adding a user who does not have private rooms enabled:
 

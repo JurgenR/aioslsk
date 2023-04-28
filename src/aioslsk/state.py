@@ -48,10 +48,10 @@ class State:
             self.users[user] = user_object
             return user_object
 
-    def get_or_create_room(self, room_name: str) -> Room:
+    def get_or_create_room(self, room_name: str, private: bool = False) -> Room:
         try:
             return self.rooms[room_name]
         except KeyError:
-            room = Room(name=room_name)
+            room = Room(name=room_name, private=private)
             self.rooms[room_name] = room
             return room
