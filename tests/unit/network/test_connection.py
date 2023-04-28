@@ -294,7 +294,7 @@ class TestDataConnection:
                 call(ConnectionState.CLOSED, close_reason=CloseReason.EOF)
             ]
         )
-        connection._stop_reader_task.assert_called_once()
+        assert connection._reader_task == None
 
 
 class TestPeerConnection:

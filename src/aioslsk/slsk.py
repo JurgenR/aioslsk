@@ -112,16 +112,22 @@ class SoulSeek:
             self.settings.get('credentials.password')
         )
 
-    async def start_shares_manager(self):
+    async def start_shares_manager(self, scan=True):
         self.shares_manager.read_cache()
         self.shares_manager.load_from_settings()
-        asyncio.create_task(self.shares_manager.scan())
+        if scan:
+            asyncio.create_task(self.shares_manager.scan())
 
     async def start_transfer_manager(self):
         await self.transfer_manager.read_transfers_from_storage()
 
     async def run_until_stopped(self):
         await self._stop_event.wait()
+
+    async def stop(self):
+        logger.info("signaling client to exit")
+        self._stop_event.set()
+
         await self.network.disconnect()
 
         logger.debug(f"tasks after disconnect : {asyncio.all_tasks()}")
@@ -130,10 +136,6 @@ class SoulSeek:
         self.transfer_manager.stop()
         self.shares_manager.write_cache()
         self.transfer_manager.write_transfers_to_storage()
-
-    async def stop(self):
-        logger.info("signaling client to exit")
-        self._stop_event.set()
 
     def _exception_handler(self, loop, context):
         message = f"unhandled exception on loop {loop!r} : context : {context!r}"
@@ -174,38 +176,56 @@ class SoulSeek:
     async def queue_transfer(self, transfer: Transfer):
         await self.transfer_manager.queue(transfer)
 
-    async def join_room(self, room: Union[str, Room]):
-        if isinstance(room, Room):
-            await self.server_manager.join_room(room.name)
-        else:
-            await self.server_manager.join_room(room)
-
     async def get_room_list(self):
         await self.server_manager.get_room_list()
 
+    async def join_room(self, room: Union[str, Room], private: bool = False):
+        room_name = room.name if isinstance(room, Room) else room
+        await self.server_manager.join_room(room_name, private=private)
+
     async def leave_room(self, room: Union[str, Room]):
-        if isinstance(room, Room):
-            await self.server_manager.leave_room(room.name)
-        else:
-            await self.server_manager.leave_room(room)
+        room_name = room.name if isinstance(room, Room) else room
+        await self.server_manager.leave_room(room_name)
+
+    async def add_user_to_room(self, room: Union[str, Room], user: Union[str, User]):
+        room_name = room.name if isinstance(room, Room) else room
+        username = user.name if isinstance(user, User) else user
+        await self.server_manager.add_user_to_room(room_name, username)
+
+    async def remove_user_from_room(self, room: Union[str, Room], user: Union[str, User]):
+        room_name = room.name if isinstance(room, Room) else room
+        username = user.name if isinstance(user, User) else user
+        await self.server_manager.remove_user_from_room(room_name, username)
+
+    async def grant_operator(self, room: Union[str, Room], user: Union[str, User]):
+        room_name = room.name if isinstance(room, Room) else room
+        username = user.name if isinstance(user, User) else user
+        await self.server_manager.grant_operator(room_name, username)
+
+    async def revoke_operator(self, room: Union[str, Room], user: Union[str, User]):
+        room_name = room.name if isinstance(room, Room) else room
+        username = user.name if isinstance(user, User) else user
+        await self.server_manager.revoke_operator(room_name, username)
+
+    async def drop_room_membership(self, room: Union[str, Room]):
+        room_name = room.name if isinstance(room, Room) else room
+        await self.server_manager.drop_room_membership(room_name)
+
+    async def drop_room_ownership(self, room: Union[str, Room]):
+        room_name = room.name if isinstance(room, Room) else room
+        await self.server_manager.drop_room_ownership(room_name)
 
     async def set_room_ticker(self, room: Union[str, Room]):
-        if isinstance(room, Room):
-            await self.server_manager.set_room_ticker(room.name)
-        else:
-            await self.server_manager.set_room_ticker(room)
+        room_name = room.name if isinstance(room, Room) else room
+        await self.server_manager.set_room_ticker(room_name)
 
     async def send_private_message(self, user: Union[str, User], message: str):
-        if isinstance(user, User):
-            await self.server_manager.send_private_message(user.name, message)
-        else:
-            await self.server_manager.send_private_message(user, message)
+        username = user.name if isinstance(user, User) else user
+        await self.server_manager.send_private_message(username, message)
 
     async def send_room_message(self, room: Union[str, Room], message: str):
-        if isinstance(room, Room):
-            await self.server_manager.send_room_message(room.name, message)
-        else:
-            await self.server_manager.send_room_message(room, message)
+        room_name = room.name if isinstance(room, Room) else room
+        await self.server_manager.send_room_message(room_name, message)
 
     async def search(self, query: str) -> SearchRequest:
         """Performs a search, returns the generated ticket number for the search
@@ -221,30 +241,30 @@ class SoulSeek:
         return self.state.search_queries.pop(ticket)
 
     async def get_user_stats(self, user: Union[str, User]):
-        await self.server_manager.get_user_stats(
-            self.state.get_or_create_user(user).name)
+        username = user.name if isinstance(user, User) else user
+        await self.server_manager.get_user_stats(username)
 
     async def get_user_status(self, user: Union[str, User]):
-        await self.server_manager.get_user_status(
-            self.state.get_or_create_user(user).name)
+        username = user.name if isinstance(user, User) else user
+        await self.server_manager.get_user_status(username)
 
     async def track_user(self, user: Union[str, User]) -> User:
-        return await self.server_manager.track_users(
-            self.state.get_or_create_user(user).name)
+        username = user.name if isinstance(user, User) else user
+        return await self.server_manager.track_user(username)
 
-    async def remove_user(self, user: Union[str, User]):
-        await self.server_manager.remove_user(
-            self.state.get_or_create_user(user).name)
+    async def untrack_user(self, user: Union[str, User]):
+        username = user.name if isinstance(user, User) else user
+        await self.server_manager.untrack_user(username)
 
     # Peer requests
     async def get_user_info(self, user: Union[str, User]):
-        await self.peer_manager.get_user_info(
-            self.state.get_or_create_user(user).name)
+        username = user.name if isinstance(user, User) else user
+        await self.peer_manager.get_user_info(username)
 
     async def get_user_shares(self, user: Union[str, User]):
-        await self.peer_manager.get_user_shares(
-            self.state.get_or_create_user(user).name)
+        username = user.name if isinstance(user, User) else user
+        await self.peer_manager.get_user_shares(username)
 
     async def get_user_directory(self, user: Union[str, User], directory: List[str]):
-        await self.peer_manager.get_user_directory(
-            self.state.get_or_create_user(user).name, directory)
+        username = user.name if isinstance(user, User) else user
+        await self.peer_manager.get_user_directory(username, directory)

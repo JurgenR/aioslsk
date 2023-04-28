@@ -253,14 +253,17 @@ class SharesManager:
             self.add_shared_directory(shared_directory)
 
     def read_cache(self):
-        """Read the directories from the storage"""
+        """Read the directories from the cache"""
+        logger.info("reading directories from storage")
         directories = self.storage.load_index()
-        logger.info(f"read {len(directories)} from storage")
+        logger.info(f"read {len(directories)} directories from storage")
         self.shared_directories = directories
 
     def write_cache(self):
+        """Write current shared directories to the cache"""
         logger.info(f"writing {len(self.shared_directories)} directories to storage")
         self.storage.store_index(self.shared_directories)
+        logger.info(f"successfully wrote {len(self.shared_directories)} directories to storage")
 
     def create_download_directory(self) -> str:
         """Ensures the download directory defined in the settings by key

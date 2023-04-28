@@ -1,40 +1,40 @@
 import asyncio
 import logging
 import time
-from typing import List, Tuple
 
 from .network.connection import CloseReason, ConnectionState, ServerConnection
 from .constants import (
     SERVER_PING_INTERVAL,
-    SERVER_RESPONSE_TIMEOUT,
 )
 from .events import (
     build_message_map,
     on_message,
+    AddedToPrivateRoomEvent,
     ConnectionStateChangedEvent,
     EventBus,
     InternalEventBus,
     KickedEvent,
+    LoginEvent,
     MessageReceivedEvent,
     PrivateMessageEvent,
-    RoomMessageEvent,
-    RoomListEvent,
+    RemovedFromPrivateRoomEvent,
     RoomJoinedEvent,
     RoomLeftEvent,
-    RoomTickersEvent,
+    RoomListEvent,
+    RoomMessageEvent,
     RoomTickerAddedEvent,
     RoomTickerRemovedEvent,
+    RoomTickersEvent,
     ServerDisconnectedEvent,
+    ServerMessageEvent,
     TrackUserEvent,
     UntrackUserEvent,
     UserInfoEvent,
     UserJoinedRoomEvent,
-    UserJoinedPrivateRoomEvent,
     UserLeftRoomEvent,
-    UserLeftPrivateRoomEvent,
     UserStatusEvent,
 )
-from .exceptions import ConnectionFailedError, LoginFailedError, NoSuchUserError
+from .exceptions import ConnectionFailedError, LoginFailedError
 from .protocol.primitives import calc_md5
 from .protocol.messages import (
     AcceptChildren,
@@ -42,8 +42,6 @@ from .protocol.messages import (
     AddUser,
     BranchRoot,
     BranchLevel,
-    PrivateRoomAddUser,
-    PrivateRoomUsers,
     ChatRoomMessage,
     ChatJoinRoom,
     ChatLeaveRoom,
@@ -70,6 +68,9 @@ from .protocol.messages import (
     ParentMinSpeed,
     ParentSpeedRatio,
     Ping,
+    PrivateRoomAddUser,
+    PrivateRoomRemoveUser,
+    PrivateRoomUsers,
     PrivateRoomAdded,
     PrivateRoomOperators,
     PrivateRoomOperatorAdded,
@@ -91,7 +92,7 @@ from .protocol.messages import (
     WishlistInterval,
     WishlistSearch,
 )
-from .model import ChatMessage, Room, RoomMessage, User, UserStatus
+from .model import ChatMessage, RoomMessage, User, UserStatus
 from .network.network import Network
 from .shares import SharesManager
 from .search import SearchRequest, SearchType
@@ -151,7 +152,6 @@ class ServerManager:
 
     async def login(self, username: str, password: str, version: int = 157):
         logger.info(f"sending request to login: username={username}, password={password}")
-        expected_response = self._network.wait_for_server_message(Login.Response)
         await self._network.send_server_messages(
             Login.Request(
                 username=username,
@@ -161,43 +161,6 @@ class ServerManager:
                 minor_version=100
             )
         )
-        try:
-            _, response = await asyncio.wait_for(expected_response, SERVER_RESPONSE_TIMEOUT)
-        except asyncio.TimeoutError:
-            raise LoginFailedError("login timed out waiting for response")
-
-        # First value indicates success
-        if response.success:
-            logger.info(f"successfully logged on, greeting : {response.greeting!r}")
-        else:
-            logger.error(f"failed to login, reason: {response.reason!r}")
-            raise LoginFailedError(response.reason)
-
-        # Make setup calls
-        self._network.queue_server_messages(
-            CheckPrivileges.Request(),
-            SetListenPort.Request(
-                self._settings.get('network.listening_port'),
-                obfuscated_port_amount=1,
-                obfuscated_port=self._settings.get('network.listening_port') + 1
-            ),
-            SetStatus.Request(UserStatus.ONLINE.value),
-            ToggleParentSearch.Request(True),
-            BranchRoot.Request(self._settings.get('credentials.username')),
-            BranchLevel.Request(0),
-            AcceptChildren.Request(False)
-        )
-
-        await self.report_shares()
-        await self.track_user(self._settings.get('credentials.username'))
-        self._network.queue_server_messages(
-            TogglePrivateRooms.Request(self._settings.get('chats.private_room_invites')))
-
-        # Perform AddUser for all in the friendlist
-        await self.track_friends()
-
-        # Auto-join rooms
-        await self.auto_join_rooms()
 
     async def track_user(self, username: str):
         """Starts tracking a user. The method sends an `AddUser` only if the
@@ -212,7 +175,7 @@ class ServerManager:
 
     async def track_friends(self):
         tasks = []
-        for friend in self._settings.get('users'):
+        for friend in self._settings.get('users.friends'):
             tasks.append(asyncio.create_task(self.track_user(friend)))
 
         asyncio.gather(*tasks, return_exceptions=True)
@@ -299,61 +262,54 @@ class ServerManager:
         await self._network.send_server_messages(AddUser.Request(username))
         user.is_tracking = True
 
-        _, response = await asyncio.wait_for(
-            self._network.wait_for_server_message(AddUser.Response, username=username),
-            SERVER_RESPONSE_TIMEOUT
-        )
-
-        if not response.exists:
-            raise NoSuchUserError(f"user {username} does not exist")
-        else:
-            user = self._state.get_or_create_user(username)
-            user.is_tracking = True
-            return await self._handle_add_user_response(response)
-
-    async def get_user_stats(self, username: str) -> User:
+    async def get_user_stats(self, username: str):
         await self._network.send_server_messages(GetUserStats.Request(username))
-        await asyncio.wait_for(
-            self._network.wait_for_server_message(GetUserStats.Response, username=username),
-            SERVER_RESPONSE_TIMEOUT
-        )
-        return self._state.get_or_create_user(username)
 
     async def get_user_status(self, username: str):
         await self._network.send_server_messages(GetUserStatus.Request(username))
-        _, response = await asyncio.wait_for(
-            self._network.wait_for_server_message(GetUserStatus.Response, username=username),
-            SERVER_RESPONSE_TIMEOUT
-        )
-        return UserStatus(response.status)
 
-    async def get_room_list(self) -> List[Room]:
+    async def get_room_list(self):
         """Request the list of chat rooms from the server"""
         await self._network.send_server_messages(RoomList.Request())
-        _, response = await asyncio.wait_for(
-            self._network.wait_for_server_message(RoomList.Response),
-            SERVER_RESPONSE_TIMEOUT
-        )
-        rooms = []
-        for room_name in response.rooms:
-            rooms.append(self._state.get_or_create_room(room_name))
-        return rooms
 
-    async def join_room(self, name: str):
+    async def join_room(self, room: str, private: bool = False):
         await self._network.send_server_messages(
-            ChatJoinRoom.Request(name)
+            ChatJoinRoom.Request(room, is_private=private)
         )
 
-    async def leave_room(self, name: str):
+    async def leave_room(self, room: str):
+        await self._network.send_server_messages(ChatLeaveRoom.Request(room))
+
+    async def add_user_to_room(self, room: str, username: str):
+        """Adds a user to a private room"""
         await self._network.send_server_messages(
-            ChatLeaveRoom.Request(name)
+            PrivateRoomAddUser.Request(room=room, username=username)
         )
 
-    async def set_room_ticker(self, room_name: str, ticker: str):
+    async def remove_user_from_room(self, room: str, username: str):
+        """Removes a user from a private room"""
+        await self._network.send_server_messages(
+            PrivateRoomRemoveUser.Request(room=room, username=username)
+        )
+
+    async def grant_operator(self, room: str, username: str):
+        """Grant operator privileges to the given `username` in `room`. This is
+        only applicable to private rooms
+        """
+        await self._network.send_server_messages(
+            PrivateRoomAddOperator.Request(room=room, username=username)
+        )
+
+    async def revoke_operator(self, room: str, username: str):
+        await self._network.send_server_messages(
+            PrivateRoomRemoveOperator.Request(room=room, username=username)
+        )
+
+    async def set_room_ticker(self, room: str, ticker: str):
         # No need to update the ticker in the model, a ChatRoomTickerAdded will
         # be sent back to us
         await self._network.send_server_messages(
-            ChatRoomTickerSet.Request(room=room_name, ticker=ticker)
+            ChatRoomTickerSet.Request(room=room, ticker=ticker)
         )
 
     async def send_private_message(self, username: str, message: str):
@@ -361,34 +317,68 @@ class ServerManager:
             ChatPrivateMessage.Request(username, message)
         )
 
-    async def send_room_message(self, room_name: str, message: str):
+    async def send_room_message(self, room: str, message: str):
         await self._network.send_server_messages(
-            ChatRoomMessage.Request(room_name, message)
+            ChatRoomMessage.Request(room, message)
         )
 
-    async def drop_private_room_ownership(self, room_name: str):
+    async def drop_room_ownership(self, room: str):
+        """Drop ownership of the private room"""
         await self._network.send_server_messages(
-            PrivateRoomDropOwnership.Request(room_name)
+            PrivateRoomDropOwnership.Request(room)
         )
 
-    async def drop_private_room_membership(self, room_name: str):
+    async def drop_room_membership(self, room: str):
+        """Drop membership of the private room"""
         await self._network.send_server_messages(
-            PrivateRoomDropMembership.Request(room_name)
+            PrivateRoomDropMembership.Request(room)
         )
 
-    async def get_peer_address(self, username: str) -> Tuple[str, int, int]:
-        """Requests the IP address/port of the peer from the server.
+    async def get_peer_address(self, username: str):
+        """Requests the IP address/port of the peer from the server
 
         :param username: username of the peer
-        :return: tuple of 3 values: ip address, port and
         """
         await self._network.send_server_messages(
             GetPeerAddress.Request(username)
         )
-        response = await self._network.wait_for_server_message(
-            GetPeerAddress.Response, username=username)
 
-        return response.ip, response.port, response.obfuscated_port
+    @on_message(Login.Response)
+    async def _on_login(self, message: Login.Response, connection):
+        if not message.success:
+            logger.error(f"failed to login, reason: {message.reason!r}")
+            await self._event_bus.emit(
+                LoginEvent(is_success=False, reason=message.reason))
+            return
+
+        logger.info(f"successfully logged on, greeting : {message.greeting!r}")
+        await self._event_bus.emit(
+            LoginEvent(is_success=True, greeting=message.greeting))
+
+        self._network.queue_server_messages(
+            CheckPrivileges.Request(),
+            SetListenPort.Request(
+                self._settings.get('network.listening_port'),
+                obfuscated_port_amount=1,
+                obfuscated_port=self._settings.get('network.listening_port') + 1
+            ),
+            SetStatus.Request(UserStatus.ONLINE.value),
+            ToggleParentSearch.Request(True),
+            BranchRoot.Request(self._settings.get('credentials.username')),
+            BranchLevel.Request(0),
+            AcceptChildren.Request(False)
+        )
+
+        await self.report_shares()
+        await self.track_user(self._settings.get('credentials.username'))
+        self._network.queue_server_messages(
+            TogglePrivateRooms.Request(self._settings.get('chats.private_room_invites')))
+
+        # Perform AddUser for all in the friendlist
+        await self.track_friends()
+
+        # Auto-join rooms
+        await self.auto_join_rooms()
 
     @on_message(Kicked.Response)
     async def _on_kicked(self, message: Kicked.Response, connection):
@@ -404,7 +394,6 @@ class ServerManager:
             user=user,
             message=message.message
         )
-        room.messages.append(room_message)
 
         await self._event_bus.emit(RoomMessageEvent(room_message))
 
@@ -437,6 +426,8 @@ class ServerManager:
     @on_message(ChatJoinRoom.Response)
     async def _on_join_room(self, message: ChatJoinRoom.Response, connection):
         room = self._state.get_or_create_room(message.room)
+        room.joined = True
+
         for idx, name in enumerate(message.users):
             user_data = message.users_data[idx]
 
@@ -453,7 +444,7 @@ class ServerManager:
             await self._event_bus.emit(UserInfoEvent(user))
 
         if message.owner:
-            room.owner = message.owner
+            room.owner = self._state.get_or_create_user(message.owner)
         for operator in message.operators or []:
             room.add_operator(self._state.get_or_create_user(operator))
 
@@ -508,58 +499,58 @@ class ServerManager:
 
     @on_message(PrivateRoomAdded.Response)
     async def _on_private_room_added(self, message: PrivateRoomAdded.Response, connection):
-        room = self._state.get_or_create_room(message.room)
-        room.joined = True
-        room.is_private = True
+        room = self._state.get_or_create_room(message.room, private=True)
+        user = self._state.get_or_create_user(self._settings.get('credentials.username'))
+        room.add_member(user)
 
-        await self._event_bus.emit(UserJoinedPrivateRoomEvent(room))
+        await self._event_bus.emit(AddedToPrivateRoomEvent(room))
 
     @on_message(PrivateRoomRemoved.Response)
     async def _on_private_room_removed(self, message: PrivateRoomRemoved.Response, connection):
-        room = self._state.get_or_create_room(message.room)
-        room.joined = False
-        room.is_private = True
+        room = self._state.get_or_create_room(message.room, private=True)
+        user = self._state.get_or_create_user(self._settings.get('credentials.username'))
+        room.remove_member(user)
 
-        await self._event_bus.emit(UserLeftPrivateRoomEvent(room))
+        await self._event_bus.emit(RemovedFromPrivateRoomEvent(room))
 
     @on_message(PrivateRoomUsers.Response)
     async def _on_private_room_users(self, message: PrivateRoomUsers.Response, connection):
-        room = self._state.get_or_create_room(message.room)
+        room = self._state.get_or_create_room(message.room, private=True)
         for username in message.usernames:
-            room.add_user(self._state.get_or_create_user(username))
+            room.add_member(self._state.get_or_create_user(username))
 
     @on_message(PrivateRoomAddUser.Response)
     async def _on_private_room_add_user(self, message: PrivateRoomAddUser.Response, connection):
-        room = self._state.get_or_create_room(message.room)
+        room = self._state.get_or_create_room(message.room, private=True)
         user = self._state.get_or_create_user(message.username)
 
         room.add_user(user)
 
     @on_message(PrivateRoomOperators.Response)
     async def _on_private_room_operators(self, message: PrivateRoomOperators.Response, connection):
-        room = self._state.get_or_create_room(message.room)
+        room = self._state.get_or_create_room(message.room, private=True)
         for operator in message.usernames:
             room.add_operator(self._state.get_or_create_user(operator))
 
     @on_message(PrivateRoomOperatorAdded.Response)
     async def _on_private_room_operator_added(self, message: PrivateRoomOperatorAdded.Response, connection):
-        room = self._state.get_or_create_room(message.room)
+        room = self._state.get_or_create_room(message.room, private=True)
         room.is_operator = True
 
     @on_message(PrivateRoomOperatorRemoved.Response)
     async def _on_private_room_operator_removed(self, message: PrivateRoomOperatorRemoved.Response, connection):
-        room = self._state.get_or_create_room(message.room)
+        room = self._state.get_or_create_room(message.room, private=True)
         room.is_operator = False
 
     @on_message(PrivateRoomAddOperator.Response)
     async def _on_private_room_add_operator(self, message: PrivateRoomAddOperator.Response, connection):
-        room = self._state.get_or_create_room(message.room)
+        room = self._state.get_or_create_room(message.room, private=True)
         user = self._state.get_or_create_user(message.username)
         room.add_operator(user)
 
     @on_message(PrivateRoomRemoveOperator.Response)
     async def _on_private_room_remove_operators(self, message: PrivateRoomRemoveOperator.Response, connection):
-        room = self._state.get_or_create_room(message.room)
+        room = self._state.get_or_create_room(message.room, private=True)
         user = self._state.get_or_create_user(message.username)
         room.remove_operator(user)
 
@@ -579,6 +570,9 @@ class ServerManager:
             ChatAckPrivateMessage.Request(message.chat_id)
         )
 
+        if message.is_admin and message.username.lower() == 'server':
+            await self._event_bus.emit(ServerMessageEvent(message.message))
+
         await self._event_bus.emit(PrivateMessageEvent(user, chat_message))
 
     # State related messages
@@ -588,24 +582,25 @@ class ServerManager:
 
     @on_message(RoomList.Response)
     async def _on_room_list(self, message: RoomList.Response, connection):
+        me = self._state.get_or_create_user(self._settings.get('credentials.username'))
         for idx, room_name in enumerate(message.rooms):
-            room = self._state.get_or_create_room(room_name)
+            room = self._state.get_or_create_room(room_name, private=False)
             room.user_count = message.rooms_user_count[idx]
 
         for idx, room_name in enumerate(message.rooms_private_owned):
-            room = self._state.get_or_create_room(room_name)
+            room = self._state.get_or_create_room(room_name, private=True)
+            room.add_member(me)
             room.user_count = message.rooms_private_owned_user_count[idx]
-            room.is_private = True
-            room.owner = self._settings.get('credentials.username')
+            room.owner = me
 
         for idx, room_name in enumerate(message.rooms_private):
-            room = self._state.get_or_create_room(room_name)
+            room = self._state.get_or_create_room(room_name, private=True)
+            room.add_member(me)
             room.user_count = message.rooms_private_user_count[idx]
-            room.is_private = True
 
         for room_name in message.rooms_private_operated:
-            room = self._state.get_or_create_room(room_name)
-            room.is_private = True
+            room = self._state.get_or_create_room(room_name, private=True)
+            room.add_operator(me)
             room.is_operator = True
 
         await self._event_bus.emit(RoomListEvent(rooms=self._state.rooms.values()))
@@ -657,7 +652,17 @@ class ServerManager:
 
     @on_message(AddUser.Response)
     async def _on_add_user(self, message: AddUser.Response, connection):
-        await self._handle_add_user_response(message)
+        if message.exists:
+            user = self._state.get_or_create_user(message.username)
+            user.name = message.username
+            user.status = UserStatus(message.status)
+            user.avg_speed = message.avg_speed
+            user.downloads = message.download_num
+            user.files = message.file_count
+            user.directories = message.dir_count
+            user.country = message.country_code
+
+            await self._event_bus.emit(UserInfoEvent(user))
 
     @on_message(GetUserStatus.Response)
     async def _on_get_user_status(self, message: GetUserStatus.Response, connection):
@@ -676,20 +681,6 @@ class ServerManager:
         user.directories = message.dir_count
 
         await self._event_bus.emit(UserInfoEvent(user))
-
-    async def _handle_add_user_response(self, response: AddUser.Response) -> User:
-        if response.exists:
-            user = self._state.get_or_create_user(response.username)
-            user.name = response.username
-            user.status = UserStatus(response.status)
-            user.avg_speed = response.avg_speed
-            user.downloads = response.download_num
-            user.files = response.file_count
-            user.directories = response.dir_count
-            user.country = response.country_code
-
-            await self._event_bus.emit(UserInfoEvent(user))
-            return user
 
     # Job methods
 
@@ -784,6 +775,6 @@ class ServerManager:
             logger.warning("failed to reconnect to server")
         else:
             await self.login(
-                self._settings('credentials.username'),
-                self._settings('credentials.password')
+                self._settings.get('credentials.username'),
+                self._settings.get('credentials.password')
             )

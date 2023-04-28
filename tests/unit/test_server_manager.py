@@ -219,7 +219,6 @@ class TestServerManager:
             )
 
         message = RoomMessage(timestamp=100.0, room=room, user=user, message='hello')
-        assert message == room.messages[-1]
         callback.assert_called_once_with(RoomMessageEvent(message))
 
     @pytest.mark.asyncio

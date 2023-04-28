@@ -82,6 +82,7 @@ from aioslsk.protocol.messages import (
     ChatPublicMessage,
     FileSearchEx,
     CannotConnect,
+    CannotCreateRoom,
     PeerPierceFirewall,
     PeerInit,
     PeerSharesRequest,
@@ -99,6 +100,7 @@ from aioslsk.protocol.messages import (
     PeerTransferQueueFailed,
     PeerPlaceInQueueRequest,
     PeerUploadQueueNotification,
+    DistributedPing,
     DistributedSearchRequest,
     DistributedBranchLevel,
     DistributedBranchRoot,
@@ -1884,6 +1886,23 @@ class TestCannotConnect:
         assert CannotConnect.Response.deserialize(data) == message
 
 
+class TestCannotCreateRoom:
+
+    def test_CannotCreateRoom_Response_serialize(self):
+        message = CannotCreateRoom.Response(
+            room='room0'
+        )
+        data = bytes.fromhex('0d000000eb03000005000000726f6f6d30')
+        assert message.serialize() == data
+
+    def test_CannotCreateRoom_Response_deserialize_withUsername(self):
+        message = CannotCreateRoom.Response(
+            room='room0'
+        )
+        data = bytes.fromhex('0d000000eb03000005000000726f6f6d30')
+        assert CannotCreateRoom.Response.deserialize(data) == message
+
+
 # Peer Initialization messages
 
 class TestPeerPierceFirewall:
@@ -2417,6 +2436,20 @@ class TestPeerUploadQueueNotification:
 
 
 # Distributed messages
+
+class TestDistributedPing:
+
+    def test_DistributedPing_Request_serialize(self):
+        message = DistributedPing.Request()
+        data = bytes.fromhex('0100000000')
+        assert message.serialize() == data
+
+    def test_DistributedPing_Request_deserialize(self):
+        message = DistributedPing.Request()
+        data = bytes.fromhex('0100000000')
+        assert DistributedPing.Request.deserialize(data) == message
+
+
 class TestDistributedSearchRequest:
 
     def test_DistributedSearchRequest_Request_serialize(self):

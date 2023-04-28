@@ -134,7 +134,7 @@ class TestPeer:
         )
 
         manager._shares_manager.create_directory_reply.assert_called_once_with(DIRECTORY)
-        connection.queue_message.assert_awaited_once_with(
+        connection.queue_message.assert_called_once_with(
             PeerDirectoryContentsReply.Request(TICKET, DIRECTORY, DIRECTORY_DATA)
         )
 

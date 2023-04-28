@@ -178,11 +178,15 @@ class PeerManager:
         self.parent = None
 
         username = self._settings.get('credentials.username')
-        await self._network.send_server_messages(
-            BranchLevel.Request(0),
-            BranchRoot.Request(username),
-            ToggleParentSearch.Request(True)
-        )
+        try:
+            await self._network.send_server_messages(
+                BranchLevel.Request(0),
+                BranchRoot.Request(username),
+                ToggleParentSearch.Request(True)
+            )
+        except asyncio.CancelledError as exc:
+            logger.warning("unsetting parent cancelled", exc_info=exc)
+            raise
 
         # TODO: What happens to the children when we lose our parent is still
         # unclear
@@ -203,10 +207,16 @@ class PeerManager:
         logger.debug(f"adding distributed connection as child : {peer!r}")
         self.children.append(peer)
         # Let the child know where it is in the distributed tree
-        await peer.connection.queue_messages(
-            DistributedBranchLevel.Request(self.parent.branch_level + 1),
-            DistributedBranchRoot.Request(self.parent.branch_root),
-        )
+        if self.parent:
+            peer.connection.queue_messages(
+                DistributedBranchLevel.Request(self.parent.branch_level + 1),
+                DistributedBranchRoot.Request(self.parent.branch_root),
+            )
+        else:
+            peer.connection.queue_messages(
+                DistributedBranchLevel.Request(0),
+                DistributedBranchRoot.Request(self._settings.get('credentials.username')),
+            )
 
     def _search_reply_task_callback(self, ticket: int, username: str, query: str, task: asyncio.Task):
         """Callback for a search reply task. This callback simply logs the
@@ -316,7 +326,7 @@ class PeerManager:
 
     @on_message(PeerSharesRequest.Request)
     async def _on_peer_shares_request(self, message: PeerSharesRequest.Request, connection: PeerConnection):
-        await connection.queue_message(
+        connection.queue_message(
             PeerSharesReply.Request(self._shares_manager.create_shares_reply())
         )
 
@@ -336,7 +346,7 @@ class PeerManager:
     @on_message(PeerDirectoryContentsRequest.Request)
     async def _on_peer_directory_contents_req(self, message: PeerDirectoryContentsRequest.Request, connection: PeerConnection):
         directories = self._shares_manager.create_directory_reply(message.directory)
-        await connection.queue_message(
+        connection.queue_message(
             PeerDirectoryContentsReply.Request(
                 ticket=message.ticket,
                 directory=message.directory,
@@ -522,7 +532,7 @@ class PeerManager:
 
     async def send_messages_to_children(self, *messages: Union[MessageDataclass, bytes]):
         for child in self.children:
-            await child.connection.queue_messages(*messages)
+            child.connection.queue_messages(*messages)
 
     def stop(self):
         for task in self._search_reply_tasks:

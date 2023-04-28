@@ -1,6 +1,6 @@
 """Definition of all SoulSeek protocol messages.
 
-This file contains 3 types of messages:
+This file contains 2 types of messages:
 
 * Server
 
@@ -9,26 +9,12 @@ This file contains 3 types of messages:
     Response : used from server to client. A client will only use the
         `deserialize` method of these messages
 
+* Peer
 
-Field metadata:
-
-The `Serializer` and `Deserializer` use the `metadata` parameter of the
-`dataclasses.field` function to control how to perform (de)serialization.
-
-These metadata keys are implemented:
-
-* 'if_true': <field_name>
-** serialization : only pack this field if the field in the value evaluates to True
-** deserialization : only parse this field if the field in the value evaluates to True
-
-* 'if_false': <field_name>
-** serialization : only pack this field if the field in the value evaluates to False
-** deserialization : only parse this field if the field in the value evaluates to False
-
-* 'optional': True
-** serialization : only pack this field if its value is anything other than None
-** deserialization : during deserialization the code will determine if the message
-    has been fully parsed. If not it will parse this field
+    Request : peer messages only consist of request type messages. The client
+        should use the `deserialize` method of these messages upon receiving
+        data from another peer and the `serialize` method when sending to
+        another peer
 """
 from dataclasses import dataclass, field
 import logging
@@ -249,6 +235,7 @@ class ChatJoinRoom(ServerMessage):
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x0E)
         room: str = field(metadata={'type': string})
+        is_private: bool = field(default=False, metadata={'type': uint32, 'optional': True})
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -270,7 +257,6 @@ class ChatJoinRoom(ServerMessage):
 
 
 class ChatLeaveRoom(ServerMessage):
-    MESSAGE_ID = 0x0F
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -458,7 +444,7 @@ class ToggleParentSearch(ServerMessage):
     @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x47)
-        enabled: bool = field(metadata={'type': boolean})
+        enable: bool = field(metadata={'type': boolean})
 
 
 class ParentIP(ServerMessage):
@@ -935,6 +921,14 @@ class CannotConnect(ServerMessage):
         username: str = field(default=None, metadata={'type': string, 'optional': True})
 
 
+class CannotCreateRoom(ServerMessage):
+
+    @dataclass
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x03EB)
+        room: str = field(metadata={'type': string})
+
+
 # Peer Initialization messages
 
 class PeerPierceFirewall(PeerInitializationMessage):
@@ -1163,6 +1157,13 @@ class PeerUploadQueueNotification(PeerMessage):
 
 
 # Distributed messages
+
+class DistributedPing(DistributedMessage):
+
+    @dataclass
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint8] = uint8(0x00)
+
 
 class DistributedSearchRequest(DistributedMessage):
 
