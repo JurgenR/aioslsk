@@ -20,8 +20,7 @@ from .connection import (
     ServerConnection,
 )
 from ..exceptions import (
-    ConnectionFailedError,
-    ConnectionWriteError,
+    NetworkError,
     PeerConnectionError,
 )
 from ..events import (
@@ -201,6 +200,26 @@ class Network:
         finally:
             self._upnp_task = None
 
+    def select_port(self, port, obfuscated_port) -> Tuple[int, bool]:
+        """Selects the port used for making a connection. This attempts to take
+        into account the `network.peer.obfuscate` parameter however falls back
+        on using whatever port is available if necessary
+
+        :param port: available non-obfuscated port
+        :param obfuscated_port: available obfuscated port
+        :return: a tuple with the port number and whether the port is obfuscated
+        """
+        prefer_obfuscated = self._settings.get('network.peer.obfuscate')
+        if port and obfuscated_port:
+            if prefer_obfuscated:
+                return obfuscated_port, True
+            else:
+                return obfuscated_port, True
+        elif port:
+            return port, False
+        else:
+            return obfuscated_port, True
+
     async def _get_peer_address(self, username: str) -> Tuple[str, int, int]:
         """Requests the peer address for the given `username` from the server.
 
@@ -223,69 +242,60 @@ class Network:
 
     async def create_peer_connection(
             self, username: str, typ: str, ip: str = None, port: int = None,
+            obfuscate: bool = False,
             initial_state: PeerConnectionState = PeerConnectionState.ESTABLISHED) -> PeerConnection:
         """Creates a new peer connection to the given `username` and connection
         type.
 
-        Optionally this method takes an `ip` and `port`. If not given it will
-        be requested to the server.
+        Optionally this method takes `ip`, `port` and `obfuscate` parameters. If
+        not given it will be requested to the server.
 
         :param username: username of the peer
         :param typ: connection type ('P', 'D', 'F')
         :param ip: optional ip address of the peer
         :param port: optional port of the peer
+        :param obfuscate: whether to obfuscate the connection. Should be used in
+            combination with the `ip` and `port`
         :return: an object of `PeerConnection`
-        :raise PeerConnectionError:
+        :raise PeerConnectionError: when establishing a peer connection has
+            failed
         """
         ticket = next(self._ticket_generator)
 
         # Request peer address if ip and port are not given
         if ip is None or port is None:
-            ip, port, obfuscated_port = await self._get_peer_address(username)
+            ip, clear_port, obfuscated_port = await self._get_peer_address(username)
+
+            port, obfuscate = self.select_port(clear_port, obfuscated_port)
 
         # Override IP address if requested
         ip = self._user_ip_overrides.get(username, ip)
 
-        # Make a direct connection to the peer
-        logger.debug(f"attempting to connect to peer : {username!r} {ip}:{port}")
-        connection = PeerConnection(
-            ip, port, self,
-            connection_type=typ,
-            username=username,
-            obfuscated=False
-        )
-        self.peer_connections.append(connection)
-
+        # Make direct connection
         try:
-            await connection.connect()
-            await connection.send_message(
-                PeerInit.Request(
-                    self._settings.get('credentials.username'),
-                    typ,
-                    ticket
-                )
+            connection = await self._make_direct_connection(
+                ticket, username, typ, ip, port, obfuscate
             )
 
-        except ConnectionFailedError as exc:
+        except NetworkError as exc:
             logger.debug(
-                f"direct connection to peer failed : {username} {ip}:{port} : {exc!r}")
+                f"direct connection ({typ}) to peer failed : {username} {ip}:{port} : {exc!r}")
 
-        except ConnectionWriteError as exc:
-            logger.debug(
-                f"direct connection succeeded but failed to deliver init message : {username} {ip}:{port} : {exc!r}")
+            # Make indirect connection
+            try:
+                connection = await self._make_indirect_connection(
+                    ticket, username, typ
+                )
 
-        else:
-            connection.set_connection_state(initial_state)
+            except NetworkError as exc:
+                logger.debug(
+                    f"indirect connection to peer failed : {username} : {exc!r}")
+                raise PeerConnectionError(
+                    f"failed to connect to peer {username} ({typ=}, {ticket=})")
 
-            await self._internal_event_bus.emit(
-                PeerInitializedEvent(connection, requested=True))
-            return connection
-
-        # Make indirect connection
-        connection = await self._make_indirect_connection(
-            ticket, username, typ, initial_state
-        )
-
+        connection.set_connection_state(initial_state)
+        await self._internal_event_bus.emit(
+            PeerInitializedEvent(connection, requested=True))
         return connection
 
     async def get_peer_connection(self, username: str, typ: PeerConnectionType = PeerConnectionType.PEER) -> PeerConnection:
@@ -299,10 +309,8 @@ class Network:
         return await self.create_peer_connection(username, typ)
 
     def _remove_response_future(self, expected_response):
-        try:
+        if expected_response in self._expected_response_futures:
             self._expected_response_futures.remove(expected_response)
-        except ValueError:
-            pass
 
     def wait_for_server_message(self, message_class, **kwargs) -> ExpectedResponse:
         """Waits for a server message to arrive, the message must match the
@@ -379,18 +387,38 @@ class Network:
             partial(self._handle_indirect_connection_callback, message))
         self._create_peer_connection_tasks.append(task)
 
+    async def _make_direct_connection(
+            self, ticket: int, username: str, typ: str, ip: int, port: int, obfuscate: bool) -> PeerConnection:
+        """Attempts to make a direct connection to the peer. After completion
+        a peer init request will be sent
+        """
+        logger.debug(f"attempting to connect to peer : {username!r} {ip}:{port}")
+        connection = PeerConnection(
+            ip, port, self,
+            connection_type=typ,
+            username=username,
+            obfuscated=obfuscate
+        )
+        self.peer_connections.append(connection)
+
+        await connection.connect()
+        await connection.send_message(
+            PeerInit.Request(
+                self._settings.get('credentials.username'),
+                typ,
+                ticket
+            )
+        )
+        return connection
+
     async def _make_indirect_connection(
-            self, ticket: int, username: str, typ: str, initial_state: PeerConnectionState) -> PeerConnection:
+            self, ticket: int, username: str, typ: str) -> PeerConnection:
         """Attempts to make an indirect connection by sending a `ConnectToPeer`
         message to the server and waiting for an incoming connection and
         `PeerPierceFirewall` message.
 
         A `PeerInitializedEvent` will be emitted in case of success
 
-        :param initial_state: the initial state of the connection after the
-            connection is established and the init message received. This is
-            going to be one of two values: PeerConnectionState.ESTABLISHED or
-            PeerConnectionState.AWAITING_OFFSET
         :raise PeerConnectionError: in case timeout was reached or we received a
             `CannotConnect` message from the server containing the `ticket`
         """
@@ -426,14 +454,15 @@ class Network:
 
         connection.username = username
         connection.connection_type = typ
-        connection.set_connection_state(initial_state)
 
-        await self._internal_event_bus.emit(
-            PeerInitializedEvent(connection, requested=True))
         return connection
 
     async def _handle_indirect_connection(self, message: ConnectToPeer.Response):
-        """Handles an indirect connection request received from the server"""
+        """Handles an indirect connection request received from the server.
+
+        A task is created for this coroutine when a `ConnectToPeer` message is
+        received
+        """
         obfuscate = self._settings.get('network.peer.obfuscate') and bool(message.obfuscated_port)
 
         ip = self._user_ip_overrides.get(message.username, message.ip)
@@ -453,12 +482,11 @@ class Network:
                 PeerPierceFirewall.Request(message.ticket)
             )
 
-        except Exception as exc:
-            logger.warning(f"couldn't connect to peer : {exc!r}")
+        except NetworkError:
             await self.server.queue_message(
                 CannotConnect.Request(message.ticket)
             )
-            raise
+            raise PeerConnectionError("failed connect on user request")
 
         if message.typ == PeerConnectionType.FILE:
             peer_connection.set_connection_state(PeerConnectionState.AWAITING_TICKET)

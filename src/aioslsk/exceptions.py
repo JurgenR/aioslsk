@@ -48,11 +48,3 @@ class ConnectionWriteError(NetworkError):
 
 class IncompleteFileReceiveError(NetworkError):
     pass
-
-
-class NoSuchUserError(AioSlskException):
-    pass
-
-
-class LoginFailedError(AioSlskException):
-    pass
