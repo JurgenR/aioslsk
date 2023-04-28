@@ -509,28 +509,28 @@ Received by member:
 Exception cases
 ---------------
 
-* Joining/creating a room that exists as a private room:
+* Joining/creating: a room that exists as a private room
 
   * CannotCreateRoom: with the room name
   * Server message: The room you are trying to enter (<room_name>) is registered as private.
 
-* Multiple spaces in between words ("my   room"):
+* Joining/creating: Multiple spaces in between words ("my   room")
 
   * Server message: Could not create room. Reason: Room name <room_name> contains multiple following spaces.
 
-* Spaces between or after room name ("room ", " room"):
+* Joining/creating: Spaces between or after room name ("room ", " room")
 
   * Server message: Could not create room. Reason: Room name <room_name> contains leading or trailing spaces.
 
-* Non-ascii characters:
+* Joing/creating: Non-ascii characters in room name
 
   * Server message: Could not create room. Reason: Room name <room_name> contains invalid characters.
 
-* Empty room name:
+* Joining/creating: Empty room name
 
   * Server message: Could not create room. Reason: Room name empty.
 
-* Adding a user who does not have private rooms enabled:
+* Add User to Room: Adding a user who does not have private rooms enabled
 
   * Server message: user <user_name> hasn't enabled private room add. please message them and ask them to do so before trying to add them again.
 

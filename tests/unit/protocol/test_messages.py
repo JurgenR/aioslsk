@@ -100,6 +100,7 @@ from aioslsk.protocol.messages import (
     PeerTransferQueueFailed,
     PeerPlaceInQueueRequest,
     PeerUploadQueueNotification,
+    DistributedPing,
     DistributedSearchRequest,
     DistributedBranchLevel,
     DistributedBranchRoot,
@@ -2435,6 +2436,20 @@ class TestPeerUploadQueueNotification:
 
 
 # Distributed messages
+
+class TestDistributedPing:
+
+    def test_DistributedPing_Request_serialize(self):
+        message = DistributedPing.Request()
+        data = bytes.fromhex('0100000000')
+        assert message.serialize() == data
+
+    def test_DistributedPing_Request_deserialize(self):
+        message = DistributedPing.Request()
+        data = bytes.fromhex('0100000000')
+        assert DistributedPing.Request.deserialize(data) == message
+
+
 class TestDistributedSearchRequest:
 
     def test_DistributedSearchRequest_Request_serialize(self):
