@@ -220,26 +220,6 @@ class Network:
         else:
             return obfuscated_port, True
 
-    async def _get_peer_address(self, username: str) -> Tuple[str, int, int]:
-        """Requests the peer address for the given `username` from the server.
-
-        :raise PeerConnectionError: if no IP address or no valid ports were
-            returned
-        """
-        await self.server.send_message(GetPeerAddress.Request(username))
-        _, response = await self.wait_for_server_message(
-            GetPeerAddress.Response, username=username)
-
-        if response.ip == '0.0.0.0':
-            logger.warning(f"GetPeerAddress : no address returned for username : {username}")
-            raise PeerConnectionError(f"no address for user : {username}")
-
-        elif not response.port and not response.obfuscated_port:
-            logger.warning(f"GetPeerAddress : no valid ports found for user : {username}")
-            raise PeerConnectionError(f"no valid ports for user : {username}")
-
-        return response.ip, response.port, response.obfuscated_port
-
     async def create_peer_connection(
             self, username: str, typ: str, ip: str = None, port: int = None,
             obfuscate: bool = False,
@@ -298,6 +278,26 @@ class Network:
             PeerInitializedEvent(connection, requested=True))
         return connection
 
+    async def _get_peer_address(self, username: str) -> Tuple[str, int, int]:
+        """Requests the peer address for the given `username` from the server.
+
+        :raise PeerConnectionError: if no IP address or no valid ports were
+            returned
+        """
+        await self.server.send_message(GetPeerAddress.Request(username))
+        _, response = await self.wait_for_server_message(
+            GetPeerAddress.Response, username=username)
+
+        if response.ip == '0.0.0.0':
+            logger.warning(f"GetPeerAddress : no address returned for username : {username}")
+            raise PeerConnectionError(f"no address for user : {username}")
+
+        elif not response.port and not response.obfuscated_port:
+            logger.warning(f"GetPeerAddress : no valid ports found for user : {username}")
+            raise PeerConnectionError(f"no valid ports for user : {username}")
+
+        return response.ip, response.port, response.obfuscated_port
+
     async def get_peer_connection(self, username: str, typ: PeerConnectionType = PeerConnectionType.PEER) -> PeerConnection:
         """Gets a peer connection for the given `username`. It will first try to
         re-use an existing connection, otherwise it will create a new connection
@@ -345,7 +345,7 @@ class Network:
         future.add_done_callback(self._remove_response_future)
         return future
 
-    def get_peer_connections(self, username: str, typ: str) -> List[PeerConnection]:
+    def get_peer_connections(self, username: str, typ: PeerConnectionType) -> List[PeerConnection]:
         """Returns all connections for peer with given username and peer
         connection types.
         """
@@ -380,11 +380,12 @@ class Network:
     async def _on_connect_to_peer(self, message: ConnectToPeer.Response, connection: ServerConnection):
         """Handles a ConnectToPeer request coming from another peer"""
         task = asyncio.create_task(
-            self._handle_indirect_connection(message),
+            self._handle_connect_to_peer(message),
             name=f'connect-to-peer-{task_counter()}'
         )
         task.add_done_callback(
-            partial(self._handle_indirect_connection_callback, message))
+            partial(self._handle_connect_to_peer_callback, message)
+        )
         self._create_peer_connection_tasks.append(task)
 
     async def _make_direct_connection(
@@ -457,7 +458,7 @@ class Network:
 
         return connection
 
-    async def _handle_indirect_connection(self, message: ConnectToPeer.Response):
+    async def _handle_connect_to_peer(self, message: ConnectToPeer.Response):
         """Handles an indirect connection request received from the server.
 
         A task is created for this coroutine when a `ConnectToPeer` message is
@@ -631,7 +632,7 @@ class Network:
             self.download_rate_limiter = new_limiter
 
     # Task callbacks
-    def _handle_indirect_connection_callback(self, message: ConnectToPeer.Response, task: asyncio.Task):
+    def _handle_connect_to_peer_callback(self, message: ConnectToPeer.Response, task: asyncio.Task):
         try:
             task.result()
         except asyncio.CancelledError:

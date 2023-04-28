@@ -17,6 +17,7 @@ from .events import (
     EventBus,
     InternalEventBus,
     ConnectionStateChangedEvent,
+    LoginSuccessEvent,
     PeerInitializedEvent,
     MessageReceivedEvent,
     UserDirectoryEvent,
@@ -30,6 +31,7 @@ from .protocol.messages import (
     BranchLevel,
     BranchRoot,
     ToggleParentSearch,
+    DistributedChildDepth,
     DistributedBranchLevel,
     DistributedBranchRoot,
     DistributedSearchRequest,
@@ -63,6 +65,7 @@ class DistributedPeer:
     connection: PeerConnection
     branch_level: int = None
     branch_root: str = None
+    child_depth: int = None
 
 
 class PeerManager:
@@ -92,6 +95,8 @@ class PeerManager:
             ConnectionStateChangedEvent, self._on_state_changed)
         self._internal_event_bus.register(
             MessageReceivedEvent, self._on_message_received)
+        self._internal_event_bus.register(
+            LoginSuccessEvent, self._on_login_success)
 
         self.MESSAGE_MAP = build_message_map(self)
 
@@ -144,15 +149,7 @@ class PeerManager:
                         name=f'disconnect-distributed-{task_counter()}'
                     )
 
-        logger.info(f"notifying server of our parent : level={peer.branch_level} root={peer.branch_root}")
-        # The original Windows client sends out the child depth (=0) and the
-        # ParentIP
-        await self._network.send_server_messages(
-            BranchLevel.Request(peer.branch_level + 1),
-            BranchRoot.Request(peer.branch_root),
-            ToggleParentSearch.Request(False),
-            AcceptChildren.Request(True)
-        )
+        await self._notify_server_of_parent()
 
         # Notify children of new parent
         await self.send_messages_to_children(
@@ -178,15 +175,7 @@ class PeerManager:
         self.parent = None
 
         username = self._settings.get('credentials.username')
-        try:
-            await self._network.send_server_messages(
-                BranchLevel.Request(0),
-                BranchRoot.Request(username),
-                ToggleParentSearch.Request(True)
-            )
-        except asyncio.CancelledError as exc:
-            logger.warning("unsetting parent cancelled", exc_info=exc)
-            raise
+        await self._notify_server_of_parent()
 
         # TODO: What happens to the children when we lose our parent is still
         # unclear
@@ -194,6 +183,31 @@ class PeerManager:
             DistributedBranchLevel.Request(0),
             DistributedBranchRoot.Request(username)
         )
+
+    async def _notify_server_of_parent(self):
+        """Notifies the server of our parent or if we don't have any, notify the
+        server that we are looking for one
+        """
+        if self.parent:
+            logger.info(f"notifying server of our parent : level={self.parent.branch_level} root={self.parent.branch_root}")
+            # The original Windows client sends out the child depth (=0) and the
+            # ParentIP
+            await self._network.send_server_messages(
+                BranchLevel.Request(self.parent.branch_level + 1),
+                BranchRoot.Request(self.parent.branch_root),
+                ToggleParentSearch.Request(False),
+                AcceptChildren.Request(True)
+            )
+        else:
+            logger.info("notifying server we are looking for parent")
+            # The original Windows client sends out the child depth (=0) and the
+            # ParentIP
+            await self._network.send_server_messages(
+                BranchLevel.Request(0),
+                BranchRoot.Request(self._settings.get('credentials.username')),
+                ToggleParentSearch.Request(True),
+                AcceptChildren.Request(True)
+            )
 
     async def _check_if_new_child(self, peer: DistributedPeer):
         """Potentially adds a distributed connection to our list of children.
@@ -469,6 +483,11 @@ class PeerManager:
             await self.send_messages_to_children(
                 DistributedBranchRoot.Request(message.username))
 
+    @on_message(DistributedChildDepth)
+    async def _on_distributed_child_depth(self, message: DistributedChildDepth.Request, connection: PeerConnection):
+        peer = self.get_distributed_peer(connection.username, connection)
+        peer.child_depth = message.depth
+
     @on_message(DistributedSearchRequest.Request)
     async def _on_distributed_search_request(self, message: DistributedSearchRequest.Request, connection: PeerConnection):
         await self._query_shares_and_reply(message.ticket, message.username, message.query)
@@ -502,7 +521,6 @@ class PeerManager:
         if message.__class__ in self.MESSAGE_MAP:
             await self.MESSAGE_MAP[message.__class__](message, event.connection)
 
-    # Connection state changes
     async def _on_state_changed(self, event: ConnectionStateChangedEvent):
         if not isinstance(event.connection, PeerConnection):
             return
@@ -529,6 +547,9 @@ class PeerManager:
                     peer for peer in self.distributed_peers
                     if peer.connection != event.connection
                 ]
+
+    async def _on_login_success(self, event: LoginSuccessEvent):
+        await self._notify_server_of_parent()
 
     async def send_messages_to_children(self, *messages: Union[MessageDataclass, bytes]):
         for child in self.children:
