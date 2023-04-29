@@ -69,11 +69,15 @@ class DistributedPeer:
 
 
 class PeerManager:
+    """Peer manager is responsible for handling peer messages and the
+    distributed network
+    """
 
     def __init__(
             self, state: State, settings: Settings,
             event_bus: EventBus, internal_event_bus: InternalEventBus,
-            shares_manager: SharesManager, transfer_manager: TransferManager, network: Network):
+            shares_manager: SharesManager, transfer_manager: TransferManager,
+            network: Network):
         self._state: State = state
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
@@ -129,7 +133,7 @@ class PeerManager:
                 return peer
 
     async def _set_parent(self, peer: DistributedPeer):
-        logger.info(f"set parent : {peer!r}")
+        logger.info(f"set parent : {peer}")
         self.parent = peer
 
         self._cancel_potential_parent_tasks()
@@ -309,7 +313,7 @@ class PeerManager:
     @on_message(PotentialParents.Response)
     async def _on_potential_parents(self, message: PotentialParents.Response, connection: ServerConnection):
         if not self._settings.get('debug.search_for_parent'):
-            logger.debug("ignoring NetInfo message : searching for parent is disabled")
+            logger.debug("ignoring PotentialParents message : searching for parent is disabled")
             return
 
         self.potential_parents = [
@@ -556,10 +560,12 @@ class PeerManager:
             child.connection.queue_messages(*messages)
 
     def stop(self):
+        self._cancel_search_reply_tasks()
+        self._cancel_potential_parent_tasks()
+
+    def _cancel_search_reply_tasks(self):
         for task in self._search_reply_tasks:
             task.cancel()
-
-        self._cancel_potential_parent_tasks()
 
     def _cancel_potential_parent_tasks(self):
         for task in self._potential_parent_tasks:

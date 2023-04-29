@@ -129,6 +129,7 @@ class ListeningConnection(Connection):
                 f"{self.hostname}:{self.port} : exception while disconnecting", exc_info=exc)
 
         finally:
+            self._server = None
             logger.debug(f"{self.hostname}:{self.port} : disconnected : {reason.name}")
             await self.set_state(ConnectionState.CLOSED, close_reason=reason)
 
@@ -226,13 +227,15 @@ class DataConnection(Connection):
                 await self._writer.wait_closed()
 
         except Exception as exc:
-            logger.warning(f"{self.hostname}:{self.port} : exception while disconnecting", exc_info=exc)
+            logger.warning(f"{self.hostname}:{self.port} : exception while disconnecting : {exc}")
 
         finally:
             await self.set_state(ConnectionState.CLOSED, close_reason=reason)
             # Because disconnect can be called when read failed setting the
             # reader task to none should be done last
             self._reader_task = None
+            self._reader = None
+            self._writer = None
 
     def _start_reader_task(self):
         self._reader_task = asyncio.create_task(self._message_reader_loop())
@@ -273,7 +276,8 @@ class DataConnection(Connection):
             else:
                 # Do not handle messages when closing/closed
                 if not self._is_closing():
-                    await self._perform_message_callback(message)
+                    if message:
+                        await self._perform_message_callback(message)
 
     async def _read_message(self):
         header_size = HEADER_SIZE_OBFUSCATED if self.obfuscated else HEADER_SIZE_UNOBFUSCATED
@@ -376,10 +380,13 @@ class DataConnection(Connection):
 
     def queue_messages(self, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
         if self._is_closing():
-            logger.warning(f"{self.hostname}:{self.port} : not queueing messages, connection is closing : {messages}")
-            return
+            logger.warning(f"{self.hostname}:{self.port} : not queueing message, connection is closing : {messages}")
+            return []
 
-        return [self.queue_message(message) for message in messages]
+        return [
+            self.queue_message(message)
+            for message in messages
+        ]
 
     async def send_message(self, message: Union[bytes, MessageDataclass]):
         """Sends a message or a set of bytes over the connection. In case an
