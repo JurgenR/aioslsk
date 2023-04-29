@@ -276,7 +276,8 @@ class DataConnection(Connection):
             else:
                 # Do not handle messages when closing/closed
                 if not self._is_closing():
-                    await self._perform_message_callback(message)
+                    if message:
+                        await self._perform_message_callback(message)
 
     async def _read_message(self):
         header_size = HEADER_SIZE_OBFUSCATED if self.obfuscated else HEADER_SIZE_UNOBFUSCATED

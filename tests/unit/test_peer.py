@@ -126,7 +126,7 @@ class TestPeer:
         manager = self._create_peer_manager()
         manager._shares_manager.create_directory_reply.return_value = DIRECTORY_DATA
 
-        connection = AsyncMock()
+        connection = Mock()
         connection.username = USER
 
         await manager._on_peer_directory_contents_req(

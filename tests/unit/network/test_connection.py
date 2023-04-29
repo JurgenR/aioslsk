@@ -117,28 +117,32 @@ class TestDataConnection:
         connection = self._create_connection(network)
         connection.set_state = AsyncMock()
         connection._stop_reader_task = Mock()
-        connection._writer = Mock()
+
+        writer_mock = Mock()
+        connection._writer = writer_mock
         connection._writer.close = Mock()
         connection._writer.wait_closed = AsyncMock()
         connection._writer.is_closing = Mock(return_value=False)
 
         await connection.disconnect(CloseReason.EOF)
 
-        self._validate_disconnected(connection)
+        self._validate_disconnected(connection, writer_mock)
 
     @pytest.mark.asyncio
     async def test_disconnect_exception_shouldSetState(self, network):
         connection = self._create_connection(network)
         connection.set_state = AsyncMock()
         connection._stop_reader_task = Mock()
-        connection._writer = Mock()
+
+        writer_mock = Mock()
+        connection._writer = writer_mock
         connection._writer.close = Mock()
         connection._writer.wait_closed = AsyncMock(side_effect=OSError)
         connection._writer.is_closing = Mock(return_value=False)
 
         await connection.disconnect(CloseReason.EOF)
 
-        self._validate_disconnected(connection)
+        self._validate_disconnected(connection, writer_mock)
 
     # receive_message
     @pytest.mark.asyncio
@@ -286,9 +290,11 @@ class TestDataConnection:
         connection.state = state
         return connection
 
-    def _validate_disconnected(self, connection: DataConnection):
-        connection._writer.close.assert_called_once()
-        connection._writer.wait_closed.assert_awaited_once()
+    def _validate_disconnected(self, connection: DataConnection, writer_mock: Mock):
+        writer_mock.close.assert_called_once()
+        writer_mock.wait_closed.assert_awaited_once()
+        assert connection._writer is None
+        assert connection._reader is None
         assert 2 == connection.set_state.call_count
         connection.set_state.assert_has_awaits(
             [
@@ -538,27 +544,31 @@ class TestListeningConnection:
     async def test_disconnect_shouldSetState(self, network):
         connection = self._create_connection(network)
         connection.set_state = AsyncMock()
-        connection._server = Mock()
+
+        server_mock = Mock()
+        connection._server = server_mock
         connection._server.close = Mock()
         connection._server.wait_closed = AsyncMock()
         connection._server.is_serving = Mock(return_value=True)
 
         await connection.disconnect(CloseReason.REQUESTED)
 
-        self._validate_disconnected(connection)
+        self._validate_disconnected(connection, server_mock)
 
     @pytest.mark.asyncio
     async def test_disconnect_exception_shouldSetState(self, network):
         connection = self._create_connection(network)
         connection.set_state = AsyncMock()
-        connection._server = Mock()
+
+        server_mock = Mock()
+        connection._server = server_mock
         connection._server.close = Mock()
         connection._server.wait_closed = AsyncMock(side_effect=OSError)
         connection._server.is_serving = Mock(return_value=True)
 
         await connection.disconnect(CloseReason.REQUESTED)
 
-        self._validate_disconnected(connection)
+        self._validate_disconnected(connection, server_mock)
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -582,9 +592,10 @@ class TestListeningConnection:
         assert PeerConnectionType.PEER == peer_connection.connection_type
         assert peer_connection.obfuscated is obfuscated
 
-    def _validate_disconnected(self, connection: ListeningConnection):
-        connection._server.close.assert_called_once()
-        connection._server.wait_closed.assert_awaited_once()
+    def _validate_disconnected(self, connection: ListeningConnection, server_mock: Mock):
+        server_mock.close.assert_called_once()
+        server_mock.wait_closed.assert_awaited_once()
+        assert connection._server is None
         assert 2 == connection.set_state.call_count
         connection.set_state.assert_has_awaits(
             [
