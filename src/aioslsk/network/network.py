@@ -20,6 +20,8 @@ from .connection import (
     ServerConnection,
 )
 from ..exceptions import (
+    ConnectionReadError,
+    MessageDeserializationError,
     NetworkError,
     PeerConnectionError,
 )
@@ -590,7 +592,18 @@ class Network:
         """
         self.peer_connections.append(connection)
 
-        peer_init_message = await connection.receive_message()
+        try:
+            message_data = await connection.receive_message()
+            if message_data:
+                peer_init_message = connection.decode_message_data(message_data)
+            else:
+                # EOF reached before receiving a message
+                return
+        except ConnectionReadError:
+            return
+        except MessageDeserializationError:
+            await connection.disconnect(CloseReason.REQUESTED)
+            return
 
         if isinstance(peer_init_message, PeerInit.Request):
             connection.username = peer_init_message.username
@@ -610,13 +623,15 @@ class Network:
             try:
                 connection_future = self._expected_connection_futures[ticket]
             except KeyError:
-                logger.warning(f"got an unknown pierce firewall ticket {ticket}")
+                logger.warning(
+                    f"{connection.hostname}:{connection.port} : unknown pierce firewall ticket : {ticket}")
             else:
                 connection_future.set_result(connection)
 
         else:
-            logger.warning(f"got an unknown peer init message, disconnecting : {peer_init_message}")
-            await connection.disconnect()
+            logger.warning(
+                f"{connection.hostname}:{connection.port} unknown peer init message : {peer_init_message}")
+            await connection.disconnect(CloseReason.REQUESTED)
 
     async def on_message_received(self, message: MessageDataclass, connection: Connection):
         """Method called by `connection` instances when a message is received

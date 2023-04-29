@@ -2,6 +2,8 @@ from aioslsk.exceptions import (
     ConnectionFailedError,
     ConnectionReadError,
     ConnectionWriteError,
+    MessageDeserializationError,
+    MessageSerializationError,
 )
 from aioslsk.protocol.messages import (
     ChatLeaveRoom,
@@ -10,7 +12,7 @@ from aioslsk.protocol.messages import (
     PeerInit,
     PeerPlaceInQueueRequest,
 )
-from aioslsk.protocol.obfuscation import encode
+from aioslsk.protocol.obfuscation import decode, encode
 from aioslsk.network.connection import (
     Connection,
     CloseReason,
@@ -34,6 +36,7 @@ def network():
     nw.connect = AsyncMock()
     nw.disconnect = AsyncMock()
     nw.on_state_changed = AsyncMock()
+    nw.on_peer_accepted = AsyncMock()
     return nw
 
 
@@ -68,7 +71,6 @@ class TestDataConnection:
         assert ConnectionState.CONNECTED == connection.state
         assert connection._reader is not None
         assert connection._writer is not None
-        connection._start_reader_task.assert_called_once()
         open_mock.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -313,15 +315,74 @@ class TestPeerConnection:
             (PeerConnectionState.ESTABLISHED, PeerConnectionType.DISTRIBUTED, DistributedBranchLevel.Request(1)),
         ]
     )
-    def test_parseMessage_shouldReturnMessage(self, peer_state: PeerConnectionState, peer_type: PeerConnectionType, message: MessageDataclass):
-        ip, port = '1.2.3.4', 1234
-        conn = PeerConnection(
-            hostname=ip, port=port, network=Mock(),
-            connection_type=peer_type)
+    def test_deserializeMessage_shouldReturnMessage(self, network, peer_state: PeerConnectionState, peer_type: PeerConnectionType, message: MessageDataclass):
+        conn = self._create_connection(network)
         conn.connection_state = peer_state
+        conn.connection_type = peer_type
 
-        actual_message = conn.parse_message(message.serialize())
+        actual_message = conn.deserialize_message(message.serialize())
         assert message == actual_message
+
+    def test_decodeMessageData_nonObfuscated_shouldReturnMessage(self, network):
+        conn = self._create_connection(network)
+        conn.connection_state = PeerConnectionState.AWAITING_INIT
+        conn.obfuscated = False
+
+        message_obj = PeerInit.Request('user', 'P', 1)
+        data = message_obj.serialize()
+
+        assert message_obj == conn.decode_message_data(data)
+
+    def test_decodeMessageData_obfuscated_shouldReturnMessage(self, network):
+        conn = self._create_connection(network)
+        conn.connection_state = PeerConnectionState.AWAITING_INIT
+        conn.obfuscated = True
+
+        message_obj = PeerInit.Request('user', 'P', 1)
+        data = encode(message_obj.serialize())
+
+        assert message_obj == conn.decode_message_data(data)
+
+    def test_decodeMessageData_error_shouldRaise(self, network):
+        conn = self._create_connection(network)
+        conn.connection_state = PeerConnectionState.AWAITING_INIT
+        conn.obfuscated = False
+
+        message_obj = PeerInit.Request('user', 'P', 1)
+        data = message_obj.serialize()
+
+        with pytest.raises(MessageDeserializationError):
+            conn.decode_message_data(data[1:])
+
+    def test_encodeMessageData_nonObfuscated_shouldReturnBytes(self, network):
+        conn = self._create_connection(network)
+        conn.connection_state = PeerConnectionState.AWAITING_INIT
+        conn.obfuscated = False
+
+        message_obj = PeerInit.Request('user', 'P', 1)
+        data = message_obj.serialize()
+
+        assert data == conn.encode_message_data(message_obj)
+
+    def test_encodeMessageData_obfuscated_shouldReturnBytes(self, network):
+        conn = self._create_connection(network)
+        conn.connection_state = PeerConnectionState.AWAITING_INIT
+        conn.obfuscated = True
+
+        message_obj = PeerInit.Request('user', 'P', 1)
+        data = encode(message_obj.serialize())
+
+        assert data == decode(conn.encode_message_data(data))
+
+    def test_encodeMessageData_error_shouldRaise(self, network):
+        conn = self._create_connection(network)
+        conn.connection_state = PeerConnectionState.AWAITING_INIT
+        conn.obfuscated = False
+
+        message_obj = PeerInit.Request('user', 'P', 2 ** 32 + 1)
+
+        with pytest.raises(MessageSerializationError):
+            conn.encode_message_data(message_obj)
 
     # receive_data
     @pytest.mark.asyncio
@@ -513,7 +574,7 @@ class TestListeningConnection:
 
         await connection.accept(reader, writer)
 
-        connection.network.on_peer_accepted.assert_called_once()
+        connection.network.on_peer_accepted.assert_awaited_once()
         peer_connection = connection.network.on_peer_accepted.call_args.args[0]
         assert peer_ip == peer_connection.hostname
         assert peer_port == peer_connection.port

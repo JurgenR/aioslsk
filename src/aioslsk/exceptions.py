@@ -14,6 +14,10 @@ class MessageSerializationError(AioSlskException):
     pass
 
 
+class MessageDeserializationError(AioSlskException):
+    pass
+
+
 class FileError(AioSlskException):
     pass
 

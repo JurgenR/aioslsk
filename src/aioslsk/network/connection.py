@@ -17,6 +17,8 @@ from ..exceptions import (
     ConnectionFailedError,
     ConnectionReadError,
     ConnectionWriteError,
+    MessageDeserializationError,
+    MessageSerializationError,
 )
 from ..protocol.primitives import uint32, uint64, MessageDataclass
 from ..protocol.messages import (
@@ -190,7 +192,7 @@ class DataConnection(Connection):
         :param timeout: timeout in seconds before giving up (default: 30)
         :raise ConnectionFailedError: raised when connection failed or timed out
         """
-        logger.info(f"connecting to {self.hostname}:{self.port}")
+        logger.info(f"{self.hostname}:{self.port} : connecting")
         await self.set_state(ConnectionState.CONNECTING)
 
         try:
@@ -202,7 +204,7 @@ class DataConnection(Connection):
             raise ConnectionFailedError(f"{self.hostname}:{self.port} : failed to connect") from exc
 
         else:
-            logger.debug(f"successfully connected to {self.hostname}:{self.port}")
+            logger.debug(f"{self.hostname}:{self.port} : successfully connected")
             await self.set_state(ConnectionState.CONNECTED)
 
     async def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
@@ -259,11 +261,19 @@ class DataConnection(Connection):
         while not self._is_closing():
             try:
                 message_data = await self.receive_message()
-            except ConnectionReadError as exc:
-                logger.warning(f"{self.hostname}:{self.port} : read error : {exc!r}")
+                if message_data:
+                    message = self.decode_message_data(message_data)
+
+            except ConnectionReadError:
+                logger.warning(f"{self.hostname}:{self.port} : read error")
+
+            except MessageDeserializationError:
+                logger.warning(f"{self.hostname}:{self.port} : failed to deserialize message")
+
             else:
-                if message_data and not self._is_closing():
-                    await self._process_message_data(message_data)
+                # Do not handle messages when closing/closed
+                if not self._is_closing():
+                    await self._perform_message_callback(message)
 
     async def _read_message(self):
         header_size = HEADER_SIZE_OBFUSCATED if self.obfuscated else HEADER_SIZE_UNOBFUSCATED
@@ -281,16 +291,43 @@ class DataConnection(Connection):
     async def receive_message(self) -> bytes:
         return await self._read(self._read_message)
 
-    async def _process_message_data(self, data: bytes):
+    def decode_message_data(self, data: bytes) -> MessageDataclass:
+        """De-obfuscates and deserializes message data into a `MessageDataclass`
+        object. See `deserialize_message`
+
+        :return: object of `MessageDataclass`
+        :raise MessageDeserializationError: raised when deserialization failed
+        """
         if self.obfuscated:
             data = obfuscation.decode(data)
 
         try:
-            message = self.parse_message(data)
-        except Exception:
-            logger.exception(f"{self.hostname}:{self.port} : failed to parse message data : {data.hex()}")
-            return
+            message = self.deserialize_message(data)
+        except Exception as exc:
+            logger.exception(f"{self.hostname}:{self.port} : failed to deserialize message : {data.hex()}")
+            raise MessageDeserializationError("failed to deserialize message") from exc
 
+        return message
+
+    def encode_message_data(self, message: Union[bytes, MessageDataclass]) -> bytes:
+        """Serializes the `MessageDataclass` or `bytes` and obfuscates the
+        contents. See `serialize_message`
+
+        :return: `bytes` object
+        :raise MessageSerializationError: raised when serialization failed
+        """
+        try:
+            data = self.serialize_message(message)
+        except Exception as exc:
+            logger.exception(f"{self.hostname}:{self.port} : failed to serialize message : {message!r}")
+            raise MessageSerializationError("failed to serialize Message") from exc
+
+        if self.obfuscated:
+            data = obfuscation.encode(data)
+
+        return data
+
+    async def _perform_message_callback(self, message: MessageDataclass):
         logger.debug(f"{self.hostname}:{self.port} : received message : {message!r}")
         try:
             await self.network.on_message_received(message, self)
@@ -351,12 +388,9 @@ class DataConnection(Connection):
         logger.debug(f"{self.hostname}:{self.port} : send message : {message!r}")
         # Serialize the message
         try:
-            data = self._serialize_message(message)
-        except Exception:
-            logger.exception(f"{self.hostname}:{self.port} : failed to serialize message : {message!r}")
-
-        if self.obfuscated:
-            data = obfuscation.encode(data)
+            data = self.encode_message_data(message)
+        except MessageSerializationError:
+            return
 
         # Perform actual send
         try:
@@ -371,14 +405,14 @@ class DataConnection(Connection):
             await self.disconnect(CloseReason.WRITE_ERROR)
             raise ConnectionWriteError(f"{self.hostname}:{self.port} : exception during writing") from exc
 
-    def parse_message(self, message_data: bytes):
+    def deserialize_message(self, message_data: bytes):
         """Should be called after a full message has been received. This method
         should parse the message and notify the listeners
         """
         raise NotImplementedError(
-            "parse_message should be overwritten by a subclass")
+            "'deserialize_message' should be overwritten by a subclass")
 
-    def _serialize_message(self, message: Union[bytes, MessageDataclass]) -> bytes:
+    def serialize_message(self, message: Union[bytes, MessageDataclass]) -> bytes:
         if isinstance(message, MessageDataclass):
             return message.serialize()
         else:
@@ -391,7 +425,7 @@ class ServerConnection(DataConnection):
         await super().connect(timeout=timeout)
         self._start_reader_task()
 
-    def parse_message(self, message_data: bytes):
+    def deserialize_message(self, message_data: bytes):
         return ServerMessage.deserialize_response(message_data)
 
 
@@ -521,7 +555,7 @@ class PeerConnection(DataConnection):
             await self.send_data(data)
             callback(data)
 
-    def parse_message(self, message_data: bytes):
+    def deserialize_message(self, message_data: bytes):
         if self.connection_state == PeerConnectionState.AWAITING_INIT:
             return PeerInitializationMessage.deserialize_request(message_data)
 
