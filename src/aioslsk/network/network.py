@@ -625,12 +625,13 @@ class Network:
             except KeyError:
                 logger.warning(
                     f"{connection.hostname}:{connection.port} : unknown pierce firewall ticket : {ticket}")
+                await connection.disconnect(CloseReason.REQUESTED)
             else:
                 connection_future.set_result(connection)
 
         else:
             logger.warning(
-                f"{connection.hostname}:{connection.port} unknown peer init message : {peer_init_message}")
+                f"{connection.hostname}:{connection.port} : unknown peer init message : {peer_init_message}")
             await connection.disconnect(CloseReason.REQUESTED)
 
     async def on_message_received(self, message: MessageDataclass, connection: Connection):

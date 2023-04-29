@@ -31,6 +31,33 @@ The components of the messages use a little-endian byte order.
 Data Structures
 ===============
 
+Attribute
+---------
+
+1. **uint32**: key
+2. **uint32**: value
+
+
+FileData
+--------
+
+1. **uint8**: unknown
+2. **string**: filename
+3. **uint64**: filesize
+4. **string**: extension
+5. Array of file attributes:
+
+   1. **Attribute**: attributes
+
+
+DirectoryData
+-------------
+
+1. **string**: name
+2. Array of file data:
+
+   1. **FileData**: files
+
 
 Server Messages
 ===============
@@ -1187,13 +1214,15 @@ PeerSharesRequest (Code 4)
 
 :Send/Receive:
 
-No message body
+1. Optional
+
+   1. **uint32**: ticket: some clients seem to send a ticket
 
 
 PeerSharesReply (Code 5)
 ------------------------
 
-:Code: 4 (0x04)
+:Code: 5 (0x05)
 
 :Usage: Response to PeerSharesRequest
 
@@ -1201,7 +1230,40 @@ PeerSharesReply (Code 5)
 
 Compressed using gzip:
 
-1.
+1. Array of directories:
+
+   1. **DirectoryData**: directories
+
+2. **uint32**: unknown: always 0
+3. Optional: Array of locked directories:
+
+   1. **DirectoryData**: locked_directories
+
+
+PeerSearchReply (Code 9)
+------------------------
+
+:Code: 9 (0x09)
+
+:Usage: Response to a search request
+
+:Send/Receive:
+
+Compressed using gzip:
+
+1. **string**: username
+2. **uint32**: ticket
+3. Array of results:
+
+   1. **FileData**: results
+
+4. **bool**: has_slots_free
+5. **uint32**: avg_speed
+6. **uint32**: queue_size
+7. **uint32**: unknown: always 0
+8. Optional: Array of locked results:
+
+   1. **FileData**: locked_results
 
 
 PeerUserInfoRequest (Code 15)
@@ -1234,6 +1296,35 @@ PeerUserInfoReply (Code 16)
 4. **uint32**: slots_free
 5. **uint32**: total_uploads
 6. **bool**: has_slots_free
+
+
+PeerDirectoryContentsRequest (Code 36)
+--------------------------------------
+
+:Code: 36 (0x24)
+
+:Usage: Request the file contents of a directory
+
+:Send/Receive:
+
+1. **uint32**: ticket
+2. **string**: directory
+
+
+PeerDirectoryContentsReply (Code 36)
+--------------------------------------
+
+:Code: 36 (0x24)
+
+:Usage: Request the file contents of a directory
+
+:Send/Receive:
+
+1. **uint32**: ticket
+2. **string**: directory
+3. Array of directory data:
+
+   1. **DirectoryData**: directories
 
 
 PeerTransferRequest (Code 40)
@@ -1271,3 +1362,160 @@ PeerTransferReply (Code 41)
 4. If allowed==false
 
    1. **string**: reason
+
+
+PeerTransferQueue (Code 43)
+---------------------------
+
+:Code: 43 (0x2B)
+
+:Usage: Request to place the provided transfer of `filename` in the queue
+
+:Send/Receive:
+
+1. **string**: filename
+
+
+PeerPlaceInQueueReply (Code 44)
+-------------------------------
+
+:Code: 44 (0x2C)
+
+:Usage: Response to PeerPlaceInQueueRequest
+
+:Send/Receive:
+
+1. **string**: filename
+2. **uint32**: place
+
+
+PeerUploadFailed (Code 46)
+-------------------------
+
+:Code: 46 (0x2E)
+
+:Usage: Sent when uploading failed
+
+:Send/Receive:
+
+1. **string**: filename
+
+
+PeerTransferQueueFailed (Code 50)
+---------------------------------
+
+:Code: 50 (0x32)
+
+:Usage: Sent when placing the transfer in queue failed
+
+:Send/Receive:
+
+1. **string**: filename
+2. **string**: reason
+
+
+PeerPlaceInQueueRequest (Code 51)
+---------------------------------
+
+:Code: 51 (0x33)
+
+:Usage: Request the place of the transfer in the queue.
+
+:Send/Receive:
+
+1. **string**: filename
+
+
+PeerUploadQueueNotification (Code 52)
+-------------------------------------
+
+:Code: 51 (0x33)
+
+:Usage:
+
+:Send/Receive:
+
+Nothing
+
+
+Distributed Messages
+====================
+
+
+DistributedPing (Code 0)
+------------------------
+
+:Code: 0 (0x00)
+
+:Usage: Ping request from the parent. Most clients do not send this.
+
+:Send/Receive:
+
+Nothing
+
+
+DistributedSearchRequest (Code 3)
+---------------------------------
+
+:Code: 3 (0x03)
+
+:Usage: Search request coming from the parent
+
+:Send/Receive:
+
+1. **uint32**: unknown: unknown value, seems like this is always 0x31
+2. **string**: username
+3. **uint32**: ticket
+4. **string**: query
+
+
+DistributedBranchLevel (Code 4)
+-------------------------------
+
+:Code: 4 (0x04)
+
+:Usage: Distributed branch level
+
+:Send/Receive:
+
+1. **uint32**: level
+
+
+DistributedBranchRoot (Code 5)
+------------------------------
+
+:Code: 5 (0x05)
+
+:Usage: Distributed branch root
+
+:Send/Receive:
+
+1. **string**: root
+
+
+DistributedChildDepth (Code 7)
+------------------------------
+
+:Code: 7 (0x07)
+
+:Usage: How many children the peer has (unverified). This is sent by some clients to the parent after they are added and updates are sent afterwards. Usage is a unknown.
+
+:Send/Receive:
+
+1. **string**: depth
+
+
+DistributedServerSearchRequest (Code 93)
+----------------------------------------
+
+:Code: 93 (0x5D)
+
+:Usage: This message exists internally only for deserialization purposes and this is actually a `ServerSearchRequest`.
+
+:Send/Receive:
+
+1. **uint8**: distributed_code
+2. **uint32**: unknown: unknown value, seems like this is always 0x31
+3. **string**: username
+4. **uint32**: ticket
+5. **string**: query

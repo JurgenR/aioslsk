@@ -176,6 +176,14 @@ class SoulSeek:
     async def queue_transfer(self, transfer: Transfer):
         await self.transfer_manager.queue(transfer)
 
+    async def track_user(self, user: Union[str, User]):
+        username = user.name if isinstance(user, User) else user
+        await self.server_manager.track_user(username)
+
+    async def untrack_user(self, user: Union[str, User]):
+        username = user.name if isinstance(user, User) else user
+        await self.server_manager.untrack_user(username)
+
     async def get_room_list(self):
         await self.server_manager.get_room_list()
 
