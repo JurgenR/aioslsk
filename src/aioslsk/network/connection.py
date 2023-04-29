@@ -155,9 +155,8 @@ class ListeningConnection(Connection):
             incoming=True
         )
         connection._reader, connection._writer = reader, writer
-        self.network.on_peer_accepted(connection)
+        await self.network.on_peer_accepted(connection)
         await connection.set_state(ConnectionState.CONNECTED)
-        connection._start_reader_task()
 
 
 class DataConnection(Connection):
@@ -205,7 +204,6 @@ class DataConnection(Connection):
         else:
             logger.debug(f"successfully connected to {self.hostname}:{self.port}")
             await self.set_state(ConnectionState.CONNECTED)
-            self._start_reader_task()
 
     async def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
         """Disconnects the TCP connection. The method will not raise an
@@ -391,6 +389,7 @@ class ServerConnection(DataConnection):
 
     async def connect(self, timeout: float = SERVER_CONNECT_TIMEOUT):
         await super().connect(timeout=timeout)
+        self._start_reader_task()
 
     def parse_message(self, message_data: bytes):
         return ServerMessage.deserialize_response(message_data)
@@ -414,15 +413,17 @@ class PeerConnection(DataConnection):
         await super().connect(timeout=timeout)
 
     def set_connection_state(self, state: PeerConnectionState):
-        # For AWAITING_OFFSET, AWAITING_TICKET and TRANSFERING we need to cancel
-        # the message reader as these require different handling
-        if state not in (PeerConnectionState.AWAITING_INIT, PeerConnectionState.ESTABLISHED):
-            self._stop_reader_task()
-
         # Set non-peer connections to non-obfuscated
         if state != PeerConnectionState.AWAITING_INIT:
             if self.connection_type != PeerConnectionType.PEER:
                 self.obfuscated = False
+
+        if state == PeerConnectionState.ESTABLISHED:
+            self._start_reader_task()
+        else:
+            # This shouldn't occur, during all other states we call the
+            # receive_* methods directly. But it can do no harn
+            self._stop_reader_task()
 
         logger.debug(f"{self.hostname}:{self.port} setting state to {state} : {self!r}")
         self.connection_state = state

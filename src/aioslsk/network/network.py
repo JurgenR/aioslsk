@@ -89,6 +89,7 @@ class Network:
         self._ticket_generator = ticket_generator()
         self._stop_event = stop_event
         self._expected_response_futures: List[ExpectedResponse] = []
+        self._expected_connection_futures: Dict[int, asyncio.Future] = {}
 
         # List of connections
         self.server: ServerConnection = ServerConnection(
@@ -153,16 +154,7 @@ class Network:
 
     async def disconnect(self):
         """Disconnects all current connections"""
-        for task in self._create_peer_connection_tasks:
-            task.cancel()
-
-        if self._log_connections_task is not None:
-            self._log_connections_task.cancel()
-            self._log_connections_task = None
-
-        if self._upnp_task is not None:
-            self._upnp_task.cancel()
-            self._upnp_task = None
+        self._cancel_all_tasks()
 
         connections = [self.server, ] + self.listening_connections + self.peer_connections
         logger.info(f"waiting for network disconnect : {len(connections)} connections")
@@ -170,7 +162,7 @@ class Network:
             *[conn.disconnect(CloseReason.REQUESTED) for conn in connections],
             return_exceptions=True
         )
-        logger.info(f"disconnect complete")
+        logger.info("network disconnected")
 
     async def _log_connections_job(self):
         while True:
@@ -308,9 +300,12 @@ class Network:
 
         return await self.create_peer_connection(username, typ)
 
-    def _remove_response_future(self, expected_response):
+    def _remove_response_future(self, expected_response: asyncio.Future):
         if expected_response in self._expected_response_futures:
             self._expected_response_futures.remove(expected_response)
+
+    def _remove_connection_future(self, ticket: int, connection_future: asyncio.Future):
+        self._expected_connection_futures.pop(ticket)
 
     def wait_for_server_message(self, message_class, **kwargs) -> ExpectedResponse:
         """Waits for a server message to arrive, the message must match the
@@ -425,33 +420,41 @@ class Network:
         """
         await self.server.send_message(ConnectToPeer.Request(ticket, username, typ))
 
-        # Wait for either a PierceFirewall from the peer or a CannotConnect from
-        # the server
-        futures = (
-            self.wait_for_peer_message(None, PeerPierceFirewall.Request, ticket=ticket),
-            self.wait_for_server_message(CannotConnect.Response, ticket=ticket)
+        # Wait for either a established connection with PeerPierceFirewall or a
+        # CannotConnect from the server
+        expected_connection_future = asyncio.Future()
+        expected_connection_future.add_done_callback(
+            partial(self._remove_connection_future, ticket)
         )
+        self._expected_connection_futures[ticket] = expected_connection_future
+
+        cannot_connect_future = self.wait_for_server_message(
+            CannotConnect.Response, ticket=ticket)
+
+        futures = (expected_connection_future, cannot_connect_future)
         done, pending = await asyncio.wait(
             futures,
             timeout=PEER_INDIRECT_CONNECT_TIMEOUT,
             return_when=asyncio.FIRST_COMPLETED
         )
 
-        # Whatever happens here, we can remove all the pending futures
-        [future.cancel() for future in pending]
-        [self._remove_response_future(future) for future in futures]
+        # Whatever happens here, we can cancel all pending futures
+        [fut.cancel() for fut in pending]
 
         # `done` will be empty in case of timeout
         if not done:
+            self._expected_connection_futures.pop(ticket)
             raise PeerConnectionError(
                 f"indirect connection timed out (username={username}, ticket={ticket})")
 
-        connection, response = done.pop().result()
+        completed_future = done.pop()
 
-        if response.__class__ == CannotConnect.Response:
+        if completed_future == cannot_connect_future:
             logger.debug(f"received cannot connect (ticket={ticket})")
             raise PeerConnectionError(
                 f"indirect connection failed (username={username}, ticket={ticket})")
+
+        connection = completed_future.result()
 
         connection.username = username
         connection.connection_type = typ
@@ -496,20 +499,6 @@ class Network:
 
         await self._internal_event_bus.emit(
             PeerInitializedEvent(peer_connection, requested=False))
-
-    @on_message(PeerInit.Request)
-    async def _on_peer_init(self, message: PeerInit.Request, connection: PeerConnection):
-        connection.username = message.username
-        connection.connection_type = message.typ
-        # When the first message is PeerInit it's up to the other peer to send
-        # us the transfer ticket in case it's a file connection
-        if message.typ == PeerConnectionType.FILE:
-            connection.set_connection_state(PeerConnectionState.AWAITING_TICKET)
-        else:
-            connection.set_connection_state(PeerConnectionState.ESTABLISHED)
-
-        await self._internal_event_bus.emit(
-            PeerInitializedEvent(connection, requested=False))
 
     async def send_peer_messages(self, username: str, *messages: List[Union[bytes, MessageDataclass]]):
         """Sends a list of messages to the peer with given `username`. This uses
@@ -582,8 +571,52 @@ class Network:
             self.remove_peer_connection(connection)
 
     # Peer related
-    def on_peer_accepted(self, connection: PeerConnection):
+    async def on_peer_accepted(self, connection: PeerConnection):
+        """Called when a connection has been accepted on one of the listening
+        connections. This method will wait for the peer initialization message:
+        either PeerInit or PeerPierceFirewall.
+
+        In case of PeerInit the method will perform the initialization of the
+        connection.
+
+        In case of PeerPierceFirewall we look for an associated future object
+        for the ticket provided in the message; there should be a task waiting
+        for it to be completed (see `_make_indirect_connection`). Full
+        initialization of the connection should be done in that method.
+
+        In any other case we disconnect the connection.
+
+        :param connection: the accepted `PeerConnection`
+        """
         self.peer_connections.append(connection)
+
+        peer_init_message = await connection.receive_message()
+
+        if isinstance(peer_init_message, PeerInit.Request):
+            connection.username = peer_init_message.username
+            connection.connection_type = peer_init_message.typ
+            # When the first message is PeerInit it's up to the other peer to send
+            # us the transfer ticket in case it's a file connection
+            if peer_init_message.typ == PeerConnectionType.FILE:
+                connection.set_connection_state(PeerConnectionState.AWAITING_TICKET)
+            else:
+                connection.set_connection_state(PeerConnectionState.ESTABLISHED)
+
+            await self._internal_event_bus.emit(
+                PeerInitializedEvent(connection, requested=False))
+
+        elif isinstance(peer_init_message, PeerPierceFirewall.Request):
+            ticket = peer_init_message.ticket
+            try:
+                connection_future = self._expected_connection_futures[ticket]
+            except KeyError:
+                logger.warning(f"got an unknown pierce firewall ticket {ticket}")
+            else:
+                connection_future.set_result(connection)
+
+        else:
+            logger.warning(f"got an unknown peer init message, disconnecting : {peer_init_message}")
+            await connection.disconnect()
 
     async def on_message_received(self, message: MessageDataclass, connection: Connection):
         """Method called by `connection` instances when a message is received
@@ -643,3 +676,15 @@ class Network:
             logger.info(f"successfully fulfilled ConnectToPeer request : {message}")
         finally:
             self._create_peer_connection_tasks.remove(task)
+
+    def _cancel_all_tasks(self):
+        for task in self._create_peer_connection_tasks:
+            task.cancel()
+
+        if self._log_connections_task is not None:
+            self._log_connections_task.cancel()
+            self._log_connections_task = None
+
+        if self._upnp_task is not None:
+            self._upnp_task.cancel()
+            self._upnp_task = None
