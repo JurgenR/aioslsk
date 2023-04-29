@@ -379,6 +379,10 @@ class DataConnection(Connection):
         )
 
     def queue_messages(self, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
+        if self._is_closing():
+            logger.warning(f"{self.hostname}:{self.port} : not queueing message, connection is closing : {messages}")
+            return []
+
         return [
             self.queue_message(message)
             for message in messages
