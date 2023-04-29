@@ -15,6 +15,7 @@ from .events import (
     InternalEventBus,
     KickedEvent,
     LoginEvent,
+    LoginSuccessEvent,
     MessageReceivedEvent,
     PrivateMessageEvent,
     RemovedFromPrivateRoomEvent,
@@ -34,14 +35,11 @@ from .events import (
     UserLeftRoomEvent,
     UserStatusEvent,
 )
-from .exceptions import ConnectionFailedError, LoginFailedError
+from .exceptions import ConnectionFailedError
 from .protocol.primitives import calc_md5
 from .protocol.messages import (
-    AcceptChildren,
     AddPrivilegedUser,
     AddUser,
-    BranchRoot,
-    BranchLevel,
     ChatRoomMessage,
     ChatJoinRoom,
     ChatLeaveRoom,
@@ -60,7 +58,6 @@ from .protocol.messages import (
     GetPeerAddress,
     GetUserStatus,
     GetUserStats,
-    ToggleParentSearch,
     Kicked,
     Login,
     MinParentsInCache,
@@ -352,8 +349,6 @@ class ServerManager:
             return
 
         logger.info(f"successfully logged on, greeting : {message.greeting!r}")
-        await self._event_bus.emit(
-            LoginEvent(is_success=True, greeting=message.greeting))
 
         self._network.queue_server_messages(
             CheckPrivileges.Request(),
@@ -363,22 +358,21 @@ class ServerManager:
                 obfuscated_port=self._settings.get('network.listening_port') + 1
             ),
             SetStatus.Request(UserStatus.ONLINE.value),
-            ToggleParentSearch.Request(True),
-            BranchRoot.Request(self._settings.get('credentials.username')),
-            BranchLevel.Request(0),
-            AcceptChildren.Request(False)
+            TogglePrivateRooms.Request(self._settings.get('chats.private_room_invites'))
         )
 
         await self.report_shares()
         await self.track_user(self._settings.get('credentials.username'))
-        self._network.queue_server_messages(
-            TogglePrivateRooms.Request(self._settings.get('chats.private_room_invites')))
 
         # Perform AddUser for all in the friendlist
         await self.track_friends()
 
         # Auto-join rooms
         await self.auto_join_rooms()
+
+        await self._internal_event_bus.emit(LoginSuccessEvent())
+        await self._event_bus.emit(
+            LoginEvent(is_success=True, greeting=message.greeting))
 
     @on_message(Kicked.Response)
     async def _on_kicked(self, message: Kicked.Response, connection):

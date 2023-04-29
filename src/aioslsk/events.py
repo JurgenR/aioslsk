@@ -261,3 +261,8 @@ class TrackUserEvent(InternalEvent):
 @dataclass(frozen=True)
 class UntrackUserEvent(InternalEvent):
     username: str
+
+
+@dataclass(frozen=True)
+class LoginSuccessEvent(InternalEvent):
+    pass

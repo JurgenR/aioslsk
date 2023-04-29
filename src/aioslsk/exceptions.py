@@ -14,6 +14,10 @@ class MessageSerializationError(AioSlskException):
     pass
 
 
+class MessageDeserializationError(AioSlskException):
+    pass
+
+
 class FileError(AioSlskException):
     pass
 
@@ -47,12 +51,4 @@ class ConnectionWriteError(NetworkError):
 
 
 class IncompleteFileReceiveError(NetworkError):
-    pass
-
-
-class NoSuchUserError(AioSlskException):
-    pass
-
-
-class LoginFailedError(AioSlskException):
     pass
