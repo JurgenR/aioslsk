@@ -76,69 +76,64 @@ Server Messages
 Login (Code 1)
 --------------
 
+Login into the server, this should be the first message sent to the server upon connecting
+
 :Code: 1 (0x01)
-:Usage: Login into the server, this should be the first message sent to the server upon connecting
 :Send:
-
-1. **string**: username
-2. **string**: password
-3. **uint32**:
-4. **string**: MD5 hash of concatenated username and password
-5. **uint32**: minor_version
-
+   1. **string**: username
+   2. **string**: password
+   3. **uint32**:
+   4. **string**: MD5 hash of concatenated username and password
+   5. **uint32**: minor_version
 :Receive:
+   1. **bool**: result. true on success, false on failure
+   2. If result==true
 
-1. **bool**: result. true on success, false on failure
-2. If result==true
+      1. **string**: greeting
+      2. **ip**: ip_address
+      3. **string**: md5_hash , hash of the password
+      4. **uint8**: privileged
 
-   1. **string**: greeting
-   2. **ip**: ip_address
-   3. **string**: md5_hash , hash of the password
-   4. **uint8**: privileged
+   3. If result==false
 
-3. If result==false
-
-   1. **string**: failure_reason
+      1. **string**: failure_reason
 
 
 SetListenPort (Code 2)
 ----------------------
 
-:Code: 2 (0x02)
-:Usage: Advertise our listening ports to the server
+Advertise our listening ports to the server
+
 Obfuscated port: this part seems to be optional, either it can be omitted completely or both values set to 0
 
+:Code: 2 (0x02)
 :Send:
+   1. **uint32**: listening port
+   2. Optional:
 
-1. **uint32**: listening port
-2. Optional:
-
-   1. **uint32**: has obfuscated listening port
-   2. **uint32**: obfuscated listening port
+      1. **uint32**: has obfuscated listening port
+      2. **uint32**: obfuscated listening port
 
 
 GetPeerAddress (Code 3)
 -----------------------
 
+Retrieve the IP address/port of a peer. Obfuscated port: this part seems to be optional, either it can be omitted completely or both values set to ``0``
+
+If the peer does not exist we will receive a response with IP address, port set to ``0``
+
+
 :Code: 3 (0x03)
-:Usage: Retrieve the IP address/port of a peer
-Obfuscated port: this part seems to be optional, either it can be omitted completely or both values set to 0
-
-If the peer does not exist we will receive a response with IP address, port set to `0`
-
 :Send:
-
-1. **string**: username
-
+   1. **string**: username
 :Receive:
+   1. **string**: username
+   2. **uint32**: IP address
+   3. **uint32**: listening port
+   4. Optional:
 
-1. **string**: username
-2. **uint32**: IP address
-3. **uint32**: listening port
-4. Optional:
-
-   1. **uint32**: has obfuscated listening port
-   2. **uint32**: obfuscated listening port
+      1. **uint32**: has obfuscated listening port
+      2. **uint32**: obfuscated listening port
 
 
 AddUser (Code 5)

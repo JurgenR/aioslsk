@@ -6,11 +6,6 @@ SoulSeek Flows
 
 This document describes different flows and details for the SoulSeek protocol
 
-Messages
-========
-
-The messages described can be found here: https://www.museek-plus.org/wiki/SoulseekProtocol
-
 
 Server Connection and Logon
 ===========================

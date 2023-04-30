@@ -139,6 +139,15 @@ Debug
 +-------------------------+-------------------------------------------------+---------+
 
 
+Building the documentation
+==========================
+
+.. code-block:: bash
+
+    cd docs/
+    poetry run make html
+
+
 Running Tests
 =============
 
