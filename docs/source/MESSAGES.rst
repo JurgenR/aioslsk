@@ -1484,3 +1484,14 @@ This message exists internally only for deserialization purposes and this is act
    3. **string**: username
    4. **uint32**: ticket
    5. **string**: query
+
+
+.. _file-messages:
+
+File Messages
+=============
+
+File connection does not have a message format but after peer initialization two values are exchanged:
+
+1. **uint32**: ticket
+2. **uint64**: offset

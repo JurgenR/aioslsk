@@ -16,7 +16,7 @@ Server Connection and Logon
 Establishing a connection and logging on:
 
 1. Open a TCP connection to the server
-2. Open up at least one listening connection, a second one can be opened for obfuscated connections. The SoulSeekQt client always takes the configured port + 1 as the obfuscated port.
+2. Open up at least one listening connection (see :ref:`peer-connections` for more info)
 3. Send the :ref:`Login`: command on the server socket
 
 A login response will be received which determines whether the login was successful along with the following commands providing some information:
@@ -54,12 +54,8 @@ Exception Cases
 * If the user was previously logged in with and the password does not match results in failure reason ``INVALIDPASS``
 * If the credentials are valid but the user is logged in the other user will receive message :ref:`Kicked` and the connection will be terminated
 
-.. note::
-   Question 1: I'm assuming the client version has some impact on how the server communicates to the peer
 
-.. note::
-   Question 2: What client versions are in existence?
-
+.. _peer-connections:
 
 Peer Connections
 ================
@@ -123,7 +119,7 @@ Distributed Connections
 Obtaining a parent
 ------------------
 
-When :ref:`ToggleParentSearch` is enabled then every 60 seconds the server will send the client a :ref:`PotentialParents` command (containing 10 possible parents) until we disable our search for a parent using the :ref:`ToggleParentSearch` command. The :ref:`PotentialParents` command contains a list with each entry containg: username, IP address and port. Upon receiving this command the client will attempt to open up a connection to each of the IP addresses in the list to find a suitable parent.
+When :ref:`ToggleParentSearch` is enabled then every 60 seconds the server will send the client a :ref:`PotentialParents` command (containing 10 possible parents) until we disable our search for a parent using the :ref:`ToggleParentSearch` command. The :ref:`PotentialParents` command contains a list with each entry containing: username, IP address and port. Upon receiving this command the client will attempt to open up a connection to each of the IP addresses in the list to find a suitable parent.
 
 After establishing a distributed connection with one of the potential parents the peer will send out a :ref:`DistributedBranchLevel` and :ref:`DistributedBranchRoot` over the distributed connection. If the peer is selected to be the parent the other potential parents are disconnected and the following messages are then send to the server to let it know where we are in the hierarchy:
 
@@ -169,30 +165,34 @@ Transfers
 Downloads
 ---------
 
-For downloading we need the ``username``, ``filename`` and ``slotsfree`` returned by a :ref:`PeerSearchReply`: . Uploads are just the opposite of the download process.
+For downloading we need only the ``username`` and ``filename`` returned by a :ref:`PeerSearchReply`.
 
-Request a file download (peer has slotsfree):
+Request a file download (peer has free upload slots):
 
-1. Initiate a connection to the Peer
-2. Send: :ref:`PeerTransferQueue` message containing the filename
-3. Receive: :ref:`PeerTransferRequest` message. Store the ticket and the filesize
-4. Send: :ref:`PeerTransferReply` message containing the ticket. If the `allowed` flag is set the other peer will now attempt to establish a connection for uploading, if it is not set the transfer should be aborted.
-
-
-The peer will create a new file connection to start uploading the file.
-
-1. Receive: :ref:`PeerInit`: or :ref:`PeerPierceFirewall` (messages after this will no longer be obfuscated)
-2. Receive: ticket (not contained in a message)
-3. Send: offset (not contained in a message)
-4. Receive data
+1. Initiate a connection a peer connection (``P``)
+2. Send: :ref:`PeerTransferQueue` message containing the ``filename``
+3. Receive: :ref:`PeerTransferRequest` message. Store the ``ticket`` and the ``filesize``
+4. Send: :ref:`PeerTransferReply` message containing the ``ticket``. If the `allowed` flag is set the other peer will now attempt to establish a connection for uploading, if it is not set the transfer should be aborted.
 
 
-Queue a file download (peer does not have slotsfree):
+When the peer is ready for uploading it will create a new file connection (``F``) :
 
-1. Initiate a connection to the Peer
+1. Receive: :ref:`PeerInit`: or :ref:`PeerPierceFirewall`
+2. Receive: ``ticket``
+3. Send: ``offset``
+4. Receive data until ``filesize`` is reached
+5. Close connection
+
+
+Queue a file download (peer does not have any free upload slots):
+
+1. Initiate a peer connection (``P``)
 2. Send: :ref:`PeerTransferQueue` message containing the filename
 3. (If after 60s the ticket is not handled) Send: :ref:`PeerPlaceInQueueRequest` containing the filename
 4. Receive: :ref:`PeerPlaceInQueueReply` which contains the filename and place in queue
+
+.. warning::
+   It is up to the downloader to close the file connection, the downloader confirms he has received all bytes by closing. If the uploader closes the connection as soon as all data is sent the file will be incomplete on the downloader side.
 
 
 Uploads
