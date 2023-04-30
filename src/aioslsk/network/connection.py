@@ -369,20 +369,12 @@ class DataConnection(Connection):
             raise ConnectionReadError(f"{self.hostname}:{self.port} : exception during reading") from exc
 
     def queue_message(self, message: Union[bytes, MessageDataclass]) -> asyncio.Task:
-        if self._is_closing():
-            logger.warning(f"{self.hostname}:{self.port} : not queueing message, connection is closing : {message}")
-            return
-
         return asyncio.create_task(
             self.send_message(message),
             name=f'queue-message-task-{task_counter()}'
         )
 
     def queue_messages(self, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
-        if self._is_closing():
-            logger.warning(f"{self.hostname}:{self.port} : not queueing message, connection is closing : {messages}")
-            return []
-
         return [
             self.queue_message(message)
             for message in messages
@@ -396,6 +388,10 @@ class DataConnection(Connection):
 
         :raise ConnectionWriteError: error or timeout occured during writing
         """
+        if self._is_closing():
+            logger.warning(f"{self.hostname}:{self.port} : not sending message, connection is closing : {message}")
+            return
+
         logger.debug(f"{self.hostname}:{self.port} : send message : {message!r}")
         # Serialize the message
         try:

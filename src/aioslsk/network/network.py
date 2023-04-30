@@ -512,8 +512,10 @@ class Network:
             successfully sent, otherwise the result will contain the exception
         """
         connection = await self.get_peer_connection(username)
-        queue_tasks = connection.queue_messages(*messages)
-        results = await asyncio.gather(*queue_tasks, return_exceptions=True)
+        results = await asyncio.gather(
+            *[connection.send_message(message) for message in messages],
+            return_exceptions=True
+        )
         return list(zip(messages, results))
 
     def queue_server_messages(self, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
@@ -524,13 +526,11 @@ class Network:
         return self.server.queue_messages(*messages)
 
     async def send_server_messages(self, *messages: List[Union[bytes, MessageDataclass]]):
-        queue_tasks = self.queue_server_messages(*messages)
-        logger.debug(f"tasks for send server messages : {queue_tasks!r}")
-        results = await asyncio.gather(*queue_tasks, return_exceptions=True)
-        for message, result in zip(messages, results):
-            if isinstance(result, BaseException):
-                logger.exception(f"failed to deliver message : {message!r}", exc_info=result)
-        return results
+        results = await asyncio.gather(
+            *[self.server.send_message(message) for message in messages],
+            return_exceptions=True
+        )
+        return list(zip(messages, results))
 
     # Methods called by connections
 
