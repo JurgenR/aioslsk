@@ -172,7 +172,7 @@ Request a file download (peer has free upload slots):
 1. Initiate a connection a peer connection (``P``)
 2. Send: :ref:`PeerTransferQueue` message containing the ``filename``
 3. Receive: :ref:`PeerTransferRequest` message. Store the ``ticket`` and the ``filesize``
-4. Send: :ref:`PeerTransferReply` message containing the ``ticket``. If the `allowed` flag is set the other peer will now attempt to establish a connection for uploading, if it is not set the transfer should be aborted.
+4. Send: :ref:`PeerTransferReply` message containing the ``ticket``. If the ``allowed`` flag is set the other peer will now attempt to establish a connection for uploading, if it is not set the transfer should be aborted.
 
 
 When the peer is ready for uploading it will create a new file connection (``F``) :
@@ -182,7 +182,7 @@ When the peer is ready for uploading it will create a new file connection (``F``
 3. Send: ``offset``
 4. Receive data until ``filesize`` is reached
 5. Close connection
-
+6. (the uploader will send a :ref:`SendUploadSpeed` message to the server with the average upload speed)
 
 Queue a file download (peer does not have any free upload slots):
 
