@@ -70,9 +70,10 @@ DirectoryData
    1. **FileData**: files
 
 
+.. _server-messages:
+
 Server Messages
 ===============
-
 
 .. _Login:
 
@@ -1136,8 +1137,10 @@ Sent by the server when attempting to create/join a private room which already e
    1. **string**: room_name
 
 
-Initialization Messages
-=======================
+.. _peer-init-messages:
+
+Peer Initialization Messages
+============================
 
 These are the first messages sent after connecting to a peer.
 
@@ -1167,6 +1170,8 @@ Sent after direct connection was successfully established (not as a response to 
    2. **string**: connection_type
    3. **uint32**: ticket
 
+
+.. _peer-messages:
 
 Peer Messages
 =============
@@ -1396,6 +1401,8 @@ PeerUploadQueueNotification (Code 52)
 :Code: 51 (0x33)
 :Send/Receive: Nothing
 
+
+.. _distributed-messages:
 
 Distributed Messages
 ====================
