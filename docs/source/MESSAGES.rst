@@ -3,29 +3,30 @@ Messages
 ========
 
 .. contents:
+   :local
 
 Data Types
 ==========
 
 The components of the messages use a little-endian byte order.
 
-+--------+-------------+
-| Type   | Python type |
-+========+=============+
-| uint8  | int         |
-+--------+-------------+
-| uint16 | int         |
-+--------+-------------+
-| uint32 | int         |
-+--------+-------------+
-| uint64 | int         |
-+--------+-------------+
-| uchar  | int         |
-+--------+-------------+
-| string | str         |
-+--------+-------------+
-| bool   | bool        |
-+--------+-------------+
++--------+-------------+-------+
+| Type   | Python type | bytes |
++========+=============+=======+
+| uint8  | int         | 1     |
++--------+-------------+-------+
+| uint16 | int         | 2     |
++--------+-------------+-------+
+| uint32 | int         | 4     |
++--------+-------------+-------+
+| uint64 | int         | 8     |
++--------+-------------+-------+
+| uchar  | int         | 1     |
++--------+-------------+-------+
+| string | str         |       |
++--------+-------------+-------+
+| bool   | bool        | 1     |
++--------+-------------+-------+
 
 String
 ------
@@ -73,8 +74,10 @@ Server Messages
 ===============
 
 
-Login
------
+.. _Login:
+
+Login (Code 1)
+--------------
 
 Login into the server, this should be the first message sent to the server upon connecting
 
@@ -99,8 +102,10 @@ Login into the server, this should be the first message sent to the server upon 
       1. **string**: failure_reason
 
 
-SetListenPort
--------------
+.. _SetListenPort:
+
+SetListenPort (Code 2)
+----------------------
 
 Advertise our listening ports to the server
 
@@ -115,8 +120,10 @@ Obfuscated port: this part seems to be optional, either it can be omitted comple
       2. **uint32**: obfuscated listening port
 
 
-GetPeerAddress
---------------
+.. _GetPeerAddress:
+
+GetPeerAddress (Code 3)
+-----------------------
 
 Retrieve the IP address/port of a peer. Obfuscated port: this part seems to be optional, either it can be omitted completely or both values set to ``0``
 
@@ -136,8 +143,10 @@ If the peer does not exist we will receive a response with IP address, port set 
       2. **uint32**: obfuscated listening port
 
 
-AddUser
--------
+.. _AddUser:
+
+AddUser (Code 5)
+----------------
 
 Track a user
 
@@ -159,8 +168,10 @@ Track a user
          1. **string**: country_code
 
 
-RemoveUser
-----------
+.. _RemoveUser:
+
+RemoveUser (Code 6)
+-------------------
 
 Untrack a user
 
@@ -169,8 +180,10 @@ Untrack a user
    1. **string**: username
 
 
-GetUserStatus
--------------
+.. _GetUserStatus:
+
+GetUserStatus (Code 7)
+----------------------
 
 Get the user status, we will get updates on this automatically if we have performed AddUser
 
@@ -183,8 +196,10 @@ Get the user status, we will get updates on this automatically if we have perfor
    3. **bool**: privileged
 
 
-ChatRoomMessage
-----------------
+.. _ChatRoomMessage:
+
+ChatRoomMessage (Code 13)
+-------------------------
 
 Used to send/receive a message to/from a room
 
@@ -198,8 +213,10 @@ Used to send/receive a message to/from a room
    3. **string**: message
 
 
-ChatJoinRoom
--------------
+.. _ChatJoinRoom:
+
+ChatJoinRoom (Code 14)
+----------------------
 
 Used when we want to join a chat room
 
@@ -239,8 +256,10 @@ Used when we want to join a chat room
          1. **string**: operator
 
 
-ChatLeaveRoom
---------------
+.. _ChatLeaveRoom:
+
+ChatLeaveRoom (Code 15)
+-----------------------
 
 Used when we want to leave a chat room. The receive is for confirmation
 
@@ -251,8 +270,10 @@ Used when we want to leave a chat room. The receive is for confirmation
    1. **string**: room_name
 
 
-ChatUserJoinedRoom
--------------------
+.. _ChatUserJoinedRoom:
+
+ChatUserJoinedRoom (Code 16)
+----------------------------
 
 Received when a user joined a room
 
@@ -269,8 +290,10 @@ Received when a user joined a room
    9. **string**: country_code
 
 
-ChatUserJoinedRoom
--------------------
+.. _ChatUserLeftRoom:
+
+ChatUserLeftRoom (Code 17)
+--------------------------
 
 Received when a user left a room
 
@@ -280,8 +303,10 @@ Received when a user left a room
    2. **string**: username
 
 
-ConnectToPeer
---------------
+.. _ConnectToPeer:
+
+ConnectToPeer (Code 18)
+-----------------------
 
 Received when a peer attempted to connect to us but failed and thus is asking us to attempt to connect to them
 
@@ -303,8 +328,10 @@ Received when a peer attempted to connect to us but failed and thus is asking us
       2. **uint32**: obfuscated_port
 
 
-ChatPrivateMessage
--------------------
+.. _ChatPrivateMessage:
+
+ChatPrivateMessage (Code 22)
+----------------------------
 
 Send or receive a private message
 
@@ -322,8 +349,10 @@ Send or receive a private message
       1. **bool**: is_admin
 
 
-ChatPrivateMessage
--------------------
+.. _ChatAckPrivateMessage:
+
+ChatAckPrivateMessage (Code 23)
+-------------------------------
 
 Acknowledge we have received a private message
 
@@ -332,8 +361,10 @@ Acknowledge we have received a private message
    1. **uint32**: chat_id
 
 
-FileSearch
------------
+.. _FileSearch:
+
+FileSearch (Code 26)
+--------------------
 
 Unknown, file searches usually come from the distributed connection or ServerSearch message
 
@@ -347,8 +378,10 @@ Unknown, file searches usually come from the distributed connection or ServerSea
    3. **string**: query
 
 
-SetStatus
-----------
+.. _SetStatus:
+
+SetStatus (Code 28)
+-------------------
 
 Update our status
 
@@ -357,8 +390,10 @@ Update our status
    1. **uint32**: status
 
 
-Ping
------
+.. _Ping:
+
+Ping (Code 32)
+--------------
 
 Send a ping to the server to let it know we are still alive (every 5 minutes)
 
@@ -366,8 +401,10 @@ Send a ping to the server to let it know we are still alive (every 5 minutes)
 :Send: Nothing
 
 
-SharedFoldersFiles
--------------------
+.. _SharedFoldersFiles:
+
+SharedFoldersFiles (Code 35)
+----------------------------
 
 Let the server know the amount of files and directories we are sharing
 
@@ -377,8 +414,10 @@ Let the server know the amount of files and directories we are sharing
    2. **uint32**: shared_files
 
 
-GetUserStats
--------------
+.. _GetUserStats:
+
+GetUserStats (Code 36)
+----------------------
 
 Get more user information, we will automatically receive updates if we added a user using AddUser
 
@@ -393,8 +432,10 @@ Get more user information, we will automatically receive updates if we added a u
    5. **uint32**: shared_directories
 
 
-Kicked
--------
+.. _Kicked:
+
+Kicked (Code 41)
+----------------
 
 You were kicked from the server. This message is sent when the user was logged into at another location
 
@@ -402,8 +443,10 @@ You were kicked from the server. This message is sent when the user was logged i
 :Receive: Nothing
 
 
-UserSearch
------------
+.. _UserSearch:
+
+UserSearch (Code 42)
+--------------------
 
 :Code: 42 (0x2A)
 :Send:
@@ -412,18 +455,73 @@ UserSearch
    3. **string**: query
 
 
-ToggleParentSearch
--------------------
+.. _RoomList:
+
+RoomList (Code 64)
+------------------
+
+:Code: 42 (0x2A)
+:Send: Nothing
+:Receive:
+   1. Array of room names:
+
+      1. **string**: rooms
+
+   2. Array of users count in ``rooms``:
+
+      1. **uint32**: rooms_user_count
+
+   3. Array of owned private rooms:
+
+      1. **string**: rooms_private_owned
+
+   4. Array of users count in ``rooms_private_owned``:
+
+      1. **uint32**: rooms_private_owned_user_count
+
+   5. Array of private rooms we are a member of:
+
+      1. **string**: rooms_private
+
+   6. Array of users count in ``rooms_private``:
+
+      1. **uint32**: rooms_private_user_count
+
+   7. Array of rooms in which we are operator:
+
+      1. **string**: rooms_private_operated
+
+
+.. _PrivilegedUsers:
+
+PrivilegedUsers (Code 69)
+-------------------------
 
 Indicates whether we want to receive `PotentialParents` messages from the server. A message should be sent to disable if we have found a parent
+
+:Code: 69 (0x45)
+:Receive:
+   1. Array of privileged users on the server
+
+      1. **string**: users
+
+
+.. _ToggleParentSearch:
+
+ToggleParentSearch (Code 71)
+----------------------------
+
+Indicates whether we want to receive :ref:`PotentialParents` messages from the server. A message should be sent to disable if we have found a parent
 
 :Code: 71 (0x47)
 :Send:
    1. **bool**: enable
 
 
-ParentIP
----------
+.. _ParentIP:
+
+ParentIP (Code 73)
+------------------
 
 IP address of the parent. Not sent by newer clients
 
@@ -432,24 +530,30 @@ IP address of the parent. Not sent by newer clients
    1. **uint32**: ip_address
 
 
-ParentMinSpeed
----------------
+.. _ParentMinSpeed:
+
+ParentMinSpeed (Code 83)
+------------------------
 
 :Code: 83 (0x53)
 :Receive:
    1. **uint32**: parent_min_speed
 
 
-ParentSpeedRatio
------------------
+.. _ParentSpeedRatio:
+
+ParentSpeedRatio (Code 84)
+--------------------------
 
 :Code: 84 (0x54)
 :Receive:
    1. **uint32**: parent_speed_ratio
 
 
-ParentInactivityTimeout
-------------------------
+.. _ParentInactivityTimeout:
+
+ParentInactivityTimeout (Code 86)
+---------------------------------
 
 Timeout for the distributed parent
 
@@ -459,16 +563,20 @@ Timeout for the distributed parent
    1. **uint32**: timeout
 
 
-SearchInactivityTimeout
-------------------------
+.. _SearchInactivityTimeout:
+
+SearchInactivityTimeout (Code 87)
+---------------------------------
 
 :Code: 87 (0x57)
 :Receive:
    1. **uint32**: timeout
 
 
-MinParentsInCache
-------------------
+.. _MinParentsInCache:
+
+MinParentsInCache (Code 88)
+---------------------------
 
 Amount of parents (received through PotentialParents) we should keep in cache. Message has not been seen yet being sent by the server
 
@@ -477,24 +585,30 @@ Amount of parents (received through PotentialParents) we should keep in cache. M
    1. **uint32**: amount
 
 
-DistributedAliveInterval
--------------------------
+.. _DistributedAliveInterval:
+
+DistributedAliveInterval (Code 90)
+----------------------------------
 
 :Code: 90 (0x5A)
 :Receive:
    1. **uint32**: interval
 
 
-AddPrivilegedUser
-------------------
+.. _AddPrivilegedUser:
+
+AddPrivilegedUser (Code 91)
+---------------------------
 
 :Code: 91 (0x5B)
 :Send:
    1. **string**: username
 
 
-CheckPrivileges
-----------------
+.. _CheckPrivileges:
+
+CheckPrivileges (Code 92)
+-------------------------
 
 :Code: 92 (0x5C)
 :Send: Nothing
@@ -502,8 +616,10 @@ CheckPrivileges
    1. **uint32**: time_left
 
 
-ServerSearchRequest
---------------------
+.. _ServerSearchRequest:
+
+ServerSearchRequest (Code 93)
+-----------------------------
 
 :Code: 93 (0x5D)
 :Receive:
@@ -514,16 +630,20 @@ ServerSearchRequest
    5. **string**: query
 
 
-AcceptChildren
---------------
+.. _AcceptChildren:
+
+AcceptChildren (Code 100)
+-------------------------
 
 :Code: 100 (0x64)
 :Send:
    1. **bool**: accept
 
 
-PotentialParents
-----------------
+.. _PotentialParents:
+
+PotentialParents (Code 102)
+---------------------------
 
 :Code: 102 (0x66)
 :Receive:
@@ -534,8 +654,10 @@ PotentialParents
       3. **uint32**: port
 
 
-WishlistSearch
---------------
+.. _WishlistSearch:
+
+WishlistSearch (Code 103)
+-------------------------
 
 Perform a wishlist search
 
@@ -545,8 +667,10 @@ Perform a wishlist search
    2. **string**: query
 
 
-WishlistInterval
-----------------
+.. _WishlistInterval:
+
+WishlistInterval (Code 104)
+---------------------------
 
 The server lets us know at what interval we should perform wishlist searches
 
@@ -556,8 +680,10 @@ The server lets us know at what interval we should perform wishlist searches
    1. **uint32**: interval
 
 
-GetSimilarUsers
----------------
+.. _GetSimilarUsers:
+
+GetSimilarUsers (Code 110)
+--------------------------
 
 :Code: 110 (0x6E)
 :Send: Nothing
@@ -568,8 +694,10 @@ GetSimilarUsers
       2. **uint32**: status
 
 
-GetItemRecommendations
-----------------------
+.. _GetItemRecommendations:
+
+GetItemRecommendations (Code 111)
+---------------------------------
 
 :Code: 111 (0x6F)
 :Send:
@@ -581,8 +709,10 @@ GetItemRecommendations
       2. **uint32**: number
 
 
-ChatRoomTickers
----------------
+.. _ChatRoomTickers:
+
+ChatRoomTickers (Code 113)
+--------------------------
 
 List of chat room tickers (room wall)
 
@@ -595,8 +725,10 @@ List of chat room tickers (room wall)
       2. **string**: ticker
 
 
-ChatRoomTickerAdded
--------------------
+.. _ChatRoomTickerAdded:
+
+ChatRoomTickerAdded (Code 114)
+------------------------------
 
 A ticker has been added to the room (room wall)
 
@@ -607,8 +739,10 @@ A ticker has been added to the room (room wall)
    3. **string**: ticker
 
 
-ChatRoomTickerRemoved
----------------------
+.. _ChatRoomTickerRemoved:
+
+ChatRoomTickerRemoved (Code 115)
+--------------------------------
 
 A ticker has been removed to the room (room wall)
 
@@ -618,8 +752,10 @@ A ticker has been removed to the room (room wall)
    2. **string**: username
 
 
-ChatRoomTickerSet
------------------
+.. _ChatRoomTickerSet:
+
+ChatRoomTickerSet (Code 116)
+----------------------------
 
 Add or update a ticker for a room (room wall)
 
@@ -629,8 +765,10 @@ Add or update a ticker for a room (room wall)
    2. **string**: ticker
 
 
-ChatRoomSearch
---------------
+.. _ChatRoomSearch:
+
+ChatRoomSearch (Code 120)
+-------------------------
 
 :Code: 120 (0x78)
 :Send:
@@ -639,18 +777,22 @@ ChatRoomSearch
    3. **string**: query
 
 
-ChatRoomSearch
---------------
+.. _SendUploadSpeed:
+
+SendUploadSpeed (Code 121)
+--------------------------
 
 Send upload speed, sent to the server right after an upload completed
 
-:Code: 120 (0x78)
+:Code: 121 (0x79)
 :Send:
    1. **uint32**: speed
 
 
-GetUserPrivileges
------------------
+.. _GetUserPrivileges:
+
+GetUserPrivileges (Code 122)
+----------------------------
 
 Retrieve whether a user has privileges
 
@@ -661,16 +803,20 @@ Retrieve whether a user has privileges
    2. **bool**: privileged
 
 
-GiveUserPrivileges
-------------------
+.. _GiveUserPrivileges:
+
+GiveUserPrivileges (Code 123)
+-----------------------------
 
 :Code: 123 (0x7B)
 :Send:
    1. **string**: username
    2. **uint32**: days
 
-PrivilegesNotification
-----------------------
+.. _PrivilegesNotification:
+
+PrivilegesNotification (Code 124)
+---------------------------------
 
 :Code: 124 (0x7C)
 :Send:
@@ -678,16 +824,20 @@ PrivilegesNotification
    2. **string**: username
 
 
-PrivilegesNotificationAck
--------------------------
+.. _PrivilegesNotificationAck:
+
+PrivilegesNotificationAck (Code 125)
+------------------------------------
 
 :Code: 125 (0x7D)
 :Send:
    1. **uint32**: notification_id
 
 
-BranchLevel
------------
+.. _BranchLevel:
+
+BranchLevel (Code 126)
+----------------------
 
 Notify the server which branch level we are at in the distributed network
 
@@ -696,8 +846,10 @@ Notify the server which branch level we are at in the distributed network
    1. **uint32**: level
 
 
-BranchRoot
-----------
+.. _BranchRoot:
+
+BranchRoot (Code 127)
+---------------------
 
 Notify the server who our branch root user is in the distributed network
 
@@ -706,16 +858,20 @@ Notify the server who our branch root user is in the distributed network
    1. **string**: username
 
 
-ChildDepth
-----------
+.. _ChildDepth:
+
+ChildDepth (Code 129)
+---------------------
 
 :Code: 129 (0x81)
 :Send:
    1. **uint32**: depth
 
 
-PrivateRoomUsers
-----------------
+.. _PrivateRoomUsers:
+
+PrivateRoomUsers (Code 133)
+---------------------------
 
 List of all users that are part of the private room
 
@@ -727,8 +883,10 @@ List of all users that are part of the private room
       1. **string**: username
 
 
-PrivateRoomAddUser
-------------------
+.. _PrivateRoomAddUser:
+
+PrivateRoomAddUser (Code 134)
+-----------------------------
 
 Add another user to the private room. Only operators and the owner can add members to a private room
 
@@ -741,8 +899,10 @@ Add another user to the private room. Only operators and the owner can add membe
    2. **string**: username
 
 
-PrivateRoomRemoveUser
----------------------
+.. _PrivateRoomRemoveUser:
+
+PrivateRoomRemoveUser (Code 135)
+--------------------------------
 
 Remove another user from the private room. Operators can remove regular members but not other operators or the owner. The owner can remove anyone aside from himself (see `PrivateRoomDropOwnership`).
 
@@ -755,16 +915,20 @@ Remove another user from the private room. Operators can remove regular members 
    2. **string**: username
 
 
-PrivateRoomDropMembership
--------------------------
+.. _PrivateRoomDropMembership:
+
+PrivateRoomDropMembership (Code 136)
+------------------------------------
 
 :Code: 136 (0x88)
 :Send:
    1. **string**: room
 
 
-PrivateRoomDropOwnership
-------------------------
+.. _PrivateRoomDropOwnership:
+
+PrivateRoomDropOwnership (Code 137)
+-----------------------------------
 
 Drops ownership of a private room, this disbands the entire room.
 
@@ -773,8 +937,10 @@ Drops ownership of a private room, this disbands the entire room.
    1. **string**: room
 
 
-PrivateRoomAdded
-----------------
+.. _PrivateRoomAdded:
+
+PrivateRoomAdded (Code 139)
+---------------------------
 
 The current user was added to the private room
 
@@ -783,8 +949,10 @@ The current user was added to the private room
    1. **string**: room
 
 
-PrivateRoomRemoved
-------------------
+.. _PrivateRoomRemoved:
+
+PrivateRoomRemoved (Code 140)
+-----------------------------
 
 The current user was removed from the private room
 
@@ -794,8 +962,10 @@ The current user was removed from the private room
    1. **string**: room
 
 
-TogglePrivateRooms
-------------------
+.. _TogglePrivateRooms:
+
+TogglePrivateRooms (Code 141)
+-----------------------------
 
 Enables or disables private room invites (through `PrivateRoomAddUser`)
 
@@ -807,16 +977,20 @@ Enables or disables private room invites (through `PrivateRoomAddUser`)
    1. **bool**: enabled
 
 
-NewPassword
------------
+.. _NewPassword:
+
+NewPassword (Code 142)
+----------------------
 
 :Code: 142 (0x8E)
 :Send:
    1. **string**: password
 
 
-PrivateRoomAddOperator
-----------------------
+.. _PrivateRoomAddOperator:
+
+PrivateRoomAddOperator (Code 143)
+---------------------------------
 
 :Code: 143 (0x8F)
 :Send:
@@ -828,8 +1002,10 @@ PrivateRoomAddOperator
    2. **string**: username
 
 
-PrivateRoomRemoveOperator
--------------------------
+.. _PrivateRoomRemoveOperator:
+
+PrivateRoomRemoveOperator (Code 144)
+------------------------------------
 
 :Code: 144 (0x90)
 :Send:
@@ -841,24 +1017,30 @@ PrivateRoomRemoveOperator
    2. **string**: username
 
 
-PrivateRoomOperatorAdded
-------------------------
+.. _PrivateRoomOperatorAdded:
+
+PrivateRoomOperatorAdded (Code 145)
+-----------------------------------
 
 :Code: 145 (0x91)
 :Receive:
    1. **string**: room
 
 
-PrivateRoomOperatorRemoved
---------------------------
+.. _PrivateRoomOperatorRemoved:
+
+PrivateRoomOperatorRemoved (Code 146)
+-------------------------------------
 
 :Code: 146 (0x92)
 :Receive:
    1. **string**: room
 
 
-PrivateRoomOperators
---------------------
+.. _PrivateRoomOperators:
+
+PrivateRoomOperators (Code 148)
+-------------------------------
 
 :Code: 148 (0x94)
 :Receive:
@@ -869,8 +1051,10 @@ PrivateRoomOperators
 
 
 
-ChatMessageUsers
-----------------
+.. _ChatMessageUsers:
+
+ChatMessageUsers (Code 149)
+---------------------------
 
 :Code: 149 (0x95)
 :Send:
@@ -883,22 +1067,28 @@ ChatMessageUsers
 
 
 
-ChatEnablePublic
-----------------
+.. _ChatEnablePublic:
+
+ChatEnablePublic (Code 150)
+---------------------------
 
 :Code: 150 (0x96)
 :Send: Nothing
 
 
-ChatDisablePublic
------------------
+.. _ChatDisablePublic:
+
+ChatDisablePublic (Code 151)
+----------------------------
 
 :Code: 151 (0x97)
 :Send: Nothing
 
 
-ChatPublicMessage
------------------
+.. _ChatPublicMessage:
+
+ChatPublicMessage (Code 152)
+----------------------------
 
 :Code: 152 (0x98)
 :Receive:
@@ -907,8 +1097,10 @@ ChatPublicMessage
    3. **string**: message
 
 
-FileSearchEx
-------------
+.. _FileSearchEx:
+
+FileSearchEx (Code 153)
+-----------------------
 
 :Code: 153 (0x99)
 :Send:
@@ -918,8 +1110,10 @@ FileSearchEx
    2. **uint32**: unknown
 
 
-CannotConnect
--------------
+.. _CannotConnect:
+
+CannotConnect (Code 1001)
+-------------------------
 
 :Code: 1001 (0x03E9)
 :Send:
@@ -930,8 +1124,10 @@ CannotConnect
    2. **string**: username
 
 
-CannotCreateRoom
-----------------
+.. _CannotCreateRoom:
+
+CannotCreateRoom (Code 1003)
+----------------------------
 
 Sent by the server when attempting to create/join a private room which already exists or the user is not part of
 
@@ -946,8 +1142,10 @@ Initialization Messages
 These are the first messages sent after connecting to a peer.
 
 
-PeerPierceFirewall
-------------------
+.. _PeerPierceFirewall:
+
+PeerPierceFirewall (Code 0)
+---------------------------
 
 Sent after connection was successfully established in response to a ConnectToPeer message. The `ticket` used here should be the ticket from that ConnectToPeer message
 
@@ -956,8 +1154,10 @@ Sent after connection was successfully established in response to a ConnectToPee
    1. **uint32**: ticket
 
 
-PeerInit
---------
+.. _PeerInit:
+
+PeerInit (Code 1)
+-----------------
 
 Sent after direct connection was successfully established (not as a response to a ConnectToPeer received from the server)
 
@@ -972,8 +1172,10 @@ Peer Messages
 =============
 
 
-PeerSharesRequest
------------------
+.. _PeerSharesRequest:
+
+PeerSharesRequest (Code 4)
+--------------------------
 
 Request all shared files/directories from a peer
 
@@ -984,8 +1186,10 @@ Request all shared files/directories from a peer
       1. **uint32**: ticket: some clients seem to send a ticket
 
 
-PeerSharesReply
----------------
+.. _PeerSharesReply:
+
+PeerSharesReply (Code 5)
+------------------------
 
 Response to PeerSharesRequest
 
@@ -1003,8 +1207,10 @@ Response to PeerSharesRequest
       1. **DirectoryData**: locked_directories
 
 
-PeerSearchReply
----------------
+.. _PeerSearchReply:
+
+PeerSearchReply (Code 9)
+------------------------
 
 Response to a search request
 
@@ -1027,8 +1233,10 @@ Response to a search request
       1. **FileData**: locked_results
 
 
-PeerUserInfoRequest
---------------------
+.. _PeerUserInfoRequest:
+
+PeerUserInfoRequest (Code 15)
+-----------------------------
 
 Request information from the peer
 
@@ -1036,8 +1244,10 @@ Request information from the peer
 :Send/Receive: Nothing
 
 
-PeerUserInfoReply
-------------------
+.. _PeerUserInfoReply:
+
+PeerUserInfoReply (Code 16)
+---------------------------
 
 Response to PeerUserInfoRequest
 
@@ -1054,8 +1264,10 @@ Response to PeerUserInfoRequest
    6. **bool**: has_slots_free
 
 
-PeerDirectoryContentsRequest
------------------------------
+.. _PeerDirectoryContentsRequest:
+
+PeerDirectoryContentsRequest (Code 36)
+--------------------------------------
 
 Request the file contents of a directory
 
@@ -1065,8 +1277,10 @@ Request the file contents of a directory
    2. **string**: directory
 
 
-PeerDirectoryContentsReply
----------------------------
+.. _PeerDirectoryContentsReply:
+
+PeerDirectoryContentsReply (Code 36)
+--------------------------------------
 
 Request the file contents of a directory
 
@@ -1079,8 +1293,10 @@ Request the file contents of a directory
       1. **DirectoryData**: directories
 
 
-PeerTransferRequest
---------------------
+.. _PeerTransferRequest:
+
+PeerTransferRequest (Code 40)
+-----------------------------
 
 :Code: 40 (0x28)
 :Send/Receive:
@@ -1092,8 +1308,10 @@ PeerTransferRequest
       1. **uint64**: filesize . Can be omitted if the direction==1 however a value of `0` can be used in this case as well
 
 
-PeerTransferReply
-------------------
+.. _PeerTransferReply:
+
+PeerTransferReply (Code 41)
+---------------------------
 
 :Code: 41 (0x29)
 :Send/Receive:
@@ -1108,8 +1326,10 @@ PeerTransferReply
       1. **string**: reason
 
 
-PeerTransferQueue
-------------------
+.. _PeerTransferQueue:
+
+PeerTransferQueue (Code 43)
+---------------------------
 
 Request to place the provided transfer of `filename` in the queue
 
@@ -1118,8 +1338,10 @@ Request to place the provided transfer of `filename` in the queue
    1. **string**: filename
 
 
-PeerPlaceInQueueReply
-----------------------
+.. _PeerPlaceInQueueReply:
+
+PeerPlaceInQueueReply (Code 44)
+-------------------------------
 
 Response to PeerPlaceInQueueRequest
 
@@ -1129,8 +1351,10 @@ Response to PeerPlaceInQueueRequest
    2. **uint32**: place
 
 
-PeerUploadFailed
------------------
+.. _PeerUploadFailed:
+
+PeerUploadFailed (Code 46)
+--------------------------
 
 Sent when uploading failed
 
@@ -1139,8 +1363,10 @@ Sent when uploading failed
    1. **string**: filename
 
 
-PeerTransferQueueFailed
-------------------------
+.. _PeerTransferQueueFailed:
+
+PeerTransferQueueFailed (Code 50)
+---------------------------------
 
 Sent when placing the transfer in queue failed
 
@@ -1150,8 +1376,10 @@ Sent when placing the transfer in queue failed
    2. **string**: reason
 
 
-PeerPlaceInQueueRequest
-------------------------
+.. _PeerPlaceInQueueRequest:
+
+PeerPlaceInQueueRequest (Code 51)
+---------------------------------
 
 Request the place of the transfer in the queue.
 
@@ -1160,8 +1388,10 @@ Request the place of the transfer in the queue.
    1. **string**: filename
 
 
-PeerUploadQueueNotification
-----------------------------
+.. _PeerUploadQueueNotification:
+
+PeerUploadQueueNotification (Code 52)
+-------------------------------------
 
 :Code: 51 (0x33)
 :Send/Receive: Nothing
@@ -1171,8 +1401,10 @@ Distributed Messages
 ====================
 
 
-DistributedPing
----------------
+.. _DistributedPing:
+
+DistributedPing (Code 0)
+------------------------
 
 Ping request from the parent. Most clients do not send this.
 
@@ -1180,8 +1412,10 @@ Ping request from the parent. Most clients do not send this.
 :Send/Receive: Nothing
 
 
-DistributedSearchRequest
-------------------------
+.. _DistributedSearchRequest:
+
+DistributedSearchRequest (Code 3)
+---------------------------------
 
 Search request coming from the parent
 
@@ -1193,8 +1427,10 @@ Search request coming from the parent
    4. **string**: query
 
 
-DistributedBranchLevel
-----------------------
+.. _DistributedBranchLevel:
+
+DistributedBranchLevel (Code 4)
+-------------------------------
 
 Distributed branch level
 
@@ -1203,8 +1439,10 @@ Distributed branch level
    1. **uint32**: level
 
 
-DistributedBranchRoot
----------------------
+.. _DistributedBranchRoot:
+
+DistributedBranchRoot (Code 5)
+------------------------------
 
 Distributed branch root
 
@@ -1213,8 +1451,10 @@ Distributed branch root
    1. **string**: root
 
 
-DistributedChildDepth
----------------------
+.. _DistributedChildDepth:
+
+DistributedChildDepth (Code 7)
+------------------------------
 
 How many children the peer has (unverified). This is sent by some clients to the parent after they are added and updates are sent afterwards. Usage is a unknown.
 
@@ -1223,8 +1463,10 @@ How many children the peer has (unverified). This is sent by some clients to the
    1. **string**: depth
 
 
-DistributedServerSearchRequest
--------------------------------
+.. _DistributedServerSearchRequest:
+
+DistributedServerSearchRequest (Code 93)
+----------------------------------------
 
 This message exists internally only for deserialization purposes and this is actually a `ServerSearchRequest`.
 

@@ -15,7 +15,7 @@ SoulSeek: 208.76.170.59:2242
 
 1. Open a TCP connection to the server
 2. Open up at least one listening connection, a second one can be opened for obfuscated connections. The SoulSeekQt client always takes the configured port + 1 as the obfuscated port.
-3. Send the Login_ command on the server socket. Most of the parameters here are self explanatory except for the client version and minor version.
+3. Send the :ref:Login: command on the server socket, most of the parameters here are self explanatory
 
 A login response will be received which determines whether the login was successful or not along with the following commands providing some information:
 
@@ -27,22 +27,22 @@ A login response will be received which determines whether the login was success
 
 After the response we send the following requests back to the server with some information about us:
 
-* :ref:`CheckPrivileges`: Check if we have privileges
-* :ref:`SetListenPort`: The listening port(s), obfuscated and non*obfuscated
-* :ref:`SetStatus`: Our status (offline, away, available)
-* :ref:`SharedFoldersFiles`: Number of directories and files we are sharing
+* :ref:`CheckPrivileges` : Check if we have privileges
+* :ref:`SetListenPort` : The listening port(s), obfuscated and non*obfuscated
+* :ref:`SetStatus` : Our status (offline, away, available)
+* :ref:`SharedFoldersFiles` : Number of directories and files we are sharing
 
 We also send messages to advertise we have no parent:
 
 * :ref:`ToggleParentSearch` : Should initually be true
-* :ref:`BranchRoot`` : Initially our own username
+* :ref:`BranchRoot` : Initially our own username
 * :ref:`BranchLevel` : Initially should be ``0``
-* :ref:`AcceptChildren``: Accept child connections
+* :ref:`AcceptChildren` : Accept child connections
 
-* AddUser_ : Using our own username as parameter
+* :ref:`AddUser` : Using our own username as parameter
 
 
-After connection is complete, send a Ping_ command out every 5 minutes.
+After connection is complete, send a :ref:`Ping` command out every 5 minutes.
 
 Exception Cases
 ---------------
@@ -66,32 +66,33 @@ We can connect to them:
 
 1. Attempt to connect to the peer -> connection established
 2. Generate a ticket number
-3. Send PeerInit_ over the peer connection (ticket, username, connection_type)
+3. Send :ref:`PeerInit` over the peer connection (ticket, username, connection_type)
 
 We cannot connect to them, but they can connect to us:
 
 1. Attempt to connect to the peer -> connection failure
 2. Generate a ticket number
-3. Send ConnectToPeer_ to the server(ticket, username, connection_type)
+3. Send :ref:`ConnectToPeer` to the server(ticket, username, connection_type)
 4. Incoming connection from peer -> connection is established
-5. Receive PeerPierceFirewall_ over the peer connection (ticket)
+5. Receive :ref:`PeerPierceFirewall` over the peer connection (ticket)
 6. Look up ticket
 
 We cannot connect to them, they cannot connect to us:
 
 1. Attempt to connect to the peer -> connection failure
 2. Generate a ticket number
-3. Send ConnectToPeer_ command to the server (ticket, username, connection_type)
+3. Send :ref:`ConnectToPeer` command to the server (ticket, username, connection_type)
 4. Nothing should happen here, as they cannot connect to us
-5. Receive CannotConnect_ from server (ticket)
+5. Receive :ref:`CannotConnect` from server (ticket)
 
-_Note:_ The SoulSeekQt client doesn't seem to adhere to this flow: it doesn't actually wait for the connection to be established and just fires a ConnectToPeer_ message to the server at the same time as it tries to establish a connection to the peer.
+.. note::
+   Other clients don't seem to adhere to this flow: they don't actually wait for the connection to be established and just fires a :ref:`ConnectToPeer` message to the server at the same time as it tries to establish a connection to the peer.
 
-_Note:_ The SoulSeekQt client usually also sends a GetPeerAddress_ message before connecting, presumably to get the obfuscation port if it exists.
+.. note::
+   Question 1: Why do we need a ticket number for :ref:`PeerInit` ? -> most clients seem to just send ``0``
 
-_Question 1:_ Why do we need a ticket number for PeerInit_ ? -> most clients seem to just send 0
-
-_Question 2:_ Some clients appear to send a PeerInit_ instead of PeerPierceFirewall_ ?
+.. note::
+   Question 2: Some clients appear to send a :ref:`PeerInit` instead of :ref:`PeerPierceFirewall` ?
 
 
 Transfers
@@ -100,19 +101,19 @@ Transfers
 Downloads
 ---------
 
-For downloading we need the `username`, `filename` and `slotsfree` returned by a PeerSearchReply_ . Uploads are just the opposite of the download process.
+For downloading we need the ``username``, ``filename`` and ``slotsfree`` returned by a :ref:`PeerSearchReply`: . Uploads are just the opposite of the download process.
 
 Request a file download (peer has slotsfree):
 
 1. Initiate a connection to the Peer
-2. Send: PeerTransferQueue_ message containing the filename
+2. Send: :ref:`PeerTransferQueue` message containing the filename
 3. Receive: PeerTransferRequest_ message. Store the ticket and the filesize
 4. Send: PeerTransferReply_ message containing the ticket. If the `allowed` flag is set the other peer will now attempt to establish a connection for uploading, if it is not set the transfer should be aborted.
 
 
 The peer will create a new file connection to start uploading the file.
 
-1. Receive: PeerInit_ or PeerPierceFirewall_ (messages after this will no longer be obfuscated)
+1. Receive: :ref:`PeerInit`: or :ref:`PeerPierceFirewall` (messages after this will no longer be obfuscated)
 2. Receive: ticket (not contained in a message)
 3. Send: offset (not contained in a message)
 4. Receive data
@@ -121,9 +122,9 @@ The peer will create a new file connection to start uploading the file.
 Queue a file download (peer does not have slotsfree):
 
 1. Initiate a connection to the Peer
-2. Send: PeerTransferQueue_ message containing the filename
-3. (If after 60s the ticket is not handled) Send: PeerPlaceInQueueRequest_ containing the filename
-4. Receive: PeerPlaceInQueueReply_ which contains the filename and place in queue
+2. Send: :ref:`PeerTransferQueue` message containing the filename
+3. (If after 60s the ticket is not handled) Send: :ref:`PeerPlaceInQueueRequest` containing the filename
+4. Receive: :ref:`PeerPlaceInQueueReply` which contains the filename and place in queue
 
 
 Uploads
@@ -138,29 +139,32 @@ Distributed Connections
 Obtaining a parent
 ------------------
 
-When HaveNoParents_ is enabled then every 60 seconds the server will send the client a NetInfo_ command (containing 10 possible peers) until we disable our search for a parent using the HaveNoParents_ command. The NetInfo_ command contains a list with each entry containg: username, IP address and port. Upon receiving this command the client will attempt to open up a connection to each of the IP addresses in the list to find a suitable parent.
+When :ref:`ToggleParentSearch` is enabled then every 60 seconds the server will send the client a :ref:`PotentialParents` command (containing 10 possible peers) until we disable our search for a parent using the :ref:`ToggleParentSearch` command. The :ref:`PotentialParents` command contains a list with each entry containg: username, IP address and port. Upon receiving this command the client will attempt to open up a connection to each of the IP addresses in the list to find a suitable parent.
 
 After establishing a distributed connection with one of the potential parents the peer will send out a DistributedBranchLevel and DistributedBranchRoot over the distributed connection. If the peer is selected to be the parent the other potential parents are disconnected and the following messages are then send to the server to let it know where we are in the hierarchy:
 
-* BranchLevel_ : BranchLevel from the parent + 1
-* BranchRoot_ : The BranchRoot received from the parent
-* HaveNoParents_ : Set to false to disable receiving NetInfo_ commands
+* :ref:`BranchLevel` : BranchLevel from the parent + 1
+* :ref:`BranchRoot` : The BranchRoot received from the parent
+* :ref:`ToggleParentSearch` : Set to false to disable receiving :ref:`PotentialParents` commands
 
 Once the parent is set our parent will send us search requests in the form of
-DistributedSearchRequest commands.
+:ref:`DistributedSearchRequest` commands.
 
 
-_Note:_ Branch Root is not always sent when the potential parent has branch level 0
+.. note::
+   Branch Root is not always sent when the potential parent has branch level 0
 
-_Question 1:_ Is there a picking process for the parent? It seems to be first come first serve.
+.. note::
+   Question 1: Is there a picking process for the parent? It seems to be first come first serve.
 
-_Question 2:_ When a parent disconnects, are all the children disconnected?
+.. note::
+   Question 2: When a parent disconnects, are all the children disconnected?
 
 
 Obtaining children
 ------------------
 
-The AcceptChildren_ command tells the server whether we want to have any children, this is probably used in combination with the HaveNoParents_ command which enables searching for parents. Enabling it will cause us to be listed in NetInfo_ commands sent to other peers. It is not mandatory to have a parent and to obtain children if we ourselves are the branch root (branch level is 0).
+The :ref:`AcceptChildren` command tells the server whether we want to have any children, this is probably used in combination with the :ref:`ToggleParentSearch` command which enables searching for parents. Enabling it will cause us to be listed in :ref:`PotentialParents` commands sent to other peers. It is not mandatory to have a parent and to obtain children if we ourselves are the branch root (branch level is 0).
 
 The process is very similar to the one to obtain a parent except that this time we are in the role of the other peer; we need to advertise the branch level and branch root using the DistributedBranchLevel and DistributedBranchRoot commands.
 
@@ -177,19 +181,19 @@ Searching
 Query rules
 -----------
 
-* Exclusion: dash-character gets used to exclude terms. Example: `-mp3`, would exclude all mp3 files
-* Wildcard: asterisk-character for wildcard searches. Example: `*oney`, would match 'honey' and 'money'
-* Sentence matching: double quotes would get used to keep terms together. Example: `"my song"` would perform an exact match for those terms. This no longer seems to be implemented.
+* Exclusion: dash-character gets used to exclude terms. Example: ``-mp3``, would exclude all mp3 files
+* Wildcard: asterisk-character for wildcard searches. Example: ``*oney``, would match 'honey' and 'money'
+* Sentence matching: double quotes would get used to keep terms together. Example: ``"my song"`` would perform an exact match for those terms. This no longer seems to be implemented.
 
 Undescribed rules (matching):
 
 * Searches are case-insensitive
-* Placement of terms is irrelevant. This also applies to exclusions `-mp3 song` is the same as `song -mp3`
+* Placement of terms is irrelevant. This also applies to exclusions ``-mp3 song`` is the same as ``song -mp3``
 * Wildcard/exclusion: placement is irrelevant
-* Wildcard: can only be used in the beginning of the word. `some*` is not valid and neither is `some*thing`
-* Wildcard: doesn't need to match a character. Query `*song.mp3` will match `song.mp3`
-* Wildcard: query `song *` will return something
-* Exclusion: there are results for queries using only exclusions but it does not seem official. Example `-mp3`, returns a limited number of results and some results even containing string `mp3`
+* Wildcard: can only be used in the beginning of the word. ``some*`` is not valid and neither is ``some*thing``
+* Wildcard: doesn't need to match a character. Query ``*song.mp3`` will match ``song.mp3```
+* Wildcard: query ``song *`` will return something
+* Exclusion: there are results for queries using only exclusions but it does not seem official. Example ``-mp3``, returns a limited number of results and some results even containing string ``mp3``
 
 The algorithm for matching can be described as:
 
@@ -231,78 +235,84 @@ Attribute table:
 +-------+-------------------+----------------------+
 
 
-_Note:_ extension is empty for anything but mp3 and flac
+.. note::
+   The ``extension`` parameter is empty for anything but mp3 and flac
 
-_Note:_ Couldn't find any other than these. Number 3 seems to be missing, could this be something used in the past or maybe for video? Theoretically we could invent new attributes here, like something for video, images, extra metadata for music files. The official clients don't seem to do anything with the extra attributes
+.. note::
+   Couldn't find any other than these. Number 3 seems to be missing, could this be something used in the past or maybe for video? Theoretically we could invent new attributes here, like something for video, images, extra metadata for music files. The official clients don't seem to do anything with the extra attributes
 
 
 Rooms
 =====
 
-After joining a room, we will automatically be receiving GetUserStatus_ updates from the server.
+After joining a room, we will automatically be receiving :ref:`GetUserStatus` updates from the server.
 
 Only private rooms have an owner and operators.
 
 Room List
 ---------
 
-The room list is received after login but can be refreshed by sending another RoomList_ request. The RoomList_ message consists of lists of rooms categorized by room type:
+The room list is received after login but can be refreshed by sending another :ref:`RoomList` request. The :ref:`RoomList` message consists of lists of rooms categorized by room type:
 
-* rooms : all public rooms
-* rooms_private_owned : private rooms which we own
-* rooms_private : private rooms which we are part of. this excludes the rooms in rooms_private_owned
-* rooms_private_operated : private rooms in which we are operator
+* ``rooms`` : all public rooms
+* ``rooms_private_owned`` : private rooms which we own
+* ``rooms_private`` : private rooms which we are part of. this excludes the rooms in rooms_private_owned
+* ``rooms_private_operated`` : private rooms in which we are operator
 
-_Note:_ Not all public rooms are listed in the initial RoomList_ message after login. Possibly (needs investigation) it returns only the rooms with more than 5 members.
+.. note::
+   Not all public rooms are listed in the initial :ref:`RoomList` message after login. Possibly (needs investigation) it returns only the rooms with more than 5 members.
 
 
 Room Joining / Creation
 -----------------------
 
-To join a public room a JoinRoom_ message is sent to the server, containing the name of the room and whether the room is private. If the room does not yet exist it is created.
+To join a public room a :ref:`ChatJoinRoom` message is sent to the server, containing the name of the room and whether the room is private. If the room does not yet exist it is created.
 
 Creating a public room:
 
-1. Send ChatJoinRoom (is_private=0)
+1. Send :ref:`ChatJoinRoom` (is_private=0)
 2. Receive:
 
-  * ChatUserJoinedRoom
-  * ChatJoinRoom : with our own username
-  * ChatRoomTickers
+  * :ref:`ChatUserJoinedRoom`
+  * :ref:`ChatJoinRoom` : with our own username
+  * :ref:`ChatRoomTickers`
 
 Creating a private room:
 
-1. Send ChatJoinRoom (is_private=1)
+1. Send :ref:`ChatJoinRoom` (is_private=1)
 2. Receive:
 
-  * RoomList : updated list of rooms. See 'Room List' section on what would be expected here
-  * PrivateRoomUsers : list of users in the room (exluding ourself)
-  * PrivateRoomOperators : list of operators
-  * ChatUserJoinedRoom : with our own username
-  * ChatJoinRoom : with our own username
-  * ChatRoomTickers
+  * :ref:`RoomList` : updated list of rooms. See 'Room List' section on what would be expected here
+  * :ref:`PrivateRoomUsers` : list of users in the room (exluding ourself)
+  * :ref:`PrivateRoomOperators` : list of operators
+  * :ref:`ChatUserJoinedRoom` : with our own username
+  * :ref:`ChatJoinRoom` : with our own username
+  * :ref:`ChatRoomTickers`
 
-_Note:_ Messages PrivateRoomUsers, PrivateRoomOperators seems to be repeated for private rooms we are already part of
+.. note::
+   Messages :ref:`PrivateRoomUsers`, :ref:`PrivateRoomOperators` seems to be repeated for private rooms we are already part of
 
-_Note:_ Possibly on the server side the joining happens after some of these messages are sent. In the RoomList_ message the `rooms_private_owned_user_count` is 0, in the PrivateRoomsUsers message the list of users is empty. The
+.. note::
+   Possibly on the server side the joining happens after some of these messages are sent. In the :ref:`RoomList` message the `rooms_private_owned_user_count` is 0, in the PrivateRoomsUsers message the list of users is empty. The
 
-_Note:_ PrivateRoomUsers returns the users which are part of the room (excluding the owner) while RoomList_ rooms_private_user_count only return the amount of online users
+.. note::
+   :ref:`PrivateRoomUsers` returns the users which are part of the room (excluding the owner) while :ref:`RoomList` rooms_private_user_count only return the amount of online users
 
 Room Leaving
 ------------
 
 From the user leaving the room:
 
-1. Send: ChatLeaveRoom : with room name
+1. Send: :ref:`ChatLeaveRoom` : with room name
 2. Receive:
 
-   * ChatLeaveRoom : with room name
+   * :ref:`ChatLeaveRoom` : with room name
 
 Other users in the room:
 
 1. Receive:
 
-   * ChatUserLeftRoom : with room name and user name
+   * :ref:`ChatUserLeftRoom` : with room name and user name
 
 
 Add User to Private Room
@@ -312,25 +322,25 @@ Owners and operators can add users to rooms.
 
 User adding another user:
 
-1. Send: PrivateRoomAddUser : with room name and user name
+1. Send: :ref:`PrivateRoomAddUser` : with room name and user name
 2. Receive:
 
-   * PrivateRoomAddUser : with room name and user name
+   * :ref:`PrivateRoomAddUser` : with room name and user name
    * Server message: User <user_name> is now a member of room <room_name>
 
 The added user:
 
 1. Receive:
 
-   * PrivateRoomAddUser : with room name and user name
-   * PrivateRoomAdded : with room name
-   * RoomList
+   * :ref:`PrivateRoomAddUser` : with room name and user name
+   * :ref:`PrivateRoomAdded` : with room name
+   * :ref:`RoomList`
 
 The owner of the room:
 
 1. Receive:
 
-   * PrivateRoomAddUser : with room name and user name
+   * :ref:`PrivateRoomAddUser` : with room name and user name
    * Server message: User [<user_name>] was added as a member of room [<room_name>] by operator [<operator_name>]
 
 
@@ -341,25 +351,25 @@ Owners can remove operators and members, operators can only remove members.
 
 User removing another user (owner):
 
-1. Send: PrivateRoomRemoveUser : with room name and user name
+1. Send: :ref:`PrivateRoomRemoveUser` : with room name and user name
 2. Receive:
 
-   * PrivateRoomRemoveUser : with room name and user name
+   * :ref:`PrivateRoomRemoveUser` : with room name and user name
    * Server message: User <user_name> is no longer a member of room <room_name>
 
 User being removed:
 
 1. Receive:
 
-   * PrivateRoomRemoved : with room name
-   * ChatLeaveRoom : with room name
-   * RoomList
+   * :ref:`PrivateRoomRemoved` : with room name
+   * :ref:`ChatLeaveRoom` : with room name
+   * :ref:`RoomList`
 
 The owner of the room:
 
 1. Receive:
 
-   * PrivateRoomRemoveUser : with room name and user name
+   * :ref:`PrivateRoomRemoveUser` : with room name and user name
    * Server message: User <user_name> is no longer a member of room <room_name>
 
 
@@ -368,10 +378,10 @@ Granting Operator to Private Room
 
 User granting operator:
 
-1. Send: PrivateRoomAddOperator : with room name and user name
+1. Send: :ref:`PrivateRoomAddOperator` : with room name and user name
 2. Receive:
 
-   * PrivateRoomAddOperator : with room name and user name (got this twice for some reason, perhaps a bug in the server? Should probably be PrivateRoomOperatorAdded)
+   * :ref:`PrivateRoomAddOperator` : with room name and user name (got this twice for some reason, perhaps a bug in the server? Should probably be PrivateRoomOperatorAdded)
    * Server message: User <user_name> is now an operator of room <room_name>
 
 
@@ -380,21 +390,21 @@ Revoking Operator from Private Room
 
 User revoking operator:
 
-1. Send: PrivateRoomRemoveOperator : with room name and user name
+1. Send: :ref:`PrivateRoomRemoveOperator` : with room name and user name
 2. Receive:
 
-   * PrivateRoomRemoveOperator : with room name and user name (got this twice for some reason, perhaps a bug in the server? Should probably be PrivateRoomRemoveOperator)
+   * :ref:`PrivateRoomRemoveOperator` : with room name and user name (got this twice for some reason, perhaps a bug in the server? Should probably be :ref:`PrivateRoomRemoveOperator`)
    * Server message: User <user_name> is no longer an operator of room <room_name>
 
 User for which operator was revoked:
 
 1. Receive:
 
-   * PrivateRoomRemoveOperator : with room name and user name (got this twice)
-   * PrivateRoomOperatorRemoved : with room name
-   * RoomList
-   * PrivateRoomUsers : for all private rooms we are part of
-   * PrivateRoomOperators : for all private rooms we are part of
+   * :ref:`PrivateRoomRemoveOperator` : with room name and user name (got this twice)
+   * :ref:`PrivateRoomOperatorRemoved` : with room name
+   * :ref:`RoomList`
+   * :ref:`PrivateRoomUsers` : for all private rooms we are part of
+   * :ref:`PrivateRoomOperators` : for all private rooms we are part of
 
 
 Dropping Membership
@@ -410,25 +420,25 @@ Member dropping membership:
 1. Send: PrivateRoomDropMembership : with room name
 2. Receive:
 
-   * PrivateRoomRemoved : with room name
-   * ChatLeaveRoom : with room name
-   * RoomList
+   * :ref:`PrivateRoomRemoved` : with room name
+   * :ref:`ChatLeaveRoom` : with room name
+   * :ref:`RoomList`
 
 
 Received by owner:
 
 1. Receive:
 
-   * PrivateRoomRemoveUser : with room name and user name
+   * :ref:`PrivateRoomRemoveUser` : with room name and user name
    * Server message: User <user_name> is no longer a member of room <room_name>
-   * ChatUserLeftRoom : with room name and user name
+   * :ref:`ChatUserLeftRoom` : with room name and user name
 
 Received by operator:
 
 1. Receive:
 
-   * PrivateRoomRemoveUser : with room name and user name
-   * ChatUserLeftRoom : with room name and user name
+   * :ref:`PrivateRoomRemoveUser` : with room name and user name
+   * :ref:`ChatUserLeftRoom` : with room name and user name
 
 
 As operator
@@ -439,33 +449,33 @@ Operator dropping membership:
 1. Send: PrivateRoomDropMembership : with room name
 2. Receive:
 
-   * PrivateRoomRemoved : with room name
-   * ChatLeaveRoom : with room name
-   * RoomList
-   * PrivateRoomUsers : for private rooms we are still part of
-   * PrivateRoomOperators : for private rooms we are still part of
-   * PrivateRoomOperatorRemoved
-   * RoomList
-   * PrivateRoomUsers : for private rooms
-   * PrivateRoomOperators : for private rooms
+   * :ref:`PrivateRoomRemoved` : with room name
+   * :ref:`ChatLeaveRoom` : with room name
+   * :ref:`RoomList`
+   * :ref:`PrivateRoomUsers` : for private rooms we are still part of
+   * :ref:`PrivateRoomOperators` : for private rooms we are still part of
+   * :ref:`PrivateRoomOperatorRemoved`
+   * :ref:`RoomList`
+   * :ref:`PrivateRoomUsers` : for private rooms
+   * :ref:`PrivateRoomOperators` : for private rooms
 
 Received by owner:
 
 1. Receive:
 
-   * PrivateRoomRemoveUser
+   * :ref:`PrivateRoomRemoveUser`
    * Server message: User <user_name> is no longer a member of room <room_name>
-   * ChatUserLeftRoom
-   * PrivateRoomRemoveOperator (twice)
+   * :ref:`ChatUserLeftRoom`
+   * :ref:`PrivateRoomRemoveOperator` (twice)
    * Server message: User <user_name> is no longer an operator of room <room_name>
 
 Received by member:
 
 1. Receive:
 
-   * PrivateRoomRemoveUser
-   * ChatUserLeftRoom
-   * PrivateRoomRemoveOperator (twice)
+   * :ref:`PrivateRoomRemoveUser`
+   * :ref:`ChatUserLeftRoom`
+   * :ref:`PrivateRoomRemoveOperator` (twice)
 
 
 Dropping Ownership
@@ -476,34 +486,34 @@ Owner dropping ownership:
 1. Send: PrivateRoomDropOwnership : with room name
 2. Receive:
 
-   * ChatUserLeftRoom : with room name and user name for all other users in the room
-   * RoomList
-   * PrivateRoomUsers : for private rooms we are still part of
-   * PrivateRoomOperators : for private rooms we are still part of
+   * :ref:`ChatUserLeftRoom` : with room name and user name for all other users in the room
+   * :ref:`RoomList`
+   * :ref:`PrivateRoomUsers` : for private rooms we are still part of
+   * :ref:`PrivateRoomOperators` : for private rooms we are still part of
 
 Received by operator:
 
 1. Receive:
 
-   * PrivateRoomRemoved : with room name
-   * ChatLeaveRoom : with room name
-   * RoomList
-   * PrivateRoomUsers : for private rooms we are still part of
-   * PrivateRoomOperators : for private rooms we are still part of
-   * PrivateRoomOperatorRemoved
-   * RoomList
-   * PrivateRoomUsers : for private rooms
-   * PrivateRoomOperators : for private rooms
+   * :ref:`PrivateRoomRemoved` : with room name
+   * :ref:`ChatLeaveRoom` : with room name
+   * :ref:`RoomList`
+   * :ref:`PrivateRoomUsers` : for private rooms we are still part of
+   * :ref:`PrivateRoomOperators` : for private rooms we are still part of
+   * :ref:`PrivateRoomOperatorRemoved`
+   * :ref:`RoomList`
+   * :ref:`PrivateRoomUsers` : for private rooms
+   * :ref:`PrivateRoomOperators` : for private rooms
 
 Received by member:
 
 1. Receive:
 
-   * ChatUserLeftRoom : for the operator that was in the room
-   * PrivateRoomRemoveOperator : for the operator that was in the room
-   * PrivateRoomRemoved
-   * ChatLeaveRoom
-   * RoomList
+   * :ref:`ChatUserLeftRoom` : for the operator that was in the room
+   * :ref:`PrivateRoomRemoveOperator` : for the operator that was in the room
+   * :ref:`PrivateRoomRemoved`
+   * :ref:`ChatLeaveRoom`
+   * :ref:`RoomList`
 
 
 Exception cases

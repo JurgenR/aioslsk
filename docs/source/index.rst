@@ -7,12 +7,12 @@ Welcome to aioslsk's documentation!
 ===================================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :caption: Contents:
 
+   ./USAGE
    ./MESSAGES
    ./SOULSEEK
-
 
 
 Indices and tables
