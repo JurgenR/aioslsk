@@ -19,23 +19,28 @@ SoulSeek: 208.76.170.59:2242
 
 A login response will be received which determines whether the login was successful or not along with the following commands providing some information:
 
-* RoomList
-* ParentMinSpeed
-* ParentSpeedRatio
-* WishlistInterval
-* PrivilegedUsers
+* :ref:`RoomList`
+* :ref:`ParentMinSpeed`
+* :ref:`ParentSpeedRatio`
+* :ref:`WishlistInterval`
+* :ref:`PrivilegedUsers`
 
 After the response we send the following requests back to the server with some information about us:
 
-* CheckPrivileges: Check if we have privileges
-* SetListenPort: The listening port(s), obfuscated and non*obfuscated
-* SetStatus: Our status (offline, away, available)
-* HaveNoParents_ : Related to Distributed Connections, should initually be true
-* BranchRoot_ : Related to Distributed Connections, should initially be our own username
-* BranchLevel_ : Related to Distributed Connections, should initially be 0
-* SharedFoldersFiles: Number of directories and files we are sharing
+* :ref:`CheckPrivileges`: Check if we have privileges
+* :ref:`SetListenPort`: The listening port(s), obfuscated and non*obfuscated
+* :ref:`SetStatus`: Our status (offline, away, available)
+* :ref:`SharedFoldersFiles`: Number of directories and files we are sharing
+
+We also send messages to advertise we have no parent:
+
+* :ref:`ToggleParentSearch` : Should initually be true
+* :ref:`BranchRoot`` : Initially our own username
+* :ref:`BranchLevel` : Initially should be ``0``
+* :ref:`AcceptChildren``: Accept child connections
+
 * AddUser_ : Using our own username as parameter
-* AcceptChildren: This is used to prevent the server from advertising us through NetInfo_
+
 
 After connection is complete, send a Ping_ command out every 5 minutes.
 
