@@ -1093,170 +1093,164 @@ Compressed using gzip:
 PeerSearchReply (Code 9)
 ------------------------
 
+Response to a search request
+
 :Code: 9 (0x09)
-:Usage: Response to a search request
 :Send/Receive:
+   Compressed using gzip:
 
-Compressed using gzip:
+   1. **string**: username
+   2. **uint32**: ticket
+   3. Array of results:
 
-1. **string**: username
-2. **uint32**: ticket
-3. Array of results:
+      1. **FileData**: results
 
-   1. **FileData**: results
+   4. **bool**: has_slots_free
+   5. **uint32**: avg_speed
+   6. **uint32**: queue_size
+   7. **uint32**: unknown: always 0
+   8. Optional: Array of locked results:
 
-4. **bool**: has_slots_free
-5. **uint32**: avg_speed
-6. **uint32**: queue_size
-7. **uint32**: unknown: always 0
-8. Optional: Array of locked results:
-
-   1. **FileData**: locked_results
+      1. **FileData**: locked_results
 
 
 PeerUserInfoRequest (Code 15)
 -----------------------------
 
-:Code: 15 (0x0F)
-:Usage: Request information from the peer
-:Send/Receive:
+Request information from the peer
 
-No message body
+:Code: 15 (0x0F)
+:Send/Receive: Nothing
 
 
 PeerUserInfoReply (Code 16)
 ---------------------------
 
+Response to PeerUserInfoRequest
+
 :Code: 16 (0x10)
-:Usage: Response to PeerUserInfoRequest
 :Send/Receive:
+   1. **string**: description
+   2. **bool**: has_picture
+   3. If has_picture==true
 
-1. **string**: description
-2. **bool**: has_picture
-3. If has_picture==true
+      1. **string**: picture
 
-   1. **string**: picture
-
-4. **uint32**: slots_free
-5. **uint32**: total_uploads
-6. **bool**: has_slots_free
+   4. **uint32**: slots_free
+   5. **uint32**: total_uploads
+   6. **bool**: has_slots_free
 
 
 PeerDirectoryContentsRequest (Code 36)
 --------------------------------------
 
-:Code: 36 (0x24)
-:Usage: Request the file contents of a directory
-:Send/Receive:
+Request the file contents of a directory
 
-1. **uint32**: ticket
-2. **string**: directory
+:Code: 36 (0x24)
+:Send/Receive:
+   1. **uint32**: ticket
+   2. **string**: directory
 
 
 PeerDirectoryContentsReply (Code 36)
 --------------------------------------
 
+Request the file contents of a directory
+
 :Code: 36 (0x24)
-:Usage: Request the file contents of a directory
 :Send/Receive:
+   1. **uint32**: ticket
+   2. **string**: directory
+   3. Array of directory data:
 
-1. **uint32**: ticket
-2. **string**: directory
-3. Array of directory data:
-
-   1. **DirectoryData**: directories
+      1. **DirectoryData**: directories
 
 
 PeerTransferRequest (Code 40)
 -----------------------------
 
 :Code: 40 (0x28)
-:Usage:
 :Send/Receive:
+   1. **uint32**: direction
+   2. **uint32**: ticket
+   3. **string**: filename
+   4. Optional:
 
-1. **uint32**: direction
-2. **uint32**: ticket
-3. **string**: filename
-4. Optional:
-
-   1. **uint64**: filesize . Can be omitted if the direction==1 however a value of `0` can be used in this case as well
+      1. **uint64**: filesize . Can be omitted if the direction==1 however a value of `0` can be used in this case as well
 
 
 PeerTransferReply (Code 41)
 ---------------------------
 
 :Code: 41 (0x29)
-:Usage:
 :Send/Receive:
+   1. **uint32**: ticket
+   2. **bool**: allowed
+   3. If allowed==true
 
-1. **uint32**: ticket
-2. **bool**: allowed
-3. If allowed==true
+      1. **uint32**: filesize
 
-   1. **uint32**: filesize
+   4. If allowed==false
 
-4. If allowed==false
-
-   1. **string**: reason
+      1. **string**: reason
 
 
 PeerTransferQueue (Code 43)
 ---------------------------
 
-:Code: 43 (0x2B)
-:Usage: Request to place the provided transfer of `filename` in the queue
-:Send/Receive:
+Request to place the provided transfer of `filename` in the queue
 
-1. **string**: filename
+:Code: 43 (0x2B)
+:Send/Receive:
+   1. **string**: filename
 
 
 PeerPlaceInQueueReply (Code 44)
 -------------------------------
 
-:Code: 44 (0x2C)
-:Usage: Response to PeerPlaceInQueueRequest
-:Send/Receive:
+Response to PeerPlaceInQueueRequest
 
-1. **string**: filename
-2. **uint32**: place
+:Code: 44 (0x2C)
+:Send/Receive:
+   1. **string**: filename
+   2. **uint32**: place
 
 
 PeerUploadFailed (Code 46)
 -------------------------
 
-:Code: 46 (0x2E)
-:Usage: Sent when uploading failed
-:Send/Receive:
+Sent when uploading failed
 
-1. **string**: filename
+:Code: 46 (0x2E)
+:Send/Receive:
+   1. **string**: filename
 
 
 PeerTransferQueueFailed (Code 50)
 ---------------------------------
 
-:Code: 50 (0x32)
-:Usage: Sent when placing the transfer in queue failed
-:Send/Receive:
+Sent when placing the transfer in queue failed
 
-1. **string**: filename
-2. **string**: reason
+:Code: 50 (0x32)
+:Send/Receive:
+   1. **string**: filename
+   2. **string**: reason
 
 
 PeerPlaceInQueueRequest (Code 51)
 ---------------------------------
 
-:Code: 51 (0x33)
-:Usage: Request the place of the transfer in the queue.
-:Send/Receive:
+Request the place of the transfer in the queue.
 
-1. **string**: filename
+:Code: 51 (0x33)
+:Send/Receive:
+   1. **string**: filename
 
 
 PeerUploadQueueNotification (Code 52)
 -------------------------------------
 
 :Code: 51 (0x33)
-:Usage:
 :Send/Receive: Nothing
 
 
@@ -1267,16 +1261,18 @@ Distributed Messages
 DistributedPing (Code 0)
 ------------------------
 
+Ping request from the parent. Most clients do not send this.
+
 :Code: 0 (0x00)
-:Usage: Ping request from the parent. Most clients do not send this.
 :Send/Receive: Nothing
 
 
 DistributedSearchRequest (Code 3)
 ---------------------------------
 
+Search request coming from the parent
+
 :Code: 3 (0x03)
-:Usage: Search request coming from the parent
 :Send/Receive:
    1. **uint32**: unknown: unknown value, seems like this is always 0x31
    2. **string**: username
@@ -1287,42 +1283,42 @@ DistributedSearchRequest (Code 3)
 DistributedBranchLevel (Code 4)
 -------------------------------
 
-:Code: 4 (0x04)
-:Usage: Distributed branch level
-:Send/Receive:
+Distributed branch level
 
-1. **uint32**: level
+:Code: 4 (0x04)
+:Send/Receive:
+   1. **uint32**: level
 
 
 DistributedBranchRoot (Code 5)
 ------------------------------
 
-:Code: 5 (0x05)
-:Usage: Distributed branch root
-:Send/Receive:
+Distributed branch root
 
-1. **string**: root
+:Code: 5 (0x05)
+:Send/Receive:
+   1. **string**: root
 
 
 DistributedChildDepth (Code 7)
 ------------------------------
 
-:Code: 7 (0x07)
-:Usage: How many children the peer has (unverified). This is sent by some clients to the parent after they are added and updates are sent afterwards. Usage is a unknown.
-:Send/Receive:
+How many children the peer has (unverified). This is sent by some clients to the parent after they are added and updates are sent afterwards. Usage is a unknown.
 
-1. **string**: depth
+:Code: 7 (0x07)
+:Send/Receive:
+   1. **string**: depth
 
 
 DistributedServerSearchRequest (Code 93)
 ----------------------------------------
 
-:Code: 93 (0x5D)
-:Usage: This message exists internally only for deserialization purposes and this is actually a `ServerSearchRequest`.
-:Send/Receive:
+This message exists internally only for deserialization purposes and this is actually a `ServerSearchRequest`.
 
-1. **uint8**: distributed_code
-2. **uint32**: unknown: unknown value, seems like this is always 0x31
-3. **string**: username
-4. **uint32**: ticket
-5. **string**: query
+:Code: 93 (0x5D)
+:Send/Receive:
+   1. **uint8**: distributed_code
+   2. **uint32**: unknown: unknown value, seems like this is always 0x31
+   3. **string**: username
+   4. **uint32**: ticket
+   5. **string**: query
