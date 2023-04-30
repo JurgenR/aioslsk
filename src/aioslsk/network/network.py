@@ -542,9 +542,7 @@ class Network:
         :param state: the new state the connection has received
         :param connection: the connection for which the state changed
         :param close_reason: in case ConnectionState.CLOSED is passed a reason
-            will be given as well, this is useful when we need to send a
-            CannotConnect to the server after a ConnectToPeer was sent and we
-            failed to connect to that peer
+            will be given as well
         """
         if isinstance(connection, ServerConnection):
             await self._on_server_connection_state_changed(state, connection, close_reason=close_reason)

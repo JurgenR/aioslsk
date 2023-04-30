@@ -11,6 +11,7 @@ network:
     distributed: 120
   reconnect:
     auto: true
+    timeout: 10
   peer:
     obfuscate: false
 
