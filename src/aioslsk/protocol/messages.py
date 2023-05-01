@@ -33,7 +33,7 @@ from .primitives import (
     FileData,
     DirectoryData,
     MessageDataclass,
-    UserData,
+    UserStats,
     PotentialParent,
     SimilarUser,
     ItemRecommendation,
@@ -177,10 +177,7 @@ class AddUser(ServerMessage):
         username: str = field(metadata={'type': string})
         exists: bool = field(metadata={'type': boolean})
         status: int = field(default=None, metadata={'type': uint32, 'if_true': 'exists'})
-        avg_speed: int = field(default=None, metadata={'type': uint32, 'if_true': 'exists'})
-        uploads: int = field(default=None, metadata={'type': uint64, 'if_true': 'exists'})
-        file_count: int = field(default=None, metadata={'type': uint32, 'if_true': 'exists'})
-        dir_count: int = field(default=None, metadata={'type': uint32, 'if_true': 'exists'})
+        user_stats: UserStats = field(default=None, metadata={'type': UserStats, 'if_true': 'exists'})
         country_code: str = field(
             default=None,
             metadata={
@@ -243,7 +240,7 @@ class ChatJoinRoom(ServerMessage):
         room: str = field(metadata={'type': string})
         users: List[str] = field(metadata={'type': array, 'subtype': string})
         users_status: List[int] = field(metadata={'type': array, 'subtype': uint32})
-        users_data: List[UserData] = field(metadata={'type': array, 'subtype': UserData})
+        users_stats: List[UserStats] = field(metadata={'type': array, 'subtype': UserStats})
         users_slots_free: List[int] = field(metadata={'type': array, 'subtype': uint32})
         users_countries: List[str] = field(metadata={'type': array, 'subtype': string})
         owner: str = field(default=None, metadata={'type': string, 'optional': True})
@@ -277,7 +274,7 @@ class ChatUserJoinedRoom(ServerMessage):
         room: str = field(metadata={'type': string})
         username: str = field(metadata={'type': string})
         status: int = field(metadata={'type': uint32})
-        user_data: UserData = field(metadata={'type': UserData})
+        user_stats: UserStats = field(metadata={'type': UserStats})
         slots_free: int = field(metadata={'type': uint32})
         country_code: str = field(metadata={'type': string})
 
@@ -375,8 +372,8 @@ class SharedFoldersFiles(ServerMessage):
     @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x23)
-        directory_count: int = field(metadata={'type': uint32})
-        file_count: int = field(metadata={'type': uint32})
+        shared_folder_count: int = field(metadata={'type': uint32})
+        shared_file_count: int = field(metadata={'type': uint32})
 
 
 class GetUserStats(ServerMessage):
@@ -390,10 +387,7 @@ class GetUserStats(ServerMessage):
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x24)
         username: str = field(metadata={'type': string})
-        avg_speed: int = field(metadata={'type': uint32})
-        uploads: int = field(metadata={'type': uint64})
-        file_count: int = field(metadata={'type': uint32})
-        dir_count: int = field(metadata={'type': uint32})
+        user_stats: UserStats = field(metadata={'type': UserStats})
 
 
 class Kicked(ServerMessage):

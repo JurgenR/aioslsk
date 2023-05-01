@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import enum
 from typing import Dict, List
+from .protocol.primitives import UserStats
 
 
 class UserStatus(enum.Enum):
@@ -23,14 +24,20 @@ class User:
 
     avg_speed: int = None
     uploads: int = None
-    files: int = None
-    directories: int = None
+    shared_file_count: int = None
+    shared_folder_count: int = None
     has_slots_free: bool = None
     slots_free: int = None
     upload_slots: int = None
     queue_length: int = None
 
     is_tracking: bool = False
+
+    def update_from_user_stats(self, user_stats: UserStats):
+        self.avg_speed = user_stats.avg_speed
+        self.shared_file_count = user_stats.shared_file_count
+        self.shared_folder_count = user_stats.shared_folder_count
+        self.uploads = user_stats.uploads
 
 
 @dataclass

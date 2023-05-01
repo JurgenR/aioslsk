@@ -139,12 +139,12 @@ class ServerManager:
 
     async def report_shares(self):
         """Reports the shares amount to the server"""
-        dir_count, file_count = self._shares_manager.get_stats()
-        logger.debug(f"reporting shares to the server (dirs={dir_count}, file_count={file_count})")
+        folder_count, file_count = self._shares_manager.get_stats()
+        logger.debug(f"reporting shares to the server (folder_count={folder_count}, file_count={file_count})")
         await self._network.send_server_messages(
             SharedFoldersFiles.Request(
-                directory_count=dir_count,
-                file_count=file_count
+                shared_folder_count=folder_count,
+                shared_file_count=file_count
             )
         )
 
@@ -396,10 +396,7 @@ class ServerManager:
     async def _on_user_joined_room(self, message: ChatUserJoinedRoom.Response, connection):
         user = self._state.get_or_create_user(message.username)
         user.status = UserStatus(message.status)
-        user.avg_speed = message.user_data.avg_speed
-        user.uploads = message.user_data.uploads
-        user.files = message.user_data.file_count
-        user.directories = message.user_data.dir_count
+        user.update_from_user_stats(message.user_stats)
         user.slots_free = message.slots_free
         user.country = message.country_code
 
@@ -424,14 +421,9 @@ class ServerManager:
         room.joined = True
 
         for idx, name in enumerate(message.users):
-            user_data = message.users_data[idx]
-
             user = self._state.get_or_create_user(name)
             user.status = UserStatus(message.users_status[idx])
-            user.avg_speed = user_data.avg_speed
-            user.uploads = user_data.uploads
-            user.files = user_data.file_count
-            user.directories = user_data.dir_count
+            user.update_from_user_stats(message.users_stats[idx])
             user.country = message.users_countries[idx]
             user.slots_free = message.users_slots_free[idx]
 
@@ -651,10 +643,7 @@ class ServerManager:
             user = self._state.get_or_create_user(message.username)
             user.name = message.username
             user.status = UserStatus(message.status)
-            user.avg_speed = message.avg_speed
-            user.uploads = message.uploads
-            user.files = message.file_count
-            user.directories = message.dir_count
+            user.update_from_user_stats(message.user_stats)
             user.country = message.country_code
 
             await self._event_bus.emit(UserInfoEvent(user))
@@ -670,10 +659,7 @@ class ServerManager:
     @on_message(GetUserStats.Response)
     async def _on_get_user_stats(self, message: GetUserStats.Response, connection):
         user = self._state.get_or_create_user(message.username)
-        user.avg_speed = message.avg_speed
-        user.uploads = message.uploads
-        user.files = message.file_count
-        user.directories = message.dir_count
+        user.update_from_user_stats(message.user_stats)
 
         await self._event_bus.emit(UserInfoEvent(user))
 
