@@ -37,6 +37,7 @@ def network():
     nw.disconnect = AsyncMock()
     nw.on_state_changed = AsyncMock()
     nw.on_peer_accepted = AsyncMock()
+    nw._stop_event.is_set = Mock(return_value=False)
     return nw
 
 

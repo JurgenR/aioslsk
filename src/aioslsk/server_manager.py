@@ -116,6 +116,7 @@ class ServerManager:
         self._ping_task: asyncio.Task = None
         self._wishlist_task: asyncio.Task = None
         self._post_login_task: asyncio.Task = None
+        self._connection_watchdog_task: asyncio.Task = None
 
         self.MESSAGE_MAP = build_message_map(self)
 
@@ -691,6 +692,23 @@ class ServerManager:
             self._ping_task.cancel()
             self._ping_task = None
 
+    async def _connection_watchdog_job(self):
+        """Reconnects to the server if it is closed. This should be started as a
+        task and should be cancelled upon request.
+        """
+        timeout = self._settings.get('network.reconnect.timeout')
+        while True:
+            await asyncio.sleep(0.5)
+            if self._network.server.state == ConnectionState.CLOSED:
+                logger.info(f"will attempt to reconnect to server in {timeout} seconds")
+                await asyncio.sleep(timeout)
+                await self.reconnect()
+
+    async def _cancel_connection_watchdog_task(self):
+        if self._connection_watchdog_task is not None:
+            self._connection_watchdog_task.cancel()
+            self._connection_watchdog_task = None
+
     async def _wishlist_job(self, interval: int):
         while True:
             items = self._settings.get('search.wishlist')
@@ -743,24 +761,45 @@ class ServerManager:
 
         if event.state == ConnectionState.CONNECTED:
             self._ping_task = asyncio.create_task(
-                self._ping_job(), name=f'ping-task-{task_counter()}')
+                self._ping_job(),
+                name=f'ping-task-{task_counter()}'
+            )
+
+            if self._settings.get('network.reconnect.auto'):
+                if self._connection_watchdog_task is None:
+                    self._connection_watchdog_task = asyncio.create_task(
+                        self._connection_watchdog_job(),
+                        name=f'watchdog-task-{task_counter()}'
+                    )
 
         elif event.state == ConnectionState.CLOSING:
 
             self._cancel_wishlist_task()
             self._cancel_ping_task()
+            # When `disconnect` is called on the connection it will always first
+            # go into the CLOSING state. The watchdog will only attempt to
+            # reconnect if the server is in CLOSED state. So the code needs to
+            # make a decision here whether we want to reconnect or not before it
+            # goes into CLOSED state.
+            # Cancel the watchdog only if we are closing up on request or the
+            # server sends an EOF. The server sends an EOF as soon as you are
+            # connected if your IP address is banned, this happens when you make
+            # too many connections in a short period of time. Making any more
+            # connections will only extend your ban period. Possibly the server
+            # will also EOF when the login message is not sent
+            if event.close_reason == CloseReason.REQUESTED:
+                self._cancel_connection_watchdog_task()
 
-            await self._event_bus.emit(ServerDisconnectedEvent())
+            elif event.close_reason == CloseReason.EOF:
+                logger.warning(
+                    "server closed connection, will not attempt to reconnect")
+                self._cancel_connection_watchdog_task()
 
         elif event.state == ConnectionState.CLOSED:
             for user in self._state.users.values():
                 user.is_tracking = False
 
-            if event.close_reason != CloseReason.REQUESTED:
-                if self._settings.get('network.reconnect.auto'):
-                    logger.info("attempting to reconnect to server in 5 seconds")
-                    await asyncio.sleep(5)
-                    await self.reconnect()
+            await self._event_bus.emit(ServerDisconnectedEvent())
 
     async def reconnect(self):
         try:
