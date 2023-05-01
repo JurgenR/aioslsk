@@ -27,6 +27,7 @@ pytest-asyncio = "^0.20.3"
 
 [tool.poetry.group.dev.dependencies]
 flake8 = "^6.0.0"
+sphinx = "^7.0.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
