@@ -12,7 +12,6 @@ from async_upnp_client.ssdp import SSDP_IP_V4, SSDP_PORT
 from ..settings import Settings
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
 
 
 SEARCH_TIMEOUT = 10

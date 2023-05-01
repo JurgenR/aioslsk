@@ -160,8 +160,8 @@ Track a user
    3. if exists==true
 
       1. **uint32**: status
-      2. **uint32**: average upload speed
-      3. **uint64**: download_number
+      2. **uint32**: avg_speed
+      3. **uint64**: download_num
       4. **uint32**: shared_files
       5. **uint32**: shared_directories
       6. Optional:

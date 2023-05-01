@@ -697,6 +697,7 @@ class ServerManager:
         task and should be cancelled upon request.
         """
         timeout = self._settings.get('network.reconnect.timeout')
+        logger.info("starting server connection watchdog")
         while True:
             await asyncio.sleep(0.5)
             if self._network.server.state == ConnectionState.CLOSED:
@@ -704,7 +705,7 @@ class ServerManager:
                 await asyncio.sleep(timeout)
                 await self.reconnect()
 
-    async def _cancel_connection_watchdog_task(self):
+    def _cancel_connection_watchdog_task(self):
         if self._connection_watchdog_task is not None:
             self._connection_watchdog_task.cancel()
             self._connection_watchdog_task = None
