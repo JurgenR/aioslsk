@@ -161,7 +161,7 @@ Track a user
 
       1. **uint32**: status
       2. **uint32**: avg_speed
-      3. **uint64**: download_num
+      3. **uint64**: uploads
       4. **uint32**: shared_files
       5. **uint32**: shared_directories
       6. Optional:
@@ -284,7 +284,7 @@ Received when a user joined a room
    2. **string**: username
    3. **uint32**: status
    4. **uint32**: average_speed
-   5. **uint64**: download_number
+   5. **uint64**: uploads
    6. **uint32**: shared_files
    7. **uint32**: shared_directories
    8. **uint32**: slots_free
@@ -428,7 +428,7 @@ Get more user information, we will automatically receive updates if we added a u
 :Receive:
    1. **string**: username
    2. **uint32**: average_speed
-   3. **uint64**: download_number
+   3. **uint64**: uploads
    4. **uint32**: shared_files
    5. **uint32**: shared_directories
 

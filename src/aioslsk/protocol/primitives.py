@@ -350,7 +350,7 @@ class PotentialParent(ProtocolDataclass):
 @dataclass(frozen=True, order=True)
 class UserData(ProtocolDataclass):
     avg_speed: int = field(metadata={'type': uint32})
-    download_num: int = field(metadata={'type': uint64})
+    uploads: int = field(metadata={'type': uint64})
     file_count: int = field(metadata={'type': uint32})
     dir_count: int = field(metadata={'type': uint32})
 

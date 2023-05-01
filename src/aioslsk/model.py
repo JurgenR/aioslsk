@@ -22,7 +22,7 @@ class User:
     privileged: bool = False
 
     avg_speed: int = None
-    downloads: int = None
+    uploads: int = None
     files: int = None
     directories: int = None
     has_slots_free: bool = None

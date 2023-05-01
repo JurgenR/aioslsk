@@ -335,7 +335,7 @@ class TestAddUser:
             exists=True,
             status=1,
             avg_speed=100,
-            download_num=1000,
+            uploads=1000,
             file_count=10000,
             dir_count=100000
         )
@@ -348,7 +348,7 @@ class TestAddUser:
             exists=True,
             status=1,
             avg_speed=100,
-            download_num=1000,
+            uploads=1000,
             file_count=10000,
             dir_count=100000
         )
@@ -361,7 +361,7 @@ class TestAddUser:
             exists=True,
             status=1,
             avg_speed=100,
-            download_num=1000,
+            uploads=1000,
             file_count=10000,
             dir_count=100000,
             country_code='DE'
@@ -375,7 +375,7 @@ class TestAddUser:
             exists=True,
             status=1,
             avg_speed=100,
-            download_num=1000,
+            uploads=1000,
             file_count=10000,
             dir_count=100000,
             country_code='DE'
@@ -501,7 +501,7 @@ class TestUserJoinedRoom:
             status=1,
             user_data=UserData(
                 avg_speed=1000,
-                download_num=10000,
+                uploads=10000,
                 file_count=1000,
                 dir_count=1000
             ),
@@ -518,7 +518,7 @@ class TestUserJoinedRoom:
             status=1,
             user_data=UserData(
                 avg_speed=1000,
-                download_num=10000,
+                uploads=10000,
                 file_count=1000,
                 dir_count=1000
             ),
@@ -818,7 +818,7 @@ class TestGetUserStats:
         message = GetUserStats.Response(
             username='user0',
             avg_speed=100000,
-            download_num=1000000,
+            uploads=1000000,
             file_count=10000,
             dir_count=1000
         )
@@ -829,7 +829,7 @@ class TestGetUserStats:
         message = GetUserStats.Response(
             username='user0',
             avg_speed=100000,
-            download_num=1000000,
+            uploads=1000000,
             file_count=10000,
             dir_count=1000
         )

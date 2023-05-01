@@ -246,7 +246,7 @@ class TestServerManager:
 
         assert user in room.users
 
-        assert user_data == (user.avg_speed, user.downloads, user.files, user.directories)
+        assert user_data == (user.avg_speed, user.uploads, user.files, user.directories)
         assert 'US' == user.country
         assert 10 == user.slots_free
         assert UserStatus.ONLINE == user.status

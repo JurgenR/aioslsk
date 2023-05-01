@@ -397,7 +397,7 @@ class ServerManager:
         user = self._state.get_or_create_user(message.username)
         user.status = UserStatus(message.status)
         user.avg_speed = message.user_data.avg_speed
-        user.downloads = message.user_data.download_num
+        user.uploads = message.user_data.uploads
         user.files = message.user_data.file_count
         user.directories = message.user_data.dir_count
         user.slots_free = message.slots_free
@@ -429,7 +429,7 @@ class ServerManager:
             user = self._state.get_or_create_user(name)
             user.status = UserStatus(message.users_status[idx])
             user.avg_speed = user_data.avg_speed
-            user.downloads = user_data.download_num
+            user.uploads = user_data.uploads
             user.files = user_data.file_count
             user.directories = user_data.dir_count
             user.country = message.users_countries[idx]
@@ -652,7 +652,7 @@ class ServerManager:
             user.name = message.username
             user.status = UserStatus(message.status)
             user.avg_speed = message.avg_speed
-            user.downloads = message.download_num
+            user.uploads = message.uploads
             user.files = message.file_count
             user.directories = message.dir_count
             user.country = message.country_code
@@ -671,7 +671,7 @@ class ServerManager:
     async def _on_get_user_stats(self, message: GetUserStats.Response, connection):
         user = self._state.get_or_create_user(message.username)
         user.avg_speed = message.avg_speed
-        user.downloads = message.download_num
+        user.uploads = message.uploads
         user.files = message.file_count
         user.directories = message.dir_count
 
@@ -705,7 +705,7 @@ class ServerManager:
                 await asyncio.sleep(timeout)
                 await self.reconnect()
 
-    def _cancel_connection_watchdog_task(self):
+    async def _cancel_connection_watchdog_task(self):
         if self._connection_watchdog_task is not None:
             self._connection_watchdog_task.cancel()
             self._connection_watchdog_task = None

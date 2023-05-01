@@ -178,7 +178,7 @@ class AddUser(ServerMessage):
         exists: bool = field(metadata={'type': boolean})
         status: int = field(default=None, metadata={'type': uint32, 'if_true': 'exists'})
         avg_speed: int = field(default=None, metadata={'type': uint32, 'if_true': 'exists'})
-        download_num: int = field(default=None, metadata={'type': uint64, 'if_true': 'exists'})
+        uploads: int = field(default=None, metadata={'type': uint64, 'if_true': 'exists'})
         file_count: int = field(default=None, metadata={'type': uint32, 'if_true': 'exists'})
         dir_count: int = field(default=None, metadata={'type': uint32, 'if_true': 'exists'})
         country_code: str = field(
@@ -391,7 +391,7 @@ class GetUserStats(ServerMessage):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x24)
         username: str = field(metadata={'type': string})
         avg_speed: int = field(metadata={'type': uint32})
-        download_num: int = field(metadata={'type': uint64})
+        uploads: int = field(metadata={'type': uint64})
         file_count: int = field(metadata={'type': uint32})
         dir_count: int = field(metadata={'type': uint32})
 
