@@ -446,7 +446,6 @@ class Network:
 
         # `done` will be empty in case of timeout
         if not done:
-            self._expected_connection_futures.pop(ticket)
             raise PeerConnectionError(
                 f"indirect connection timed out (username={username}, ticket={ticket})")
 
