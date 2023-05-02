@@ -488,7 +488,10 @@ class Network:
 
         except NetworkError:
             await self.server.queue_message(
-                CannotConnect.Request(message.ticket)
+                CannotConnect.Request(
+                    ticket=message.ticket,
+                    username=message.username
+                )
             )
             raise PeerConnectionError("failed connect on user request")
 

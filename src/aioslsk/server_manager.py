@@ -691,7 +691,7 @@ class ServerManager:
                 await asyncio.sleep(timeout)
                 await self.reconnect()
 
-    async def _cancel_connection_watchdog_task(self):
+    def _cancel_connection_watchdog_task(self):
         if self._connection_watchdog_task is not None:
             self._connection_watchdog_task.cancel()
             self._connection_watchdog_task = None
