@@ -587,7 +587,7 @@ class SharesManager:
         """
         file_path = shared_item.get_absolute_path()
         file_size = os.path.getsize(file_path)
-        file_ext = os.path.splitext(shared_item.filename)[-1]
+        file_ext = os.path.splitext(shared_item.filename)[-1][1:]
         if shared_item.attributes:
             attributes = [Attribute(*attr) for attr in shared_item.attributes]
         else:
