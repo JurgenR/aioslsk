@@ -25,20 +25,21 @@ class UPNP:
 
     async def search_igd_devices(self, source_ip: str) -> List[IgdDevice]:
         devices = []
-        logger.debug("starting search for IGD devices")
+        logger.info("starting search for IGD devices")
         await async_search(
             partial(self._search_callback, devices),
             source=(source_ip, 0),
             target=(SSDP_IP_V4, SSDP_PORT),
             timeout=SEARCH_TIMEOUT
         )
+        logger.debug(f"found {len(devices)} IGD devices")
         return devices
 
     async def _search_callback(self, devices: List[IgdDevice], headers):
         if headers['ST'] not in IgdDevice.DEVICE_TYPES:
             return
 
-        logger.debug(f"found Internet Gateway Device : {headers!r}")
+        logger.info(f"found Internet Gateway Device : {headers!r}")
         device = await self._factory.async_create_device(headers['LOCATION'])
 
         devices.append(IgdDevice(device, None))

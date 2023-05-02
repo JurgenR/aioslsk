@@ -208,7 +208,7 @@ class Network:
             if prefer_obfuscated:
                 return obfuscated_port, True
             else:
-                return obfuscated_port, True
+                return port, False
         elif port:
             return port, False
         else:
@@ -447,14 +447,14 @@ class Network:
         # `done` will be empty in case of timeout
         if not done:
             raise PeerConnectionError(
-                f"indirect connection timed out (username={username}, ticket={ticket})")
+                f"indirect connection timed out ({username=}, {ticket=})")
 
         completed_future = done.pop()
 
         if completed_future == cannot_connect_future:
             logger.debug(f"received cannot connect (ticket={ticket})")
             raise PeerConnectionError(
-                f"indirect connection failed (username={username}, ticket={ticket})")
+                f"indirect connection failed ({username=}, {ticket=})")
 
         connection = completed_future.result()
 
@@ -469,10 +469,8 @@ class Network:
         A task is created for this coroutine when a `ConnectToPeer` message is
         received
         """
-        obfuscate = self._settings.get('network.peer.obfuscate') and bool(message.obfuscated_port)
-
         ip = self._user_ip_overrides.get(message.username, message.ip)
-        port = message.obfuscated_port if obfuscate else message.port
+        port, obfuscate = self.select_port(message.port, message.obfuscated_port)
 
         peer_connection = PeerConnection(
             ip, port, self,
@@ -490,7 +488,10 @@ class Network:
 
         except NetworkError:
             await self.server.queue_message(
-                CannotConnect.Request(message.ticket)
+                CannotConnect.Request(
+                    ticket=message.ticket,
+                    username=message.username
+                )
             )
             raise PeerConnectionError("failed connect on user request")
 
