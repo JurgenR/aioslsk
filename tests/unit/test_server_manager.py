@@ -18,7 +18,7 @@ from aioslsk.protocol.messages import (
     ChatRoomTickerRemoved,
     RemoveUser,
 )
-from aioslsk.protocol.primitives import RoomTicker, UserData
+from aioslsk.protocol.primitives import RoomTicker, UserStats
 from aioslsk.search import SearchType
 from aioslsk.settings import Settings
 from aioslsk.server_manager import ServerManager
@@ -231,13 +231,13 @@ class TestServerManager:
         room = manager._state.get_or_create_room('room0')
         user = manager._state.get_or_create_user('user0')
 
-        user_data = (1, 2, 3, 4)
+        user_stats = (1, 2, 3, 4)
         await manager._on_user_joined_room(
             ChatUserJoinedRoom.Response(
                 room='room0',
                 username='user0',
                 status=UserStatus.ONLINE,
-                user_data=UserData(*user_data),
+                user_stats=UserStats(*user_stats),
                 slots_free=10,
                 country_code='US'
             ),
@@ -246,7 +246,7 @@ class TestServerManager:
 
         assert user in room.users
 
-        assert user_data == (user.avg_speed, user.downloads, user.files, user.directories)
+        assert user_stats == (user.avg_speed, user.uploads, user.shared_file_count, user.shared_folder_count)
         assert 'US' == user.country
         assert 10 == user.slots_free
         assert UserStatus.ONLINE == user.status

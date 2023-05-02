@@ -70,6 +70,15 @@ DirectoryData
    1. **FileData**: files
 
 
+UserStats
+---------
+
+1. **uint32**: avg_speed
+2. **uint32**: uploads
+3. **uint32**: shared_file_count
+4. **uint32**: shared_folder_count
+
+
 .. _server-messages:
 
 Server Messages
@@ -160,11 +169,8 @@ Track a user
    3. if exists==true
 
       1. **uint32**: status
-      2. **uint32**: avg_speed
-      3. **uint64**: download_num
-      4. **uint32**: shared_files
-      5. **uint32**: shared_directories
-      6. Optional:
+      2. **UserStats**: user_stats
+      3. Optional:
 
          1. **string**: country_code
 
@@ -231,23 +237,23 @@ Used when we want to join a chat room
    1. **string**: room_name
    2. Array of usernames:
 
-      1. **string**: username
+      1. **string**: users
 
    3. Array of user statuses:
 
-      1. **uint32**: status
+      1. **uint32**: users_status
 
-   4. Array of user info:
+   4. Array of user stats:
 
-      1. 1234
+      1. **UserStats**: users_stats
 
    5. Array of upload slots free:
 
-      1. **uint32**: slots_free
+      1. **uint32**: users_slots_free
 
    6. Array of user countries:
 
-      1. **string**: country_code
+      1. **string**: users_countries
 
    7. Optional:
 
@@ -283,12 +289,9 @@ Received when a user joined a room
    1. **string**: room_name
    2. **string**: username
    3. **uint32**: status
-   4. **uint32**: average_speed
-   5. **uint64**: download_number
-   6. **uint32**: shared_files
-   7. **uint32**: shared_directories
-   8. **uint32**: slots_free
-   9. **string**: country_code
+   4. **UserStats**: user_stats
+   5. **uint32**: slots_free
+   6. **string**: country_code
 
 
 .. _ChatUserLeftRoom:
@@ -411,8 +414,8 @@ Let the server know the amount of files and directories we are sharing
 
 :Code: 35 (0x23)
 :Send:
-   1. **uint32**: shared_directories
-   2. **uint32**: shared_files
+   1. **uint32**: shared_folder_count
+   2. **uint32**: shared_file_count
 
 
 .. _GetUserStats:
@@ -427,10 +430,7 @@ Get more user information, we will automatically receive updates if we added a u
    1. **string**: username
 :Receive:
    1. **string**: username
-   2. **uint32**: average_speed
-   3. **uint64**: download_number
-   4. **uint32**: shared_files
-   5. **uint32**: shared_directories
+   2. **UserStats**: user_stats
 
 
 .. _Kicked:

@@ -7,7 +7,7 @@ from aioslsk.protocol.primitives import (
     ItemRecommendation,
     SimilarUser,
     RoomTicker,
-    UserData,
+    UserStats,
 )
 from aioslsk.protocol.messages import (
     Login,
@@ -334,10 +334,12 @@ class TestAddUser:
             username='user0',
             exists=True,
             status=1,
-            avg_speed=100,
-            download_num=1000,
-            file_count=10000,
-            dir_count=100000
+            user_stats=UserStats(
+                avg_speed=100,
+                uploads=1000,
+                shared_file_count=10000,
+                shared_folder_count=100000
+            )
         )
         data = bytes.fromhex('2600000005000000050000007573657230010100000064000000e80300000000000010270000a0860100')
         assert message.serialize() == data
@@ -347,10 +349,12 @@ class TestAddUser:
             username='user0',
             exists=True,
             status=1,
-            avg_speed=100,
-            download_num=1000,
-            file_count=10000,
-            dir_count=100000
+            user_stats=UserStats(
+                avg_speed=100,
+                uploads=1000,
+                shared_file_count=10000,
+                shared_folder_count=100000
+            )
         )
         data = bytes.fromhex('2600000005000000050000007573657230010100000064000000e80300000000000010270000a0860100')
         assert AddUser.Response.deserialize(data) == message
@@ -360,10 +364,12 @@ class TestAddUser:
             username='user0',
             exists=True,
             status=1,
-            avg_speed=100,
-            download_num=1000,
-            file_count=10000,
-            dir_count=100000,
+            user_stats=UserStats(
+                avg_speed=100,
+                uploads=1000,
+                shared_file_count=10000,
+                shared_folder_count=100000
+            ),
             country_code='DE'
         )
         data = bytes.fromhex('2c00000005000000050000007573657230010100000064000000e80300000000000010270000a0860100020000004445')
@@ -374,10 +380,12 @@ class TestAddUser:
             username='user0',
             exists=True,
             status=1,
-            avg_speed=100,
-            download_num=1000,
-            file_count=10000,
-            dir_count=100000,
+            user_stats=UserStats(
+                avg_speed=100,
+                uploads=1000,
+                shared_file_count=10000,
+                shared_folder_count=100000
+            ),
             country_code='DE'
         )
         data = bytes.fromhex('2c00000005000000050000007573657230010100000064000000e80300000000000010270000a0860100020000004445')
@@ -499,11 +507,11 @@ class TestUserJoinedRoom:
             room='room0',
             username='user0',
             status=1,
-            user_data=UserData(
+            user_stats=UserStats(
                 avg_speed=1000,
-                download_num=10000,
-                file_count=1000,
-                dir_count=1000
+                uploads=10000,
+                shared_file_count=1000,
+                shared_folder_count=1000
             ),
             slots_free=5,
             country_code='DE'
@@ -516,11 +524,11 @@ class TestUserJoinedRoom:
             room='room0',
             username='user0',
             status=1,
-            user_data=UserData(
+            user_stats=UserStats(
                 avg_speed=1000,
-                download_num=10000,
-                file_count=1000,
-                dir_count=1000
+                uploads=10000,
+                shared_file_count=1000,
+                shared_folder_count=1000
             ),
             slots_free=5,
             country_code='DE'
@@ -787,16 +795,16 @@ class TestSharedFoldersFiles:
 
     def test_SharedFoldersFiles_Request_serialize(self):
         message = SharedFoldersFiles.Request(
-            directory_count=1000,
-            file_count=10000
+            shared_folder_count=1000,
+            shared_file_count=10000
         )
         data = bytes.fromhex('0c00000023000000e803000010270000')
         assert message.serialize() == data
 
     def test_SharedFoldersFiles_Request_deserialize(self):
         message = SharedFoldersFiles.Request(
-            directory_count=1000,
-            file_count=10000
+            shared_folder_count=1000,
+            shared_file_count=10000
         )
         data = bytes.fromhex('0c00000023000000e803000010270000')
         assert SharedFoldersFiles.Request.deserialize(data) == message
@@ -817,10 +825,12 @@ class TestGetUserStats:
     def test_GetUserStats_Response_serialize(self):
         message = GetUserStats.Response(
             username='user0',
-            avg_speed=100000,
-            download_num=1000000,
-            file_count=10000,
-            dir_count=1000
+            user_stats=UserStats(
+                avg_speed=100000,
+                uploads=1000000,
+                shared_file_count=10000,
+                shared_folder_count=1000
+            )
         )
         data = bytes.fromhex('2100000024000000050000007573657230a086010040420f000000000010270000e8030000')
         assert message.serialize() == data
@@ -828,10 +838,12 @@ class TestGetUserStats:
     def test_GetUserStats_Response_deserialize(self):
         message = GetUserStats.Response(
             username='user0',
-            avg_speed=100000,
-            download_num=1000000,
-            file_count=10000,
-            dir_count=1000
+            user_stats=UserStats(
+                avg_speed=100000,
+                uploads=1000000,
+                shared_file_count=10000,
+                shared_folder_count=1000
+            )
         )
         data = bytes.fromhex('2100000024000000050000007573657230a086010040420f000000000010270000e8030000')
         assert GetUserStats.Response.deserialize(data) == message
