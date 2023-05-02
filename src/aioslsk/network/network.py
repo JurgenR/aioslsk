@@ -308,6 +308,7 @@ class Network:
 
     def _remove_connection_future(self, ticket: int, connection_future: asyncio.Future):
         self._expected_connection_futures.pop(ticket)
+        logger.debug(f"removed expected connection with {ticket=}")
 
     def wait_for_server_message(self, message_class, **kwargs) -> ExpectedResponse:
         """Waits for a server message to arrive, the message must match the
