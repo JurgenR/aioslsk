@@ -862,6 +862,16 @@ class TransferManager:
         """
         connection.set_connection_state(PeerConnectionState.TRANSFERING)
         await self.downloading(transfer)
+
+        try:
+            path, _ = os.path.split(transfer.local_path)
+            await self._shares_manager.create_directory(path)
+        except OSError:
+            logger.exception(f"failed to create path {path}")
+            await connection.disconnect(CloseReason.REQUESTED)
+            await self.fail(transfer)
+            return
+
         try:
             async with aiofiles.open(transfer.local_path, 'ab') as handle:
                 await connection.receive_file(
@@ -1065,8 +1075,8 @@ class TransferManager:
 
                 transfer.filesize = message.filesize
                 if transfer.local_path is None:
-                    download_path = self._shares_manager.get_download_path(transfer.remote_path)
-                    transfer.local_path = download_path
+                    download_path, file_path = self._shares_manager.calculate_download_path(transfer.remote_path)
+                    transfer.local_path = os.path.join(download_path, file_path)
 
                 await connection.queue_message(
                     PeerTransferReply.Request(

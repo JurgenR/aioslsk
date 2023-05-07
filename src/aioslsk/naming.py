@@ -20,6 +20,14 @@ class DefaultNamingStrategy(NamingStrategy):
         return local_dir, remote_filename
 
 
+class KeepDirectoryStrategy(NamingStrategy):
+    """Keeps the original directory the remote file was in"""
+
+    def apply(self, remote_dir: str, remote_filename: str, local_dir: str, local_filename: str) -> Tuple[str, str]:
+
+        return os.path.join(local_dir, )
+
+
 class DuplicateNamingStrategy(NamingStrategy):
 
     def should_be_applied(self, local_dir: str, local_filename: str) -> bool:

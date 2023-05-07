@@ -52,6 +52,10 @@ class SearchQuery:
 
         return obj
 
+    def has_inclusion_terms(self) -> bool:
+        """Return whether this query has any valid inclusion terms"""
+        return bool(self.include_terms) or bool(self.wildcard_terms)
+
 
 @dataclass
 class SearchResult:
