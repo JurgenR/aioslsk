@@ -1,7 +1,9 @@
 import itertools
 import logging
+import re
 from typing import List
 
+from .constants import PATH_SEPERATOR_PATTERN
 from .protocol.primitives import Attribute
 
 
@@ -20,6 +22,15 @@ def try_decoding(value: bytes):
         except Exception:
             logger.warning(f"failed to decode string {value!r}")
             raise
+
+
+def normalize_remote_path(path) -> str:
+    return re.sub(PATH_SEPERATOR_PATTERN, '\\\\', path)
+
+
+def split_remote_path(path: str) -> List[str]:
+    """Splits a remote path into parts. Empty parts will be filtered out"""
+    return [part for part in re.split(PATH_SEPERATOR_PATTERN, path) if part]
 
 
 def get_duration(attributes: List[Attribute]):

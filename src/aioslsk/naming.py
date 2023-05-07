@@ -2,6 +2,8 @@ import os
 import re
 from typing import List, Tuple
 
+from .utils import split_remote_path
+
 
 class NamingStrategy:
     NAME = None
@@ -9,15 +11,38 @@ class NamingStrategy:
     def should_be_applied(self, local_dir: str, local_filename: str) -> bool:
         return True
 
-    def apply(self, remote_dir: str, remote_filename: str, local_dir: str, local_filename: str) -> Tuple[str, str]:
+    def apply(self, remote_path: str, local_dir: str, local_filename: str) -> Tuple[str, str]:
         raise NotImplementedError("'apply' should be overwritten by a subclass")
 
 
 class DefaultNamingStrategy(NamingStrategy):
     """The default naming strategy just uses the filename"""
 
-    def apply(self, remote_dir: str, remote_filename: str, local_dir: str, local_filename: str) -> Tuple[str, str]:
-        return local_dir, remote_filename
+    def apply(self, remote_path: str, local_dir: str, local_filename: str) -> Tuple[str, str]:
+        return local_dir, split_remote_path(remote_path)[-1]
+
+
+class KeepDirectoryStrategy(NamingStrategy):
+    """Keeps the original directory the remote file was in. """
+
+    def apply(self, remote_path: str, local_dir: str, local_filename: str) -> Tuple[str, str]:
+        # -1 filename
+        # -2 the containing directory
+        remote_path_parts = split_remote_path(remote_path)
+
+        # Only a filename (not sure if this can occur)
+        if len(remote_path_parts) == 1:
+            return local_dir, local_filename
+
+        # Ignore directories starting with '@@' or Windows drives (C:, D:)
+        contained_dir = remote_path_parts[-2]
+        if contained_dir.startswith('@@'):
+            return local_dir, local_filename
+
+        elif re.match(r'[a-zA-Z]{1}:', contained_dir) is not None:
+            return local_dir, local_filename
+
+        return os.path.join(local_dir, contained_dir), local_filename
 
 
 class DuplicateNamingStrategy(NamingStrategy):
@@ -32,7 +57,7 @@ class NumberDuplicateStrategy(DuplicateNamingStrategy):
     """
     PATTERN = r' \((\d+)\)'
 
-    def apply(self, remote_dir: str, remote_filename: str, local_dir: str, local_filename: str) -> Tuple[str, str]:
+    def apply(self, remote_path: str, local_dir: str, local_filename: str) -> Tuple[str, str]:
         # Find all files which are already numbered
         filename, extension = os.path.splitext(local_filename)
         pattern = re.escape(filename) + self.PATTERN + re.escape(extension)
@@ -53,13 +78,12 @@ class NumberDuplicateStrategy(DuplicateNamingStrategy):
         return local_dir, new_filename
 
 
-def chain_strategies(strategies: List[NamingStrategy], remote_dir: str, remote_filename: str, local_dir: str) -> Tuple[str, str]:
+def chain_strategies(strategies: List[NamingStrategy], remote_path: str, local_dir: str) -> Tuple[str, str]:
     """Chains strategies together to find the target location and filename to
     which the file should be written.
 
     :param strategies: list of strategies to apply
-    :param remote_dir: the remote path
-    :param remote_filename: the remote filename
+    :param remote_path: the full remote path
     :param local_dir: initial local path, this should be the initial download
         directory
     :return: tuple with the path and filename
@@ -68,6 +92,5 @@ def chain_strategies(strategies: List[NamingStrategy], remote_dir: str, remote_f
     filename = None
     for strategy in strategies:
         if strategy.should_be_applied(path, filename):
-            path, filename = strategy.apply(
-                remote_dir, remote_filename, path, filename)
+            path, filename = strategy.apply(remote_path, path, filename)
     return path, filename

@@ -1,23 +1,61 @@
+import os
+import pytest
+import sys
 from unittest.mock import Mock, patch
 
 from aioslsk.naming import (
     chain_strategies,
     DefaultNamingStrategy,
+    KeepDirectoryStrategy,
     NumberDuplicateStrategy,
 )
 
-DEFAULT_LOCAL_PATH = 'C:\\Music\\'
+
+DEFAULT_LOCAL_PATH = 'C:\\Downloads\\' if sys.platform == 'win32' else '/users/Downloads/'
 
 
 class TestDefaultNamingStrategy:
 
     def test_apply(self):
-        remote_path = '@@abcdef\\Music\\'
-        remote_filename = 'myfile.mp3'
+        remote_path = '@@abcdef\\Music\\myfile.mp3'
         local_path = 'C:\\Downloads\\'
 
         strategy = DefaultNamingStrategy()
-        assert local_path, remote_filename == strategy.apply(remote_path, remote_filename, local_path, None)
+        assert local_path, 'myfile.mp3' == strategy.apply(remote_path, local_path, None)
+
+
+class TestKeepDirectoryStrategy:
+
+    def test_apply(self):
+        remote_path = '@@abcdef\\album\\myfile.mp3'
+        local_path = DEFAULT_LOCAL_PATH
+        local_filename = 'myfile.mp3'
+
+        strategy = KeepDirectoryStrategy()
+        actual_local_path, actual_local_filename = strategy.apply(
+            remote_path, local_path, local_filename)
+
+        assert os.path.join(local_path, 'album') == actual_local_path
+        assert local_filename == actual_local_filename
+
+    @pytest.mark.parametrize(
+        "remote_path",
+        [
+            ('myfile.mp3'), # only filename
+            ('@@abcdef\\myfile.mp3'), # only alias
+            ('C:\\myfile.mp3'), # Windows drive
+        ]
+    )
+    def test_apply_ignoredRemotePaths(self, remote_path: str):
+        local_path = DEFAULT_LOCAL_PATH
+        local_filename = 'myfile.mp3'
+
+        strategy = KeepDirectoryStrategy()
+        actual_local_path, actual_local_filename = strategy.apply(
+            remote_path, local_path, local_filename)
+
+        assert local_path == actual_local_path
+        assert local_filename == actual_local_filename
 
 
 class TestNumberDuplicateStrategy:
@@ -29,7 +67,7 @@ class TestNumberDuplicateStrategy:
         listdir_mock = Mock(return_value=[filename])
         with patch('os.listdir', listdir_mock):
             actual_local_path, actual_local_filename = strategy.apply(
-                None, None, DEFAULT_LOCAL_PATH, filename)
+                None, DEFAULT_LOCAL_PATH, filename)
 
         assert DEFAULT_LOCAL_PATH == actual_local_path
         assert 'myfile (1).mp3' == actual_local_filename
@@ -47,7 +85,7 @@ class TestNumberDuplicateStrategy:
         )
         with patch('os.listdir', listdir_mock):
             actual_local_path, actual_local_filename = strategy.apply(
-                None, None, DEFAULT_LOCAL_PATH, filename)
+                None, DEFAULT_LOCAL_PATH, filename)
 
         assert DEFAULT_LOCAL_PATH == actual_local_path
         assert 'myfile (2).mp3' == actual_local_filename
@@ -65,7 +103,7 @@ class TestNumberDuplicateStrategy:
         )
         with patch('os.listdir', listdir_mock):
             actual_local_path, actual_local_filename = strategy.apply(
-                None, None, DEFAULT_LOCAL_PATH, filename)
+                None, DEFAULT_LOCAL_PATH, filename)
 
         assert DEFAULT_LOCAL_PATH == actual_local_path
         assert 'myfile (3).mp3' == actual_local_filename
@@ -74,23 +112,21 @@ class TestNumberDuplicateStrategy:
 class TestFunctions:
 
     def test_chainStrategiesDefault(self):
-        remote_path = '@@abcdef\\Music\\'
-        remote_filename = 'myfile.mp3'
-        local_path = 'C:\\Downloads\\'
+        remote_path = '@@abcdef\\Music\\myfile.mp3'
+        local_path = DEFAULT_LOCAL_PATH
 
         strategies = [
             DefaultNamingStrategy()
         ]
         actual_path, actual_filename = chain_strategies(
-            strategies, remote_path, remote_filename, local_path
+            strategies, remote_path, local_path
         )
-        assert remote_filename == actual_filename
+        assert 'myfile.mp3' == actual_filename
         assert local_path == actual_path
 
     def test_chainStrategiesDefaultWithNumbering(self):
-        remote_path = '@@abcdef\\Music\\'
-        remote_filename = 'myfile.mp3'
-        local_path = 'C:\\Downloads\\'
+        remote_path = '@@abcdef\\Music\\myfile.mp3'
+        local_path = DEFAULT_LOCAL_PATH
 
         expected_filename = 'myfile (1).mp3'
 
@@ -99,9 +135,9 @@ class TestFunctions:
             NumberDuplicateStrategy()
         ]
 
-        with patch('os.listdir', return_value=[remote_filename]), patch('os.path.exists', return_value=True):
+        with patch('os.listdir', return_value=['myfile.mp3']), patch('os.path.exists', return_value=True):
             actual_path, actual_filename = chain_strategies(
-                strategies, remote_path, remote_filename, local_path
+                strategies, remote_path, local_path
             )
         assert expected_filename == actual_filename
         assert local_path == actual_path
