@@ -2,6 +2,8 @@ from aioslsk.protocol.primitives import Attribute
 from aioslsk.utils import (
     get_attribute_string,
     get_duration,
+    normalize_remote_path,
+    split_remote_path,
     ticket_generator,
     try_decoding,
 )
@@ -57,3 +59,29 @@ class TestUtils:
     def test_whenTryDecoding_unknownEncoding_shouldRaise(self):
         with pytest.raises(Exception):
             try_decoding(bytes([0x8f]))
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("aaa/bbb/ccc", "aaa\\bbb\\ccc"),
+            ("aaa\\bbb/ccc", "aaa\\bbb\\ccc"),
+            ("aaa\\\\bbb/ccc", "aaa\\bbb\\ccc"),
+            ("aaa\\bbb//ccc", "aaa\\bbb\\ccc"),
+        ]
+    )
+    def test_normalizeRemotePath(self, value: str, expected: str):
+        assert expected == normalize_remote_path(value)
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            ("aaa/bbb/ccc"),
+            ("aaa\\bbb\\ccc"),
+            ("aaa\\\\bbb/ccc"),
+            ("aaa\\bbb//ccc"),
+            ("aaa/bbb/ccc/"),
+            ("aaa\\bbb\\ccc\\"),
+        ]
+    )
+    def test_splitRemotePath(self, value: str):
+        assert ['aaa', 'bbb', 'ccc'] == split_remote_path(value)

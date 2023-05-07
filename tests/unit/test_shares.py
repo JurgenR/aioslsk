@@ -80,7 +80,7 @@ class TestSharedDirectory:
         item = SharedItem(shared_directory, 'author', 'song.mp3', 1.0)
         shared_directory.items = {item}
 
-        remote_path = os.path.join('@@abcdef', 'author', 'song.mp3')
+        remote_path = '@@abcdef\\author\\song.mp3'
         assert item == shared_directory.get_item_by_remote_path(remote_path)
 
     def test_getItemByRemotePath_itemNotExists_shouldRaise(self):

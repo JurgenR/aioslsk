@@ -244,7 +244,7 @@ class Transfer:
 
     def set_state(self, state: TransferState, force: bool = False):
         """Sets the current state for the transfer. This will do nothing in case
-        the transfer is already in that state
+        the transfer is already in that state.
 
         :param state: the new state
         :param force: only used for the QUEUED state, normally we don't allow
@@ -329,8 +329,8 @@ class Transfer:
     def get_speed(self) -> float:
         """Retrieve the speed of the transfer
 
-        :return: Zero if the transfer has not yet begun. The current speed if
-            the transfer is ongoing. The transfer speed if the transfer was
+        :return: 0 if the transfer has not yet begun. The current speed if the
+            transfer is ongoing. The transfer speed if the transfer was
             complete. Bytes per second
         """
         # Transfer hasn't begun
@@ -643,11 +643,6 @@ class TransferManager:
         downloads/uploads and starts them up in case there are free slots
         available
         """
-        for transfer in self._transfers:
-            if transfer.state == TransferState.QUEUED and transfer.direction == TransferDirection.DOWNLOAD:
-                # import pdb; pdb.set_trace()
-                pass
-
         downloads, uploads = await self._get_queued_transfers()
         free_upload_slots = self.get_free_upload_slots()
 
@@ -658,7 +653,7 @@ class TransferManager:
                     self._queue_remotely(download),
                     name=f'queue-remotely-{task_counter()}'
                 )
-                download._current_task.add_done_callback(transfer._queue_remotely_task_complete)
+                download._current_task.add_done_callback(download._queue_remotely_task_complete)
 
         for upload in uploads[:free_upload_slots]:
             if not upload._current_task:
@@ -867,6 +862,16 @@ class TransferManager:
         """
         connection.set_connection_state(PeerConnectionState.TRANSFERING)
         await self.downloading(transfer)
+
+        try:
+            path, _ = os.path.split(transfer.local_path)
+            await self._shares_manager.create_directory(path)
+        except OSError:
+            logger.exception(f"failed to create path {path}")
+            await connection.disconnect(CloseReason.REQUESTED)
+            await self.fail(transfer)
+            return
+
         try:
             async with aiofiles.open(transfer.local_path, 'ab') as handle:
                 await connection.receive_file(
@@ -1070,8 +1075,8 @@ class TransferManager:
 
                 transfer.filesize = message.filesize
                 if transfer.local_path is None:
-                    download_path = self._shares_manager.get_download_path(transfer.remote_path)
-                    transfer.local_path = download_path
+                    download_path, file_path = self._shares_manager.calculate_download_path(transfer.remote_path)
+                    transfer.local_path = os.path.join(download_path, file_path)
 
                 await connection.queue_message(
                     PeerTransferReply.Request(

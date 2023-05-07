@@ -1,3 +1,5 @@
+import re
+
 DEFAULT_LISTENING_HOST: str = '0.0.0.0'
 PEER_CONNECT_TIMEOUT: float = 10
 """Direct connection timeout"""
@@ -15,3 +17,5 @@ SERVER_LOGIN_TIMEOUT: float = 30
 SERVER_PING_INTERVAL: float = 5 * 60
 SERVER_RESPONSE_TIMEOUT: float = 30
 DISCONNECT_TIMEOUT: float = 10
+PATH_SEPERATOR_PATTERN = re.compile(r"[\\/]+")
+"""Pattern for splitting/normalizing remote paths"""

@@ -1,3 +1,4 @@
+from aiofiles import os as asyncos
 import asyncio
 from concurrent.futures import Future
 from dataclasses import dataclass, field
@@ -10,7 +11,7 @@ import re
 import shelve
 import sys
 import time
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Set, Tuple, Union
 import uuid
 from weakref import WeakSet
 
@@ -23,6 +24,7 @@ from .naming import (
 from .protocol.primitives import Attribute, DirectoryData, FileData
 from .search import SearchQuery
 from .settings import Settings
+from .utils import normalize_remote_path, split_remote_path
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +63,16 @@ class SharedDirectory:
     alias: str
     items: Set['SharedItem'] = field(default_factory=set, init=False, compare=False, hash=False, repr=False)
 
-    def get_remote_path(self):
+    def get_remote_path(self) -> str:
         return '@@' + self.alias
 
-    def get_item_by_remote_path(self, remote_path: str):
+    def get_item_by_remote_path(self, remote_path: str) -> 'SharedItem':
+        """Returns the `SharedItem` instance belonging to the passed
+        `remote_path`
+
+        :raise FileNotFoundError: when the item cannot be found in the set of
+            `items`
+        """
         for item in self.items:
             if item.get_remote_path() == remote_path:
                 return item
@@ -81,19 +89,21 @@ class SharedItem:
     modified: float
     attributes: bytes = field(default=None, init=False, compare=False, hash=False)
 
-    def get_absolute_path(self):
+    def get_absolute_path(self) -> str:
+        """Returns the absolute path of the shared item"""
         return os.path.join(
             self.shared_directory.absolute_path, self.subdir, self.filename)
 
-    def get_remote_path(self):
-        return '@@' + os.path.join(
-            self.shared_directory.alias, self.subdir, self.filename)
+    def get_remote_path(self) -> str:
+        return normalize_remote_path(
+            '@@' + os.path.join(self.shared_directory.alias, self.subdir, self.filename))
 
-    def get_remote_directory_path(self):
-        return '@@' + os.path.join(
-            self.shared_directory.alias, self.subdir)
+    def get_remote_directory_path(self) -> str:
+        return normalize_remote_path(
+            '@@' + os.path.join(self.shared_directory.alias, self.subdir))
 
-    def get_query_path(self):
+    def get_query_path(self) -> str:
+        """Returns the query-able part of the `SharedItem`"""
         return os.path.join(self.subdir, self.filename)
 
     def __getstate__(self):
@@ -103,10 +113,9 @@ class SharedItem:
 
 
 def scan_directory(shared_directory: SharedDirectory) -> Set[SharedItem]:
-    """Performs the scanning of a directory
+    """Scans the directory for items to share
 
-    :param shared_dir: absolute path to the directory
-    :param alias: directory alias, used when building the SharedItem objects
+    :param shared_directory: `SharedDirectory` instance
     """
     shared_items = set()
     for directory, _, files in os.walk(shared_directory.absolute_path):
@@ -130,7 +139,10 @@ def scan_directory(shared_directory: SharedDirectory) -> Set[SharedItem]:
 
 
 def extract_attributes(filepath: str) -> List[Tuple[int, int]]:
-    """Attempts to extract attributes from the file at `filepath`"""
+    """Attempts to extract attributes from the file at `filepath`. If there was
+    an error attempting to extract the attributes this method will log a warning
+    and return an empty list of attributes
+    """
     attributes = []
     try:
         mutagen_file = mutagen.File(filepath)
@@ -206,12 +218,17 @@ class SharesManager:
 
     def __init__(self, settings: Settings, storage: SharesStorage):
         self._settings: Settings = settings
-        self.term_map: Dict[str, Set[SharedItem]] = {}
+        self._term_map: Dict[str, Set[SharedItem]] = {}
         self.shared_directories: List[SharedDirectory] = list()
         self._directory_aliases: Dict[str, str] = {}
 
         self.storage: SharesStorage = storage
         self.executor = None
+
+        self.naming_strategies = [
+            DefaultNamingStrategy(),
+            NumberDuplicateStrategy()
+        ]
 
     def generate_alias(self, path: str, offset: int = 0) -> str:
         """Generates a directory alias for the given path, this method will be
@@ -265,26 +282,24 @@ class SharesManager:
         self.storage.store_index(self.shared_directories)
         logger.info(f"successfully wrote {len(self.shared_directories)} directories to storage")
 
-    def create_download_directory(self) -> str:
-        """Ensures the download directory defined in the settings by key
-        `sharing.download` exists
-
-        :return: absolute path of the download directory
-        """
+    def get_download_directory(self) -> str:
+        """Gets the absolute path the to download directory"""
         download_dir = self._settings.get('sharing.download')
-        download_dir_abs = os.path.abspath(download_dir)
+        return os.path.abspath(download_dir)
 
-        if not os.path.exists(download_dir_abs):
-            logger.info(f"created download directory : {download_dir_abs}")
-            os.makedirs(download_dir_abs, exist_ok=True)
+    async def create_directory(self, absolute_path: str) -> str:
+        """Ensures the passed directory exists"""
+        if not await asyncos.path.exists(absolute_path):
+            logger.info(f"creating directory : {absolute_path}")
+            await asyncos.makedirs(absolute_path, exist_ok=True)
 
-        return download_dir_abs
+        return absolute_path
 
     def build_term_map(self, shared_directory: SharedDirectory):
         """Builds a list of valid terms for the given shared directory"""
         for item in shared_directory.items:
             self._add_item_to_term_map(item)
-        logger.debug(f"term map contains {len(self.term_map)} terms")
+        logger.debug(f"term map contains {len(self._term_map)} terms")
 
     def _add_item_to_term_map(self, item: SharedItem):
         path = (item.subdir + "/" + item.filename).lower()
@@ -293,9 +308,9 @@ class SharesManager:
             if not term:
                 continue
 
-            if term not in self.term_map:
-                self.term_map[term] = WeakSet()
-            self.term_map[term].add(item)
+            if term not in self._term_map:
+                self._term_map[term] = WeakSet()
+            self._term_map[term].add(item)
 
     def get_shared_item(self, remote_path: str) -> SharedItem:
         """Gets a shared item from the cache based on the given file path. If
@@ -402,9 +417,6 @@ class SharesManager:
             # set
             shared_directory.items -= (shared_directory.items ^ shared_items)
 
-    def extract_attributes(self, shared_item: SharedItem) -> List[Tuple[int, int]]:
-        return extract_attributes(shared_item.get_absolute_path())
-
     def _extract_attributes_callback(self, shared_item: SharedItem, future: Future):
         try:
             shared_item.attributes = future.result()
@@ -414,13 +426,17 @@ class SharesManager:
     def get_filesize(self, shared_item: SharedItem) -> int:
         return os.path.getsize(shared_item.get_absolute_path())
 
-    def query(self, query: str) -> List[SharedItem]:
+    def query(self, query: Union[str, SearchQuery]) -> List[SharedItem]:
         """Performs a query on the `shared_directories` returning the matching
-        items
+        items. This method makes a first p
         """
-        search_query = SearchQuery.parse(query)
+        if not isinstance(query, SearchQuery):
+            search_query = SearchQuery.parse(query)
+        else:
+            search_query = query
+
         # Ignore if no valid include or wildcard terms are given
-        if not (search_query.include_terms + search_query.wildcard_terms):
+        if not search_query.has_inclusion_terms():
             return []
 
         # First round using the term map
@@ -431,7 +447,7 @@ class SharesManager:
                 if not subterm:
                     continue
 
-                if subterm not in self.term_map:  # Optimization
+                if subterm not in self._term_map:  # Optimization
                     return []
 
                 include_terms.append(subterm)
@@ -444,7 +460,7 @@ class SharesManager:
 
                 if idx == 0:
                     matching_terms = [
-                        map_term for map_term in self.term_map.keys()
+                        map_term for map_term in self._term_map.keys()
                         if map_term.endswith(subterm)
                     ]
 
@@ -453,16 +469,16 @@ class SharesManager:
 
                     include_terms.extend(matching_terms)
                 else:
-                    if subterm not in self.term_map:  # Optimization
+                    if subterm not in self._term_map:  # Optimization
                         return []
 
                     include_terms.append(subterm)
 
-        found_items = set(self.term_map[include_terms[0]])
+        found_items = set(self._term_map[include_terms[0]])
         for include_term in include_terms:
-            found_items &= set(self.term_map[include_term])
+            found_items &= set(self._term_map[include_term])
 
-        # Regular expressions using the remnants
+        # Regular expressions on the remnants
 
         for include_term in search_query.include_terms:
             to_remove = set()
@@ -504,25 +520,19 @@ class SharesManager:
         )
         return dir_count, file_count
 
-    def get_download_path(self, remote_path: str) -> str:
-        """Gets the local download path for a remote path returned by another
-        peer. This method will attempt to create the download directory
+    def calculate_download_path(self, remote_path: str) -> Tuple[str, str]:
+        """Calculates the local download path for a remote path returned by
+        another peer.
 
+        :return: tuple of the directory and file name
         """
-        download_dir = self.create_download_directory()
+        download_dir = self.get_download_directory()
 
-        remote_dir, remote_filename = os.path.split(remote_path)
-        local_path, local_filename = chain_strategies(
-            [
-                DefaultNamingStrategy(),
-                NumberDuplicateStrategy()
-            ],
-            remote_dir,
-            remote_filename,
+        return chain_strategies(
+            self.naming_strategies,
+            remote_path,
             download_dir
         )
-
-        return os.path.join(local_path, local_filename)
 
     def create_shares_reply(self) -> List[DirectoryData]:
         """Creates a complete list of the currently shared items as a reply to
@@ -587,7 +597,7 @@ class SharesManager:
         """
         file_path = shared_item.get_absolute_path()
         file_size = os.path.getsize(file_path)
-        file_ext = os.path.splitext(shared_item.filename)[-1]
+        file_ext = os.path.splitext(shared_item.filename)[-1][1:]
         if shared_item.attributes:
             attributes = [Attribute(*attr) for attr in shared_item.attributes]
         else:
