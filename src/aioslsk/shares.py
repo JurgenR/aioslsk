@@ -6,7 +6,6 @@ from functools import partial
 import logging
 import mutagen
 from mutagen.mp3 import BitrateMode
-import ntpath
 import os
 import re
 import shelve
@@ -25,7 +24,7 @@ from .naming import (
 from .protocol.primitives import Attribute, DirectoryData, FileData
 from .search import SearchQuery
 from .settings import Settings
-from .utils import normalize_remote_path
+from .utils import normalize_remote_path, split_remote_path
 
 logger = logging.getLogger(__name__)
 
@@ -529,11 +528,9 @@ class SharesManager:
         """
         download_dir = self.get_download_directory()
 
-        remote_dir, remote_filename = os.path.split(remote_path)
         return chain_strategies(
             self.naming_strategies,
-            remote_dir,
-            remote_filename,
+            remote_path,
             download_dir
         )
 
