@@ -1,4 +1,4 @@
-import aiofiles
+from aiofiles import os as asyncos
 import asyncio
 from concurrent.futures import Future
 from dataclasses import dataclass, field
@@ -289,9 +289,9 @@ class SharesManager:
 
     async def create_directory(self, absolute_path: str) -> str:
         """Ensures the passed directory exists"""
-        if not await aiofiles.os.path.exists(absolute_path):
+        if not await asyncos.path.exists(absolute_path):
             logger.info(f"creating directory : {absolute_path}")
-            await aiofiles.os.makedirs(absolute_path, exist_ok=True)
+            await asyncos.makedirs(absolute_path, exist_ok=True)
 
         return absolute_path
 
