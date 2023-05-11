@@ -29,10 +29,17 @@ DEFAULT_SETTINGS = {
         }
     },
     'network': {
-        'server_hostname': 'server.slsk.org',
-        'server_port': 2234,
-        'listening_port': 10000,
-        'use_upnp': False,
+        'server': {
+            'hostname': 'server.slsk.org',
+            'port': 2234
+        },
+        'listening': {
+            'port': 10000,
+            'obfuscated_port': 10001
+        },
+        'upnp': {
+            'enabled': False
+        },
         'peer': {
             'obfuscate': False
         }
@@ -54,12 +61,9 @@ class _BaseTestComponentNetwork:
         network._upnp = Mock()
 
         # Mock server object
-        network.server = ServerConnection('server.slsk.org', 2234, network)
+        network.server_connection = ServerConnection('server.slsk.org', 2234, network)
 
         return network
-
-    def _validate_server_message(self, network, message_type):
-        assert isinstance(network.server._messages[0].message, message_type)
 
     def _validate_successful_connection(
             self, network, connection, init_message_type=PeerInit):

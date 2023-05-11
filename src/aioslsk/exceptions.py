@@ -42,6 +42,10 @@ class ConnectionFailedError(NetworkError):
     pass
 
 
+class ListeningConnectionFailedError(NetworkError):
+    pass
+
+
 class ConnectionReadError(NetworkError):
     pass
 

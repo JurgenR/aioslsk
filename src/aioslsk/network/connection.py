@@ -138,13 +138,18 @@ class ListeningConnection(Connection):
             f"open {self.hostname}:{self.port} : listening connection")
         await self.set_state(ConnectionState.CONNECTING)
 
-        self._server = await asyncio.start_server(
-            self.accept,
-            self.hostname,
-            self.port,
-            family=socket.AF_INET,
-            start_serving=True
-        )
+        try:
+            self._server = await asyncio.start_server(
+                self.accept,
+                self.hostname,
+                self.port,
+                family=socket.AF_INET,
+                start_serving=True
+            )
+
+        except OSError:
+            await self.disconnect(CloseReason.CONNECT_FAILED)
+            raise ConnectionFailedError(f"{self.hostname}:{self.port} : failed to connect")
 
         await self.set_state(ConnectionState.CONNECTED)
 

@@ -21,10 +21,17 @@ DEFAULT_SETTINGS = {
         }
     },
     'network': {
-        'server_hostname': 'server.slsk.org',
-        'server_port': 2234,
-        'listening_port': 10000,
-        'use_upnp': False,
+        'server': {
+            'hostname': 'server.slsk.org',
+            'port': 2234
+        },
+        'listening': {
+            'port': 10000,
+            'obfuscated_port': 10001
+        },
+        'upnp': {
+            'enabled': False
+        },
         'peer': {
             'obfuscate': False
         }
@@ -41,7 +48,7 @@ class TestNetworkManager:
         settings = settings or DEFAULT_SETTINGS
         state = State()
         network = Network(state, Settings(settings), InternalEventBus(), Event())
-        network.server = Mock()
+        network.server_connection = Mock()
 
         return network
 

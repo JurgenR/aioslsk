@@ -20,7 +20,9 @@ from .connection import (
     ServerConnection,
 )
 from ..exceptions import (
+    ConnectionFailedError,
     ConnectionReadError,
+    ListeningConnectionFailedError,
     MessageDeserializationError,
     NetworkError,
     PeerConnectionError,
@@ -94,24 +96,24 @@ class Network:
         self._expected_connection_futures: Dict[int, asyncio.Future] = {}
 
         # List of connections
-        self.server: ServerConnection = ServerConnection(
-            self._settings.get('network.server_hostname'),
-            self._settings.get('network.server_port'),
+        self.server_connection: ServerConnection = ServerConnection(
+            self._settings.get('network.server.hostname'),
+            self._settings.get('network.server.port'),
             self
         )
-        self.listening_connections: List[ListeningConnection] = [
+        self.listening_connections: Tuple[ListeningConnection] = (
             ListeningConnection(
                 DEFAULT_LISTENING_HOST,
-                self._settings.get('network.listening_port'),
+                self._settings.get('network.listening.port'),
                 self
-            ),
+            ) if self._settings.get('network.listening.port') else None,
             ListeningConnection(
                 DEFAULT_LISTENING_HOST,
-                self._settings.get('network.listening_port') + 1,
+                self._settings.get('network.listening.obfuscated_port'),
                 self,
                 obfuscated=True
-            )
-        ]
+            ) if self._settings.get('network.listening.obfuscated_port') else None
+        )
         self.peer_connections: List[PeerConnection] = []
 
         self.MESSAGE_MAP = build_message_map(self)
@@ -136,14 +138,27 @@ class Network:
         self._upnp_task: asyncio.Task = None
 
     async def initialize(self):
-        """Initializes the server and listening connections"""
+        """Initializes the server and listening connections. This method will
+        attempt to connect both listening ports (if configured) but will raise
+        an exception in case no listening connection can be made
+
+        :raise ListeningConnectionFailedError: if none of the listening
+            connections succeeded to connect
+        """
         logger.info("initializing network")
 
-        tasks = [asyncio.create_task(self.connect_server())]
-        for listening_connection in self.listening_connections:
-            tasks.append(asyncio.create_task(listening_connection.connect()))
+        results = await asyncio.gather(
+            *[
+                listening_connection.connect()
+                for listening_connection in self.listening_connections
+                if listening_connection
+            ],
+            return_exceptions=True
+        )
+        if all(isinstance(res, ConnectionFailedError) for res in results):
+            raise ListeningConnectionFailedError("failed to open any listening ports")
 
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await self.connect_server()
 
         if self._log_connections_task is None:
             self._log_connections_task = asyncio.create_task(
@@ -152,19 +167,36 @@ class Network:
             )
 
     async def connect_server(self):
-        await self.server.connect()
+        await self.server_connection.connect()
 
     async def disconnect(self):
         """Disconnects all current connections"""
         self._cancel_all_tasks()
 
-        connections = [self.server, ] + self.listening_connections + self.peer_connections
+        connections = [self.server_connection, ] + self.peer_connections
+        connections += [conn for conn in self.listening_connections if conn]
         logger.info(f"waiting for network disconnect : {len(connections)} connections")
         await asyncio.gather(
             *[conn.disconnect(CloseReason.REQUESTED) for conn in connections],
             return_exceptions=True
         )
         logger.info("network disconnected")
+
+    def get_listening_ports(self) -> Tuple[int, int]:
+        """Gets the currently connected listening ports
+
+        :return: `tuple` with 2 elements: the non-obfuscated- and obfuscated
+            ports. If either is not connected or not configured `0` will be
+            returned for this port
+        """
+        def get_port(conn: ListeningConnection):
+            if conn and conn.state == ConnectionState.CONNECTED:
+                return conn.port
+            return 0
+
+        nonobf_port = get_port(self.listening_connections[0])
+        obf_port = get_port(self.listening_connections[1])
+        return nonobf_port, obf_port
 
     async def _log_connections_job(self):
         while True:
@@ -175,9 +207,8 @@ class Network:
 
     async def map_upnp_ports(self):
         """Maps the listening ports using UPNP on the gateway"""
-        listen_port = self._settings.get('network.listening_port')
-        ports = [listen_port, listen_port + 1]
-        ip_address = self.server.get_connecting_ip()
+        ports = [port for port in self.get_listening_ports() if port]
+        ip_address = self.server_connection.get_connecting_ip()
 
         devices = await self._upnp.search_igd_devices(ip_address)
         for port in ports:
@@ -278,7 +309,7 @@ class Network:
         :raise PeerConnectionError: if no IP address or no valid ports were
             returned
         """
-        await self.server.send_message(GetPeerAddress.Request(username))
+        await self.server_connection.send_message(GetPeerAddress.Request(username))
         _, response = await self.wait_for_server_message(
             GetPeerAddress.Response, username=username)
 
@@ -421,7 +452,7 @@ class Network:
         :raise PeerConnectionError: in case timeout was reached or we received a
             `CannotConnect` message from the server containing the `ticket`
         """
-        await self.server.send_message(ConnectToPeer.Request(ticket, username, typ))
+        await self.server_connection.send_message(ConnectToPeer.Request(ticket, username, typ))
 
         # Wait for either a established connection with PeerPierceFirewall or a
         # CannotConnect from the server
@@ -487,7 +518,7 @@ class Network:
             )
 
         except NetworkError:
-            await self.server.queue_message(
+            await self.server_connection.queue_message(
                 CannotConnect.Request(
                     ticket=message.ticket,
                     username=message.username
@@ -524,11 +555,11 @@ class Network:
 
         :param messages: list of messages to queue
         """
-        return self.server.queue_messages(*messages)
+        return self.server_connection.queue_messages(*messages)
 
     async def send_server_messages(self, *messages: List[Union[bytes, MessageDataclass]]):
         results = await asyncio.gather(
-            *[self.server.send_message(message) for message in messages],
+            *[self.server_connection.send_message(message) for message in messages],
             return_exceptions=True
         )
         return list(zip(messages, results))
