@@ -100,12 +100,13 @@ class TestNetworkManager:
         settings = copy.deepcopy(DEFAULT_SETTINGS)
         settings['network']['listening']['error_mode'] = 'all'
         network = self._create_network(settings)
+        network.listening_connections[0].disconnect = AsyncMock()
+        network.listening_connections[1].disconnect = AsyncMock()
 
         network.listening_connections[0].connect = AsyncMock(side_effect=ConnectionFailedError)
         network.listening_connections[1].connect = AsyncMock(side_effect=ConnectionFailedError)
 
-        with pytest.raises(ListeningConnectionFailedError):
-            await network.connect_listening_ports()
+        await self.verify_error_and_disconnect(network)
 
     @pytest.mark.asyncio
     async def test_connectListeningPorts_errorModeAny(self):
@@ -115,9 +116,10 @@ class TestNetworkManager:
 
         network.listening_connections[0].connect = AsyncMock()
         network.listening_connections[1].connect = AsyncMock(side_effect=ConnectionFailedError)
+        network.listening_connections[0].disconnect = AsyncMock()
+        network.listening_connections[1].disconnect = AsyncMock()
 
-        with pytest.raises(ListeningConnectionFailedError):
-            await network.connect_listening_ports()
+        await self.verify_error_and_disconnect(network)
 
     @pytest.mark.asyncio
     async def test_connectListeningPorts_errorModeClear(self):
@@ -127,6 +129,14 @@ class TestNetworkManager:
 
         network.listening_connections[0].connect = AsyncMock(side_effect=ConnectionFailedError)
         network.listening_connections[1].connect = AsyncMock()
+        network.listening_connections[0].disconnect = AsyncMock()
+        network.listening_connections[1].disconnect = AsyncMock()
 
+        await self.verify_error_and_disconnect(network)
+
+    async def verify_error_and_disconnect(self, network: Network):
         with pytest.raises(ListeningConnectionFailedError):
             await network.connect_listening_ports()
+
+        network.listening_connections[0].disconnect.assert_awaited_once()
+        network.listening_connections[1].disconnect.assert_awaited_once()

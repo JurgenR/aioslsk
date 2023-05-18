@@ -185,15 +185,27 @@ class Network:
 
         if error_mode == ListeningConnectionErrorMode.ALL:
             if all(isinstance(res, ConnectionFailedError) for res in results):
+                await self.disconnect_listening_ports()
                 raise ListeningConnectionFailedError("failed to open any listening ports")
 
         elif error_mode == ListeningConnectionErrorMode.ANY:
             if any(isinstance(res, ConnectionFailedError) for res in results):
+                await self.disconnect_listening_ports()
                 raise ListeningConnectionFailedError("one or more listening ports failed to connect")
 
         elif error_mode == ListeningConnectionErrorMode.CLEAR:
             if not self.listening_connections[0] or self.listening_connections[0].state != ConnectionState.CONNECTED:
+                await self.disconnect_listening_ports()
                 raise ListeningConnectionFailedError("failed to connect non-obfuscated listening port")
+
+    async def disconnect_listening_ports(self):
+        await asyncio.gather(
+            *[
+                listening_connection.disconnect()
+                for listening_connection in self.listening_connections
+                if listening_connection
+            ]
+        )
 
     async def connect_server(self):
         await self.server_connection.connect()
