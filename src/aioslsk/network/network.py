@@ -168,7 +168,8 @@ class Network:
     async def connect_listening_ports(self):
         """This method will attempt to connect both listening ports (if
         configured) but will raise an exception depending on the settings
-        `network.listening.error_mode` setting
+        `network.listening.error_mode` setting. All other listening connections
+        will be disconnected before raising the error
 
         :raise ListeningConnectionFailedError: if an error occurred connecting
             the listening ports
@@ -185,20 +186,20 @@ class Network:
 
         if error_mode == ListeningConnectionErrorMode.ALL:
             if all(isinstance(res, ConnectionFailedError) for res in results):
-                await self.disconnect_listening_ports()
+                await self.disconnect_listening_connections()
                 raise ListeningConnectionFailedError("failed to open any listening ports")
 
         elif error_mode == ListeningConnectionErrorMode.ANY:
             if any(isinstance(res, ConnectionFailedError) for res in results):
-                await self.disconnect_listening_ports()
+                await self.disconnect_listening_connections()
                 raise ListeningConnectionFailedError("one or more listening ports failed to connect")
 
         elif error_mode == ListeningConnectionErrorMode.CLEAR:
             if not self.listening_connections[0] or self.listening_connections[0].state != ConnectionState.CONNECTED:
-                await self.disconnect_listening_ports()
+                await self.disconnect_listening_connections()
                 raise ListeningConnectionFailedError("failed to connect non-obfuscated listening port")
 
-    async def disconnect_listening_ports(self):
+    async def disconnect_listening_connections(self):
         await asyncio.gather(
             *[
                 listening_connection.disconnect()
