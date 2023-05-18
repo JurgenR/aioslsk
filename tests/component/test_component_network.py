@@ -34,6 +34,7 @@ DEFAULT_SETTINGS = {
             'port': 2234
         },
         'listening': {
+            'error_mode': 'all',
             'port': 10000,
             'obfuscated_port': 10001
         },

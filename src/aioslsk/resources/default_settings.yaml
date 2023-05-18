@@ -4,6 +4,7 @@ network:
     hostname: server.slsknet.org
     port: 2416
   listening:
+    error_mode: 'clear'
     port: 61000
     obfuscated_port: 61001
   upnp:

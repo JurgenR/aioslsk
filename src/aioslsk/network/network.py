@@ -1,9 +1,9 @@
 from __future__ import annotations
 import asyncio
+import enum
 from functools import partial
 import logging
 from typing import Any, Dict, List, Union, Tuple
-
 
 from ..constants import (
     DEFAULT_LISTENING_HOST,
@@ -51,6 +51,20 @@ from ..utils import task_counter, ticket_generator
 
 
 logger = logging.getLogger(__name__)
+
+
+class ListeningConnectionErrorMode(enum.Enum):
+    """Error mode for listening connections. During initialization of the
+    network and
+    """
+    ALL = 'all'
+    """Raise an exception if all listening connections failed to connect"""
+    ANY = 'any'
+    """Raise an exception if any listening connections failed to connect"""
+    CLEAR = 'clear'
+    """Raise an exception only if the non-obfuscated connection failed to
+    connect
+    """
 
 
 class ExpectedResponse(asyncio.Future):
@@ -105,7 +119,8 @@ class Network:
             ListeningConnection(
                 DEFAULT_LISTENING_HOST,
                 self._settings.get('network.listening.port'),
-                self
+                self,
+                obfuscated=False
             ) if self._settings.get('network.listening.port') else None,
             ListeningConnection(
                 DEFAULT_LISTENING_HOST,
@@ -138,15 +153,27 @@ class Network:
         self._upnp_task: asyncio.Task = None
 
     async def initialize(self):
-        """Initializes the server and listening connections. This method will
-        attempt to connect both listening ports (if configured) but will raise
-        an exception in case no listening connection can be made
-
-        :raise ListeningConnectionFailedError: if none of the listening
-            connections succeeded to connect
-        """
+        """Initializes the server and listening connections"""
         logger.info("initializing network")
 
+        await self.connect_listening_ports()
+        await self.connect_server()
+
+        if self._log_connections_task is None:
+            self._log_connections_task = asyncio.create_task(
+                self._log_connections_job(),
+                name=f'log-connections-{task_counter()}'
+            )
+
+    async def connect_listening_ports(self):
+        """This method will attempt to connect both listening ports (if
+        configured) but will raise an exception depending on the settings
+        `network.listening.error_mode` setting
+
+        :raise ListeningConnectionFailedError: if an error occurred connecting
+            the listening ports
+        """
+        error_mode = ListeningConnectionErrorMode(self._settings.get('network.listening.error_mode'))
         results = await asyncio.gather(
             *[
                 listening_connection.connect()
@@ -155,16 +182,18 @@ class Network:
             ],
             return_exceptions=True
         )
-        if all(isinstance(res, ConnectionFailedError) for res in results):
-            raise ListeningConnectionFailedError("failed to open any listening ports")
 
-        await self.connect_server()
+        if error_mode == ListeningConnectionErrorMode.ALL:
+            if all(isinstance(res, ConnectionFailedError) for res in results):
+                raise ListeningConnectionFailedError("failed to open any listening ports")
 
-        if self._log_connections_task is None:
-            self._log_connections_task = asyncio.create_task(
-                self._log_connections_job(),
-                name=f'log-connections-{task_counter()}'
-            )
+        elif error_mode == ListeningConnectionErrorMode.ANY:
+            if any(isinstance(res, ConnectionFailedError) for res in results):
+                raise ListeningConnectionFailedError("one or more listening ports failed to connect")
+
+        elif error_mode == ListeningConnectionErrorMode.CLEAR:
+            if not self.listening_connections[0] or self.listening_connections[0].state != ConnectionState.CONNECTED:
+                raise ListeningConnectionFailedError("failed to connect non-obfuscated listening port")
 
     async def connect_server(self):
         await self.server_connection.connect()
@@ -682,8 +711,9 @@ class Network:
 
     # Settings listeners
 
-    def _on_upload_speed_changed(self, limit_kbps: int):
-        """Called when upload speed is changed in the settings
+    def set_upload_speed_limit(self, limit_kbps: int):
+        """Modifies the upload speed limit. Passing 0 will set the upload speed
+        to unlimited
 
         :param limit_kbps: the new upload limit
         """
@@ -696,8 +726,9 @@ class Network:
             new_limiter.last_refill = self.upload_rate_limiter.last_refill
             self.upload_rate_limiter = new_limiter
 
-    def _on_download_speed_changed(self, limit_kbps: int):
-        """Called when download speed is changed in the settings
+    def set_download_speed_limit(self, limit_kbps: int):
+        """Modifies the download speed limit. Passing 0 will set the download
+        speed to unlimited
 
         :param limit_kbps: the new download limit
         """
@@ -709,6 +740,14 @@ class Network:
             new_limiter.add_tokens(self.download_rate_limiter.bucket)
             new_limiter.last_refill = self.download_rate_limiter.last_refill
             self.download_rate_limiter = new_limiter
+
+    def _on_upload_speed_changed(self, limit_kbps: int):
+        """Called when upload speed is changed in the settings"""
+        self.set_upload_speed_limit(limit_kbps=limit_kbps)
+
+    def _on_download_speed_changed(self, limit_kbps: int):
+        """Called when download speed is changed in the settings"""
+        self.set_download_speed_limit(limit_kbps=limit_kbps)
 
     # Task callbacks
     def _handle_connect_to_peer_callback(self, message: ConnectToPeer.Response, task: asyncio.Task):
