@@ -1,8 +1,12 @@
 ---
 network:
-  server_hostname: server.slsknet.org
-  server_port: 2416
-  listening_port: 61000
+  server:
+    hostname: server.slsknet.org
+    port: 2416
+  listening:
+    error_mode: 'clear'
+    port: 61000
+    obfuscated_port: 61001
   upnp:
     enabled: true
     lease_duration: 0

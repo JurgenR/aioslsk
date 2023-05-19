@@ -131,7 +131,7 @@ class ServerManager:
 
     @property
     def connection_state(self) -> ConnectionState:
-        return self._network.server.state
+        return self._network.server_connection.state
 
     async def send_ping(self):
         """Send ping to the server"""
@@ -351,12 +351,14 @@ class ServerManager:
 
         logger.info(f"successfully logged on, greeting : {message.greeting!r}")
 
+        port, obfuscated_port = self._network.get_listening_ports()
+
         self._network.queue_server_messages(
             CheckPrivileges.Request(),
             SetListenPort.Request(
-                self._settings.get('network.listening_port'),
-                obfuscated_port_amount=1,
-                obfuscated_port=self._settings.get('network.listening_port') + 1
+                port,
+                obfuscated_port_amount=1 if obfuscated_port else 0,
+                obfuscated_port=obfuscated_port
             ),
             SetStatus.Request(UserStatus.ONLINE.value),
             TogglePrivateRooms.Request(self._settings.get('chats.private_room_invites'))
@@ -686,7 +688,7 @@ class ServerManager:
         logger.info("starting server connection watchdog")
         while True:
             await asyncio.sleep(0.5)
-            if self._network.server.state == ConnectionState.CLOSED:
+            if self._network.server_connection.state == ConnectionState.CLOSED:
                 logger.info(f"will attempt to reconnect to server in {timeout} seconds")
                 await asyncio.sleep(timeout)
                 await self.reconnect()
