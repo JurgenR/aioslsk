@@ -134,9 +134,9 @@ class Network:
         self.MESSAGE_MAP = build_message_map(self)
 
         # Rate limiters
-        self.upload_rate_limiter: RateLimiter = RateLimiter.create_limiter(
+        self._upload_rate_limiter: RateLimiter = RateLimiter.create_limiter(
             self._settings.get('sharing.limits.upload_speed_kbps'))
-        self.download_rate_limiter: RateLimiter = RateLimiter.create_limiter(
+        self._download_rate_limiter: RateLimiter = RateLimiter.create_limiter(
             self._settings.get('sharing.limits.download_speed_kbps'))
 
         self._settings.add_listener(
@@ -202,7 +202,7 @@ class Network:
     async def disconnect_listening_connections(self):
         await asyncio.gather(
             *[
-                listening_connection.disconnect()
+                listening_connection.disconnect(CloseReason.REQUESTED)
                 for listening_connection in self.listening_connections
                 if listening_connection
             ]
@@ -210,6 +210,9 @@ class Network:
 
     async def connect_server(self):
         await self.server_connection.connect()
+
+    async def disconnect_server(self):
+        await self.server_connection.disconnect(CloseReason.REQUESTED)
 
     async def disconnect(self):
         """Disconnects all current connections"""
@@ -731,13 +734,11 @@ class Network:
         :param limit_kbps: the new upload limit
         """
         new_limiter = RateLimiter.create_limiter(limit_kbps)
-        if isinstance(new_limiter, UnlimitedRateLimiter):
-            self.upload_rate_limiter = new_limiter
-        else:
-            # Transfer the tokens we had to the new limiter
-            new_limiter.add_tokens(self.upload_rate_limiter.bucket)
-            new_limiter.last_refill = self.upload_rate_limiter.last_refill
-            self.upload_rate_limiter = new_limiter
+        new_limiter.copy_tokens(self._upload_rate_limiter)
+        self._upload_rate_limiter = new_limiter
+
+        for conn in self.peer_connections:
+            conn.upload_rate_limiter = self._upload_rate_limiter
 
     def set_download_speed_limit(self, limit_kbps: int):
         """Modifies the download speed limit. Passing 0 will set the download
@@ -746,13 +747,11 @@ class Network:
         :param limit_kbps: the new download limit
         """
         new_limiter = RateLimiter.create_limiter(limit_kbps)
-        if isinstance(new_limiter, UnlimitedRateLimiter):
-            self.download_rate_limiter = new_limiter
-        else:
-            # Transfer the tokens we had to the new limiter
-            new_limiter.add_tokens(self.download_rate_limiter.bucket)
-            new_limiter.last_refill = self.download_rate_limiter.last_refill
-            self.download_rate_limiter = new_limiter
+        new_limiter.copy_tokens(self._download_rate_limiter)
+        self._download_rate_limiter = new_limiter
+
+        for conn in self.peer_connections:
+            conn.download_rate_limiter = self._download_rate_limiter
 
     def _on_upload_speed_changed(self, limit_kbps: int):
         """Called when upload speed is changed in the settings"""

@@ -6,7 +6,6 @@ import logging
 import socket
 import struct
 
-from ..protocol import obfuscation
 from ..constants import (
     PEER_CONNECT_TIMEOUT,
     PEER_READ_TIMEOUT,
@@ -20,6 +19,7 @@ from ..exceptions import (
     MessageDeserializationError,
     MessageSerializationError,
 )
+from ..protocol import obfuscation
 from ..protocol.primitives import uint32, uint64, MessageDataclass
 from ..protocol.messages import (
     DistributedMessage,
@@ -30,6 +30,7 @@ from ..protocol.messages import (
 from ..utils import task_counter
 
 if TYPE_CHECKING:
+    from .rate_limiter import RateLimiter
     from .network import Network
 
 
@@ -455,6 +456,9 @@ class PeerConnection(DataConnection):
         self.connection_type: str = connection_type
         self.read_timeout = PEER_READ_TIMEOUT
 
+        self.download_rate_limiter: RateLimiter = None
+        self.upload_rate_limiter: RateLimiter = None
+
     async def connect(self, timeout: float = PEER_CONNECT_TIMEOUT):
         await super().connect(timeout=timeout)
 
@@ -526,7 +530,7 @@ class PeerConnection(DataConnection):
     async def receive_file(self, file_handle: BinaryIO, filesize: int, callback=None):
         bytes_received = 0
         while True:
-            bytes_to_read = await self.network.download_rate_limiter.take_tokens()
+            bytes_to_read = await self.download_rate_limiter.take_tokens()
             data = await self.receive_data(bytes_to_read)
             if data is None:
                 return None
@@ -559,7 +563,7 @@ class PeerConnection(DataConnection):
         :param file_handle: binary opened file handle
         """
         while True:
-            bytes_to_write = await self.network.upload_rate_limiter.take_tokens()
+            bytes_to_write = await self.upload_rate_limiter.take_tokens()
             data = await file_handle.read(bytes_to_write)
             if not data:
                 return

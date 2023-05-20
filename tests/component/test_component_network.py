@@ -123,25 +123,25 @@ class TestComponentNetworkLimiter(_BaseTestComponentNetwork):
         settings['sharing']['limits']['upload_speed_kbps'] = 10
         network = self._create_network(settings=settings)
 
-        assert isinstance(network.upload_rate_limiter, LimitedRateLimiter)
+        assert isinstance(network._upload_rate_limiter, LimitedRateLimiter)
 
         limit = 0
         network._settings.set('sharing.limits.upload_speed_kbps', limit)
 
-        assert isinstance(network.upload_rate_limiter, UnlimitedRateLimiter)
+        assert isinstance(network._upload_rate_limiter, UnlimitedRateLimiter)
 
     def test_whenChangeUploadSpeed_unlimitedToLimited_shouldChangeLimiter(self):
         settings = copy.deepcopy(DEFAULT_SETTINGS)
         settings['sharing']['limits']['upload_speed_kbps'] = 0
         network = self._create_network(settings=settings)
 
-        assert isinstance(network.upload_rate_limiter, UnlimitedRateLimiter)
+        assert isinstance(network._upload_rate_limiter, UnlimitedRateLimiter)
 
         limit = 10
         network._settings.set('sharing.limits.upload_speed_kbps', limit)
 
-        assert isinstance(network.upload_rate_limiter, LimitedRateLimiter)
-        assert network.upload_rate_limiter.limit_bps == (limit * 1024)
+        assert isinstance(network._upload_rate_limiter, LimitedRateLimiter)
+        assert network._upload_rate_limiter.limit_bps == (limit * 1024)
 
     def test_whenChangeUploadSpeed_limitedToLimited_shouldKeepBucket(self):
         settings = copy.deepcopy(DEFAULT_SETTINGS)
@@ -152,17 +152,17 @@ class TestComponentNetworkLimiter(_BaseTestComponentNetwork):
         # params
         bucket = 9 * 1024
         last_refill = 1.0
-        assert isinstance(network.upload_rate_limiter, LimitedRateLimiter)
-        network.upload_rate_limiter.bucket = bucket
-        network.upload_rate_limiter.last_refill = last_refill
+        assert isinstance(network._upload_rate_limiter, LimitedRateLimiter)
+        network._upload_rate_limiter.bucket = bucket
+        network._upload_rate_limiter.last_refill = last_refill
 
         limit = 5
         network._settings.set('sharing.limits.upload_speed_kbps', limit)
 
-        assert isinstance(network.upload_rate_limiter, LimitedRateLimiter)
-        assert network.upload_rate_limiter.limit_bps == (limit * 1024)
-        assert network.upload_rate_limiter.bucket == (limit * 1024)
-        assert network.upload_rate_limiter.last_refill == last_refill
+        assert isinstance(network._upload_rate_limiter, LimitedRateLimiter)
+        assert network._upload_rate_limiter.limit_bps == (limit * 1024)
+        assert network._upload_rate_limiter.bucket == (limit * 1024)
+        assert network._upload_rate_limiter.last_refill == last_refill
 
     # Download
     def test_whenChangeDownloadSpeed_limitedToUnlimited_shouldChangeLimiter(self):
@@ -170,25 +170,25 @@ class TestComponentNetworkLimiter(_BaseTestComponentNetwork):
         settings['sharing']['limits']['download_speed_kbps'] = 10
         network = self._create_network(settings=settings)
 
-        assert isinstance(network.download_rate_limiter, LimitedRateLimiter)
+        assert isinstance(network._download_rate_limiter, LimitedRateLimiter)
 
         limit = 0
         network._settings.set('sharing.limits.download_speed_kbps', limit)
 
-        assert isinstance(network.download_rate_limiter, UnlimitedRateLimiter)
+        assert isinstance(network._download_rate_limiter, UnlimitedRateLimiter)
 
     def test_whenChangeDownloadSpeed_unlimitedToLimited_shouldChangeLimiter(self):
         settings = copy.deepcopy(DEFAULT_SETTINGS)
         settings['sharing']['limits']['download_speed_kbps'] = 0
         network = self._create_network(settings=settings)
 
-        assert isinstance(network.download_rate_limiter, UnlimitedRateLimiter)
+        assert isinstance(network._download_rate_limiter, UnlimitedRateLimiter)
 
         limit = 10
         network._settings.set('sharing.limits.download_speed_kbps', limit)
 
-        assert isinstance(network.download_rate_limiter, LimitedRateLimiter)
-        assert network.download_rate_limiter.limit_bps == (limit * 1024)
+        assert isinstance(network._download_rate_limiter, LimitedRateLimiter)
+        assert network._download_rate_limiter.limit_bps == (limit * 1024)
 
     def test_whenChangeDownloadSpeed_limitedToLimited_shouldKeepBucket(self):
         settings = copy.deepcopy(DEFAULT_SETTINGS)
@@ -199,14 +199,14 @@ class TestComponentNetworkLimiter(_BaseTestComponentNetwork):
         # params
         bucket = 9 * 1024
         last_refill = 1.0
-        assert isinstance(network.download_rate_limiter, LimitedRateLimiter)
-        network.download_rate_limiter.bucket = bucket
-        network.download_rate_limiter.last_refill = last_refill
+        assert isinstance(network._download_rate_limiter, LimitedRateLimiter)
+        network._download_rate_limiter.bucket = bucket
+        network._download_rate_limiter.last_refill = last_refill
 
         limit = 5
         network._settings.set('sharing.limits.download_speed_kbps', limit)
 
-        assert isinstance(network.download_rate_limiter, LimitedRateLimiter)
-        assert network.download_rate_limiter.limit_bps == (limit * 1024)
-        assert network.download_rate_limiter.bucket == (limit * 1024)
-        assert network.download_rate_limiter.last_refill == last_refill
+        assert isinstance(network._download_rate_limiter, LimitedRateLimiter)
+        assert network._download_rate_limiter.limit_bps == (limit * 1024)
+        assert network._download_rate_limiter.bucket == (limit * 1024)
+        assert network._download_rate_limiter.last_refill == last_refill
