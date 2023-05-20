@@ -508,12 +508,10 @@ class TransferManager:
 
     async def uploading(self, transfer: Transfer):
         await self._set_transfer_state(transfer, TransferState.UPLOADING)
-        self._network.upload_rate_limiter.transfer_amount += 1
         await self.manage_transfers()
 
     async def downloading(self, transfer: Transfer):
         await self._set_transfer_state(transfer, TransferState.DOWNLOADING)
-        self._network.download_rate_limiter.transfer_amount += 1
         await self.manage_transfers()
 
     async def queue(self, transfer: Transfer, force: bool = False):

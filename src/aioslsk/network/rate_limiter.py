@@ -12,7 +12,6 @@ class RateLimiter:
     def __init__(self, limit_bps: int):
         self.limit_bps: int = limit_bps
         self.bucket: int = 0
-        self.transfer_amount: int = 0
         self.last_refill: float = 0.0
 
     @classmethod

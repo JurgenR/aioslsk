@@ -44,7 +44,7 @@ from ..protocol.messages import (
     PeerPierceFirewall,
 )
 from . import upnp
-from .rate_limiter import RateLimiter, UnlimitedRateLimiter
+from .rate_limiter import RateLimiter
 from ..state import State
 from ..settings import Settings
 from ..utils import task_counter, ticket_generator
@@ -55,7 +55,8 @@ logger = logging.getLogger(__name__)
 
 class ListeningConnectionErrorMode(enum.Enum):
     """Error mode for listening connections. During initialization of the
-    network and
+    network the `connect_listening_connections` method will raise an error
+    depending on the error mode
     """
     ALL = 'all'
     """Raise an exception if all listening connections failed to connect"""
