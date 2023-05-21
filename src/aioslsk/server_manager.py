@@ -26,6 +26,7 @@ from .events import (
     RoomTickerAddedEvent,
     RoomTickerRemovedEvent,
     RoomTickersEvent,
+    ScanCompleteEvent,
     ServerDisconnectedEvent,
     ServerMessageEvent,
     TrackUserEvent,
@@ -738,6 +739,9 @@ class ServerManager:
 
     async def _on_untrack_user(self, event: UntrackUserEvent):
         await self.untrack_user(event.username)
+
+    async def _on_scan_completed(self, event: ScanCompleteEvent):
+        await self.report_shares()
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message
