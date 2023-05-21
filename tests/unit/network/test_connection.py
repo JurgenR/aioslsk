@@ -23,6 +23,7 @@ from aioslsk.network.connection import (
     PeerConnectionState,
     PeerConnectionType,
 )
+from aioslsk.network.network import Network
 
 from asyncio import IncompleteReadError, TimeoutError
 import pytest
@@ -456,8 +457,8 @@ class TestPeerConnection:
         data = bytes.fromhex('AABBCCDDEEFF1122')
         split_data = (data[0:2], data[2:4], data[4:6], data[6:8])
         # Mock rate limiter
-        network.download_rate_limiter = Mock()
-        network.download_rate_limiter.take_tokens = AsyncMock(return_value=2)
+        network._download_rate_limiter = Mock()
+        network._download_rate_limiter.take_tokens = AsyncMock(return_value=2)
 
         # Mock receiving connection
         connection = self._create_connection(network)
@@ -517,10 +518,11 @@ class TestPeerConnection:
         connection.disconnect.assert_awaited_once_with(CloseReason.TIMEOUT)
 
     # helpers
-    def _create_connection(self, network, state: ConnectionState = ConnectionState.CONNECTED) -> PeerConnection:
+    def _create_connection(self, network: Network, state: ConnectionState = ConnectionState.CONNECTED) -> PeerConnection:
         ip, port = '1.2.3.4', 1234
         connection = PeerConnection(hostname=ip, port=port, network=network)
         connection.state = state
+        connection.download_rate_limiter = network._download_rate_limiter
         return connection
 
 

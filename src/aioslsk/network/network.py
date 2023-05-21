@@ -44,7 +44,7 @@ from ..protocol.messages import (
     PeerPierceFirewall,
 )
 from . import upnp
-from .rate_limiter import RateLimiter, UnlimitedRateLimiter
+from .rate_limiter import RateLimiter
 from ..state import State
 from ..settings import Settings
 from ..utils import task_counter, ticket_generator
@@ -55,7 +55,8 @@ logger = logging.getLogger(__name__)
 
 class ListeningConnectionErrorMode(enum.Enum):
     """Error mode for listening connections. During initialization of the
-    network and
+    network the `connect_listening_connections` method will raise an error
+    depending on the error mode
     """
     ALL = 'all'
     """Raise an exception if all listening connections failed to connect"""
@@ -134,9 +135,9 @@ class Network:
         self.MESSAGE_MAP = build_message_map(self)
 
         # Rate limiters
-        self.upload_rate_limiter: RateLimiter = RateLimiter.create_limiter(
+        self._upload_rate_limiter: RateLimiter = RateLimiter.create_limiter(
             self._settings.get('sharing.limits.upload_speed_kbps'))
-        self.download_rate_limiter: RateLimiter = RateLimiter.create_limiter(
+        self._download_rate_limiter: RateLimiter = RateLimiter.create_limiter(
             self._settings.get('sharing.limits.download_speed_kbps'))
 
         self._settings.add_listener(
@@ -202,7 +203,7 @@ class Network:
     async def disconnect_listening_connections(self):
         await asyncio.gather(
             *[
-                listening_connection.disconnect()
+                listening_connection.disconnect(CloseReason.REQUESTED)
                 for listening_connection in self.listening_connections
                 if listening_connection
             ]
@@ -210,6 +211,9 @@ class Network:
 
     async def connect_server(self):
         await self.server_connection.connect()
+
+    async def disconnect_server(self):
+        await self.server_connection.disconnect(CloseReason.REQUESTED)
 
     async def disconnect(self):
         """Disconnects all current connections"""
@@ -341,6 +345,10 @@ class Network:
                     f"failed to connect to peer {username} ({typ=}, {ticket=})")
 
         connection.set_connection_state(initial_state)
+        if typ == PeerConnectionType.FILE:
+            connection.download_rate_limiter = self._download_rate_limiter
+            connection.upload_rate_limiter = self._upload_rate_limiter
+
         await self._internal_event_bus.emit(
             PeerInitializedEvent(connection, requested=True))
         return connection
@@ -570,6 +578,8 @@ class Network:
 
         if message.typ == PeerConnectionType.FILE:
             peer_connection.set_connection_state(PeerConnectionState.AWAITING_TICKET)
+            peer_connection.download_rate_limiter = self._download_rate_limiter
+            peer_connection.upload_rate_limiter = self._upload_rate_limiter
         else:
             peer_connection.set_connection_state(PeerConnectionState.ESTABLISHED)
 
@@ -684,6 +694,8 @@ class Network:
             # us the transfer ticket in case it's a file connection
             if peer_init_message.typ == PeerConnectionType.FILE:
                 connection.set_connection_state(PeerConnectionState.AWAITING_TICKET)
+                connection.download_rate_limiter = self._download_rate_limiter
+                connection.upload_rate_limiter = self._upload_rate_limiter
             else:
                 connection.set_connection_state(PeerConnectionState.ESTABLISHED)
 
@@ -731,13 +743,11 @@ class Network:
         :param limit_kbps: the new upload limit
         """
         new_limiter = RateLimiter.create_limiter(limit_kbps)
-        if isinstance(new_limiter, UnlimitedRateLimiter):
-            self.upload_rate_limiter = new_limiter
-        else:
-            # Transfer the tokens we had to the new limiter
-            new_limiter.add_tokens(self.upload_rate_limiter.bucket)
-            new_limiter.last_refill = self.upload_rate_limiter.last_refill
-            self.upload_rate_limiter = new_limiter
+        new_limiter.copy_tokens(self._upload_rate_limiter)
+        self._upload_rate_limiter = new_limiter
+
+        for conn in self.peer_connections:
+            conn.upload_rate_limiter = self._upload_rate_limiter
 
     def set_download_speed_limit(self, limit_kbps: int):
         """Modifies the download speed limit. Passing 0 will set the download
@@ -746,13 +756,11 @@ class Network:
         :param limit_kbps: the new download limit
         """
         new_limiter = RateLimiter.create_limiter(limit_kbps)
-        if isinstance(new_limiter, UnlimitedRateLimiter):
-            self.download_rate_limiter = new_limiter
-        else:
-            # Transfer the tokens we had to the new limiter
-            new_limiter.add_tokens(self.download_rate_limiter.bucket)
-            new_limiter.last_refill = self.download_rate_limiter.last_refill
-            self.download_rate_limiter = new_limiter
+        new_limiter.copy_tokens(self._download_rate_limiter)
+        self._download_rate_limiter = new_limiter
+
+        for conn in self.peer_connections:
+            conn.download_rate_limiter = self._download_rate_limiter
 
     def _on_upload_speed_changed(self, limit_kbps: int):
         """Called when upload speed is changed in the settings"""
