@@ -345,6 +345,10 @@ class Network:
                     f"failed to connect to peer {username} ({typ=}, {ticket=})")
 
         connection.set_connection_state(initial_state)
+        if typ == PeerConnectionType.FILE:
+            connection.download_rate_limiter = self._download_rate_limiter
+            connection.upload_rate_limiter = self._upload_rate_limiter
+
         await self._internal_event_bus.emit(
             PeerInitializedEvent(connection, requested=True))
         return connection
@@ -574,6 +578,8 @@ class Network:
 
         if message.typ == PeerConnectionType.FILE:
             peer_connection.set_connection_state(PeerConnectionState.AWAITING_TICKET)
+            peer_connection.download_rate_limiter = self._download_rate_limiter
+            peer_connection.upload_rate_limiter = self._upload_rate_limiter
         else:
             peer_connection.set_connection_state(PeerConnectionState.ESTABLISHED)
 
@@ -688,6 +694,8 @@ class Network:
             # us the transfer ticket in case it's a file connection
             if peer_init_message.typ == PeerConnectionType.FILE:
                 connection.set_connection_state(PeerConnectionState.AWAITING_TICKET)
+                connection.download_rate_limiter = self._download_rate_limiter
+                connection.upload_rate_limiter = self._upload_rate_limiter
             else:
                 connection.set_connection_state(PeerConnectionState.ESTABLISHED)
 
