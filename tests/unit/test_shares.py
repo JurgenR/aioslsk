@@ -1,3 +1,4 @@
+from aioslsk.events import InternalEventBus
 from aioslsk.exceptions import FileNotFoundError
 from aioslsk.shares import (
     extract_attributes,
@@ -39,7 +40,7 @@ SHARED_DIRECTORY.items = set(SHARED_ITEMS.values())
 
 @pytest.fixture
 def manager(tmp_path):
-    return SharesManager(Settings(DEFAULT_SETTINGS), SharesStorage())
+    return SharesManager(Settings(DEFAULT_SETTINGS), SharesStorage(), InternalEventBus())
 
 
 @pytest.fixture
