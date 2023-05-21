@@ -266,3 +266,10 @@ class UntrackUserEvent(InternalEvent):
 @dataclass(frozen=True)
 class LoginSuccessEvent(InternalEvent):
     pass
+
+
+@dataclass(frozen=True)
+class ScanCompleteEvent(InternalEvent):
+    folder_count: int
+    file_count: int
+

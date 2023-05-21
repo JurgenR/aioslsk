@@ -53,7 +53,8 @@ class SoulSeek:
         shares_storage: SharesStorage = SharesShelveStorage(self.configuration.data_directory)
         self.shares_manager: SharesManager = SharesManager(
             self.settings,
-            shares_storage
+            shares_storage,
+            self._internal_events
         )
 
         self.transfer_manager: TransferManager = TransferManager(

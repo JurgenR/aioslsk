@@ -15,6 +15,7 @@ from typing import Dict, List, Set, Tuple, Union
 import uuid
 from weakref import WeakSet
 
+from .events import InternalEventBus, ScanCompleteEvent
 from .exceptions import FileNotFoundError
 from .naming import (
     chain_strategies,
@@ -216,11 +217,11 @@ class SharesShelveStorage(SharesStorage):
 class SharesManager:
     _ALIAS_LENGTH = 5
 
-    def __init__(self, settings: Settings, storage: SharesStorage):
+    def __init__(self, settings: Settings, storage: SharesStorage, internal_event_bus: InternalEventBus):
         self._settings: Settings = settings
+        self._internal_event_bus: InternalEventBus = internal_event_bus
         self._term_map: Dict[str, Set[SharedItem]] = {}
         self.shared_directories: List[SharedDirectory] = list()
-        self._directory_aliases: Dict[str, str] = {}
 
         self.storage: SharesStorage = storage
         self.executor = None
@@ -402,6 +403,10 @@ class SharesManager:
                 f"scheduled {amount_scheduled} items for attribute extracting for directory {shared_directory}")
 
         logger.info(f"completed scan in {time.time() - start_time} seconds")
+        folder_count, file_count = self.get_stats()
+        await self._internal_event_bus.emit(
+            ScanCompleteEvent(folder_count, file_count)
+        )
 
     def _scan_directory_callback(self, shared_directory: SharedDirectory, future: Future):
         try:
