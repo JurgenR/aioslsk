@@ -5,7 +5,7 @@ from aioslsk.shares import (
     SharedDirectory,
     SharedItem,
     SharesManager,
-    SharesStorage,
+    SharesCache,
 )
 from aioslsk.settings import Settings
 
@@ -40,12 +40,12 @@ SHARED_DIRECTORY.items = set(SHARED_ITEMS.values())
 
 @pytest.fixture
 def manager(tmp_path):
-    return SharesManager(Settings(DEFAULT_SETTINGS), SharesStorage(), InternalEventBus())
+    return SharesManager(Settings(DEFAULT_SETTINGS), SharesCache(), InternalEventBus())
 
 
 @pytest.fixture
 def manager_query(tmp_path):
-    manager = SharesManager(Settings(DEFAULT_SETTINGS), SharesStorage(), InternalEventBus())
+    manager = SharesManager(Settings(DEFAULT_SETTINGS), SharesCache(), InternalEventBus())
     manager.shared_directories = [SHARED_DIRECTORY]
     manager.build_term_map(SHARED_DIRECTORY)
 

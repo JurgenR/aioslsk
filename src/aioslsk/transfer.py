@@ -111,13 +111,13 @@ class TransferRequest:
     transfer: Transfer
 
 
-class TransferStorage:
+class TransferCache:
     DEFAULT_FILENAME = 'transfers'
 
     def __init__(self, data_directory: str):
         self.data_directory = data_directory
 
-    def read_database(self):
+    def read(self):
         db_path = os.path.join(self.data_directory, self.DEFAULT_FILENAME)
 
         transfers = []
@@ -132,7 +132,7 @@ class TransferStorage:
 
         return transfers
 
-    def write_database(self, transfers):
+    def write(self, transfers):
         db_path = os.path.join(self.data_directory, self.DEFAULT_FILENAME)
 
         logger.info(f"writing {len(transfers)} transfers to : {db_path}")
@@ -250,8 +250,8 @@ class Transfer:
         :param force: only used for the QUEUED state, normally we don't allow
             to queue a transfer in case the transfer is processing but in some
             cases it needs to be forced: during loading of transfers from
-            storage for transfers who were processing when they were stored or
-            if initialization failed (default: False)
+            cache for transfers who were processing when they were stored or if
+            initialization failed (default: False)
         :return: previous state in case state was changed, otherwise None
         """
         if state == self.state:
@@ -434,7 +434,7 @@ class TransferManager:
         self._shares_manager: SharesManager = shares_manager
         self._network: Network = network
 
-        self._storage: TransferStorage = TransferStorage(self._configuration.data_directory)
+        self._cache: TransferCache = TransferCache(self._configuration.data_directory)
 
         self._transfer_requests: Dict[int, TransferRequest] = {}
         self._transfers: List[Transfer] = []
@@ -444,8 +444,8 @@ class TransferManager:
         self._internal_event_bus.register(MessageReceivedEvent, self._on_message_received)
         self._internal_event_bus.register(PeerInitializedEvent, self._on_peer_initialized)
 
-    async def read_transfers_from_storage(self) -> List[Transfer]:
-        transfers: List[Transfer] = self._storage.read_database()
+    async def read_cache(self) -> List[Transfer]:
+        transfers: List[Transfer] = self._cache.read()
         for transfer in transfers:
             await self.add(transfer)
 
@@ -460,8 +460,8 @@ class TransferManager:
 
         await self.manage_transfers()
 
-    def write_transfers_to_storage(self):
-        self._storage.write_database(self._transfers)
+    def write_cache(self):
+        self._cache.write(self._transfers)
 
     def stop(self):
         for transfer in self.transfers:
