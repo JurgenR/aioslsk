@@ -1,3 +1,4 @@
+from aioslsk.configuration import Configuration
 from aioslsk.events import InternalEventBus
 from aioslsk.exceptions import FileNotFoundError
 from aioslsk.shares import (
@@ -6,6 +7,7 @@ from aioslsk.shares import (
     SharedItem,
     SharesManager,
     SharesCache,
+    SharesShelveCache,
 )
 from aioslsk.settings import Settings
 
@@ -50,6 +52,13 @@ def manager_query(tmp_path):
     manager.build_term_map(SHARED_DIRECTORY)
 
     return manager
+
+
+@pytest.fixture
+def configuration(tmpdir) -> Configuration:
+    settings_dir = os.path.join(tmpdir, 'settings')
+    data_dir = os.path.join(tmpdir, 'data')
+    return Configuration(settings_dir, data_dir)
 
 
 class TestFunctions:
@@ -206,3 +215,14 @@ class TestSharesManager:
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
         actual_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
+
+
+class TestSharesShelveCache:
+
+    def test_read(self, configuration: Configuration):
+        cache = SharesShelveCache(configuration.data_directory)
+        cache.read()
+
+    def test_write(self, configuration: Configuration):
+        cache = SharesShelveCache(configuration.data_directory)
+        cache.write([SHARED_DIRECTORY, ])
