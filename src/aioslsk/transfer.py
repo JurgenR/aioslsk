@@ -117,7 +117,7 @@ class TransferCache:
     def __init__(self, data_directory: str):
         self.data_directory = data_directory
 
-    def read(self):
+    def read(self) -> List['Transfer']:
         db_path = os.path.join(self.data_directory, self.DEFAULT_FILENAME)
 
         transfers = []
@@ -132,7 +132,7 @@ class TransferCache:
 
         return transfers
 
-    def write(self, transfers):
+    def write(self, transfers: List['Transfer']):
         db_path = os.path.join(self.data_directory, self.DEFAULT_FILENAME)
 
         logger.info(f"writing {len(transfers)} transfers to : {db_path}")
@@ -152,7 +152,7 @@ class TransferCache:
             # Remove non existing transfers
             keys_to_delete = []
             for key, db_transfer in database.items():
-                if not any(transfer.equals(db_transfer) for transfer in transfers):
+                if not any(transfer == db_transfer for transfer in transfers):
                     keys_to_delete.append(key)
             for key_to_delete in keys_to_delete:
                 database.pop(key_to_delete)
@@ -392,11 +392,6 @@ class Transfer:
     def is_transfered(self) -> bool:
         return self.filesize == self.bytes_transfered
 
-    def equals(self, transfer):
-        other = (transfer.remote_path, transfer.username, transfer.direction, )
-        own = (self.remote_path, self.username, self.direction, )
-        return other == own
-
     def _queue_remotely_task_complete(self, task: asyncio.Task):
         self._current_task = None
 
@@ -409,6 +404,11 @@ class Transfer:
     def _transfer_progress_callback(self, data: bytes):
         self.bytes_transfered += len(data)
         self.add_speed_log_entry(len(data))
+
+    def __eq__(self, other: 'Transfer'):
+        other_vars = (other.remote_path, other.username, other.direction, )
+        own_vars = (self.remote_path, self.username, self.direction, )
+        return other_vars == own_vars
 
     def __repr__(self):
         return (
@@ -447,7 +447,7 @@ class TransferManager:
     async def read_cache(self) -> List[Transfer]:
         transfers: List[Transfer] = self._cache.read()
         for transfer in transfers:
-            await self.add(transfer)
+            await self._add_transfer(transfer)
 
             # Analyze the current state of the stored transfers and set them to
             # the correct state
@@ -457,8 +457,6 @@ class TransferManager:
             elif transfer.is_transfering():
                 state = TransferState.COMPLETE if transfer.is_transfered() else TransferState.INCOMPLETE
                 transfer.set_state(state, force=True)
-
-        await self.manage_transfers()
 
     def write_cache(self):
         self._cache.write(self._transfers)
@@ -519,34 +517,33 @@ class TransferManager:
 
         # Track user
         await self.manage_transfers()
-        await self._internal_event_bus.emit(TrackUserEvent(transfer.username))
 
     async def remotely_queue(self, transfer: Transfer):
         await self._set_transfer_state(transfer, TransferState.REMOTELY_QUEUED)
         await self.manage_transfers()
 
-    async def add(self, transfer: Transfer) -> Transfer:
-        """Adds a transfer if it does not already exist, otherwise it returns
-        the already existing transfer.
-
-        This method will emit a `TransferAddedEvent` only if the transfer did
-        not exist and will also perform an `AddUser` command on the server in
-        case the transfer isn't finalized yet
-
-        :return: either the transfer we have passed or the already existing
-            transfer
-        """
+    async def _add_transfer(self, transfer: Transfer) -> Transfer:
         for queued_transfer in self._transfers:
-            if queued_transfer.equals(transfer):
-                logger.info(f"skip adding transfer, returning existing : {queued_transfer!r}")
+            if queued_transfer == transfer:
+                logger.info(f"skip adding transfer, already exists : {queued_transfer!r}")
                 return queued_transfer
-
-        if not transfer.is_finalized():
-            await self._internal_event_bus.emit(TrackUserEvent(transfer.username))
 
         logger.info(f"adding transfer : {transfer!r}")
         self._transfers.append(transfer)
         await self._event_bus.emit(TransferAddedEvent(transfer))
+        return transfer
+
+    async def add(self, transfer: Transfer) -> Transfer:
+        """Adds a transfer if it does not already exist, otherwise it returns
+        the already existing transfer. This method will emit a
+        `TransferAddedEvent` only if the transfer did not exist
+
+        :return: either the transfer we have passed or the already existing
+            transfer
+        """
+        transfer = await self._add_transfer(transfer)
+
+        await self.manage_transfers()
         return transfer
 
     async def remove(self, transfer: Transfer):
@@ -631,7 +628,7 @@ class TransferManager:
         """Lookup transfer by username, remote_path and transfer direction"""
         req_transfer = Transfer(username, remote_path, direction)
         for transfer in self._transfers:
-            if transfer.equals(req_transfer):
+            if transfer == req_transfer:
                 return transfer
         raise LookupError(
             f"transfer for user {username} and remote_path {remote_path} (direction={direction}) not found")
@@ -643,6 +640,10 @@ class TransferManager:
         """
         downloads, uploads = await self._get_queued_transfers()
         free_upload_slots = self.get_free_upload_slots()
+
+        for transfer in self.transfers:
+            if not transfer.is_finalized():
+                await self._internal_event_bus.emit(TrackUserEvent(transfer.username))
 
         # Downloads will just get remotely queued
         for download in downloads:

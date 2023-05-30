@@ -1,3 +1,6 @@
+import copy
+import os
+import shutil
 from unittest.mock import AsyncMock, Mock, MagicMock, patch
 
 import pytest
@@ -5,7 +8,13 @@ import pytest
 from aioslsk.configuration import Configuration
 from aioslsk.events import TrackUserEvent
 from aioslsk.model import UserStatus
-from aioslsk.transfer import Transfer, TransferDirection, TransferState, TransferManager
+from aioslsk.transfer import (
+    Transfer,
+    TransferCache,
+    TransferDirection,
+    TransferState,
+    TransferManager,
+)
 from aioslsk.settings import Settings
 from aioslsk.state import State
 
@@ -27,6 +36,14 @@ DEFAULT_SETTINGS = {
 }
 DEFAULT_FILENAME = "myfile.mp3"
 DEFAULT_USERNAME = "username"
+RESOURCES = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'resources')
+
+
+@pytest.fixture
+def configuration(tmpdir) -> Configuration:
+    settings_dir = os.path.join(tmpdir, 'settings')
+    data_dir = os.path.join(tmpdir, 'data')
+    return Configuration(settings_dir, data_dir)
 
 
 @pytest.fixture
@@ -109,6 +126,61 @@ class TestTransfer:
         assert transfer.start_time == 2.0
         assert transfer.state == state
 
+    def test_getSpeed_transferQueued_returnZero(self):
+        transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
+        transfer.set_state(TransferState.QUEUED)
+
+        assert 0.0 == transfer.get_speed()
+
+    def test_getSpeed_transferComplete_returnAverageSpeed(self):
+        transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
+        transfer.set_state(TransferState.QUEUED)
+
+        with patch('time.time', side_effect=[0.0, 2.0, ]):
+            transfer.filesize = 100
+            transfer.set_state(TransferState.DOWNLOADING)
+            transfer.bytes_transfered = 100
+            transfer.set_state(TransferState.COMPLETE)
+
+        assert 50.0 == transfer.get_speed()
+
+    def test_getSpeed_transferProcessing_returnAverageSpeed(self):
+        transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
+        transfer.set_state(TransferState.QUEUED)
+
+        with patch('time.time', return_value=0.0):
+            transfer.filesize = 100
+            transfer.set_state(TransferState.DOWNLOADING)
+            transfer.bytes_transfered = 30
+
+        with patch('time.monotonic', side_effect=[0.05, 0.05, 0.15, 0.15, 0.25, 0.25, 0.3]):
+            transfer.add_speed_log_entry(5)
+            transfer.add_speed_log_entry(5)
+            transfer.add_speed_log_entry(5)
+            transfer.add_speed_log_entry(5)
+            transfer.add_speed_log_entry(5)
+            transfer.add_speed_log_entry(5)
+
+            assert 120.0 == transfer.get_speed()
+
+    def test_getSpeed_transferProcessing_noEntries_returnZero(self):
+        transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
+        transfer.set_state(TransferState.QUEUED)
+
+        with patch('time.time', return_value=0.0):
+            transfer.filesize = 100
+            transfer.set_state(TransferState.DOWNLOADING)
+            transfer.bytes_transfered = 30
+
+        assert 0.0 == transfer.get_speed()
+
+    def test_setState_alreadyInState_shouldDoNothing(self):
+        transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
+        transfer.set_state(TransferState.QUEUED)
+        transfer.set_state(TransferState.QUEUED)
+
+        assert TransferState.QUEUED == transfer.state
+
 
 class TestTransferManager:
 
@@ -129,6 +201,20 @@ class TestTransferManager:
         await manager.add(transfer)
 
         await manager.queue(transfer)
+
+        assert transfer.state == TransferState.QUEUED
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'state',
+        [TransferState.DOWNLOADING, TransferState.UPLOADING, TransferState.INITIALIZING]
+    )
+    async def test_whenQueueTransferForced_shouldSetQueuedState(self, manager: TransferManager, state: TransferState):
+        transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
+        await manager.add(transfer)
+
+        transfer.set_state(state)
+        await manager.queue(transfer, force=True)
 
         assert transfer.state == TransferState.QUEUED
 
@@ -267,7 +353,7 @@ class TestTransferManager:
 
         assert manager.get_average_upload_speed() == 15.0
 
-    def test_whenGetAverageUploadSpeedNoCompleteUploads_shouldReturnZero(self, manager):
+    def test_whenGetAverageUploadSpeedNoCompleteUploads_shouldReturnZero(self, manager: TransferManager):
         transfer1 = Transfer(None, None, TransferDirection.UPLOAD)
         transfer1.state = TransferState.UPLOADING
         transfer1.get_speed = MagicMock(return_value=100.0)
@@ -277,13 +363,13 @@ class TestTransferManager:
         assert manager.get_average_upload_speed() == 0.0
 
     # Retrieval of single transfer
-    def test_whenGetTransferExists_shouldReturnTransfer(self, manager):
+    def test_whenGetTransferExists_shouldReturnTransfer(self, manager: TransferManager):
         transfer = Transfer("myuser", "myfile", TransferDirection.UPLOAD)
         manager._transfers = [transfer, ]
 
         assert manager.get_transfer("myuser", "myfile", TransferDirection.UPLOAD) == transfer
 
-    def test_whenGetTransferNotExists_shouldRaiseException(self, manager):
+    def test_whenGetTransferNotExists_shouldRaiseException(self, manager: TransferManager):
         transfer = Transfer("myuser", "myfile", TransferDirection.UPLOAD)
         manager._transfers = [transfer, ]
 
@@ -298,7 +384,7 @@ class TestTransferManager:
 
     # Retrieval of multiple transfers
 
-    def test_whenGetUploading_shouldReturnUploading(self, manager):
+    def test_whenGetUploading_shouldReturnUploading(self, manager: TransferManager):
         transfer0 = Transfer(None, None, TransferDirection.UPLOAD)
         transfer0.state = TransferState.INITIALIZING
         transfer1 = Transfer(None, None, TransferDirection.UPLOAD)
@@ -309,7 +395,7 @@ class TestTransferManager:
 
         assert manager.get_uploading() == [transfer0, transfer1, ]
 
-    def test_whenGetDownloading_shouldReturnDownloading(self, manager):
+    def test_whenGetDownloading_shouldReturnDownloading(self, manager: TransferManager):
         transfer0 = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer0.state = TransferState.INITIALIZING
         transfer1 = Transfer(None, None, TransferDirection.UPLOAD)
@@ -320,7 +406,7 @@ class TestTransferManager:
 
         assert manager.get_downloading() == [transfer0, transfer2, ]
 
-    def test_whenGetUploads_shouldReturnUploads(self, manager):
+    def test_whenGetUploads_shouldReturnUploads(self, manager: TransferManager):
         transfer1 = Transfer(None, None, TransferDirection.UPLOAD)
         transfer2 = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer3 = Transfer(None, None, TransferDirection.UPLOAD)
@@ -328,7 +414,7 @@ class TestTransferManager:
 
         assert manager.get_uploads() == [transfer1, transfer3]
 
-    def test_whenGetDownloads_shouldReturnDownloads(self, manager):
+    def test_whenGetDownloads_shouldReturnDownloads(self, manager: TransferManager):
         transfer1 = Transfer(None, None, TransferDirection.UPLOAD)
         transfer2 = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer3 = Transfer(None, None, TransferDirection.UPLOAD)
@@ -375,3 +461,32 @@ class TestTransferManager:
         transfer2 = Transfer(USER2, 'C:\\dir0', TransferDirection.UPLOAD)
 
         assert manager._rank_queued_uploads([transfer, transfer2]) == [transfer2, transfer]
+
+
+class TestTransferCache:
+    TRANSFERS = [
+        Transfer('user0', '@abcdef\\file.mp3', TransferDirection.DOWNLOAD),
+        Transfer('user1', '@abcdef\\file.flac', TransferDirection.UPLOAD)
+    ]
+
+    def test_read(self, configuration: Configuration):
+        shutil.copytree(os.path.join(RESOURCES, 'data'), configuration.data_directory, dirs_exist_ok=True)
+        cache = TransferCache(configuration.data_directory)
+        transfers = cache.read()
+        assert 2 == len(transfers)
+        assert self.TRANSFERS == transfers
+
+    def test_write(self, configuration: Configuration):
+        cache = TransferCache(configuration.data_directory)
+        cache.write(self.TRANSFERS)
+
+    def test_write_withDeletedEntries_shouldRemove(self, configuration: Configuration):
+        cache = TransferCache(configuration.data_directory)
+        cache.write(self.TRANSFERS)
+
+        transfers_with_deleted = copy.deepcopy(self.TRANSFERS)
+        transfers_with_deleted.pop()
+        cache.write(transfers_with_deleted)
+
+        transfers = cache.read()
+        assert transfers_with_deleted == transfers

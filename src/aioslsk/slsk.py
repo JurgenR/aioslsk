@@ -97,9 +97,9 @@ class SoulSeek:
         self.network._stop_event = self._stop_event
 
         await self.start_shares_manager()
+        await self.start_transfer_manager()
         await self.connect()
         await self.login()
-        await self.start_transfer_manager()
 
     async def connect(self):
         await self.network.initialize()
