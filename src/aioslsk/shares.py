@@ -177,19 +177,19 @@ def extract_attributes(filepath: str) -> List[Tuple[int, int]]:
     return attributes
 
 
-class SharesStorage:
+class SharesCache:
     """Abstract base class for storing shares"""
 
-    def load_index(self) -> List[SharedDirectory]:
+    def read(self) -> List[SharedDirectory]:
         raise NotImplementedError(
-            "'load_index' needs to be overwritten in a subclass")
+            "'read' needs to be overwritten in a subclass")
 
-    def store_index(self, shared_directories: List[SharedDirectory]):
+    def write(self, shared_directories: List[SharedDirectory]):
         raise NotImplementedError(
-            "'store_index' needs to be overwritten in a subclass")
+            "'write' needs to be overwritten in a subclass")
 
 
-class SharesShelveStorage(SharesStorage):
+class SharesShelveCache(SharesCache):
     DEFAULT_FILENAME = 'shares_index'
 
     def __init__(self, data_directory: str):
@@ -198,7 +198,7 @@ class SharesShelveStorage(SharesStorage):
     def _get_index_path(self) -> str:
         return os.path.join(self.data_directory, self.DEFAULT_FILENAME)
 
-    def load_index(self) -> List[SharedDirectory]:
+    def read(self) -> List[SharedDirectory]:
         with shelve.open(self._get_index_path(), 'c') as db:
             directories = db.get('index', list())
             for directory in directories:
@@ -209,7 +209,7 @@ class SharesShelveStorage(SharesStorage):
                 directory.items = new_items
             return directories
 
-    def store_index(self, shared_directories: List[SharedDirectory]):
+    def write(self, shared_directories: List[SharedDirectory]):
         with shelve.open(self._get_index_path(), 'c') as db:
             db['index'] = shared_directories
 
@@ -217,13 +217,13 @@ class SharesShelveStorage(SharesStorage):
 class SharesManager:
     _ALIAS_LENGTH = 5
 
-    def __init__(self, settings: Settings, storage: SharesStorage, internal_event_bus: InternalEventBus):
+    def __init__(self, settings: Settings, cache: SharesCache, internal_event_bus: InternalEventBus):
         self._settings: Settings = settings
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._term_map: Dict[str, Set[SharedItem]] = {}
         self.shared_directories: List[SharedDirectory] = list()
 
-        self.storage: SharesStorage = storage
+        self.cache: SharesCache = cache
         self.executor = None
 
         self.naming_strategies = [
@@ -272,16 +272,16 @@ class SharesManager:
 
     def read_cache(self):
         """Read the directories from the cache"""
-        logger.info("reading directories from storage")
-        directories = self.storage.load_index()
-        logger.info(f"read {len(directories)} directories from storage")
+        logger.info("reading directories from cache")
+        directories = self.cache.read()
+        logger.info(f"read {len(directories)} directories from cache")
         self.shared_directories = directories
 
     def write_cache(self):
         """Write current shared directories to the cache"""
-        logger.info(f"writing {len(self.shared_directories)} directories to storage")
-        self.storage.store_index(self.shared_directories)
-        logger.info(f"successfully wrote {len(self.shared_directories)} directories to storage")
+        logger.info(f"writing {len(self.shared_directories)} directories to cache")
+        self.cache.write(self.shared_directories)
+        logger.info(f"successfully wrote {len(self.shared_directories)} directories to cache")
 
     def get_download_directory(self) -> str:
         """Gets the absolute path the to download directory"""

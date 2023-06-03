@@ -7,8 +7,8 @@ from .configuration import Configuration
 from .events import EventBus, InternalEventBus
 from .shares import (
     SharesManager,
-    SharesShelveStorage,
-    SharesStorage,
+    SharesShelveCache,
+    SharesCache,
 )
 from .model import Room, User
 from .network.network import Network
@@ -50,10 +50,10 @@ class SoulSeek:
             self._stop_event
         )
 
-        shares_storage: SharesStorage = SharesShelveStorage(self.configuration.data_directory)
+        shares_cache: SharesCache = SharesShelveCache(self.configuration.data_directory)
         self.shares_manager: SharesManager = SharesManager(
             self.settings,
-            shares_storage,
+            shares_cache,
             self._internal_events
         )
 
@@ -88,7 +88,11 @@ class SoulSeek:
     def event_loop(self):
         return asyncio.get_running_loop()
 
-    async def start(self):
+    async def start(self, scan_shares=True):
+        """Starts the client
+
+        :param scan_shares: start a shares scan as soon as the client starts
+        """
         self.event_loop.set_exception_handler(self._exception_handler)
 
         # Allows creating client before actually calling asyncio.run(client.start())
@@ -96,10 +100,11 @@ class SoulSeek:
         self._stop_event = asyncio.Event()
         self.network._stop_event = self._stop_event
 
-        await self.start_shares_manager()
+        await self.start_shares_manager(scan=scan_shares)
+        await self.start_transfer_manager()
         await self.connect()
         await self.login()
-        await self.start_transfer_manager()
+        await self.transfer_manager.manage_transfers()
 
     async def connect(self):
         await self.network.initialize()
@@ -120,7 +125,7 @@ class SoulSeek:
             asyncio.create_task(self.shares_manager.scan())
 
     async def start_transfer_manager(self):
-        await self.transfer_manager.read_transfers_from_storage()
+        await self.transfer_manager.read_cache()
 
     async def run_until_stopped(self):
         await self._stop_event.wait()
@@ -136,7 +141,7 @@ class SoulSeek:
         self.peer_manager.stop()
         self.transfer_manager.stop()
         self.shares_manager.write_cache()
-        self.transfer_manager.write_transfers_to_storage()
+        self.transfer_manager.write_cache()
 
     def _exception_handler(self, loop, context):
         message = f"unhandled exception on loop {loop!r} : context : {context!r}"
