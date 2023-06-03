@@ -88,7 +88,8 @@ class SoulSeek:
     def event_loop(self):
         return asyncio.get_running_loop()
 
-    async def start(self):
+    async def start(self, scan_shares=True):
+        """"""
         self.event_loop.set_exception_handler(self._exception_handler)
 
         # Allows creating client before actually calling asyncio.run(client.start())
@@ -100,6 +101,7 @@ class SoulSeek:
         await self.start_transfer_manager()
         await self.connect()
         await self.login()
+        await self.transfer_manager.manage_transfers()
 
     async def connect(self):
         await self.network.initialize()
