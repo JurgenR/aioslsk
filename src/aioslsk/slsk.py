@@ -89,7 +89,10 @@ class SoulSeek:
         return asyncio.get_running_loop()
 
     async def start(self, scan_shares=True):
-        """"""
+        """Starts the client
+
+        :param scan_shares: start a shares scan as soon as the client starts
+        """
         self.event_loop.set_exception_handler(self._exception_handler)
 
         # Allows creating client before actually calling asyncio.run(client.start())
@@ -97,7 +100,7 @@ class SoulSeek:
         self._stop_event = asyncio.Event()
         self.network._stop_event = self._stop_event
 
-        await self.start_shares_manager()
+        await self.start_shares_manager(scan=scan_shares)
         await self.start_transfer_manager()
         await self.connect()
         await self.login()
