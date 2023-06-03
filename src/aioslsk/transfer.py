@@ -112,6 +112,19 @@ class TransferRequest:
 
 
 class TransferCache:
+    """Abstract base class for storing shares"""
+
+    def read(self) -> List['Transfer']:
+        raise NotImplementedError(
+            "'read' needs to be overwritten in a subclass")
+
+    def write(self, transfers: List['Transfer']):
+        raise NotImplementedError(
+            "'write' needs to be overwritten in a subclass")
+
+
+class TransferShelveCache:
+
     DEFAULT_FILENAME = 'transfers'
 
     def __init__(self, data_directory: str):
@@ -434,7 +447,7 @@ class TransferManager:
         self._shares_manager: SharesManager = shares_manager
         self._network: Network = network
 
-        self._cache: TransferCache = TransferCache(self._configuration.data_directory)
+        self._cache: TransferCache = TransferShelveCache(self._configuration.data_directory)
 
         self._transfer_requests: Dict[int, TransferRequest] = {}
         self._transfers: List[Transfer] = []

@@ -10,7 +10,7 @@ from aioslsk.events import TrackUserEvent
 from aioslsk.model import UserStatus
 from aioslsk.transfer import (
     Transfer,
-    TransferCache,
+    TransferShelveCache,
     TransferDirection,
     TransferState,
     TransferManager,
@@ -463,7 +463,7 @@ class TestTransferManager:
         assert manager._rank_queued_uploads([transfer, transfer2]) == [transfer2, transfer]
 
 
-class TestTransferCache:
+class TestTransferShelveCache:
     TRANSFERS = [
         Transfer('user0', '@abcdef\\file.mp3', TransferDirection.DOWNLOAD),
         Transfer('user1', '@abcdef\\file.flac', TransferDirection.UPLOAD)
@@ -471,17 +471,17 @@ class TestTransferCache:
 
     def test_read(self, configuration: Configuration):
         shutil.copytree(os.path.join(RESOURCES, 'data'), configuration.data_directory, dirs_exist_ok=True)
-        cache = TransferCache(configuration.data_directory)
+        cache = TransferShelveCache(configuration.data_directory)
         transfers = cache.read()
         assert 2 == len(transfers)
         assert self.TRANSFERS == transfers
 
     def test_write(self, configuration: Configuration):
-        cache = TransferCache(configuration.data_directory)
+        cache = TransferShelveCache(configuration.data_directory)
         cache.write(self.TRANSFERS)
 
     def test_write_withDeletedEntries_shouldRemove(self, configuration: Configuration):
-        cache = TransferCache(configuration.data_directory)
+        cache = TransferShelveCache(configuration.data_directory)
         cache.write(self.TRANSFERS)
 
         transfers_with_deleted = copy.deepcopy(self.TRANSFERS)
