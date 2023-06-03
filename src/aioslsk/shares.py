@@ -433,7 +433,10 @@ class SharesManager:
 
     def query(self, query: Union[str, SearchQuery]) -> List[SharedItem]:
         """Performs a query on the `shared_directories` returning the matching
-        items. This method makes a first p
+        items. This method makes a first pass using the built in term map and
+        filters the remaining results using regular expressions.
+
+        :param query: the query to perform on the shared directories
         """
         if not isinstance(query, SearchQuery):
             search_query = SearchQuery.parse(query)
@@ -566,6 +569,10 @@ class SharesManager:
         return shares_reply
 
     def create_directory_reply(self, remote_directory: str) -> List[DirectoryData]:
+        """Lists directory data as a response to a directory request.
+
+        :param remote_directory: remote path of the directory
+        """
         response_dirs: Dict[str, List[SharedItem]] = {}
         for shared_dir in self.shared_directories:
             for item in shared_dir.items:
