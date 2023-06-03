@@ -460,8 +460,6 @@ class TransferManager:
     async def read_cache(self) -> List[Transfer]:
         transfers: List[Transfer] = self._cache.read()
         for transfer in transfers:
-            await self._add_transfer(transfer)
-
             # Analyze the current state of the stored transfers and set them to
             # the correct state
             if transfer.state in (TransferState.INITIALIZING, TransferState.REMOTELY_QUEUED):
@@ -470,6 +468,8 @@ class TransferManager:
             elif transfer.is_transfering():
                 state = TransferState.COMPLETE if transfer.is_transfered() else TransferState.INCOMPLETE
                 transfer.set_state(state, force=True)
+
+            await self._add_transfer(transfer)
 
     def write_cache(self):
         self._cache.write(self._transfers)
