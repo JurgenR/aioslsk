@@ -202,8 +202,7 @@ class ProtocolDataclass:
         obj_fields = fields(cls)
         field_map = {}
         for obj_field in obj_fields:
-            if not cls._field_needs_deserialization(
-                    obj_field, field_map, has_unparsed_bytes(pos, message)):
+            if not cls._field_needs_deserialization(obj_field, field_map, pos, message):
                 continue
 
             try:
@@ -214,8 +213,10 @@ class ProtocolDataclass:
             if is_dataclass(proto_type):
                 pos, value = proto_type.deserialize(pos, message)
             elif 'subtype' in obj_field.metadata:
-                pos, value = proto_type.deserialize(
-                    pos, message, obj_field.metadata['subtype'])
+                # if obj_field.name == 'directories':
+                #     import pdb; pdb.set_trace()
+
+                pos, value = proto_type.deserialize(pos, message, obj_field.metadata['subtype'])
             else:
                 pos, value = proto_type.deserialize(pos, message)
 
@@ -224,7 +225,7 @@ class ProtocolDataclass:
         return pos, cls(**field_map)
 
     @classmethod
-    def _field_needs_deserialization(cls, field, field_map, has_unparsed_bytes: bool):
+    def _field_needs_deserialization(cls, field, field_map, pos: int, message: bytes):
         # For if_true and if_false we need to return only if the condition is
         # is false as we still want to check the 'optional' field
         if 'if_true' in field.metadata:
@@ -236,7 +237,7 @@ class ProtocolDataclass:
                 return False
 
         if 'optional' in field.metadata:
-            return has_unparsed_bytes
+            return has_unparsed_bytes(pos, message)
 
         return True
 
@@ -279,7 +280,9 @@ class MessageDataclass(ProtocolDataclass):
         message = super().serialize()
 
         if compress:
+            message_len_before = len(message)
             message = zlib.compress(message)
+            logger.debug(f"compressed {message_len_before} to {len(message)} bytes")
 
         message = self.MESSAGE_ID.serialize() + message
         return uint32(len(message)).serialize() + message
@@ -305,7 +308,10 @@ class MessageDataclass(ProtocolDataclass):
             raise ValueError(f"message id mismatch {message_id} != {cls.MESSAGE_ID}")
 
         if decompress:
+            message_len_before = len(message)
             message = zlib.decompress(message[pos:])
+            logger.debug(f"decompressed {message_len_before} to {len(message)} bytes")
+
             pos, obj = super().deserialize(0, message)
         else:
             pos, obj = super().deserialize(pos, message)
