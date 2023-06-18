@@ -2,6 +2,7 @@ from aiofiles import os as asyncos
 import asyncio
 from concurrent.futures import Future
 from dataclasses import dataclass, field
+import enum
 from functools import partial
 import logging
 import mutagen
@@ -57,12 +58,24 @@ def create_term_pattern(term: str, wildcard=False):
         )
 
 
+class DirectoryShareMode(enum.Enum):
+    """Share mode for directories. The mode determines for who the results are
+    locked and who can download the file
+    """
+    EVERYONE = 'everyone'
+    FRIENDS = 'friends'
+    USERS = 'users'
+
+
 @dataclass(eq=True, unsafe_hash=True)
 class SharedDirectory:
     directory: str
     absolute_path: str
     alias: str
+    share_mode: DirectoryShareMode = field(default=DirectoryShareMode.EVERYONE, compare=False, hash=False)
+    users: List[str] = field(default_factory=list, compare=False, hash=False)
     items: Set['SharedItem'] = field(default_factory=set, init=False, compare=False, hash=False, repr=False)
+    child_directories: List['SharedDirectory'] = field(default_factory=list, compare=False, hash=False, repr=False)
 
     def get_remote_path(self) -> str:
         return '@@' + self.alias
@@ -117,6 +130,7 @@ def scan_directory(shared_directory: SharedDirectory) -> Set[SharedItem]:
     """Scans the directory for items to share
 
     :param shared_directory: `SharedDirectory` instance
+    :return: set of `SharedItem` objects found during the scan
     """
     shared_items = set()
     for directory, _, files in os.walk(shared_directory.absolute_path):
@@ -221,7 +235,8 @@ class SharesManager:
         self._settings: Settings = settings
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._term_map: Dict[str, Set[SharedItem]] = {}
-        self.shared_directories: List[SharedDirectory] = list()
+        self._shared_directories: List[SharedDirectory] = list()
+        self._shared_directories_lock = asyncio.Lock()
 
         self.cache: SharesCache = cache
         self.executor = None
@@ -268,20 +283,24 @@ class SharesManager:
     def load_from_settings(self):
         """Loads the directories from the settings"""
         for shared_directory in self._settings.get('sharing.directories'):
-            self.add_shared_directory(shared_directory)
+            self.add_shared_directory(
+                shared_directory['path'],
+                share_mode=DirectoryShareMode(shared_directory['share_mode']),
+                users=shared_directory.get('users', None)
+            )
 
     def read_cache(self):
         """Read the directories from the cache"""
         logger.info("reading directories from cache")
         directories = self.cache.read()
         logger.info(f"read {len(directories)} directories from cache")
-        self.shared_directories = directories
+        self._shared_directories = directories
 
     def write_cache(self):
         """Write current shared directories to the cache"""
-        logger.info(f"writing {len(self.shared_directories)} directories to cache")
-        self.cache.write(self.shared_directories)
-        logger.info(f"successfully wrote {len(self.shared_directories)} directories to cache")
+        logger.info(f"writing {len(self._shared_directories)} directories to cache")
+        self.cache.write(self._shared_directories)
+        logger.info(f"successfully wrote {len(self._shared_directories)} directories to cache")
 
     def get_download_directory(self) -> str:
         """Gets the absolute path the to download directory"""
@@ -302,17 +321,6 @@ class SharesManager:
             self._add_item_to_term_map(item)
         logger.debug(f"term map contains {len(self._term_map)} terms")
 
-    def _add_item_to_term_map(self, item: SharedItem):
-        path = (item.subdir + "/" + item.filename).lower()
-        terms = re.split(_QUERY_CLEAN_PATTERN, path)
-        for term in terms:
-            if not term:
-                continue
-
-            if term not in self._term_map:
-                self._term_map[term] = WeakSet()
-            self._term_map[term].add(item)
-
     def get_shared_item(self, remote_path: str) -> SharedItem:
         """Gets a shared item from the cache based on the given file path. If
         the file does not exist in the L{shared_items} or the file is present
@@ -322,7 +330,7 @@ class SharesManager:
         :raise FileNotFoundError: filename was not found in shared_items or was found
             but did not exist on disk
         """
-        for shared_directory in self.shared_directories:
+        for shared_directory in self._shared_directories:
             try:
                 item = shared_directory.get_item_by_remote_path(remote_path)
             except FileNotFoundError:
@@ -336,30 +344,34 @@ class SharesManager:
         else:
             raise FileNotFoundError(f"file name {remote_path} not found in cache")
 
-    def add_shared_directory(self, shared_directory: str) -> SharedDirectory:
+    def add_shared_directory(
+            self, shared_directory: str,
+            share_mode: DirectoryShareMode = DirectoryShareMode.EVERYONE, users: List[str] = None) -> SharedDirectory:
         """Adds a shared directory. This method will call `generate_alias` and
         add the directory to the directory map
 
         :param shared_directory: path of the shared directory
+        :param share_mode:
+        :param users:
         :return: a `SharedDirectory` object
         """
         # Calc absolute path, generate an alias and store it
-        abs_directory = os.path.abspath(shared_directory)
+        abs_directory = os.path.normpath(os.path.abspath(shared_directory))
         alias = self.generate_alias(abs_directory)
 
         # Check if we have an existing shared directory, otherwise return it
         directory_object = SharedDirectory(
             shared_directory,
             abs_directory,
-            alias
+            alias,
+            share_mode=share_mode,
+            users=users or []
         )
-        for shared_directory in self.shared_directories:
+        for shared_directory in self._shared_directories:
             if shared_directory == directory_object:
                 return shared_directory
 
-        # TODO: Check if the alias already exists
-
-        self.shared_directories.append(directory_object)
+        self._shared_directories.append(directory_object)
         return directory_object
 
     async def scan(self):
@@ -370,7 +382,7 @@ class SharesManager:
         start_time = time.time()
 
         # Scan files
-        for shared_directory in self.shared_directories:
+        for shared_directory in self._shared_directories:
             logger.info(f"scheduling scan for directory : {shared_directory!r})")
             scan_future = loop.run_in_executor(
                 self.executor,
@@ -383,11 +395,11 @@ class SharesManager:
 
         await asyncio.gather(*scan_futures, return_exceptions=True)
 
-        for shared_directory in self.shared_directories:
+        for shared_directory in self._shared_directories:
             self.build_term_map(shared_directory)
 
         # Scan attributes
-        for shared_directory in self.shared_directories:
+        for shared_directory in self._shared_directories:
             amount_scheduled = 0
             for item in shared_directory.items:
                 if item.attributes is None:
@@ -431,12 +443,17 @@ class SharesManager:
     def get_filesize(self, shared_item: SharedItem) -> int:
         return os.path.getsize(shared_item.get_absolute_path())
 
-    def query(self, query: Union[str, SearchQuery]) -> List[SharedItem]:
+    def query(self, query: Union[str, SearchQuery], username: str = None) -> Tuple[List[SharedItem], Tuple[List[SharedItem]]]:
         """Performs a query on the `shared_directories` returning the matching
-        items. This method makes a first pass using the built in term map and
-        filters the remaining results using regular expressions.
+        items. If `username` is passed this method will return a list of
+        visible results and list of locked results. If `None` the second list
+        will always be empty.
+
+        This method makes a first pass using the built in term map and filters
+        the remaining results using regular expressions.
 
         :param query: the query to perform on the shared directories
+        :return: two lists of visible results and locked results
         """
         if not isinstance(query, SearchQuery):
             search_query = SearchQuery.parse(query)
@@ -445,7 +462,7 @@ class SharesManager:
 
         # Ignore if no valid include or wildcard terms are given
         if not search_query.has_inclusion_terms():
-            return []
+            return [], []
 
         # First round using the term map
         include_terms = []
@@ -456,7 +473,7 @@ class SharesManager:
                     continue
 
                 if subterm not in self._term_map:  # Optimization
-                    return []
+                    return [], []
 
                 include_terms.append(subterm)
 
@@ -473,12 +490,12 @@ class SharesManager:
                     ]
 
                     if not matching_terms:  # Optimization
-                        return []
+                        return [], []
 
                     include_terms.extend(matching_terms)
                 else:
                     if subterm not in self._term_map:  # Optimization
-                        return []
+                        return [], []
 
                     include_terms.append(subterm)
 
@@ -512,7 +529,18 @@ class SharesManager:
                     to_remove.add(item)
             found_items -= to_remove
 
-        return list(found_items)
+        # Order by visible and locked results when username is given
+        if username:
+            visible_results = []
+            locked_results = []
+            for item in found_items:
+                if self.is_item_locked(item, username):
+                    locked_results.append(item)
+                else:
+                    visible_results.append(item)
+            return visible_results, locked_results
+        else:
+            return list(found_items), []
 
     def get_stats(self) -> Tuple[int, int]:
         """Gets the total amount of shared directories and files.
@@ -520,11 +548,11 @@ class SharesManager:
         :return: directory and file count as a `tuple`
         """
         file_count = sum(
-            len(directory.items) for directory in self.shared_directories
+            len(directory.items) for directory in self._shared_directories
         )
         dir_count = sum(
             len(set(item.subdir for item in directory.items))
-            for directory in self.shared_directories
+            for directory in self._shared_directories
         )
         return dir_count, file_count
 
@@ -542,31 +570,55 @@ class SharesManager:
             download_dir
         )
 
-    def create_shares_reply(self) -> List[DirectoryData]:
+    def get_shared_directories_for_user(self, username: str) -> Tuple[List[SharedDirectory], List[SharedDirectory]]:
+        public_dirs = []
+        locked_dirs = []
+        for shared_dir in self._shared_directories:
+            if self.is_directory_locked(shared_dir, username):
+                locked_dirs.append(shared_dir)
+            else:
+                public_dirs.append(shared_dir)
+
+        return public_dirs, locked_dirs
+
+    def create_shares_reply(self, username: str) -> Tuple[List[DirectoryData], List[DirectoryData]]:
         """Creates a complete list of the currently shared items as a reply to
-        a PeerSharesRequest messages
+        a `PeerSharesRequest` messages
+
+        :param username: username of the user requesting the shares reply, this
+            is used to determine the locked results
+        :return: tuple with two lists: public directories and locked directories
         """
-        # Sort files under unique directories
-        response_dirs: Dict[str, SharedItem] = {}
-        for shared_dir in self.shared_directories:
-            for item in shared_dir.items:
-                directory = item.get_remote_directory_path()
-                if directory in response_dirs:
-                    response_dirs[directory].append(item)
-                else:
-                    response_dirs[directory] = [item, ]
+        def list_unique_directories(directories: List[SharedDirectory]) -> Dict[str, SharedItem]:
+            # Sort files under unique directories by path
+            response_dirs: Dict[str, SharedItem] = {}
+            for directory in directories:
+                for item in directory.items:
+                    directory = item.get_remote_directory_path()
+                    if directory in response_dirs:
+                        response_dirs[directory].append(item)
+                    else:
+                        response_dirs[directory] = [item, ]
+            return response_dirs
 
-        # Create shares reply
-        shares_reply = []
-        for directory, files in response_dirs.items():
-            shares_reply.append(
-                DirectoryData(
-                    name=directory,
-                    files=self.convert_items_to_file_data(files, use_full_path=False)
+        def convert_to_directory_shares(directory_map: Dict[str, SharedItem]) -> List[DirectoryData]:
+            public_shares = []
+            for directory, files in directory_map.items():
+                public_shares.append(
+                    DirectoryData(
+                        name=directory,
+                        files=self.convert_items_to_file_data(files, use_full_path=False)
+                    )
                 )
-            )
+            return public_shares
 
-        return shares_reply
+        visible_dirs, locked_dirs = self.get_shared_directories_for_user(username)
+        visible_shares = convert_to_directory_shares(
+            list_unique_directories(visible_dirs))
+        locked_shares = convert_to_directory_shares(
+            list_unique_directories(locked_dirs))
+
+        return visible_shares, locked_shares
 
     def create_directory_reply(self, remote_directory: str) -> List[DirectoryData]:
         """Lists directory data as a response to a directory request.
@@ -574,7 +626,7 @@ class SharesManager:
         :param remote_directory: remote path of the directory
         """
         response_dirs: Dict[str, List[SharedItem]] = {}
-        for shared_dir in self.shared_directories:
+        for shared_dir in self._shared_directories:
             for item in shared_dir.items:
                 item_dir = item.get_remote_directory_path()
                 if item_dir != remote_directory:
@@ -638,3 +690,39 @@ class SharesManager:
                 logger.exception(f"failed to convert to result : {shared_item!r}")
 
         return file_datas
+
+    def _add_item_to_term_map(self, item: SharedItem):
+        path = (item.subdir + "/" + item.filename).lower()
+        terms = re.split(_QUERY_CLEAN_PATTERN, path)
+        for term in terms:
+            if not term:
+                continue
+
+            if term not in self._term_map:
+                self._term_map[term] = WeakSet()
+            self._term_map[term].add(item)
+
+    def _get_parent_directories(self, shared_directory: SharedDirectory) -> List[SharedDirectory]:
+        """Returns a list of parent shared directories"""
+        parent_dirs = []
+        for potential_parent_dir in self._shared_directories:
+            commonpath = os.path.commonpath([
+                potential_parent_dir.absolute_path,
+                shared_directory.absolute_path
+            ])
+            if commonpath == potential_parent_dir.absolute_path:
+                parent_dirs.append(potential_parent_dir)
+        return sorted(parent_dirs, key=lambda d: len(d.absolute_path))
+
+    def is_directory_locked(self, directory: SharedDirectory, username: str) -> bool:
+        """Checks if the shared directory is locked for the given `username`"""
+        friends = self._settings.get('users.friends')
+        if directory.share_mode == DirectoryShareMode.FRIENDS:
+            return username in friends
+        elif directory.share_mode == DirectoryShareMode.USERS:
+            return username in directory.users
+        return False
+
+    def is_item_locked(self, item: SharedItem, username: str) -> bool:
+        """Checks if the shared item is locked for the given `username`"""
+        return self.is_directory_locked(item.shared_directory, username)

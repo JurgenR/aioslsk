@@ -124,8 +124,9 @@ class TestSharesManager:
     )
     def test_querySimpleTerms_matching(self, manager_query: SharesManager, query: str, expected_items: List[str]):
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
-        actual_items = manager_query.query(query)
+        actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
+        assert locked_items == []
 
     @pytest.mark.parametrize(
         'query',
@@ -145,8 +146,9 @@ class TestSharesManager:
         ]
     )
     def test_querySimpleTerms_notMatching(self, manager_query: SharesManager, query: str):
-        actual_items = manager_query.query(query)
+        actual_items, locked_items = manager_query.query(query)
         assert actual_items == []
+        assert locked_items == []
 
     @pytest.mark.parametrize(
         'query,expected_items',
@@ -159,8 +161,9 @@ class TestSharesManager:
     )
     def test_querySpecialCharactersInTerm_matching(self, manager_query: SharesManager, query: str, expected_items: List[str]):
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
-        actual_items = manager_query.query(query)
+        actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
+        assert locked_items == []
 
     @pytest.mark.parametrize(
         'query,expected_items',
@@ -179,8 +182,9 @@ class TestSharesManager:
     )
     def test_queryWildcard_matching(self, manager_query: SharesManager, query: str, expected_items: List[str]):
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
-        actual_items = manager_query.query(query)
+        actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
+        assert locked_items == []
 
     @pytest.mark.parametrize(
         'query,expected_items',
@@ -197,8 +201,9 @@ class TestSharesManager:
     )
     def test_queryExcludeTerm(self, manager_query: SharesManager, query: str, expected_items: List[str]):
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
-        actual_items = manager_query.query(query)
+        actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
+        assert locked_items == []
 
     @pytest.mark.parametrize(
         'query,expected_items',
@@ -213,8 +218,9 @@ class TestSharesManager:
     )
     def test_edgeCases(self, manager_query: SharesManager, query: str, expected_items: List[str]):
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
-        actual_items = manager_query.query(query)
+        actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
+        assert locked_items == []
 
 
 class TestSharesShelveCache:
