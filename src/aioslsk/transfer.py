@@ -18,6 +18,7 @@ from .exceptions import (
     ConnectionReadError,
     ConnectionWriteError,
     FileNotFoundError,
+    FileNotSharedError,
     PeerConnectionError,
 )
 from .network.connection import (
@@ -989,10 +990,11 @@ class TransferManager:
 
         # Check if the shared file exists
         try:
-            shared_item = self._shares_manager.get_shared_item(message.filename)
-            transfer.local_path = shared_item.get_absolute_path()
-            transfer.filesize = self._shares_manager.get_filesize(shared_item)
-        except FileNotFoundError:
+            item = self._shares_manager.get_shared_item(
+                message.filename, connection.username)
+            transfer.local_path = item.get_absolute_path()
+            transfer.filesize = self._shares_manager.get_filesize(item)
+        except (FileNotFoundError, FileNotSharedError):
             await self.fail(transfer, reason="File not shared.")
             await connection.queue_message(
                 PeerTransferQueueFailed.Request(

@@ -17,7 +17,7 @@ import uuid
 from weakref import WeakSet
 
 from .events import InternalEventBus, ScanCompleteEvent
-from .exceptions import FileNotFoundError
+from .exceptions import FileNotFoundError, FileNotSharedError
 from .naming import (
     chain_strategies,
     DefaultNamingStrategy,
@@ -278,6 +278,10 @@ class SharesManager:
             NumberDuplicateStrategy()
         ]
 
+    @property
+    def shared_directories(self):
+        return self._shared_directories
+
     def generate_alias(self, path: str, offset: int = 0) -> str:
         """Generates a directory alias for the given path, this method will be
         called recursively increasing the offset in case the alias is already
@@ -351,14 +355,20 @@ class SharesManager:
             self._add_item_to_term_map(item)
         logger.debug(f"term map contains {len(self._term_map)} terms")
 
-    def get_shared_item(self, remote_path: str) -> SharedItem:
+    def get_shared_item(self, remote_path: str, username: str = None) -> SharedItem:
         """Gets a shared item from the cache based on the given file path. If
-        the file does not exist in the L{shared_items} or the file is present
-        in the cache but does not exist on disk a C{FileNotFoundError} is raised
+        the file does not exist in the `shared_items` or the file is present
+        in the cache but does not exist on disk a `FileNotFoundError` is raised
+
+        If a `username` is passed this will also check if the file is locked
+        and raise a `FileNotSharedError`
 
         :param remote_path: the remote_path
+        :param username:
         :raise FileNotFoundError: filename was not found in shared_items or was found
             but did not exist on disk
+        :raise FileNotSharedError: file is found, but locked for the given
+            `username`
         """
         for shared_directory in self._shared_directories:
             try:
@@ -370,6 +380,9 @@ class SharesManager:
                     raise FileNotFoundError(
                         f"file with remote_path {remote_path} found in cache but not on disk"
                     )
+
+                if username and self.is_item_locked(item, username):
+                    raise FileNotSharedError(f"File is not shared to user {username}")
                 return item
         else:
             raise FileNotFoundError(f"file name {remote_path} not found in cache")
