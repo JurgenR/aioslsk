@@ -26,7 +26,7 @@ from .naming import (
 from .protocol.primitives import Attribute, DirectoryData, FileData
 from .search import SearchQuery
 from .settings import Settings
-from .utils import normalize_remote_path, split_remote_path
+from .utils import normalize_remote_path
 
 logger = logging.getLogger(__name__)
 
@@ -345,8 +345,6 @@ class SharesManager:
             logger.info(f"creating directory : {absolute_path}")
             await asyncos.makedirs(absolute_path, exist_ok=True)
 
-        return absolute_path
-
     def build_term_map(self, shared_directory: SharedDirectory):
         """Builds a list of valid terms for the given shared directory"""
         for item in shared_directory.items:
@@ -426,13 +424,16 @@ class SharesManager:
             parent = parents[-1]
             parent.items |= directory.items
 
-    async def scan(self):
-        """Scans all directories in `shared_directories` list"""
-        scan_futures = []
+    async def scan(self, wait_for_attributes: bool = False):
+        """Scans all directories in `shared_directories` list
+
+        :param wait_for_attributes: wait for the attribute scans to complete
+        """
         loop = asyncio.get_running_loop()
 
         start_time = time.time()
 
+        scan_futures = []
         # Scan files
         for shared_directory in self._shared_directories:
             logger.info(f"scheduling scan for directory : {shared_directory!r})")
@@ -451,9 +452,10 @@ class SharesManager:
             self.build_term_map(shared_directory)
 
         # Scan attributes
+        extract_futures = []
         for shared_directory in self._shared_directories:
-            amount_scheduled = 0
             for item in shared_directory.items:
+                amount_scheduled = 0
                 if item.attributes is None:
                     future = loop.run_in_executor(
                         self.executor,
@@ -462,9 +464,13 @@ class SharesManager:
                     future.add_done_callback(
                         partial(self._extract_attributes_callback, item)
                     )
+                    extract_futures.append(future)
                     amount_scheduled += 1
             logger.debug(
                 f"scheduled {amount_scheduled} items for attribute extracting for directory {shared_directory}")
+
+        if wait_for_attributes:
+            await asyncio.gather(*extract_futures, return_exceptions=True)
 
         logger.info(f"completed scan in {time.time() - start_time} seconds")
         folder_count, file_count = self.get_stats()
@@ -677,6 +683,7 @@ class SharesManager:
 
         :param remote_directory: remote path of the directory
         """
+        remote_directory = remote_directory.rstrip('\\/')
         response_dirs: Dict[str, List[SharedItem]] = {}
         for shared_dir in self._shared_directories:
             for item in shared_dir.items:
@@ -774,11 +781,10 @@ class SharesManager:
 
     def is_directory_locked(self, directory: SharedDirectory, username: str) -> bool:
         """Checks if the shared directory is locked for the given `username`"""
-        friends = self._settings.get('users.friends')
         if directory.share_mode == DirectoryShareMode.FRIENDS:
-            return username in friends
+            return username not in self._settings.get('users.friends')
         elif directory.share_mode == DirectoryShareMode.USERS:
-            return username in directory.users
+            return username not in directory.users
         return False
 
     def is_item_locked(self, item: SharedItem, username: str) -> bool:
