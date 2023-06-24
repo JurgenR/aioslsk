@@ -8,6 +8,7 @@ from aioslsk.shares import (
     SharesManager,
     SharesCache,
     SharesShelveCache,
+    DirectoryShareMode,
 )
 from aioslsk.settings import Settings
 
@@ -21,12 +22,19 @@ RESOURCES = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'resources
 
 MP3_FILENAME = 'Kevin_MacLeod-Galway.mp3'
 FLAC_FILENAME = 'Kevin_MacLeod-Galway.flac'
-
+SUBDIR_FILENAME = 'Strange_Drone_Impact.mp3'
+SUBDIR_PATH = os.path.join(RESOURCES, 'Cool_Test_Album')
+ROOT_FILE_1_PATH = os.path.join(RESOURCES, MP3_FILENAME)
+ROOT_FILE_2_PATH = os.path.join(RESOURCES, FLAC_FILENAME)
+SUBDIR_FILE_1_PATH = os.path.join(RESOURCES, SUBDIR_FILENAME)
 
 DEFAULT_SETTINGS = {
     'sharing': {
         'directories': [
-            RESOURCES
+            {
+                'path': RESOURCES,
+                'share_mode': 'everyone'
+            }
         ]
     }
 }
@@ -103,7 +111,7 @@ class TestSharedDirectory:
             shared_directory.get_item_by_remote_path(remote_path)
 
 
-class TestSharesManager:
+class TestSharesManagerQuery:
 
     @pytest.mark.parametrize(
         'query,expected_items',
@@ -221,6 +229,69 @@ class TestSharesManager:
         actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
         assert locked_items == []
+
+
+class TestSharesManagerSharedDirectoryManagement:
+
+    def test_loadFromSettings(self, manager: SharesManager):
+        manager.load_from_settings()
+        assert 1 == len(manager._shared_directories)
+        assert manager._shared_directories[0].absolute_path == RESOURCES
+
+    @pytest.mark.asyncio
+    async def test_scan(self, manager: SharesManager):
+        manager.load_from_settings()
+        await manager.scan()
+        directory = manager._shared_directories[0]
+        assert 3 == len(directory.items)
+
+    @pytest.mark.asyncio
+    async def test_scan_nestedDirectories(self, manager: SharesManager):
+        manager._settings = Settings({
+            'sharing': {
+                'directories': [
+                    {'path': RESOURCES, 'share_mode': 'everyone'},
+                    {'path': SUBDIR_PATH, 'share_mode': 'friends'}
+                ]
+            }
+        })
+        manager.load_from_settings()
+        assert 2 == len(manager._shared_directories)
+
+        await manager.scan()
+        assert 2 == len(manager._shared_directories[0].items)
+        assert 1 == len(manager._shared_directories[1].items)
+
+    @pytest.mark.asyncio
+    async def test_addSharedDirectory_existingSubDirectory(self, manager: SharesManager):
+        manager.load_from_settings()
+        await manager.scan()
+        manager.add_shared_directory(SUBDIR_PATH, DirectoryShareMode.FRIENDS)
+
+        assert 2 == len(manager._shared_directories)
+        assert 2 == len(manager._shared_directories[0].items)
+        assert 1 == len(manager._shared_directories[1].items)
+
+    @pytest.mark.asyncio
+    async def test_removeSharedDirectory_withSubdir(self, manager: SharesManager):
+        manager._settings = Settings({
+            'sharing': {
+                'directories': [
+                    {'path': RESOURCES, 'share_mode': 'everyone'},
+                    {'path': SUBDIR_PATH, 'share_mode': 'friends'}
+                ]
+            }
+        })
+        manager.load_from_settings()
+        await manager.scan()
+        assert 2 == len(manager._shared_directories[0].items)
+        assert 1 == len(manager._shared_directories[1].items)
+
+        subdir = manager._shared_directories[1]
+        manager.remove_shared_directory(subdir)
+        assert subdir not in manager._shared_directories
+        assert 1 == len(manager._shared_directories)
+        assert 3 == len(manager._shared_directories[0].items)
 
 
 class TestSharesShelveCache:

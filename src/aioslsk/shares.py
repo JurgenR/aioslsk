@@ -75,7 +75,22 @@ class SharedDirectory:
     share_mode: DirectoryShareMode = field(default=DirectoryShareMode.EVERYONE, compare=False, hash=False)
     users: List[str] = field(default_factory=list, compare=False, hash=False)
     items: Set['SharedItem'] = field(default_factory=set, init=False, compare=False, hash=False, repr=False)
-    child_directories: List['SharedDirectory'] = field(default_factory=list, compare=False, hash=False, repr=False)
+
+    def is_parent_of(self, directory: Union[str, 'SharedDirectory']) -> bool:
+        """Returns true if the current directory is a parent of the passed
+        shared directory
+
+        :param directory: directory to check
+        """
+        path = directory if isinstance(directory, str) else directory.absolute_path
+        return os.path.commonpath([path, self.absolute_path]) == self.absolute_path
+
+    def is_child_of(self, directory: Union[str, 'SharedDirectory']) -> bool:
+        """Returns true if the passed directory is a child of the current
+        directory
+        """
+        path = directory if isinstance(directory, str) else directory.absolute_path
+        return os.path.commonpath([self.absolute_path, path]) == path
 
     def get_remote_path(self) -> str:
         return '@@' + self.alias
@@ -93,6 +108,14 @@ class SharedDirectory:
         else:
             raise FileNotFoundError(
                 f"file with remote path {remote_path!r} not found in directory {self!r}")
+
+    def get_items_for_directory(self, directory: 'SharedDirectory') -> Set['SharedItem']:
+        """Gets items that are part of given directory"""
+        items = set()
+        for item in self.items:
+            if os.path.commonpath([directory.absolute_path, item.get_absolute_path()]) == directory.absolute_path:
+                items.add(item)
+        return items
 
 
 @dataclass(eq=True, unsafe_hash=True)
@@ -126,14 +149,23 @@ class SharedItem:
         return fields
 
 
-def scan_directory(shared_directory: SharedDirectory) -> Set[SharedItem]:
+def scan_directory(shared_directory: SharedDirectory, children: List[SharedDirectory] = None) -> Set[SharedItem]:
     """Scans the directory for items to share
 
     :param shared_directory: `SharedDirectory` instance
+    :param children: list of `SharedDirectory` instances, the items in this list
+        will not be returned and should be scanned individually
     :return: set of `SharedItem` objects found during the scan
     """
+    children = children or []
     shared_items = set()
     for directory, _, files in os.walk(shared_directory.absolute_path):
+        # Check if the currently scanned directory is part of any of the given
+        # child directories
+        abs_dir = os.path.normpath(os.path.abspath(directory))
+        if any(child_dir.is_parent_of(abs_dir) for child_dir in children):
+            continue
+
         subdir = os.path.relpath(directory, shared_directory.absolute_path)
 
         if subdir == '.':
@@ -351,8 +383,9 @@ class SharesManager:
         add the directory to the directory map
 
         :param shared_directory: path of the shared directory
-        :param share_mode:
-        :param users:
+        :param share_mode: the share mode for the directory
+        :param users: in case the share mode is `USERS`, a list of users to
+            share it with
         :return: a `SharedDirectory` object
         """
         # Calc absolute path, generate an alias and store it
@@ -371,8 +404,27 @@ class SharesManager:
             if shared_directory == directory_object:
                 return shared_directory
 
+        # If the new directory is a child of an existing directory, move items
+        # to the child directory and remove them from the parent directory
+        parents = self._get_parent_directories(directory_object)
+        if parents:
+            parent = parents[-1]
+            children = parent.get_items_for_directory(directory_object)
+            directory_object.items |= children
+            parent.items -= children
+
         self._shared_directories.append(directory_object)
         return directory_object
+
+    def remove_shared_directory(self, directory: SharedDirectory):
+        self._shared_directories.remove(directory)
+
+        parents = self._get_parent_directories(directory)
+        # If the directory has a parent directory, move all items into that
+        # directory
+        if parents:
+            parent = parents[-1]
+            parent.items |= directory.items
 
     async def scan(self):
         """Scans all directories in `shared_directories` list"""
@@ -386,7 +438,7 @@ class SharesManager:
             logger.info(f"scheduling scan for directory : {shared_directory!r})")
             scan_future = loop.run_in_executor(
                 self.executor,
-                partial(scan_directory, shared_directory)
+                partial(scan_directory, shared_directory, children=self._get_child_directories(shared_directory))
             )
             scan_future.add_done_callback(
                 partial(self._scan_directory_callback, shared_directory)
@@ -703,16 +755,22 @@ class SharesManager:
             self._term_map[term].add(item)
 
     def _get_parent_directories(self, shared_directory: SharedDirectory) -> List[SharedDirectory]:
-        """Returns a list of parent shared directories"""
-        parent_dirs = []
-        for potential_parent_dir in self._shared_directories:
-            commonpath = os.path.commonpath([
-                potential_parent_dir.absolute_path,
-                shared_directory.absolute_path
-            ])
-            if commonpath == potential_parent_dir.absolute_path:
-                parent_dirs.append(potential_parent_dir)
+        """Returns a list of parent shared directories. The parent directories
+        will be sorted by length of the absolute path (longest last)
+        """
+        parent_dirs = [
+            directory for directory in self._shared_directories
+            if directory != shared_directory and directory.is_parent_of(shared_directory)
+        ]
         return sorted(parent_dirs, key=lambda d: len(d.absolute_path))
+
+    def _get_child_directories(self, shared_directory: SharedDirectory):
+        """Returns a list of child directories"""
+        children = [
+            directory for directory in self._shared_directories
+            if directory != shared_directory and directory.is_child_of(shared_directory)
+        ]
+        return children
 
     def is_directory_locked(self, directory: SharedDirectory, username: str) -> bool:
         """Checks if the shared directory is locked for the given `username`"""
