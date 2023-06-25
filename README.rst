@@ -97,10 +97,22 @@ Sharing
 +------------------------------------+---------------+-----------------------------------------------------------------------------------+-----------+
 | sharing.download                   | string        | Directory to which files will be downloaded to                                    | <not set> |
 +------------------------------------+---------------+-----------------------------------------------------------------------------------+-----------+
-| sharing.directories                | array[string] | List of shared directories                                                        | <not set> |
+| sharing.directories                | array[object] | List of shared directories:                                                       | <not set> |
 +------------------------------------+---------------+-----------------------------------------------------------------------------------+-----------+
 | sharing.index.store_interval       | integer       | Shared items index automatically gets stored, this parameter defines the interval | 120       |
 +------------------------------------+---------------+-----------------------------------------------------------------------------------+-----------+
+
+The `sharing.directories` list contains objects which have the following parameters:
+
++------------+---------------+-----------------------------------------------------+-----------+
+| Parameter  |     Type      |                     Description                     | Mandatory |
++============+===============+=====================================================+===========+
+| path       | string        | Maximum amount of simultaneously uploads            | yes       |
++------------+---------------+-----------------------------------------------------+-----------+
+| share_mode | string        | Possible values: `everyone`, `friends`, `users`     | yes       |
++------------+---------------+-----------------------------------------------------+-----------+
+| users      | array[string] | List of specific users to share this directory with | no        |
++------------+---------------+-----------------------------------------------------+-----------+
 
 
 Chats / Users
