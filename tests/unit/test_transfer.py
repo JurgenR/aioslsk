@@ -8,13 +8,9 @@ import pytest
 from aioslsk.configuration import Configuration
 from aioslsk.events import TrackUserEvent
 from aioslsk.model import UserStatus
-from aioslsk.transfer import (
-    Transfer,
-    TransferShelveCache,
-    TransferDirection,
-    TransferState,
-    TransferManager,
-)
+from aioslsk.transfer.cache import TransferShelveCache
+from aioslsk.transfer.model import Transfer, TransferDirection, TransferState
+from aioslsk.transfer.manager import TransferManager
 from aioslsk.settings import Settings
 from aioslsk.state import State
 

@@ -17,7 +17,8 @@ from .server import ServerManager
 from .search import SearchRequest
 from .state import State
 from .settings import Settings
-from .transfer import Transfer, TransferDirection, TransferManager
+from .transfer.manager import TransferManager
+from .transfer.model import Transfer, TransferDirection
 from .utils import ticket_generator
 
 
