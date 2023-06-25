@@ -21,7 +21,7 @@ from aioslsk.protocol.messages import (
 from aioslsk.protocol.primitives import RoomTicker, UserStats
 from aioslsk.search import SearchType
 from aioslsk.settings import Settings
-from aioslsk.server_manager import ServerManager
+from aioslsk.server import ServerManager
 from aioslsk.state import State
 
 import pytest

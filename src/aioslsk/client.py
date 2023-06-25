@@ -13,7 +13,7 @@ from .shares.manager import SharesManager
 from .model import Room, User
 from .network.network import Network
 from .peer import PeerManager
-from .server_manager import ServerManager
+from .server import ServerManager
 from .search import SearchRequest
 from .state import State
 from .settings import Settings
