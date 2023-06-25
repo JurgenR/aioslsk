@@ -5,19 +5,20 @@ from typing import List, Union
 
 from .configuration import Configuration
 from .events import EventBus, InternalEventBus
-from .shares import (
-    SharesManager,
+from .shares.cache import (
     SharesShelveCache,
     SharesCache,
 )
+from .shares.manager import SharesManager
 from .model import Room, User
 from .network.network import Network
 from .peer import PeerManager
-from .server_manager import ServerManager
+from .server import ServerManager
 from .search import SearchRequest
 from .state import State
 from .settings import Settings
-from .transfer import Transfer, TransferDirection, TransferManager
+from .transfer.manager import TransferManager
+from .transfer.model import Transfer, TransferDirection
 from .utils import ticket_generator
 
 
@@ -28,7 +29,7 @@ DEFAULT_SETTINGS_NAME = 'aioslsk'
 logger = logging.getLogger(__name__)
 
 
-class SoulSeek:
+class SoulSeekClient:
 
     def __init__(self, configuration: Configuration, event_bus: EventBus = None):
         super().__init__()

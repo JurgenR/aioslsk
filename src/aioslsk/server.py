@@ -92,7 +92,7 @@ from .protocol.messages import (
 )
 from .model import ChatMessage, RoomMessage, User, UserStatus
 from .network.network import Network
-from .shares import SharesManager
+from .shares.manager import SharesManager
 from .search import SearchRequest, SearchType
 from .settings import Settings
 from .state import State

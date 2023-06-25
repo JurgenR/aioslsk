@@ -1,26 +1,22 @@
 from aioslsk.configuration import Configuration
 from aioslsk.events import InternalEventBus
 from aioslsk.exceptions import FileNotFoundError, FileNotSharedError
-from aioslsk.shares import (
-    extract_attributes,
-    SharedDirectory,
-    SharedItem,
-    SharesManager,
-    SharesCache,
-    SharesShelveCache,
-    DirectoryShareMode,
-)
+from aioslsk.shares.cache import SharesCache, SharesShelveCache
+from aioslsk.shares.manager import SharesManager, extract_attributes
+from aioslsk.shares.model import DirectoryShareMode, SharedDirectory, SharedItem
 from aioslsk.settings import Settings
 
 import mutagen
 import pytest
 from pytest_unordered import unordered
 import os
+import shutil
 from typing import List
 from unittest.mock import patch
 
 
-RESOURCES = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'resources', 'shared')
+RESOURCES = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'resources')
+SHARED_DIR_PATH = os.path.join(RESOURCES, 'shared')
 
 FRIEND = 'friend0'
 USER = 'user0'
@@ -28,15 +24,15 @@ USER = 'user0'
 MP3_FILENAME = 'Kevin_MacLeod-Galway.mp3'
 FLAC_FILENAME = 'Kevin_MacLeod-Galway.flac'
 SUBDIR_FILENAME = 'Strange_Drone_Impact.mp3'
-SUBDIR_PATH = os.path.join(RESOURCES, 'Cool_Test_Album')
-ROOT_FILE_1_PATH = os.path.join(RESOURCES, MP3_FILENAME)
-ROOT_FILE_2_PATH = os.path.join(RESOURCES, FLAC_FILENAME)
-SUBDIR_FILE_1_PATH = os.path.join(RESOURCES, SUBDIR_FILENAME)
+SUBDIR_PATH = os.path.join(SHARED_DIR_PATH, 'Cool_Test_Album')
+ROOT_FILE_1_PATH = os.path.join(SHARED_DIR_PATH, MP3_FILENAME)
+ROOT_FILE_2_PATH = os.path.join(SHARED_DIR_PATH, FLAC_FILENAME)
+SUBDIR_FILE_1_PATH = os.path.join(SHARED_DIR_PATH, SUBDIR_FILENAME)
 
 DEFAULT_SETTINGS = {
     'sharing': {
         'directories': [
-            {'path': RESOURCES,'share_mode': 'everyone'}
+            {'path': SHARED_DIR_PATH,'share_mode': 'everyone'}
         ]
     },
     'users': {'friends': []}
@@ -44,7 +40,7 @@ DEFAULT_SETTINGS = {
 SETTINGS_SUBDIR_FRIENDS = Settings({
     'sharing': {
         'directories': [
-            {'path': RESOURCES, 'share_mode': 'everyone'},
+            {'path': SHARED_DIR_PATH, 'share_mode': 'everyone'},
             {'path': SUBDIR_PATH, 'share_mode': 'friends'}
         ]
     },
@@ -53,7 +49,7 @@ SETTINGS_SUBDIR_FRIENDS = Settings({
 SETTINGS_SUBDIR_USERS = Settings({
     'sharing': {
         'directories': [
-            {'path': RESOURCES, 'share_mode': 'everyone'},
+            {'path': SHARED_DIR_PATH, 'share_mode': 'everyone'},
             {'path': SUBDIR_PATH, 'share_mode': 'users', 'users': [USER]}
         ]
     },
@@ -98,21 +94,21 @@ def configuration(tmpdir) -> Configuration:
 class TestFunctions:
 
     def test_extractAttributes_MP3File_shouldReturnAttributes(self):
-        filepath = os.path.join(RESOURCES, MP3_FILENAME)
+        filepath = os.path.join(SHARED_DIR_PATH, MP3_FILENAME)
 
         attributes = extract_attributes(filepath)
 
         assert attributes == [(0, 128), (1, 15)]
 
     def test_extractAttributes_FLACFile_shouldReturnAttributes(self):
-        filepath = os.path.join(RESOURCES, FLAC_FILENAME)
+        filepath = os.path.join(SHARED_DIR_PATH, FLAC_FILENAME)
 
         attributes = extract_attributes(filepath)
 
         assert attributes == [(1, 15), (4, 44100), (5, 16)]
 
     def test_extractAttributes_exception_shouldReturnEmpty(self):
-        filepath = os.path.join(RESOURCES, FLAC_FILENAME)
+        filepath = os.path.join(SHARED_DIR_PATH, FLAC_FILENAME)
         with patch('mutagen.File', side_effect=mutagen.MutagenError):
             attributes = extract_attributes(filepath)
 
@@ -269,7 +265,7 @@ class TestSharesManagerSharedDirectoryManagement:
     def test_loadFromSettings(self, manager: SharesManager):
         manager.load_from_settings()
         assert 1 == len(manager.shared_directories)
-        assert manager.shared_directories[0].absolute_path == RESOURCES
+        assert manager.shared_directories[0].absolute_path == SHARED_DIR_PATH
 
     @pytest.mark.asyncio
     async def test_scan(self, manager: SharesManager):
@@ -292,7 +288,7 @@ class TestSharesManagerSharedDirectoryManagement:
         manager._settings = Settings({
             'sharing': {
                 'directories': [
-                    {'path': RESOURCES, 'share_mode': 'everyone'},
+                    {'path': SHARED_DIR_PATH, 'share_mode': 'everyone'},
                     {'path': SUBDIR_PATH, 'share_mode': 'friends'}
                 ]
             }
@@ -319,7 +315,7 @@ class TestSharesManagerSharedDirectoryManagement:
         manager._settings = Settings({
             'sharing': {
                 'directories': [
-                    {'path': RESOURCES, 'share_mode': 'everyone'},
+                    {'path': SHARED_DIR_PATH, 'share_mode': 'everyone'},
                     {'path': SUBDIR_PATH, 'share_mode': 'friends'}
                 ]
             }
@@ -437,8 +433,10 @@ class TestSharesManager:
 class TestSharesShelveCache:
 
     def test_read(self, configuration: Configuration):
+        shutil.copytree(os.path.join(RESOURCES, 'data'), configuration.data_directory, dirs_exist_ok=True)
         cache = SharesShelveCache(configuration.data_directory)
-        cache.read()
+        directories = cache.read()
+        assert [SHARED_DIRECTORY, ] == directories
 
     def test_write(self, configuration: Configuration):
         cache = SharesShelveCache(configuration.data_directory)

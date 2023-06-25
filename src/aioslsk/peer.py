@@ -25,7 +25,6 @@ from .events import (
     UserSharesReplyEvent,
     SearchResultEvent,
 )
-from .shares import SharesManager
 from .protocol.messages import (
     AcceptChildren,
     BranchLevel,
@@ -51,8 +50,9 @@ from .protocol.messages import (
 from .network.network import Network
 from .search import ReceivedSearch, SearchResult
 from .settings import Settings
+from .shares.manager import SharesManager
 from .state import State
-from .transfer import TransferManager
+from .transfer.manager import TransferManager
 from .utils import task_counter, ticket_generator
 
 
