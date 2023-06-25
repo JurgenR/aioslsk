@@ -1,32 +1,31 @@
 from aiofiles import os as asyncos
 import asyncio
 from concurrent.futures import Future
-from dataclasses import dataclass, field
-import enum
 from functools import partial
 import logging
 import mutagen
 from mutagen.mp3 import BitrateMode
 import os
 import re
-import shelve
 import sys
 import time
 from typing import Dict, List, Set, Tuple, Union
 import uuid
 from weakref import WeakSet
 
-from .events import InternalEventBus, ScanCompleteEvent
-from .exceptions import FileNotFoundError, FileNotSharedError
-from .naming import (
+from .cache import SharesCache
+from ..events import InternalEventBus, ScanCompleteEvent
+from ..exceptions import FileNotFoundError, FileNotSharedError
+from .model import DirectoryShareMode, SharedDirectory, SharedItem
+from ..naming import (
     chain_strategies,
     DefaultNamingStrategy,
     NumberDuplicateStrategy,
 )
-from .protocol.primitives import Attribute, DirectoryData, FileData
-from .search import SearchQuery
-from .settings import Settings
-from .utils import normalize_remote_path
+from ..protocol.primitives import DirectoryData
+from ..search import SearchQuery
+from ..settings import Settings
+from .utils import create_term_pattern, convert_items_to_file_data
 
 logger = logging.getLogger(__name__)
 
@@ -43,110 +42,6 @@ _LOSSLESS_FORMATS = [
 ]
 _QUERY_CLEAN_PATTERN = re.compile(r"[\W_]")
 """Pattern to remove all non-word/digit characters from a string"""
-
-
-def create_term_pattern(term: str, wildcard=False):
-    if wildcard:
-        return re.compile(
-            r"(?:(?<=\W|_)|^)[^\W_]*{}(?=[\W_]|$)".format(re.escape(term)),
-            flags=re.IGNORECASE
-        )
-    else:
-        return re.compile(
-            r"(?:(?<=\W|_)|^){}(?=[\W_]|$)".format(re.escape(term)),
-            flags=re.IGNORECASE
-        )
-
-
-class DirectoryShareMode(enum.Enum):
-    """Share mode for directories. The mode determines for who the results are
-    locked and who can download the file
-    """
-    EVERYONE = 'everyone'
-    FRIENDS = 'friends'
-    USERS = 'users'
-
-
-@dataclass(eq=True, unsafe_hash=True)
-class SharedDirectory:
-    directory: str
-    absolute_path: str
-    alias: str
-    share_mode: DirectoryShareMode = field(default=DirectoryShareMode.EVERYONE, compare=False, hash=False)
-    users: List[str] = field(default_factory=list, compare=False, hash=False)
-    items: Set['SharedItem'] = field(default_factory=set, init=False, compare=False, hash=False, repr=False)
-
-    def is_parent_of(self, directory: Union[str, 'SharedDirectory']) -> bool:
-        """Returns true if the current directory is a parent of the passed
-        shared directory
-
-        :param directory: directory to check
-        """
-        path = directory if isinstance(directory, str) else directory.absolute_path
-        return os.path.commonpath([path, self.absolute_path]) == self.absolute_path
-
-    def is_child_of(self, directory: Union[str, 'SharedDirectory']) -> bool:
-        """Returns true if the passed directory is a child of the current
-        directory
-        """
-        path = directory if isinstance(directory, str) else directory.absolute_path
-        return os.path.commonpath([self.absolute_path, path]) == path
-
-    def get_remote_path(self) -> str:
-        return '@@' + self.alias
-
-    def get_item_by_remote_path(self, remote_path: str) -> 'SharedItem':
-        """Returns the `SharedItem` instance belonging to the passed
-        `remote_path`
-
-        :raise FileNotFoundError: when the item cannot be found in the set of
-            `items`
-        """
-        for item in self.items:
-            if item.get_remote_path() == remote_path:
-                return item
-        else:
-            raise FileNotFoundError(
-                f"file with remote path {remote_path!r} not found in directory {self!r}")
-
-    def get_items_for_directory(self, directory: 'SharedDirectory') -> Set['SharedItem']:
-        """Gets items that are part of given directory"""
-        items = set()
-        for item in self.items:
-            if os.path.commonpath([directory.absolute_path, item.get_absolute_path()]) == directory.absolute_path:
-                items.add(item)
-        return items
-
-
-@dataclass(eq=True, unsafe_hash=True)
-class SharedItem:
-    shared_directory: SharedDirectory
-    subdir: str
-    filename: str
-    modified: float
-    attributes: bytes = field(default=None, init=False, compare=False, hash=False)
-
-    def get_absolute_path(self) -> str:
-        """Returns the absolute path of the shared item"""
-        return os.path.join(
-            self.shared_directory.absolute_path, self.subdir, self.filename)
-
-    def get_remote_path(self) -> str:
-        return normalize_remote_path(
-            '@@' + os.path.join(self.shared_directory.alias, self.subdir, self.filename))
-
-    def get_remote_directory_path(self) -> str:
-        return normalize_remote_path(
-            '@@' + os.path.join(self.shared_directory.alias, self.subdir))
-
-    def get_query_path(self) -> str:
-        """Returns the query-able part of the `SharedItem`"""
-        return os.path.join(self.subdir, self.filename)
-
-    def __getstate__(self):
-        fields = self.__dict__.copy()
-        fields['shared_directory'] = None
-        return fields
 
 
 def scan_directory(shared_directory: SharedDirectory, children: List[SharedDirectory] = None) -> Set[SharedItem]:
@@ -221,43 +116,6 @@ def extract_attributes(filepath: str) -> List[Tuple[int, int]]:
             f"failed retrieve audio file metadata. path={filepath!r}", exc_info=exc)
 
     return attributes
-
-
-class SharesCache:
-    """Abstract base class for storing shares"""
-
-    def read(self) -> List[SharedDirectory]:
-        raise NotImplementedError(
-            "'read' needs to be overwritten in a subclass")
-
-    def write(self, shared_directories: List[SharedDirectory]):
-        raise NotImplementedError(
-            "'write' needs to be overwritten in a subclass")
-
-
-class SharesShelveCache(SharesCache):
-    DEFAULT_FILENAME = 'shares_index'
-
-    def __init__(self, data_directory: str):
-        self.data_directory: str = data_directory
-
-    def _get_index_path(self) -> str:
-        return os.path.join(self.data_directory, self.DEFAULT_FILENAME)
-
-    def read(self) -> List[SharedDirectory]:
-        with shelve.open(self._get_index_path(), 'c') as db:
-            directories = db.get('index', list())
-            for directory in directories:
-                new_items = set()
-                for item in directory.items:
-                    item.shared_directory = directory
-                    new_items.add(item)
-                directory.items = new_items
-            return directories
-
-    def write(self, shared_directories: List[SharedDirectory]):
-        with shelve.open(self._get_index_path(), 'c') as db:
-            db['index'] = shared_directories
 
 
 class SharesManager:
@@ -678,7 +536,7 @@ class SharesManager:
                 public_shares.append(
                     DirectoryData(
                         name=directory,
-                        files=self.convert_items_to_file_data(files, use_full_path=False)
+                        files=convert_items_to_file_data(files, use_full_path=False)
                     )
                 )
             return public_shares
@@ -715,53 +573,11 @@ class SharesManager:
             reply.append(
                 DirectoryData(
                     name=directory,
-                    files=self.convert_items_to_file_data(files, use_full_path=False)
+                    files=convert_items_to_file_data(files, use_full_path=False)
                 )
             )
 
         return reply
-
-    def convert_item_to_file_data(
-            self, shared_item: SharedItem, use_full_path: bool = True) -> FileData:
-        """Convert a `SharedItem` object to a `FileData` object
-
-        :param use_full_path: use the full path of the file as `filename` if
-            `True` otherwise use just the filename. Should be `False` when
-            generating a shares reply, `True` when generating search reply
-        :return: the converted data
-        :raise OSError: raised when an error occurred accessing the file
-        """
-        file_path = shared_item.get_absolute_path()
-        file_size = os.path.getsize(file_path)
-        file_ext = os.path.splitext(shared_item.filename)[-1][1:]
-        if shared_item.attributes:
-            attributes = [Attribute(*attr) for attr in shared_item.attributes]
-        else:
-            attributes = []
-
-        return FileData(
-            unknown=1,
-            filename=shared_item.get_remote_path() if use_full_path else shared_item.filename,
-            filesize=file_size,
-            extension=file_ext,
-            attributes=attributes
-        )
-
-    def convert_items_to_file_data(self, shared_items: List[SharedItem], use_full_path=True) -> List[FileData]:
-        """Converts a list of L{SharedItem} instances to a list of L{FileData}
-        instances. If an exception occurs when converting the item an error will
-        be logged and the item will be omitted from the list
-        """
-        file_datas = []
-        for shared_item in shared_items:
-            try:
-                file_datas.append(
-                    self.convert_item_to_file_data(shared_item, use_full_path=use_full_path)
-                )
-            except OSError:
-                logger.exception(f"failed to convert to result : {shared_item!r}")
-
-        return file_datas
 
     def _add_item_to_term_map(self, item: SharedItem):
         path = (item.subdir + "/" + item.filename).lower()

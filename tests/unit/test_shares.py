@@ -1,15 +1,9 @@
 from aioslsk.configuration import Configuration
 from aioslsk.events import InternalEventBus
 from aioslsk.exceptions import FileNotFoundError, FileNotSharedError
-from aioslsk.shares import (
-    extract_attributes,
-    SharedDirectory,
-    SharedItem,
-    SharesManager,
-    SharesCache,
-    SharesShelveCache,
-    DirectoryShareMode,
-)
+from aioslsk.shares.cache import SharesCache, SharesShelveCache
+from aioslsk.shares.manager import SharesManager, extract_attributes
+from aioslsk.shares.model import DirectoryShareMode, SharedDirectory, SharedItem
 from aioslsk.settings import Settings
 
 import mutagen

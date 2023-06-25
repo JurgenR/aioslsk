@@ -1,8 +1,8 @@
 from aioslsk.protocol.primitives import Attribute
+from aioslsk.shares.utils import normalize_remote_path
 from aioslsk.utils import (
     get_attribute_string,
     get_duration,
-    normalize_remote_path,
     split_remote_path,
     ticket_generator,
     try_decoding,

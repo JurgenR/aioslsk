@@ -52,7 +52,7 @@ from .protocol.messages import (
 )
 from .model import UserStatus
 from .settings import Settings
-from .shares import SharesManager
+from .shares.manager import SharesManager
 from .state import State
 from .utils import task_counter, ticket_generator
 

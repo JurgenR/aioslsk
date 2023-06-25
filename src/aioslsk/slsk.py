@@ -5,11 +5,11 @@ from typing import List, Union
 
 from .configuration import Configuration
 from .events import EventBus, InternalEventBus
-from .shares import (
-    SharesManager,
+from .shares.cache import (
     SharesShelveCache,
     SharesCache,
 )
+from .shares.manager import SharesManager
 from .model import Room, User
 from .network.network import Network
 from .peer import PeerManager
