@@ -18,6 +18,7 @@ from .exceptions import (
     ConnectionReadError,
     ConnectionWriteError,
     FileNotFoundError,
+    FileNotSharedError,
     PeerConnectionError,
 )
 from .network.connection import (
@@ -989,10 +990,11 @@ class TransferManager:
 
         # Check if the shared file exists
         try:
-            shared_item = self._shares_manager.get_shared_item(message.filename)
-            transfer.local_path = shared_item.get_absolute_path()
-            transfer.filesize = self._shares_manager.get_filesize(shared_item)
-        except FileNotFoundError:
+            item = self._shares_manager.get_shared_item(
+                message.filename, connection.username)
+            transfer.local_path = item.get_absolute_path()
+            transfer.filesize = self._shares_manager.get_filesize(item)
+        except (FileNotFoundError, FileNotSharedError):
             await self.fail(transfer, reason="File not shared.")
             await connection.queue_message(
                 PeerTransferQueueFailed.Request(
@@ -1031,6 +1033,23 @@ class TransferManager:
         # Make a decision based on what was requested and what we currently have
         # in our queue
         if TransferDirection(message.direction) == TransferDirection.UPLOAD:
+            # The other peer is asking us to upload a file. Check if this is not
+            # a locked file for the given user
+            try:
+                self._shares_manager.get_shared_item(
+                    message.filename, username=connection.username)
+            except (FileNotFoundError, FileNotSharedError):
+                await connection.queue_message(
+                    PeerTransferReply.Request(
+                        ticket=message.ticket,
+                        allowed=False,
+                        reason='Failed'
+                    )
+                )
+                if transfer:
+                    await self.fail(transfer, "File not shared.")
+                    return
+
             if transfer is None:
                 # Got a request to upload, possibly without prior PeerTransferQueue
                 # message. Kindly put it in queue

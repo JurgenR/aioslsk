@@ -1,6 +1,6 @@
 from aioslsk.configuration import Configuration
 from aioslsk.events import InternalEventBus
-from aioslsk.exceptions import FileNotFoundError
+from aioslsk.exceptions import FileNotFoundError, FileNotSharedError
 from aioslsk.shares import (
     extract_attributes,
     SharedDirectory,
@@ -8,28 +8,57 @@ from aioslsk.shares import (
     SharesManager,
     SharesCache,
     SharesShelveCache,
+    DirectoryShareMode,
 )
 from aioslsk.settings import Settings
 
+import mutagen
 import pytest
 from pytest_unordered import unordered
 import os
 from typing import List
+from unittest.mock import patch
 
 
 RESOURCES = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'resources', 'shared')
 
+FRIEND = 'friend0'
+USER = 'user0'
+
 MP3_FILENAME = 'Kevin_MacLeod-Galway.mp3'
 FLAC_FILENAME = 'Kevin_MacLeod-Galway.flac'
-
+SUBDIR_FILENAME = 'Strange_Drone_Impact.mp3'
+SUBDIR_PATH = os.path.join(RESOURCES, 'Cool_Test_Album')
+ROOT_FILE_1_PATH = os.path.join(RESOURCES, MP3_FILENAME)
+ROOT_FILE_2_PATH = os.path.join(RESOURCES, FLAC_FILENAME)
+SUBDIR_FILE_1_PATH = os.path.join(RESOURCES, SUBDIR_FILENAME)
 
 DEFAULT_SETTINGS = {
     'sharing': {
         'directories': [
-            RESOURCES
+            {'path': RESOURCES,'share_mode': 'everyone'}
         ]
-    }
+    },
+    'users': {'friends': []}
 }
+SETTINGS_SUBDIR_FRIENDS = Settings({
+    'sharing': {
+        'directories': [
+            {'path': RESOURCES, 'share_mode': 'everyone'},
+            {'path': SUBDIR_PATH, 'share_mode': 'friends'}
+        ]
+    },
+    'users': {'friends': [FRIEND]}
+})
+SETTINGS_SUBDIR_USERS = Settings({
+    'sharing': {
+        'directories': [
+            {'path': RESOURCES, 'share_mode': 'everyone'},
+            {'path': SUBDIR_PATH, 'share_mode': 'users', 'users': [USER]}
+        ]
+    },
+    'users': {'friends': []}
+})
 
 SHARED_DIRECTORY = SharedDirectory('music', 'C:\\music', 'abcdef')
 SHARED_ITEMS = {
@@ -40,6 +69,11 @@ SHARED_ITEMS = {
 SHARED_DIRECTORY.items = set(SHARED_ITEMS.values())
 
 
+async def _load_and_scan(manager: SharesManager):
+    manager.load_from_settings()
+    await manager.scan(wait_for_attributes=True)
+
+
 @pytest.fixture
 def manager(tmp_path):
     return SharesManager(Settings(DEFAULT_SETTINGS), SharesCache(), InternalEventBus())
@@ -48,7 +82,7 @@ def manager(tmp_path):
 @pytest.fixture
 def manager_query(tmp_path):
     manager = SharesManager(Settings(DEFAULT_SETTINGS), SharesCache(), InternalEventBus())
-    manager.shared_directories = [SHARED_DIRECTORY]
+    manager._shared_directories = [SHARED_DIRECTORY]
     manager.build_term_map(SHARED_DIRECTORY)
 
     return manager
@@ -77,6 +111,13 @@ class TestFunctions:
 
         assert attributes == [(1, 15), (4, 44100), (5, 16)]
 
+    def test_extractAttributes_exception_shouldReturnEmpty(self):
+        filepath = os.path.join(RESOURCES, FLAC_FILENAME)
+        with patch('mutagen.File', side_effect=mutagen.MutagenError):
+            attributes = extract_attributes(filepath)
+
+        assert [] == attributes
+
 
 class TestSharedDirectory:
 
@@ -103,7 +144,7 @@ class TestSharedDirectory:
             shared_directory.get_item_by_remote_path(remote_path)
 
 
-class TestSharesManager:
+class TestSharesManagerQuery:
 
     @pytest.mark.parametrize(
         'query,expected_items',
@@ -124,8 +165,9 @@ class TestSharesManager:
     )
     def test_querySimpleTerms_matching(self, manager_query: SharesManager, query: str, expected_items: List[str]):
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
-        actual_items = manager_query.query(query)
+        actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
+        assert locked_items == []
 
     @pytest.mark.parametrize(
         'query',
@@ -145,8 +187,9 @@ class TestSharesManager:
         ]
     )
     def test_querySimpleTerms_notMatching(self, manager_query: SharesManager, query: str):
-        actual_items = manager_query.query(query)
+        actual_items, locked_items = manager_query.query(query)
         assert actual_items == []
+        assert locked_items == []
 
     @pytest.mark.parametrize(
         'query,expected_items',
@@ -159,8 +202,9 @@ class TestSharesManager:
     )
     def test_querySpecialCharactersInTerm_matching(self, manager_query: SharesManager, query: str, expected_items: List[str]):
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
-        actual_items = manager_query.query(query)
+        actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
+        assert locked_items == []
 
     @pytest.mark.parametrize(
         'query,expected_items',
@@ -179,8 +223,9 @@ class TestSharesManager:
     )
     def test_queryWildcard_matching(self, manager_query: SharesManager, query: str, expected_items: List[str]):
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
-        actual_items = manager_query.query(query)
+        actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
+        assert locked_items == []
 
     @pytest.mark.parametrize(
         'query,expected_items',
@@ -197,8 +242,9 @@ class TestSharesManager:
     )
     def test_queryExcludeTerm(self, manager_query: SharesManager, query: str, expected_items: List[str]):
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
-        actual_items = manager_query.query(query)
+        actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
+        assert locked_items == []
 
     @pytest.mark.parametrize(
         'query,expected_items',
@@ -213,8 +259,179 @@ class TestSharesManager:
     )
     def test_edgeCases(self, manager_query: SharesManager, query: str, expected_items: List[str]):
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
-        actual_items = manager_query.query(query)
+        actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
+        assert locked_items == []
+
+
+class TestSharesManagerSharedDirectoryManagement:
+
+    def test_loadFromSettings(self, manager: SharesManager):
+        manager.load_from_settings()
+        assert 1 == len(manager.shared_directories)
+        assert manager.shared_directories[0].absolute_path == RESOURCES
+
+    @pytest.mark.asyncio
+    async def test_scan(self, manager: SharesManager):
+        manager.load_from_settings()
+        await manager.scan()
+        directory = manager.shared_directories[0]
+        assert 3 == len(directory.items)
+
+    @pytest.mark.asyncio
+    async def test_scan_waitForAttributes(self, manager: SharesManager):
+        manager.load_from_settings()
+        await manager.scan(wait_for_attributes=True)
+        directory = manager.shared_directories[0]
+        assert 3 == len(directory.items)
+        for item in directory.items:
+            assert item.attributes is not None
+
+    @pytest.mark.asyncio
+    async def test_scan_nestedDirectories(self, manager: SharesManager):
+        manager._settings = Settings({
+            'sharing': {
+                'directories': [
+                    {'path': RESOURCES, 'share_mode': 'everyone'},
+                    {'path': SUBDIR_PATH, 'share_mode': 'friends'}
+                ]
+            }
+        })
+        manager.load_from_settings()
+        assert 2 == len(manager.shared_directories)
+
+        await manager.scan()
+        assert 2 == len(manager.shared_directories[0].items)
+        assert 1 == len(manager.shared_directories[1].items)
+
+    @pytest.mark.asyncio
+    async def test_addSharedDirectory_existingSubDirectory(self, manager: SharesManager):
+        manager.load_from_settings()
+        await manager.scan()
+        manager.add_shared_directory(SUBDIR_PATH, DirectoryShareMode.FRIENDS)
+
+        assert 2 == len(manager.shared_directories)
+        assert 2 == len(manager.shared_directories[0].items)
+        assert 1 == len(manager.shared_directories[1].items)
+
+    @pytest.mark.asyncio
+    async def test_removeSharedDirectory_withSubdir(self, manager: SharesManager):
+        manager._settings = Settings({
+            'sharing': {
+                'directories': [
+                    {'path': RESOURCES, 'share_mode': 'everyone'},
+                    {'path': SUBDIR_PATH, 'share_mode': 'friends'}
+                ]
+            }
+        })
+        manager.load_from_settings()
+        await manager.scan()
+        assert 2 == len(manager.shared_directories[0].items)
+        assert 1 == len(manager.shared_directories[1].items)
+
+        subdir = manager.shared_directories[1]
+        manager.remove_shared_directory(subdir)
+        assert subdir not in manager.shared_directories
+        assert 1 == len(manager.shared_directories)
+        assert 3 == len(manager.shared_directories[0].items)
+
+
+class TestManagerReplies:
+
+    @pytest.mark.asyncio
+    async def test_createSharesReply_everyone(self, manager: SharesManager):
+        await _load_and_scan(manager)
+        result, locked = manager.create_shares_reply('anyone')
+        assert 2 == len(result)
+        assert [] == locked
+
+    @pytest.mark.asyncio
+    async def test_createSharesReply_friends_isFriend(self, manager: SharesManager):
+        manager._settings = SETTINGS_SUBDIR_FRIENDS
+        await _load_and_scan(manager)
+        result, locked = manager.create_shares_reply(FRIEND)
+        assert 2 == len(result)
+        assert [] == locked
+
+    @pytest.mark.asyncio
+    async def test_createSharesReply_friends_isNotFriend(self, manager: SharesManager):
+        manager._settings = SETTINGS_SUBDIR_FRIENDS
+        await _load_and_scan(manager)
+        result, locked = manager.create_shares_reply('notfriend')
+        assert 1 == len(result)
+        assert 1 == len(locked)
+
+    @pytest.mark.asyncio
+    async def test_createSharesReply_users_isInList(self, manager: SharesManager):
+        manager._settings = SETTINGS_SUBDIR_USERS
+        await _load_and_scan(manager)
+        result, locked = manager.create_shares_reply(USER)
+        assert 2 == len(result)
+        assert [] == locked
+
+    @pytest.mark.asyncio
+    async def test_createSharesReply_users_isNotInList(self, manager: SharesManager):
+        manager._settings = SETTINGS_SUBDIR_USERS
+        await _load_and_scan(manager)
+        result, locked = manager.create_shares_reply('notuser')
+        assert 1 == len(result)
+        assert 1 == len(locked)
+
+    @pytest.mark.asyncio
+    async def test_createDirectoryReply(self, manager: SharesManager):
+        await _load_and_scan(manager)
+        root_dir = manager.shared_directories[0].get_remote_path()
+        directories = manager.create_directory_reply(root_dir)
+        assert 1 == len(directories)
+        assert 2 == len(directories[0].files)
+
+    @pytest.mark.asyncio
+    async def test_createDirectoryReply_subDir(self, manager: SharesManager):
+        await _load_and_scan(manager)
+        root_dir = manager.shared_directories[0].get_remote_path()
+        subdir = '\\'.join([root_dir, 'Cool_Test_Album'])
+        directories = manager.create_directory_reply(subdir)
+        assert 1 == len(directories)
+        assert 1 == len(directories[0].files)
+
+    @pytest.mark.asyncio
+    async def test_query_friends_isNotFriend(self, manager: SharesManager):
+        manager._settings = SETTINGS_SUBDIR_FRIENDS
+        await _load_and_scan(manager)
+        result, locked = manager.query('Strange', username='notfriend')
+        assert 0 == len(result)
+        assert 1 == len(locked)
+
+    @pytest.mark.asyncio
+    async def test_query_isFriend(self, manager: SharesManager):
+        manager._settings = SETTINGS_SUBDIR_FRIENDS
+        await _load_and_scan(manager)
+        result, locked = manager.query('Strange', username=FRIEND)
+        assert 1 == len(result)
+        assert 0 == len(locked)
+
+
+class TestSharesManager:
+
+    @pytest.mark.asyncio
+    async def test_getSharedItem_withUsername_notShared_shouldRaise(self, manager: SharesManager):
+        manager._settings = SETTINGS_SUBDIR_FRIENDS
+        await _load_and_scan(manager)
+
+        remote_path = list(manager.shared_directories[1].items)[0].get_remote_path()
+
+        with pytest.raises(FileNotSharedError):
+            manager.get_shared_item(remote_path, 'notfriend')
+
+    @pytest.mark.asyncio
+    async def test_getSharedItem_withUsername_shared_shouldRaise(self, manager: SharesManager):
+        manager._settings = SETTINGS_SUBDIR_FRIENDS
+        await _load_and_scan(manager)
+
+        remote_path = list(manager.shared_directories[1].items)[0].get_remote_path()
+
+        item = manager.get_shared_item(remote_path, FRIEND)
+        assert item is not None
 
 
 class TestSharesShelveCache:

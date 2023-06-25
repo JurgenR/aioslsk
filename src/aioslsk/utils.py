@@ -25,7 +25,7 @@ def try_decoding(value: bytes):
 
 
 def normalize_remote_path(path) -> str:
-    return re.sub(PATH_SEPERATOR_PATTERN, '\\\\', path)
+    return re.sub(PATH_SEPERATOR_PATTERN, '\\\\', path).rstrip('\\/')
 
 
 def split_remote_path(path: str) -> List[str]:

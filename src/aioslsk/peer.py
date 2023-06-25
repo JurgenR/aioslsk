@@ -275,20 +275,20 @@ class PeerManager:
         """Performs a query on the shares manager and reports the results to the
         user
         """
-        results = self._shares_manager.query(query)
+        visible, locked = self._shares_manager.query(query, username=username)
 
         self._state.received_searches.append(
             ReceivedSearch(
                 username=username,
                 query=query,
-                matched_files=len(results)
+                matched_files=len(visible) + len(locked)
             )
         )
 
-        if len(results) == 0:
+        if len(visible) + len(locked) == 0:
             return
 
-        logger.info(f"found {len(results)} results for query {query!r} (username={username!r})")
+        logger.info(f"found {len(visible)}/{len(locked)} results for query {query!r} (username={username!r})")
 
         task = asyncio.create_task(
             self._network.send_peer_messages(
@@ -296,10 +296,11 @@ class PeerManager:
                 PeerSearchReply.Request(
                     username=self._settings.get('credentials.username'),
                     ticket=ticket,
-                    results=self._shares_manager.convert_items_to_file_data(results, use_full_path=True),
+                    results=self._shares_manager.convert_items_to_file_data(visible, use_full_path=True),
                     has_slots_free=self._transfer_manager.has_slots_free(),
                     avg_speed=int(self._transfer_manager.get_average_upload_speed()),
-                    queue_size=self._transfer_manager.get_queue_size()
+                    queue_size=self._transfer_manager.get_queue_size(),
+                    locked_results=self._shares_manager.convert_items_to_file_data(locked, use_full_path=True)
                 )
             ),
             name=f'search-reply-{task_counter()}'
@@ -344,8 +345,12 @@ class PeerManager:
 
     @on_message(PeerSharesRequest.Request)
     async def _on_peer_shares_request(self, message: PeerSharesRequest.Request, connection: PeerConnection):
+        visible, locked = self._shares_manager.create_shares_reply(connection.username)
         connection.queue_message(
-            PeerSharesReply.Request(self._shares_manager.create_shares_reply())
+            PeerSharesReply.Request(
+                directories=visible,
+                locked_directories=locked
+            )
         )
 
     @on_message(PeerSharesReply.Request)
