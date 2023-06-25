@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 _COMPRESSED_FORMATS = [
     'MP3',
     'MP4',
-    'ASF', # WMA
+    'ASF',  # WMA
     'OggVorbis'
 ]
 _LOSSLESS_FORMATS = [

@@ -262,14 +262,6 @@ class SoulSeek:
         username = user.name if isinstance(user, User) else user
         await self.server_manager.get_user_status(username)
 
-    async def track_user(self, user: Union[str, User]) -> User:
-        username = user.name if isinstance(user, User) else user
-        return await self.server_manager.track_user(username)
-
-    async def untrack_user(self, user: Union[str, User]):
-        username = user.name if isinstance(user, User) else user
-        await self.server_manager.untrack_user(username)
-
     # Peer requests
     async def get_user_info(self, user: Union[str, User]):
         username = user.name if isinstance(user, User) else user
