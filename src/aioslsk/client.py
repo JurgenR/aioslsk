@@ -28,7 +28,7 @@ DEFAULT_SETTINGS_NAME = 'aioslsk'
 logger = logging.getLogger(__name__)
 
 
-class SoulSeek:
+class SoulSeekClient:
 
     def __init__(self, configuration: Configuration, event_bus: EventBus = None):
         super().__init__()
