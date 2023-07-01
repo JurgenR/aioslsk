@@ -35,32 +35,31 @@ DEFAULT_SETTINGS = {
     }
 }
 
+@pytest.fixture
+def manager() -> ServerManager:
+    state = State()
+    event_bus = EventBus()
+    internal_event_bus = Mock()
+    shares_manager = Mock()
+    network = AsyncMock()
+    network.server = AsyncMock()
+
+    manager = ServerManager(
+        state,
+        Settings(DEFAULT_SETTINGS),
+        event_bus,
+        internal_event_bus,
+        shares_manager,
+        network
+    )
+
+    return manager
+
 
 class TestServerManager:
 
-    def _create_server_manager(self) -> ServerManager:
-        state = State()
-        event_bus = EventBus()
-        internal_event_bus = Mock()
-        shares_manager = Mock()
-        network = AsyncMock()
-        network.server = AsyncMock()
-
-        manager = ServerManager(
-            state,
-            Settings(DEFAULT_SETTINGS),
-            event_bus,
-            internal_event_bus,
-            shares_manager,
-            network
-        )
-
-        return manager
-
     @pytest.mark.asyncio
-    async def test_trackUser_userNotTracked_shouldSendAddUser(self):
-        manager = self._create_server_manager()
-
+    async def test_trackUser_userNotTracked_shouldSendAddUser(self, manager: ServerManager):
         user = manager._state.get_or_create_user('user0')
 
         await manager.track_user('user0')
@@ -71,9 +70,7 @@ class TestServerManager:
         )
 
     @pytest.mark.asyncio
-    async def test_trackUser_userTracked_shouldNotSendAddUser(self):
-        manager = self._create_server_manager()
-
+    async def test_trackUser_userTracked_shouldNotSendAddUser(self, manager: ServerManager):
         user = manager._state.get_or_create_user('user0')
         user.is_tracking = True
 
@@ -83,9 +80,7 @@ class TestServerManager:
         assert 0 == manager._network.send_server_messages.await_count
 
     @pytest.mark.asyncio
-    async def test_untrackUser_userTracked_shouldSendRemoveUser(self):
-        manager = self._create_server_manager()
-
+    async def test_untrackUser_userTracked_shouldSendRemoveUser(self, manager: ServerManager):
         user = manager._state.get_or_create_user('user0')
         user.is_tracking = True
 
@@ -97,10 +92,8 @@ class TestServerManager:
         )
 
     @pytest.mark.asyncio
-    async def test_whenRoomTickersReceived_shouldUpdateModelAndEmit(self):
-        manager = self._create_server_manager()
-
-        callback = Mock()
+    async def test_whenRoomTickersReceived_shouldUpdateModelAndEmit(self, manager: ServerManager):
+        callback = AsyncMock()
         manager._event_bus.register(RoomTickersEvent, callback)
 
         await manager._on_chat_room_tickers(
@@ -120,7 +113,7 @@ class TestServerManager:
         }
 
         assert manager._state.rooms['room0'].tickers == expected_tickers
-        callback.assert_called_once_with(
+        callback.assert_awaited_once_with(
             RoomTickersEvent(
                 manager._state.rooms['room0'],
                 tickers=expected_tickers
@@ -128,10 +121,8 @@ class TestServerManager:
         )
 
     @pytest.mark.asyncio
-    async def test_whenRoomTickerAdded_shouldUpdateModelAndEmit(self):
-        manager = self._create_server_manager()
-
-        callback = Mock()
+    async def test_whenRoomTickerAdded_shouldUpdateModelAndEmit(self, manager: ServerManager):
+        callback = AsyncMock()
         manager._event_bus.register(RoomTickerAddedEvent, callback)
 
         await manager._on_chat_room_ticker_added(
@@ -143,7 +134,7 @@ class TestServerManager:
         expected_tickers = {'user0': 'hello'}
 
         assert manager._state.rooms['room0'].tickers == expected_tickers
-        callback.assert_called_once_with(
+        callback.assert_awaited_once_with(
             RoomTickerAddedEvent(
                 manager._state.rooms['room0'],
                 manager._state.users['user0'],
@@ -152,10 +143,8 @@ class TestServerManager:
         )
 
     @pytest.mark.asyncio
-    async def test_whenRoomTickerRemoved_shouldUpdateModelAndEmit(self):
-        manager = self._create_server_manager()
-
-        callback = Mock()
+    async def test_whenRoomTickerRemoved_shouldUpdateModelAndEmit(self, manager: ServerManager):
+        callback = AsyncMock()
         manager._event_bus.register(RoomTickerRemovedEvent, callback)
 
         room = manager._state.get_or_create_room('room0')
@@ -169,7 +158,7 @@ class TestServerManager:
         expected_tickers = {}
 
         assert manager._state.rooms['room0'].tickers == expected_tickers
-        callback.assert_called_once_with(
+        callback.assert_awaited_once_with(
             RoomTickerRemovedEvent(
                 manager._state.rooms['room0'],
                 manager._state.users['user0']
@@ -177,10 +166,8 @@ class TestServerManager:
         )
 
     @pytest.mark.asyncio
-    async def test_whenRoomTickerRemoved_noTickerForUser_shouldWarnAndEmit(self, caplog):
-        manager = self._create_server_manager()
-
-        callback = Mock()
+    async def test_whenRoomTickerRemoved_noTickerForUser_shouldWarnAndEmit(self, caplog, manager: ServerManager):
+        callback = AsyncMock()
         manager._event_bus.register(RoomTickerRemovedEvent, callback)
 
         manager._state.get_or_create_room('room0')
@@ -191,7 +178,7 @@ class TestServerManager:
         )
 
         assert caplog.records[-1].levelname == 'WARNING'
-        callback.assert_called_once_with(
+        callback.assert_awaited_once_with(
             RoomTickerRemovedEvent(
                 manager._state.rooms['room0'],
                 manager._state.users['user0']
@@ -199,10 +186,8 @@ class TestServerManager:
         )
 
     @pytest.mark.asyncio
-    async def test_onChatRoomMessage_shouldEmitEvent(self):
-        manager = self._create_server_manager()
-
-        callback = Mock()
+    async def test_onChatRoomMessage_shouldEmitEvent(self, manager: ServerManager):
+        callback = AsyncMock()
         manager._event_bus.register(RoomMessageEvent, callback)
 
         room = manager._state.get_or_create_room('room0')
@@ -219,13 +204,11 @@ class TestServerManager:
             )
 
         message = RoomMessage(timestamp=100.0, room=room, user=user, message='hello')
-        callback.assert_called_once_with(RoomMessageEvent(message))
+        callback.assert_awaited_once_with(RoomMessageEvent(message))
 
     @pytest.mark.asyncio
-    async def test_onUserJoinedRoom_shouldAddUserToRoom(self):
-        manager = self._create_server_manager()
-
-        callback = Mock()
+    async def test_onUserJoinedRoom_shouldAddUserToRoom(self, manager: ServerManager):
+        callback = AsyncMock()
         manager._event_bus.register(UserJoinedRoomEvent, callback)
 
         room = manager._state.get_or_create_room('room0')
@@ -250,13 +233,11 @@ class TestServerManager:
         assert 'US' == user.country
         assert 10 == user.slots_free
         assert UserStatus.ONLINE == user.status
-        callback.assert_called_once_with(UserJoinedRoomEvent(room, user))
+        callback.assert_awaited_once_with(UserJoinedRoomEvent(room, user))
 
     @pytest.mark.asyncio
-    async def test_onUserLeftRoom_shouldRemoveUserFromRoom(self):
-        manager = self._create_server_manager()
-
-        callback = Mock()
+    async def test_onUserLeftRoom_shouldRemoveUserFromRoom(self, manager: ServerManager):
+        callback = AsyncMock()
         manager._event_bus.register(UserLeftRoomEvent, callback)
 
         room = manager._state.get_or_create_room('room0')
@@ -269,19 +250,15 @@ class TestServerManager:
         )
 
         assert 0 == len(room.users)
-        callback.assert_called_once_with(UserLeftRoomEvent(room, user))
+        callback.assert_awaited_once_with(UserLeftRoomEvent(room, user))
 
     @pytest.mark.asyncio
-    async def test_whenSetRoomTicker_shouldSetRoomTicker(self):
-        manager = self._create_server_manager()
-
+    async def test_whenSetRoomTicker_shouldSetRoomTicker(self, manager: ServerManager):
         await manager.set_room_ticker('room0', 'hello')
         manager._network.send_server_messages.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_searchNetwork_shouldSearchAndCreateEntry(self):
-        manager = self._create_server_manager()
-
+    async def test_searchNetwork_shouldSearchAndCreateEntry(self, manager: ServerManager):
         search_query = await manager.search('my query')
         assert 'my query' == search_query.query
         assert isinstance(search_query.ticket, int)
@@ -290,9 +267,7 @@ class TestServerManager:
         manager._network.send_server_messages.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_searchRoom_shouldSearchAndCreateEntry(self):
-        manager = self._create_server_manager()
-
+    async def test_searchRoom_shouldSearchAndCreateEntry(self, manager: ServerManager):
         query = 'my query'
         room_name = 'room0'
 
@@ -305,9 +280,7 @@ class TestServerManager:
         manager._network.send_server_messages.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_searchUser_shouldSearchAndCreateEntry(self):
-        manager = self._create_server_manager()
-
+    async def test_searchUser_shouldSearchAndCreateEntry(self, manager: ServerManager):
         query = 'my query'
         username = 'room0'
 
