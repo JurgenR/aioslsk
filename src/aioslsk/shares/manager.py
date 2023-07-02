@@ -337,8 +337,8 @@ class SharesManager:
                     )
                     extract_futures.append(future)
                     amount_scheduled += 1
-            logger.debug(
-                f"scheduled {amount_scheduled} items for attribute extracting for directory {shared_directory}")
+                logger.debug(
+                    f"scheduled {amount_scheduled} items for attribute extracting for directory {shared_directory}")
 
         if wait_for_attributes:
             await asyncio.gather(*extract_futures, return_exceptions=True)

@@ -31,10 +31,12 @@ logger = logging.getLogger(__name__)
 
 class SoulSeekClient:
 
-    def __init__(self, configuration: Configuration, event_bus: EventBus = None):
+    def __init__(self, configuration: Configuration, settings_name: str = None, event_bus: EventBus = None):
         super().__init__()
         self.configuration: Configuration = configuration
-        self.settings: Settings = configuration.load_settings(DEFAULT_SETTINGS_NAME)
+        self.settings: Settings = configuration.load_settings(
+            settings_name or DEFAULT_SETTINGS_NAME
+        )
 
         self._ticket_generator = ticket_generator()
         self._stop_event: asyncio.Event = None
@@ -155,7 +157,7 @@ class SoulSeekClient:
     def save_settings(self):
         self.configuration.save_settings(DEFAULT_SETTINGS_NAME, self.settings)
 
-    async def download(self, user: Union[str, User], filename: str):
+    async def download(self, user: Union[str, User], filename: str) -> Transfer:
         if isinstance(user, User):
             user = user.name
         transfer = await self.transfer_manager.add(

@@ -99,7 +99,7 @@ from .state import State
 from .utils import task_counter, ticket_generator
 
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 class ServerManager:
