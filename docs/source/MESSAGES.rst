@@ -440,11 +440,11 @@ Kicked (Code 41)
 
 You were kicked from the server. This message is sent when the user was logged into at another location
 
-:Code: 42 (0x2A)
+:Code: 41 (0x29)
 :Receive: Nothing
 
 
-.. _UserSearch:
+.. _Kicked:
 
 UserSearch (Code 42)
 --------------------
@@ -456,7 +456,83 @@ UserSearch (Code 42)
    3. **string**: query
 
 
-.. _RoomList:
+.. _UserSearch:
+
+AddInterest (Code 51)
+---------------------
+
+:Code: 51 (0x33)
+:Receive:
+   1. **string**: interest
+
+
+.. _AddInterest:
+
+RemoveInterest (Code 52)
+------------------------
+
+:Code: 52 (0x34)
+:Receive:
+   1. **string**: interest
+
+
+.. _RemoveInterest:
+
+GetRecommendations (Code 54)
+----------------------------
+
+:Code: 54 (0x36)
+:Send: Nothing
+:Receive:
+   1. Array of recommendations:
+
+      1. **string**: recommendation
+      2. **uint32**: number
+
+   2. Array of non recommendations:
+
+      1. **string**: recommendation
+      2. **uint32**: number
+
+
+.. _GetGlobalRecommendations:
+
+GetGlobalRecommendations (Code 56)
+----------------------------------
+
+:Code: 56 (0x38)
+:Send: Nothing
+:Receive:
+   1. Array of recommendations:
+
+      1. **string**: recommendation
+      2. **uint32**: number
+
+   2. Array of non recommendations:
+
+      1. **string**: recommendation
+      2. **uint32**: number
+
+
+.. _GetGlobalRecommendations:
+
+GetUserInterests (Code 57)
+--------------------------
+
+:Code: 57 (0x39)
+:Send:
+   1. **string**: username
+:Receive:
+   1. Array of interests:
+
+      1. **string**: recommendation
+
+   2. Array of non recommendations:
+
+      1. **string**: recommendation
+
+
+.. _GetUserInterests:
 
 RoomList (Code 64)
 ------------------
@@ -695,22 +771,39 @@ GetSimilarUsers (Code 110)
       2. **uint32**: status
 
 
-.. _GetItemRecommendations:
+.. _GetSimilarUsers:
 
 GetItemRecommendations (Code 111)
 ---------------------------------
 
 :Code: 111 (0x6F)
 :Send:
-   1. **string**: recommendation
+   1. **string**: item
 :Receive:
-   1. Array of item recommendations:
+   1. **string**: item
+   2. Array of item recommendations:
 
       1. **string**: recommendation
       2. **uint32**: number
 
 
 .. _ChatRoomTickers:
+
+GetItemSimilarUsers (Code 112)
+------------------------------
+
+:Code: 112 (0x70)
+:Send:
+   1. **string**: item
+:Receive:
+   1. **string**: item
+   2. Array of similar users:
+
+      1. **string**: username
+      2. **uint32**: status
+
+
+.. _GetItemSimilarUsers:
 
 ChatRoomTickers (Code 113)
 --------------------------
@@ -767,6 +860,27 @@ Add or update a ticker for a room (room wall)
 
 
 .. _ChatRoomSearch:
+
+
+AddHatedInterest (Code 117)
+----------------------------
+
+:Code: 117 (0x75)
+:Receive:
+   1. **string**: hated_interest
+
+
+.. _AddHatedInterest:
+
+RemoveHatedInterest (Code 118)
+------------------------------
+
+:Code: 118 (0x76)
+:Receive:
+   1. **string**: hated_interest
+
+
+.. _RemoveHatedInterest:
 
 ChatRoomSearch (Code 120)
 -------------------------

@@ -10,105 +10,113 @@ from aioslsk.protocol.primitives import (
     UserStats,
 )
 from aioslsk.protocol.messages import (
-    Login,
-    SetListenPort,
-    GetPeerAddress,
-    AddUser,
-    RemoveUser,
-    GetUserStatus,
-    ChatRoomMessage,
-    ChatLeaveRoom,
-    ChatUserLeftRoom,
-    ChatUserJoinedRoom,
-    GetUserStats,
-    Kicked,
-    ConnectToPeer,
-    ChatPrivateMessage,
-    ChatAckPrivateMessage,
-    FileSearch,
-    SetStatus,
-    Ping,
-    SharedFoldersFiles,
-    UserSearch,
-    RoomList,
-    PrivilegedUsers,
-    ToggleParentSearch,
-    ParentIP,
-    ParentMinSpeed,
-    ParentSpeedRatio,
-    ParentInactivityTimeout,
-    SearchInactivityTimeout,
-    MinParentsInCache,
-    DistributedAliveInterval,
-    AddPrivilegedUser,
-    CheckPrivileges,
-    ServerSearchRequest,
     AcceptChildren,
-    PotentialParents,
-    WishlistSearch,
-    WishlistInterval,
-    GetSimilarUsers,
-    GetItemRecommendations,
-    ChatRoomTickers,
-    ChatRoomTickerAdded,
-    ChatRoomTickerRemoved,
-    ChatRoomTickerSet,
-    ChatRoomSearch,
-    SendUploadSpeed,
-    GetUserPrivileges,
-    GiveUserPrivileges,
-    PrivilegesNotification,
-    PrivilegesNotificationAck,
+    AddInterest,
+    AddHatedInterest,
+    AddPrivilegedUser,
+    AddUser,
     BranchLevel,
     BranchRoot,
-    ChildDepth,
-    PrivateRoomUsers,
-    PrivateRoomAddUser,
-    PrivateRoomRemoveUser,
-    PrivateRoomDropMembership,
-    PrivateRoomDropOwnership,
-    PrivateRoomAdded,
-    PrivateRoomRemoved,
-    TogglePrivateRooms,
-    NewPassword,
-    PrivateRoomAddOperator,
-    PrivateRoomRemoveOperator,
-    PrivateRoomOperatorAdded,
-    PrivateRoomOperatorRemoved,
-    PrivateRoomOperators,
-    ChatMessageUsers,
-    ChatEnablePublic,
-    ChatDisablePublic,
-    ChatPublicMessage,
-    FileSearchEx,
     CannotConnect,
     CannotCreateRoom,
-    PeerPierceFirewall,
-    PeerInit,
-    PeerSharesRequest,
-    PeerSharesReply,
-    PeerSearchReply,
-    PeerUserInfoRequest,
-    PeerUserInfoReply,
-    PeerDirectoryContentsRequest,
-    PeerDirectoryContentsReply,
-    PeerTransferRequest,
-    PeerTransferReply,
-    PeerTransferQueue,
-    PeerPlaceInQueueReply,
-    PeerUploadFailed,
-    PeerTransferQueueFailed,
-    PeerPlaceInQueueRequest,
-    PeerUploadQueueNotification,
-    DistributedPing,
-    DistributedSearchRequest,
+    ChatAckPrivateMessage,
+    ChatDisablePublic,
+    ChatEnablePublic,
+    ChatLeaveRoom,
+    ChatMessageUsers,
+    ChatPrivateMessage,
+    ChatPublicMessage,
+    ChatRoomMessage,
+    ChatRoomSearch,
+    ChatRoomTickerAdded,
+    ChatRoomTickerRemoved,
+    ChatRoomTickers,
+    ChatRoomTickerSet,
+    ChatUserJoinedRoom,
+    ChatUserLeftRoom,
+    CheckPrivileges,
+    ChildDepth,
+    ConnectToPeer,
+    DistributedAliveInterval,
     DistributedBranchLevel,
     DistributedBranchRoot,
     DistributedChildDepth,
-    ServerMessage,
+    DistributedMessage,
+    DistributedPing,
+    DistributedSearchRequest,
+    FileSearch,
+    FileSearchEx,
+    GetGlobalRecommendations,
+    GetItemRecommendations,
+    GetItemSimilarUsers,
+    GetPeerAddress,
+    GetRecommendations,
+    GetSimilarUsers,
+    GetUserInterests,
+    GetUserPrivileges,
+    GetUserStats,
+    GetUserStatus,
+    GiveUserPrivileges,
+    Kicked,
+    Login,
+    MinParentsInCache,
+    NewPassword,
+    ParentInactivityTimeout,
+    ParentIP,
+    ParentMinSpeed,
+    ParentSpeedRatio,
+    PeerDirectoryContentsReply,
+    PeerDirectoryContentsRequest,
+    PeerInit,
     PeerInitializationMessage,
     PeerMessage,
-    DistributedMessage,
+    PeerPierceFirewall,
+    PeerPlaceInQueueReply,
+    PeerPlaceInQueueRequest,
+    PeerSearchReply,
+    PeerSharesReply,
+    PeerSharesRequest,
+    PeerTransferQueue,
+    PeerTransferQueueFailed,
+    PeerTransferReply,
+    PeerTransferRequest,
+    PeerUploadFailed,
+    PeerUploadQueueNotification,
+    PeerUserInfoReply,
+    PeerUserInfoRequest,
+    Ping,
+    PotentialParents,
+    PrivateRoomAdded,
+    PrivateRoomAddOperator,
+    PrivateRoomAddUser,
+    PrivateRoomDropMembership,
+    PrivateRoomDropOwnership,
+    PrivateRoomOperatorAdded,
+    PrivateRoomOperatorRemoved,
+    PrivateRoomOperators,
+    PrivateRoomRemoved,
+    PrivateRoomRemoveOperator,
+    PrivateRoomRemoveUser,
+    PrivateRoomUsers,
+    PrivilegedUsers,
+    PrivilegesNotification,
+    PrivilegesNotificationAck,
+    RemoveHatedInterest,
+    RemoveInterest,
+    RemoveUser,
+    RoomList,
+    SearchInactivityTimeout,
+    SendUploadSpeed,
+    ServerMessage,
+    ServerSearchRequest,
+    SetListenPort,
+    SetStatus,
+    SharedFoldersFiles,
+    ToggleParentSearch,
+    TogglePrivateRooms,
+    UserSearch,
+    WishlistInterval,
+    WishlistSearch,
 )
 
 import pytest
@@ -1207,23 +1215,199 @@ class TestGetItemRecommendations:
 
     def test_GetItemRecommendations_Response_serialize(self):
         message = GetItemRecommendations.Response(
+            item='item',
             recommendations=[
                 ItemRecommendation('recommendation0', 1),
                 ItemRecommendation('recommendation1', 2)
             ]
         )
-        data = bytes.fromhex('360000006f000000020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e3102000000')
+        data = bytes.fromhex('3e0000006f000000040000006974656d020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e3102000000')
         assert message.serialize() == data
 
     def test_GetItemRecommendations_Response_deserialize(self):
         message = GetItemRecommendations.Response(
+            item='item',
             recommendations=[
                 ItemRecommendation('recommendation0', 1),
                 ItemRecommendation('recommendation1', 2)
             ]
         )
-        data = bytes.fromhex('360000006f000000020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e3102000000')
+        data = bytes.fromhex('3e0000006f000000040000006974656d020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e3102000000')
         assert GetItemRecommendations.Response.deserialize(data) == message
+
+
+class TestAddInterest:
+
+    def test_AddInterest_Request_serialize(self):
+        message = AddInterest.Request('interest0')
+        data = bytes.fromhex('110000003300000009000000696e74657265737430')
+        assert message.serialize() == data
+
+    def test_AddInterest_Request_deserialize(self):
+        message = AddInterest.Request('interest0')
+        data = bytes.fromhex('110000003300000009000000696e74657265737430')
+        assert AddInterest.Request.deserialize(data) == message
+
+
+class TestRemoveInterest:
+
+    def test_RemoveInterest_Request_serialize(self):
+        message = RemoveInterest.Request('interest0')
+        data = bytes.fromhex('110000003400000009000000696e74657265737430')
+        assert message.serialize() == data
+
+    def test_RemoveInterest_Request_deserialize(self):
+        message = RemoveInterest.Request('interest0')
+        data = bytes.fromhex('110000003400000009000000696e74657265737430')
+        assert RemoveInterest.Request.deserialize(data) == message
+
+
+class TestGetRecommendations:
+
+    def test_GetRecommendations_Request_serialize(self):
+        message = GetRecommendations.Request()
+        data = bytes.fromhex('0400000036000000')
+        assert message.serialize() == data
+
+    def test_GetRecommendations_Request_deserialize(self):
+        message = GetRecommendations.Request()
+        data = bytes.fromhex('0400000036000000')
+        assert GetRecommendations.Request.deserialize(data) == message
+
+    def test_GetRecommendations_Response_serialize(self):
+        message = GetRecommendations.Response(
+            recommendations=[
+                ItemRecommendation('recommendation0', 1),
+                ItemRecommendation('recommendation1', 2)
+            ],
+            unrecommendations=[
+                ItemRecommendation('unrecommendation0', 1),
+                ItemRecommendation('unrecommendation1', 2)
+            ]
+        )
+        data = bytes.fromhex('6c00000036000000020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31020000000200000011000000756e7265636f6d6d656e646174696f6e300100000011000000756e7265636f6d6d656e646174696f6e3102000000')
+        assert message.serialize() == data
+
+    def test_GetRecommendations_Response_deserialize(self):
+        message = GetRecommendations.Response(
+            recommendations=[
+                ItemRecommendation('recommendation0', 1),
+                ItemRecommendation('recommendation1', 2)
+            ],
+            unrecommendations=[
+                ItemRecommendation('unrecommendation0', 1),
+                ItemRecommendation('unrecommendation1', 2)
+            ]
+        )
+        data = bytes.fromhex('6c00000036000000020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31020000000200000011000000756e7265636f6d6d656e646174696f6e300100000011000000756e7265636f6d6d656e646174696f6e3102000000')
+        assert GetRecommendations.Response.deserialize(data) == message
+
+
+class TestGetGlobalRecommendations:
+
+    def test_GetGlobalRecommendations_Request_serialize(self):
+        message = GetGlobalRecommendations.Request()
+        data = bytes.fromhex('0400000038000000')
+        assert message.serialize() == data
+
+    def test_GetGlobalRecommendations_Request_deserialize(self):
+        message = GetGlobalRecommendations.Request()
+        data = bytes.fromhex('0400000038000000')
+        assert GetGlobalRecommendations.Request.deserialize(data) == message
+
+    def test_GetGlobalRecommendations_Response_serialize(self):
+        message = GetGlobalRecommendations.Response(
+            recommendations=[
+                ItemRecommendation('recommendation0', 1),
+                ItemRecommendation('recommendation1', 2)
+            ],
+            unrecommendations=[
+                ItemRecommendation('unrecommendation0', 1),
+                ItemRecommendation('unrecommendation1', 2)
+            ]
+        )
+        data = bytes.fromhex('6c00000038000000020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31020000000200000011000000756e7265636f6d6d656e646174696f6e300100000011000000756e7265636f6d6d656e646174696f6e3102000000')
+        assert message.serialize() == data
+
+    def test_GetGlobalRecommendations_Response_deserialize(self):
+        message = GetGlobalRecommendations.Response(
+            recommendations=[
+                ItemRecommendation('recommendation0', 1),
+                ItemRecommendation('recommendation1', 2)
+            ],
+            unrecommendations=[
+                ItemRecommendation('unrecommendation0', 1),
+                ItemRecommendation('unrecommendation1', 2)
+            ]
+        )
+        data = bytes.fromhex('6c00000038000000020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31020000000200000011000000756e7265636f6d6d656e646174696f6e300100000011000000756e7265636f6d6d656e646174696f6e3102000000')
+        assert GetGlobalRecommendations.Response.deserialize(data) == message
+
+
+class TestGetUserInterests:
+
+    def test_GetUserInterests_Request_serialize(self):
+        message = GetUserInterests.Request('user0')
+        data = bytes.fromhex('0d00000039000000050000007573657230')
+        assert message.serialize() == data
+
+    def test_GetUserInterests_Request_deserialize(self):
+        message = GetUserInterests.Request('user0')
+        data = bytes.fromhex('0d00000039000000050000007573657230')
+        assert GetUserInterests.Request.deserialize(data) == message
+
+    def test_GetUserInterests_Response_serialize(self):
+        message = GetUserInterests.Response(
+            username='user0',
+            interests=['interest0', 'interest1'],
+            hated_interests=['hated0', 'hated1']
+        )
+        data = bytes.fromhex('43000000390000000500000075736572300200000009000000696e7465726573743009000000696e74657265737431020000000600000068617465643006000000686174656431')
+        assert message.serialize() == data
+
+    def test_GetUserInterests_Response_deserialize(self):
+        message = GetUserInterests.Response(
+            username='user0',
+            interests=['interest0', 'interest1'],
+            hated_interests=['hated0', 'hated1']
+        )
+        data = bytes.fromhex('43000000390000000500000075736572300200000009000000696e7465726573743009000000696e74657265737431020000000600000068617465643006000000686174656431')
+        assert GetUserInterests.Response.deserialize(data) == message
+
+
+class TestGetItemSimilarUsers:
+
+    def test_GetItemSimilarUsers_Request_serialize(self):
+        message = GetItemSimilarUsers.Request('item0')
+        data = bytes.fromhex('0d00000070000000050000006974656d30')
+        assert message.serialize() == data
+
+    def test_GetItemSimilarUsers_Request_deserialize(self):
+        message = GetItemSimilarUsers.Request('item0')
+        data = bytes.fromhex('0d00000070000000050000006974656d30')
+        assert GetItemSimilarUsers.Request.deserialize(data) == message
+
+    def test_GetItemSimilarUsers_Response_serialize(self):
+        message = GetItemSimilarUsers.Response(
+            item='item0',
+            users=[
+                SimilarUser('user0', 1),
+                SimilarUser('user1', 2)
+            ]
+        )
+        data = bytes.fromhex('2b00000070000000050000006974656d30020000000500000075736572300100000005000000757365723102000000')
+        assert message.serialize() == data
+
+    def test_GetItemSimilarUsers_Response_deserialize(self):
+        message = GetItemSimilarUsers.Response(
+            item='item0',
+            users=[
+                SimilarUser('user0', 1),
+                SimilarUser('user1', 2)
+            ]
+        )
+        data = bytes.fromhex('2b00000070000000050000006974656d30020000000500000075736572300100000005000000757365723102000000')
+        assert GetItemSimilarUsers.Response.deserialize(data) == message
 
 
 class TestChatRoomTickers:
@@ -1308,6 +1492,32 @@ class TestChatRoomTickerSet:
         )
         data = bytes.fromhex('180000007400000005000000726f6f6d30070000007469636b657230')
         assert ChatRoomTickerSet.Request.deserialize(data) == message
+
+
+class TestAddHatedInterest:
+
+    def test_AddHatedInterest_Request_serialize(self):
+        message = AddHatedInterest.Request('hated0')
+        data = bytes.fromhex('0e0000007500000006000000686174656430')
+        assert message.serialize() == data
+
+    def test_AddHatedInterest_Request_deserialize(self):
+        message = AddHatedInterest.Request('hated0')
+        data = bytes.fromhex('0e0000007500000006000000686174656430')
+        assert AddHatedInterest.Request.deserialize(data) == message
+
+
+class TestRemoveHatedInterest:
+
+    def test_RemoveHatedInterest_Request_serialize(self):
+        message = RemoveHatedInterest.Request('hated0')
+        data = bytes.fromhex('0e0000007600000006000000686174656430')
+        assert message.serialize() == data
+
+    def test_RemoveHatedInterest_Request_deserialize(self):
+        message = RemoveHatedInterest.Request('hated0')
+        data = bytes.fromhex('0e0000007600000006000000686174656430')
+        assert RemoveHatedInterest.Request.deserialize(data) == message
 
 
 class TestChatRoomSearch:
