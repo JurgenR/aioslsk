@@ -41,7 +41,7 @@ class TestTransfer:
 
         with patch('time.time', side_effect=[0.0, 2.0, ]):
             transfer.filesize = 100
-            transfer.state.start_transfering()
+            transfer.state.start_transferring()
             transfer.bytes_transfered = 100
             transfer.state.complete()
 
@@ -54,7 +54,7 @@ class TestTransfer:
 
         with patch('time.time', return_value=0.0):
             transfer.filesize = 100
-            transfer.state.start_transfering()
+            transfer.state.start_transferring()
             transfer.bytes_transfered = 30
 
         with patch('time.monotonic', side_effect=[0.05, 0.05, 0.15, 0.15, 0.25, 0.25, 0.3]):
@@ -74,7 +74,7 @@ class TestTransfer:
 
         with patch('time.time', return_value=0.0):
             transfer.filesize = 100
-            transfer.state.start_transfering()
+            transfer.state.start_transferring()
             transfer.bytes_transfered = 30
 
         assert 0.0 == transfer.get_speed()

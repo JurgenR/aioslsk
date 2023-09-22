@@ -163,7 +163,7 @@ class TestTransferState:
         transfer.state = InitializingState(transfer)
         transfer.remotely_queued = True
         with patch('time.time', time_mock):
-            transfer.state.start_transfering()
+            transfer.state.start_transferring()
 
         assert transfer.remotely_queued == False
         assert transfer.start_time == 2.0
@@ -176,7 +176,7 @@ class TestTransferState:
         transfer.state = InitializingState(transfer)
         transfer.remotely_queued = True
         with patch('time.time', time_mock):
-            transfer.state.start_transfering()
+            transfer.state.start_transferring()
 
         assert transfer.remotely_queued == False
         assert transfer.start_time == 2.0

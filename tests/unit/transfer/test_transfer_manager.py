@@ -113,7 +113,7 @@ class TestTransferManager:
 
         transfer.state.queue()
         transfer.state.initialize()
-        transfer.state.start_transfering()
+        transfer.state.start_transferring()
         await manager._complete(transfer)
 
         assert transfer.state.VALUE == TransferState.COMPLETE
@@ -125,7 +125,7 @@ class TestTransferManager:
 
         transfer.state.queue()
         transfer.state.initialize()
-        transfer.state.start_transfering()
+        transfer.state.start_transferring()
         await manager._incomplete(transfer)
 
         assert transfer.state.VALUE == TransferState.INCOMPLETE
@@ -137,7 +137,7 @@ class TestTransferManager:
 
         transfer.state.queue()
         transfer.state.initialize()
-        transfer.state.start_transfering()
+        transfer.state.start_transferring()
         await manager.abort(transfer)
 
         assert transfer.state.VALUE == TransferState.ABORTED
@@ -149,7 +149,7 @@ class TestTransferManager:
 
         transfer.state.queue()
         transfer.state.initialize()
-        transfer.state.start_transfering()
+        transfer.state.start_transferring()
         await manager._fail(transfer, reason="nok")
 
         assert transfer.state.VALUE == TransferState.FAILED

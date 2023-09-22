@@ -63,7 +63,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class TransferRequest:
-    """Class representing a request to start transfering. An object will be
+    """Class representing a request to start transfeRring. An object will be
     created when the PeerTransferRequest is sent or received and should be
     destroyed once the transfer ticket has been received or a reply sent that
     the transfer cannot continue.
@@ -109,7 +109,7 @@ class TransferManager:
             if transfer.state.VALUE == TransferState.INITIALIZING:
                 transfer.state.queue()
 
-            elif transfer.is_transfering():
+            elif transfer.is_transferring():
                 if transfer.is_transfered():
                     state = TransferState.COMPLETE
                 else:
@@ -123,6 +123,7 @@ class TransferManager:
         self._cache.write(self._transfers)
 
     def stop(self):
+        """Cancel all current transfer actions"""
         for transfer in self.transfers:
             if transfer._current_task:
                 transfer._current_task.cancel()
@@ -164,11 +165,11 @@ class TransferManager:
         await self.manage_transfers()
 
     async def _uploading(self, transfer: Transfer):
-        transfer.state.start_transfering()
+        transfer.state.start_transferring()
         await self.manage_transfers()
 
     async def _downloading(self, transfer: Transfer):
-        transfer.state.start_transfering()
+        transfer.state.start_transferring()
         await self.manage_transfers()
 
     async def _add_transfer(self, transfer: Transfer) -> Transfer:
@@ -489,7 +490,7 @@ class TransferManager:
         :param transfer: `Transfer` object
         :param connection: connection on which file should be sent
         """
-        connection.set_connection_state(PeerConnectionState.TRANSFERING)
+        connection.set_connection_state(PeerConnectionState.TRANSFERRING)
         await self._uploading(transfer)
         try:
             async with aiofiles.open(transfer.local_path, 'rb') as handle:
@@ -527,7 +528,7 @@ class TransferManager:
         :param transfer: `Transfer` object
         :param connection: connection on which file should be received
         """
-        connection.set_connection_state(PeerConnectionState.TRANSFERING)
+        connection.set_connection_state(PeerConnectionState.TRANSFERRING)
         await self._downloading(transfer)
 
         try:

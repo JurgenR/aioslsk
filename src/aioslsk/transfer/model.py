@@ -160,7 +160,7 @@ class Transfer:
             return 0.0
 
         # Transfer in progress
-        if self.is_transfering():
+        if self.is_transferring():
             if len(self._speed_log) == 0:
                 return 0.0
 
@@ -216,7 +216,7 @@ class Transfer:
             TransferState.INITIALIZING,
         )
 
-    def is_transfering(self) -> bool:
+    def is_transferring(self) -> bool:
         return self.state.VALUE in (
             TransferState.DOWNLOADING,
             TransferState.UPLOADING,

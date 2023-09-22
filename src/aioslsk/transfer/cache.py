@@ -4,7 +4,6 @@ import os
 import shelve
 from typing import List
 from .model import Transfer
-from .state import TransferState
 
 logger = logging.getLogger(__name__)
 

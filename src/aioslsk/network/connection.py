@@ -79,7 +79,7 @@ class PeerConnectionState(Enum):
     """Transfer connections: awaiting the transfer ticket"""
     AWAITING_OFFSET = auto()
     """Transfer connections: awaiting the transfer offset"""
-    TRANSFERING = auto()
+    TRANSFERRING = auto()
     """Transfer connections: ready to receive / send data"""
 
 

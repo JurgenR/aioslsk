@@ -19,6 +19,7 @@ class TransferState:
         COMPLETE = 7
         FAILED = 8
         ABORTED = 9
+        TRANSFERRING = 10
 
     VIRGIN = State.VIRGIN
     QUEUED = State.QUEUED
@@ -29,6 +30,7 @@ class TransferState:
     COMPLETE = State.COMPLETE
     FAILED = State.FAILED
     ABORTED = State.ABORTED
+    TRANSFERRING = State.TRANSFERRING
 
     VALUE = None
 
@@ -61,14 +63,12 @@ class TransferState:
     def incomplete(self):
         pass
 
-    def start_transfering(self):
+    def start_transferring(self):
         pass
 
 
 class VirginState(TransferState):
-    """State representing a newly added transfer. From here we can go to any
-    state. This is used when loading transfers from database
-    """
+    """State representing a newly added transfer"""
     VALUE = TransferState.VIRGIN
 
     def queue(self):
@@ -77,7 +77,7 @@ class VirginState(TransferState):
 
 
 class QueuedState(TransferState):
-    """Transfer is locally queued
+    """Transfer is queued
 
     Possible transitions:
     - Initializing: Uploads, requesting the peer if upload is allowed
@@ -101,11 +101,11 @@ class QueuedState(TransferState):
 
 
 class InitializingState(TransferState):
-    """Initializing state.
+    """Initializing state:
 
-    Uploads: This indicates we are attempting to establish a connection to the
+    - Uploads: This indicates we are attempting to establish a connection to the
     peer to start uploading a file
-    Downloads: The download will quickly go into this state when the transfer
+    - Downloads: The download will quickly go into this state when the transfer
     ticket has been received over a file connection
 
     Possible transitions:
@@ -132,7 +132,7 @@ class InitializingState(TransferState):
         self.transfer.fail_reason = reason
         self.transfer.transition(FailedState(self.transfer))
 
-    def start_transfering(self):
+    def start_transferring(self):
         self.transfer.remotely_queued = False
         self.transfer.set_start_time()
         if self.transfer.is_upload():
@@ -141,7 +141,7 @@ class InitializingState(TransferState):
             self.transfer.transition(DownloadingState(self.transfer))
 
 
-class _ProcessingState(TransferState):
+class _TransferringState(TransferState):
 
     def fail(self, reason: str = None):
         self.transfer.fail_reason = reason
@@ -157,7 +157,7 @@ class _ProcessingState(TransferState):
         self.transfer.transition(AbortedState(self.transfer))
 
 
-class DownloadingState(_ProcessingState):
+class DownloadingState(_TransferringState):
     """
     Possible transitions:
     - CompleteState: Transfer has successfully completed
@@ -176,7 +176,7 @@ class DownloadingState(_ProcessingState):
         self.transfer.transition(IncompleteState(self.transfer))
 
 
-class UploadingState(_ProcessingState):
+class UploadingState(_TransferringState):
     VALUE = TransferState.UPLOADING
 
     """
@@ -203,7 +203,7 @@ class CompleteState(TransferState):
 
 class IncompleteState(TransferState):
     """State only used for downloads. The transfer should enter this state if an
-    error occured during transfering but there was no explicit error from the
+    error occured during transferring but there was no explicit error from the
     other peer. In this state it should be possible to retry the transfer.
 
     Possible transitions:
