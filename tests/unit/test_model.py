@@ -1,7 +1,7 @@
 from aioslsk.model import Room, User
 
 
-class TestModel:
+class TestModelRoom:
 
     def test_addUser_userExists_shouldNotAdd(self):
         user = User(name='myuser')

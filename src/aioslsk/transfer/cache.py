@@ -3,7 +3,7 @@ import logging
 import os
 import shelve
 from typing import List
-from .model import Transfer, TransferState
+from .model import Transfer
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +33,6 @@ class TransferShelveCache:
         transfers = []
         with shelve.open(db_path, flag='c') as database:
             for _, transfer in database.items():
-                if transfer.is_processing():
-                    transfer.set_state(TransferState.QUEUED, force=True)
-
                 transfers.append(transfer)
 
         logger.info(f"read {len(transfers)} transfers from : {db_path}")

@@ -1,8 +1,14 @@
 import asyncio
 from collections import deque
-from enum import auto, Enum
+from enum import Enum
+import logging
 import os
 import time
+
+from .state import TransferState, VirginState
+
+logger = logging.getLogger(__name__)
+
 
 SPEED_LOG_INTERVAL = 0.1
 SPEED_LOG_ENTRIES = 30
@@ -13,39 +19,12 @@ class TransferDirection(Enum):
     DOWNLOAD = 1
 
 
-class TransferState(Enum):
-    VIRGIN = auto()
-    QUEUED = auto()
-    """Transfer is queued and awaiting handling"""
-    INITIALIZING = auto()
-    """Upload/download is initializing:
-
-    - Download goes into this state when PeerTransferRequest is received
-    - Upload goes into this state when we are about to send PeerTransferRequest
-      (but doesn't need to be delivered yet)
-    """
-    INCOMPLETE = auto()
-    """Connection was closed during transfer"""
-    DOWNLOADING = auto()
-    UPLOADING = auto()
-    COMPLETE = auto()
-    FAILED = auto()
-    """Upload/download failed:
-
-    - Download: Other peer rejected the upload for reasons other than 'Queued'
-    - Upload: Failure due to for example: file not present, etc...
-    """
-    ABORTED = auto()
-    """Aborted upon user request"""
-    REMOTELY_QUEUED = auto()
-
-
 class Transfer:
     """Class representing a transfer"""
     _UNPICKABLE_FIELDS = ('_speed_log', '_current_task')
 
     def __init__(self, username: str, remote_path: str, direction: TransferDirection):
-        self.state = TransferState.VIRGIN
+        self.state: TransferState = VirginState(self)
 
         self.username: str = username
         self.remote_path: str = remote_path
@@ -53,8 +32,11 @@ class Transfer:
         self.local_path: str = None
         """Absolute path to the file on disk"""
         self.direction: TransferDirection = direction
+
+        self.remotely_queued: bool = False
+        """Indicites whether the transfer queue message was received by the peer
+        """
         self.place_in_queue: int = None
-        """Place in queue, only applicable for downloads"""
         self.fail_reason: str = None
 
         self.filesize: int = None
@@ -89,22 +71,43 @@ class Transfer:
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
         self._current_task: asyncio.Task = None
 
-    def __setstate__(self, state):
+    def __setstate__(self, obj_state):
         """Called when unpickling"""
-        self.__dict__.update(state)
+        self.__dict__.update(obj_state)
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
         self._current_task = None
+        self.__dict__['state'] = TransferState.init_from_state(obj_state['state'], self)
 
     def __getstate__(self):
         """Called when pickling, removes unpickable fields from the fields to
         store
         """
-        state = self.__dict__.copy()
+        obj_state = self.__dict__.copy()
         for unpickable_field in self._UNPICKABLE_FIELDS:
-            if unpickable_field in state:
-                del state[unpickable_field]
+            if unpickable_field in obj_state:
+                del obj_state[unpickable_field]
 
-        return state
+        obj_state['state'] = obj_state['state'].VALUE
+
+        return obj_state
+
+    def reset_times(self):
+        """Clear all time related variables"""
+        self.start_time = None
+        self.complete_time = None
+        self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
+
+    def set_start_time(self):
+        """Set the start time, clear the complete time"""
+        self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
+        self.start_time = time.time()
+        self.complete_time = None
+
+    def set_complete_time(self):
+        """Set the complete time if the start time has been set"""
+        if self.start_time is not None:
+            self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
+            self.complete_time = time.time()
 
     def increase_queue_attempts(self):
         self.queue_attempts += 1
@@ -122,66 +125,10 @@ class Transfer:
         self.upload_request_attempts = 0
         self.last_upload_request_attempt = 0.0
 
-    def set_state(self, state: TransferState, force: bool = False):
-        """Sets the current state for the transfer. This will do nothing in case
-        the transfer is already in that state.
-
-        :param state: the new state
-        :param force: only used for the QUEUED state, normally we don't allow
-            to queue a transfer in case the transfer is processing but in some
-            cases it needs to be forced: during loading of transfers from
-            cache for transfers who were processing when they were stored or if
-            initialization failed (default: False)
-        :return: previous state in case state was changed, otherwise None
-        """
-        if state == self.state:
-            return None
-
-        if state == TransferState.QUEUED:
-            if force:
-                self.reset_times()
-            elif self.is_processing():
-                # Not allowed to queue processing transfers
-                return None
-
-        elif state == TransferState.REMOTELY_QUEUED:
-            pass
-
-        elif state == TransferState.INITIALIZING:
-            pass
-
-        elif state in (TransferState.DOWNLOADING, TransferState.UPLOADING):
-            self.start_time = time.time()
-            self.complete_time = None
-
-        elif state == TransferState.ABORTED:
-            # Aborting on a complete state does nothing
-            # TODO: Not sure what should # happen in case of INITIALIZING
-            if self.state in (TransferState.COMPLETE, TransferState.INCOMPLETE, TransferState.ABORTED):
-                return None
-            else:
-                self._finalize()
-
-        elif state == TransferState.FAILED:
-
-            if self.state != TransferState.ABORTED:
-                self._finalize()
-
-        elif state == TransferState.COMPLETE:
-            self._finalize()
-
-        elif state == TransferState.INCOMPLETE:
-            if self.state in (TransferState.COMPLETE, TransferState.ABORTED):
-                return None
-            self._finalize()
-
-        old_state = state
-        self.state = state
-        return old_state
-
-    def _finalize(self):
-        self.complete_time = time.time()
-        self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
+    def transition(self, state: TransferState):
+        if self.state.VALUE != state.VALUE:
+            logger.debug(f"transitioning transfer state from {self.state!r} to {state!r}")
+            self.state = state
 
     def calculate_offset(self) -> int:
         try:
@@ -201,11 +148,6 @@ class Transfer:
     def get_offset(self) -> int:
         return self._offset
 
-    def reset_times(self):
-        self.start_time = None
-        self.complete_time = None
-        self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
-
     def get_speed(self) -> float:
         """Retrieve the speed of the transfer
 
@@ -218,7 +160,7 @@ class Transfer:
             return 0.0
 
         # Transfer in progress
-        if self.is_transfering():
+        if self.is_transferring():
             if len(self._speed_log) == 0:
                 return 0.0
 
@@ -261,13 +203,24 @@ class Transfer:
         return self.direction == TransferDirection.DOWNLOAD
 
     def is_finalized(self) -> bool:
-        return self.state in (TransferState.COMPLETE, TransferState.ABORTED, TransferState.FAILED)
+        return self.state.VALUE in (
+            TransferState.COMPLETE,
+            TransferState.ABORTED,
+            TransferState.FAILED,
+        )
 
     def is_processing(self) -> bool:
-        return self.state in (TransferState.DOWNLOADING, TransferState.UPLOADING, TransferState.INITIALIZING, )
+        return self.state.VALUE in (
+            TransferState.DOWNLOADING,
+            TransferState.UPLOADING,
+            TransferState.INITIALIZING,
+        )
 
-    def is_transfering(self) -> bool:
-        return self.state in (TransferState.DOWNLOADING, TransferState.UPLOADING, )
+    def is_transferring(self) -> bool:
+        return self.state.VALUE in (
+            TransferState.DOWNLOADING,
+            TransferState.UPLOADING,
+        )
 
     def is_transfered(self) -> bool:
         return self.filesize == self.bytes_transfered
