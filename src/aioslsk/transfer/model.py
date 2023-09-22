@@ -76,7 +76,6 @@ class Transfer:
         self.__dict__.update(obj_state)
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
         self._current_task = None
-        import pdb; pdb.set_trace()
         self.__dict__['state'] = TransferState.init_from_state(obj_state['state'], self)
 
     def __getstate__(self):
