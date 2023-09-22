@@ -16,7 +16,8 @@ if TYPE_CHECKING:
         CloseReason,
         PeerConnection,
     )
-    from .transfer import Transfer, TransferState
+    from .transfer.model import Transfer
+    from .transfer.state import TransferState
 
 
 logger = logging.getLogger(__name__)
@@ -72,14 +73,12 @@ class EventBus:
                     logger.exception(f"exception notifying listener {listener!r} of event {event!r}")
 
 
-# Interal functions
-
 class InternalEventBus(EventBus):
 
     pass
 
 
-# High Level Events
+# Public events
 class Event:
     pass
 
@@ -225,7 +224,7 @@ class TransferAddedEvent(Event):
 @dataclass(frozen=True)
 class TransferStateChanged(Event):
     transfer: Transfer
-    state: TransferState
+    state: TransferState.State
 
 
 # Internal Events
@@ -243,12 +242,16 @@ class ConnectionStateChangedEvent(InternalEvent):
 
 @dataclass(frozen=True)
 class MessageReceivedEvent(InternalEvent):
+    """Emitted when a message was received on a connection"""
     message: MessageDataclass
     connection: Connection
 
 
 @dataclass(frozen=True)
 class PeerInitializedEvent(InternalEvent):
+    """Emitted when a new connection has been established and the initialization
+    message has been received
+    """
     connection: PeerConnection
     requested: bool
 
@@ -265,11 +268,11 @@ class UntrackUserEvent(InternalEvent):
 
 @dataclass(frozen=True)
 class LoginSuccessEvent(InternalEvent):
-    pass
+    """Emitted when logon was successfully performed"""
 
 
 @dataclass(frozen=True)
 class ScanCompleteEvent(InternalEvent):
+    """Emitted when shares scan was completed"""
     folder_count: int
     file_count: int
-
