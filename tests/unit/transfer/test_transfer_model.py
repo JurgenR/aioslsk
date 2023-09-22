@@ -2,11 +2,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from aioslsk.transfer.model import Transfer, TransferDirection
-from aioslsk.transfer.state import (
-    TransferState,
-    RemotelyQueuedState,
-    QueuedState,
-)
+from aioslsk.transfer.state import TransferState, QueuedState, InitializingState
 
 
 class TestTransfer:
@@ -41,11 +37,11 @@ class TestTransfer:
 
     def test_getSpeed_transferComplete_returnAverageSpeed(self):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
-        transfer.state = RemotelyQueuedState(transfer)
+        transfer.state = InitializingState(transfer)
 
         with patch('time.time', side_effect=[0.0, 2.0, ]):
             transfer.filesize = 100
-            transfer.state.start_processing()
+            transfer.state.start_transfering()
             transfer.bytes_transfered = 100
             transfer.state.complete()
 
@@ -54,11 +50,11 @@ class TestTransfer:
     def test_getSpeed_transferProcessing_returnAverageSpeed(self):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state.queue()
-        transfer.state.remotely_queue()
+        transfer.state.initialize()
 
         with patch('time.time', return_value=0.0):
             transfer.filesize = 100
-            transfer.state.start_processing()
+            transfer.state.start_transfering()
             transfer.bytes_transfered = 30
 
         with patch('time.monotonic', side_effect=[0.05, 0.05, 0.15, 0.15, 0.25, 0.25, 0.3]):
@@ -74,11 +70,11 @@ class TestTransfer:
     def test_getSpeed_transferProcessing_noEntries_returnZero(self):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state.queue()
-        transfer.state.remotely_queue()
+        transfer.state.initialize()
 
         with patch('time.time', return_value=0.0):
             transfer.filesize = 100
-            transfer.state.start_processing()
+            transfer.state.start_transfering()
             transfer.bytes_transfered = 30
 
         assert 0.0 == transfer.get_speed()

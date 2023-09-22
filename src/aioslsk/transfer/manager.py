@@ -105,7 +105,8 @@ class TransferManager:
         for transfer in transfers:
             # Analyze the current state of the stored transfers and set them to
             # the correct state
-            if transfer.state.VALUE in (TransferState.INITIALIZING, TransferState.REMOTELY_QUEUED):
+            transfer.remotely_queued = False
+            if transfer.state.VALUE == TransferState.INITIALIZING:
                 transfer.state.queue()
 
             elif transfer.is_transfering():
@@ -163,15 +164,11 @@ class TransferManager:
         await self.manage_transfers()
 
     async def _uploading(self, transfer: Transfer):
-        transfer.state.start_processing()
+        transfer.state.start_transfering()
         await self.manage_transfers()
 
     async def _downloading(self, transfer: Transfer):
-        transfer.state.start_processing()
-        await self.manage_transfers()
-
-    async def _remotely_queue(self, transfer: Transfer):
-        transfer.state.remotely_queue()
+        transfer.state.start_transfering()
         await self.manage_transfers()
 
     async def _add_transfer(self, transfer: Transfer) -> Transfer:
@@ -299,12 +296,17 @@ class TransferManager:
 
         # Downloads will just get remotely queued
         for download in downloads:
-            if not download._current_task:
-                download._current_task = asyncio.create_task(
-                    self._queue_remotely(download),
-                    name=f'queue-remotely-{task_counter()}'
-                )
-                download._current_task.add_done_callback(download._queue_remotely_task_complete)
+            if download._current_task:
+                continue
+
+            if download.remotely_queued:
+                continue
+
+            download._current_task = asyncio.create_task(
+                self._queue_remotely(download),
+                name=f'queue-remotely-{task_counter()}'
+            )
+            download._current_task.add_done_callback(download._queue_remotely_task_complete)
 
         for upload in uploads[:free_upload_slots]:
             if not upload._current_task:
@@ -386,8 +388,9 @@ class TransferManager:
             await self.queue(transfer)
 
         else:
+            transfer.remotely_queued = True
             transfer.reset_queue_attempts()
-            await self._remotely_queue(transfer)
+            await self.manage_transfers()
 
     async def _request_place_in_queue(self, transfer: Transfer):
         await self._network.send_peer_messages(

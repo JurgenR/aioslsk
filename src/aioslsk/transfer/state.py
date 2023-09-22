@@ -7,11 +7,11 @@ if TYPE_CHECKING:
 
 
 class TransferState:
+    """Represents a transfer state and its possible transitions"""
 
     class State(Enum):
         VIRGIN = 0
         QUEUED = 1
-        REMOTELY_QUEUED = 2
         INITIALIZING = 3
         INCOMPLETE = 4
         DOWNLOADING = 5
@@ -20,7 +20,6 @@ class TransferState:
         FAILED = 8
         ABORTED = 9
 
-    VALUE = None
     VIRGIN = State.VIRGIN
     QUEUED = State.QUEUED
     INITIALIZING = State.INITIALIZING
@@ -30,7 +29,8 @@ class TransferState:
     COMPLETE = State.COMPLETE
     FAILED = State.FAILED
     ABORTED = State.ABORTED
-    REMOTELY_QUEUED = State.REMOTELY_QUEUED
+
+    VALUE = None
 
     def __init__(self, transfer: 'Transfer'):
         self.transfer: 'Transfer' = transfer
@@ -52,9 +52,6 @@ class TransferState:
     def queue(self):
         pass
 
-    def remotely_queue(self):
-        pass
-
     def initialize(self):
         pass
 
@@ -64,7 +61,7 @@ class TransferState:
     def incomplete(self):
         pass
 
-    def start_processing(self):
+    def start_transfering(self):
         pass
 
 
@@ -83,7 +80,6 @@ class QueuedState(TransferState):
 
     Possible transitions:
     - Initializing: Uploads, requesting the peer if upload is allowed
-    - RemotelyQueued: Downloads, the peer has received our request for download
     - Aborted: We have aborted the transfer
     - Failed:
         - Download: peer explicitly rejected our queue request
@@ -95,44 +91,21 @@ class QueuedState(TransferState):
     def initialize(self):
         self.transfer.transition(InitializingState(self.transfer))
 
-    def remotely_queue(self):
-        self.transfer.transition(RemotelyQueuedState(self.transfer))
-
     def fail(self, reason=None):
         self.transfer.fail_reason = reason
         self.transfer.transition(FailedState(self.transfer))
 
     def abort(self):
         self.transfer.transition(AbortedState(self.transfer))
-
-
-class RemotelyQueuedState(TransferState):
-    """Remotely queued state is only applicable for downloads. This indicates
-    the peer has received our request for download
-
-    Possible transitions:
-    - DownloadingState: Download, transfer has started
-    - Aborted: We have aborted the transfer
-    - Failed:
-        - Download: peer explicitly rejected our queue request
-    """
-    VALUE = TransferState.REMOTELY_QUEUED
-
-    def fail(self, reason=None):
-        self.transfer.fail_reason = reason
-        self.transfer.transition(FailedState(self.transfer))
-
-    def abort(self):
-        self.transfer.transition(AbortedState(self.transfer))
-
-    def start_processing(self):
-        self.transfer.set_start_time()
-        self.transfer.transition(DownloadingState(self.transfer))
 
 
 class InitializingState(TransferState):
-    """Initializing state is only applicable for uploads. This indicates we are
-    attempting to establish a connection to the peer to start uploading a file
+    """Initializing state.
+
+    Uploads: This indicates we are attempting to establish a connection to the
+    peer to start uploading a file
+    Downloads: The download will quickly go into this state when the transfer
+    ticket has been received over a file connection
 
     Possible transitions:
     - UploadingState: Upload, transfer has started
@@ -158,9 +131,13 @@ class InitializingState(TransferState):
         self.transfer.fail_reason = reason
         self.transfer.transition(FailedState(self.transfer))
 
-    def start_processing(self):
+    def start_transfering(self):
+        self.transfer.remotely_queued = False
         self.transfer.set_start_time()
-        self.transfer.transition(UploadingState(self.transfer))
+        if self.transfer.is_upload():
+            self.transfer.transition(UploadingState(self.transfer))
+        else:
+            self.transfer.transition(DownloadingState(self.transfer))
 
 
 class _ProcessingState(TransferState):

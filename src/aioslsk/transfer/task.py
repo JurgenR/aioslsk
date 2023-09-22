@@ -65,4 +65,3 @@ class UploadTask(TransferTask):
 
 class DownloadTask(TransferTask):
     pass
-

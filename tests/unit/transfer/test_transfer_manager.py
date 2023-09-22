@@ -90,7 +90,7 @@ class TestTransferManager:
         await manager.add(transfer)
 
         transfer.state.queue()
-        transfer.state.remotely_queue()
+        transfer.state.initialize()
         await manager._downloading(transfer)
 
         assert transfer.state.VALUE == TransferState.DOWNLOADING
@@ -112,8 +112,8 @@ class TestTransferManager:
         await manager.add(transfer)
 
         transfer.state.queue()
-        transfer.state.remotely_queue()
-        transfer.state.start_processing()
+        transfer.state.initialize()
+        transfer.state.start_transfering()
         await manager._complete(transfer)
 
         assert transfer.state.VALUE == TransferState.COMPLETE
@@ -124,8 +124,8 @@ class TestTransferManager:
         await manager.add(transfer)
 
         transfer.state.queue()
-        transfer.state.remotely_queue()
-        transfer.state.start_processing()
+        transfer.state.initialize()
+        transfer.state.start_transfering()
         await manager._incomplete(transfer)
 
         assert transfer.state.VALUE == TransferState.INCOMPLETE
@@ -136,8 +136,8 @@ class TestTransferManager:
         await manager.add(transfer)
 
         transfer.state.queue()
-        transfer.state.remotely_queue()
-        transfer.state.start_processing()
+        transfer.state.initialize()
+        transfer.state.start_transfering()
         await manager.abort(transfer)
 
         assert transfer.state.VALUE == TransferState.ABORTED
@@ -148,8 +148,8 @@ class TestTransferManager:
         await manager.add(transfer)
 
         transfer.state.queue()
-        transfer.state.remotely_queue()
-        transfer.state.start_processing()
+        transfer.state.initialize()
+        transfer.state.start_transfering()
         await manager._fail(transfer, reason="nok")
 
         assert transfer.state.VALUE == TransferState.FAILED

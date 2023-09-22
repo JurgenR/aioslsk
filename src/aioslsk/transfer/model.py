@@ -32,8 +32,10 @@ class Transfer:
         self.local_path: str = None
         """Absolute path to the file on disk"""
         self.direction: TransferDirection = direction
+
+        self.remotely_queued: bool = False
+        """Indicites whether the queue message was received by the peer"""
         self.place_in_queue: int = None
-        """Place in queue, only applicable for downloads"""
         self.fail_reason: str = None
 
         self.filesize: int = None

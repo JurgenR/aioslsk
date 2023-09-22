@@ -12,7 +12,6 @@ from aioslsk.transfer.state import (
     CompleteState,
     IncompleteState,
     InitializingState,
-    RemotelyQueuedState,
     QueuedState,
     FailedState,
 )
@@ -51,7 +50,6 @@ class TestTransferState:
         QueuedState,
         InitializingState,
         IncompleteState,
-        RemotelyQueuedState,
     ])
     def test_whenTransitionToFailed_shouldSetState(self, initial_state: Type[TransferState]):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
@@ -82,7 +80,6 @@ class TestTransferState:
         QueuedState,
         InitializingState,
         IncompleteState,
-        RemotelyQueuedState,
     ])
     def test_whenTransitionToAborted_shouldSetState(self, initial_state: Type[TransferState]):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
@@ -126,13 +123,6 @@ class TestTransferState:
 
         assert transfer.state.VALUE == TransferState.INITIALIZING
 
-    def test_whenTransitionQueuedToRemotelyQueued_shouldSetState(self):
-        transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
-        transfer.state = QueuedState(transfer)
-        transfer.state.remotely_queue()
-
-        assert transfer.state.VALUE == TransferState.REMOTELY_QUEUED
-
     def test_whenTransitionDownloadingToIncomplete_shouldSetCompleteTime(self):
         time_mock = MagicMock(return_value=12.0)
 
@@ -163,18 +153,7 @@ class TestTransferState:
         transfer = Transfer(None, None, TransferDirection.UPLOAD)
         transfer.state = InitializingState(transfer)
         with patch('time.time', time_mock):
-            transfer.state.start_processing()
+            transfer.state.start_transfering()
 
         assert transfer.start_time == 2.0
         assert transfer.state.VALUE == TransferState.UPLOADING
-
-    def test_whenTransitionRemotelyQueuedToDownloading_shouldSetStartTime(self):
-        time_mock = MagicMock(return_value=2.0)
-
-        transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
-        transfer.state = RemotelyQueuedState(transfer)
-        with patch('time.time', time_mock):
-            transfer.state.start_processing()
-
-        assert transfer.start_time == 2.0
-        assert transfer.state.VALUE == TransferState.DOWNLOADING
