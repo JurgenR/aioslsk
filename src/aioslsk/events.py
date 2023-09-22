@@ -6,7 +6,11 @@ import logging
 from typing import Callable, Dict, List, Type, TYPE_CHECKING
 
 from .model import ChatMessage, Room, RoomMessage, User
-from .protocol.primitives import DirectoryData, MessageDataclass
+from .protocol.primitives import (
+    DirectoryData,
+    MessageDataclass,
+    ItemRecommendation,
+)
 from .search import SearchRequest, SearchResult
 
 if TYPE_CHECKING:
@@ -197,8 +201,38 @@ class SearchResultEvent(Event):
     query: SearchRequest
     result: SearchResult
 
-# Peer
 
+@dataclass(frozen=True)
+class SimilarUsersEvent(Event):
+    users: List[User]
+    item: str = None
+
+
+@dataclass(frozen=True)
+class RecommendationsEvent(Event):
+    recommendations: List[ItemRecommendation]
+    unrecommendations: List[ItemRecommendation]
+
+
+@dataclass(frozen=True)
+class GlobalRecommendationsEvent(Event):
+    recommendations: List[ItemRecommendation]
+    unrecommendations: List[ItemRecommendation]
+
+
+@dataclass(frozen=True)
+class ItemRecommendationsEvent(Event):
+    item: str
+    recommendations: List[ItemRecommendation]
+
+
+@dataclass(frozen=True)
+class UserInterestsEvent(Event):
+    user: User
+    interests: List[str]
+    hated_interests: List[str]
+
+# Peer
 
 @dataclass(frozen=True)
 class UserSharesReplyEvent(Event):

@@ -12,12 +12,15 @@ from .events import (
     AddedToPrivateRoomEvent,
     ConnectionStateChangedEvent,
     EventBus,
+    GlobalRecommendationsEvent,
     InternalEventBus,
+    ItemRecommendationsEvent,
     KickedEvent,
     LoginEvent,
     LoginSuccessEvent,
     MessageReceivedEvent,
     PrivateMessageEvent,
+    RecommendationsEvent,
     RemovedFromPrivateRoomEvent,
     RoomJoinedEvent,
     RoomLeftEvent,
@@ -27,11 +30,13 @@ from .events import (
     RoomTickerRemovedEvent,
     RoomTickersEvent,
     ScanCompleteEvent,
+    SimilarUsersEvent,
     ServerDisconnectedEvent,
     ServerMessageEvent,
     TrackUserEvent,
     UntrackUserEvent,
     UserInfoEvent,
+    UserInterestsEvent,
     UserJoinedRoomEvent,
     UserLeftRoomEvent,
     UserStatusEvent,
@@ -40,6 +45,8 @@ from .exceptions import ConnectionFailedError
 from .protocol.primitives import calc_md5
 from .protocol.messages import (
     AddPrivilegedUser,
+    AddHatedInterest,
+    AddInterest,
     AddUser,
     ChatRoomMessage,
     ChatJoinRoom,
@@ -56,7 +63,13 @@ from .protocol.messages import (
     CheckPrivileges,
     DistributedAliveInterval,
     FileSearch,
+    GetGlobalRecommendations,
+    GetItemRecommendations,
+    GetItemSimilarUsers,
     GetPeerAddress,
+    GetRecommendations,
+    GetSimilarUsers,
+    GetUserInterests,
     GetUserStatus,
     GetUserStats,
     Kicked,
@@ -80,6 +93,8 @@ from .protocol.messages import (
     PrivateRoomDropMembership,
     PrivateRoomDropOwnership,
     PrivilegedUsers,
+    RemoveHatedInterest,
+    RemoveInterest,
     RemoveUser,
     RoomList,
     SearchInactivityTimeout,
@@ -341,6 +356,56 @@ class ServerManager:
         await self._network.send_server_messages(
             GetPeerAddress.Request(username)
         )
+
+    # Recommendations / interests
+    async def get_recommendations(self):
+        await self._network.send_server_messages(
+            GetRecommendations.Request()
+        )
+
+    async def get_global_recommendations(self):
+        await self._network.send_server_messages(
+            GetGlobalRecommendations.Request()
+        )
+
+    async def get_item_recommendations(self, recommendation: str):
+        await self._network.send_server_messages(
+            GetItemRecommendations.Request(recommendation=recommendation)
+        )
+
+    async def get_user_interests(self, username: str):
+        await self._network.send_server_messages(
+            GetUserInterests.Request(username)
+        )
+
+    async def add_hated_interest(self, hated_interest: str):
+        await self._network.send_server_messages(
+            AddHatedInterest.Request(hated_interest)
+        )
+
+    async def remove_hated_interest(self, hated_interest: str):
+        await self._network.send_server_messages(
+            RemoveHatedInterest.Request(hated_interest)
+        )
+
+    async def add_interest(self, interest: str):
+        await self._network.send_server_messages(
+            AddInterest.Request(interest)
+        )
+
+    async def remove_interest(self, interest: str):
+        await self._network.send_server_messages(
+            RemoveInterest.Request(interest)
+        )
+
+    async def get_similar_users(self, item: str = None):
+        """Get similar users for an item or globally"""
+        if item:
+            message = GetItemSimilarUsers.Request(item)
+        else:
+            message = GetSimilarUsers.Request()
+
+        await self._network.send_server_messages(message)
 
     @on_message(Login.Response)
     async def _on_login(self, message: Login.Response, connection):
@@ -665,6 +730,67 @@ class ServerManager:
         user.update_from_user_stats(message.user_stats)
 
         await self._event_bus.emit(UserInfoEvent(user))
+
+    # Recommendations / interests
+    @on_message(GetRecommendations.Response)
+    async def _on_get_recommendations(self, message: GetRecommendations.Response, connection):
+        await self._event_bus.emit(
+            RecommendationsEvent(
+                recommendations=message.recommendations,
+                unrecommendations=message.unrecommendations
+            )
+        )
+
+    @on_message(GetGlobalRecommendations.Response)
+    async def _on_get_global_recommendations(self, message: GetGlobalRecommendations.Response, connection):
+        await self._event_bus.emit(
+            GlobalRecommendationsEvent(
+                recommendations=message.recommendations,
+                unrecommendations=message.unrecommendations
+            )
+        )
+
+    @on_message(GetItemRecommendations.Response)
+    async def _on_get_item_recommendations(self, message: GetItemRecommendations.Response, connection):
+        await self._event_bus.emit(
+            ItemRecommendationsEvent(
+                item=message.item,
+                recommendations=message.recommendations
+            )
+        )
+
+    @on_message(GetUserInterests.Response)
+    async def _on_get_user_interests(self, message: GetUserInterests.Response, connection):
+        await self._event_bus.emit(
+            UserInterestsEvent(
+                user=self._state.get_or_create_user(message.username),
+                interests=message.interests,
+                hated_interests=message.hated_interests
+            )
+        )
+
+    @on_message(GetSimilarUsers.Response)
+    async def _on_get_similar_users(self, message: GetSimilarUsers.Response, connection):
+        await self._event_bus.emit(
+            SimilarUsersEvent(
+                users=[
+                    self._state.get_or_create_user(user.username)
+                    for user in message.users
+                ]
+            )
+        )
+
+    @on_message(GetItemSimilarUsers.Response)
+    async def _on_get_item_similar_users(self, message: GetItemSimilarUsers.Response, connection):
+        await self._event_bus.emit(
+            SimilarUsersEvent(
+                item=message.item,
+                users=[
+                    self._state.get_or_create_user(user.username)
+                    for user in message.users
+                ]
+            )
+        )
 
     # Job methods
 

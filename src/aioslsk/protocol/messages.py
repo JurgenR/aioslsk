@@ -407,6 +407,71 @@ class UserSearch(ServerMessage):
         query: str = field(metadata={'type': string})
 
 
+class AddInterest(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x33)
+        interest: str = field(metadata={'type': string})
+
+
+class RemoveInterest(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x34)
+        interest: str = field(metadata={'type': string})
+
+
+class GetRecommendations(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x36)
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x36)
+        recommendations: List[ItemRecommendation] = field(
+            metadata={'type': array, 'subtype': ItemRecommendation}
+        )
+        unrecommendations: List[ItemRecommendation] = field(
+            metadata={'type': array, 'subtype': ItemRecommendation}
+        )
+
+
+class GetGlobalRecommendations(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x38)
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x38)
+        recommendations: List[ItemRecommendation] = field(
+            metadata={'type': array, 'subtype': ItemRecommendation}
+        )
+        unrecommendations: List[ItemRecommendation] = field(
+            metadata={'type': array, 'subtype': ItemRecommendation}
+        )
+
+
+class GetUserInterests(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x39)
+        username: str = field(metadata={'type': string})
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x39)
+        username: str = field(metadata={'type': string})
+        interests: List[str] = field(metadata={'type': array, 'subtype': string})
+        hated_interests: List[str] = field(metadata={'type': array, 'subtype': string})
+
+
 class RoomList(ServerMessage):
 
     @dataclass(order=True)
@@ -579,12 +644,27 @@ class GetItemRecommendations(ServerMessage):
     @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x6F)
-        recommendation: str = field(metadata={'type': string})
+        item: str = field(metadata={'type': string})
 
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x6F)
+        item: str = field(metadata={'type': string})
         recommendations: List[ItemRecommendation] = field(metadata={'type': array, 'subtype': ItemRecommendation})
+
+
+class GetItemSimilarUsers(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x70)
+        item: str = field(metadata={'type': string})
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x70)
+        item: str = field(metadata={'type': string})
+        users: List[SimilarUser] = field(metadata={'type': array, 'subtype': SimilarUser})
 
 
 class ChatRoomTickers(ServerMessage):
@@ -622,6 +702,22 @@ class ChatRoomTickerSet(ServerMessage):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x74)
         room: str = field(metadata={'type': string})
         ticker: str = field(metadata={'type': string})
+
+
+class AddHatedInterest(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x75)
+        hated_interest: str = field(metadata={'type': string})
+
+
+class RemoveHatedInterest(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x76)
+        hated_interest: str = field(metadata={'type': string})
 
 
 class ChatRoomSearch(ServerMessage):
