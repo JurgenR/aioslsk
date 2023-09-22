@@ -29,6 +29,15 @@ class TestTransferState:
         with pytest.raises(Exception):
             TransferState.init_from_state('bogus')
 
+    def test_whenTransitionVirginToQueued_shouldResetRemotelyQueued(self):
+        transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
+        transfer.remotely_queued = True
+
+        transfer.state.queue()
+
+        assert transfer.remotely_queued is False
+        assert transfer.state.VALUE == TransferState.QUEUED
+
     @pytest.mark.parametrize('initial_state', [
         DownloadingState,
         UploadingState,
@@ -152,8 +161,23 @@ class TestTransferState:
 
         transfer = Transfer(None, None, TransferDirection.UPLOAD)
         transfer.state = InitializingState(transfer)
+        transfer.remotely_queued = True
         with patch('time.time', time_mock):
             transfer.state.start_transfering()
 
+        assert transfer.remotely_queued == False
         assert transfer.start_time == 2.0
         assert transfer.state.VALUE == TransferState.UPLOADING
+
+    def test_whenTransitionInitializingToDownloading_shouldSetStartTime(self):
+        time_mock = MagicMock(return_value=2.0)
+
+        transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
+        transfer.state = InitializingState(transfer)
+        transfer.remotely_queued = True
+        with patch('time.time', time_mock):
+            transfer.state.start_transfering()
+
+        assert transfer.remotely_queued == False
+        assert transfer.start_time == 2.0
+        assert transfer.state.VALUE == TransferState.DOWNLOADING

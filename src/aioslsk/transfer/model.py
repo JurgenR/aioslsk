@@ -34,7 +34,8 @@ class Transfer:
         self.direction: TransferDirection = direction
 
         self.remotely_queued: bool = False
-        """Indicites whether the queue message was received by the peer"""
+        """Indicites whether the transfer queue message was received by the peer
+        """
         self.place_in_queue: int = None
         self.fail_reason: str = None
 
@@ -75,6 +76,7 @@ class Transfer:
         self.__dict__.update(obj_state)
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
         self._current_task = None
+        import pdb; pdb.set_trace()
         self.__dict__['state'] = TransferState.init_from_state(obj_state['state'], self)
 
     def __getstate__(self):

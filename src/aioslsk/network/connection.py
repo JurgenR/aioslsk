@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 from enum import auto, Enum
-from typing import BinaryIO, List, TYPE_CHECKING, Union
+from typing import BinaryIO, List, Optional, TYPE_CHECKING, Union
 import logging
 import socket
 import struct
@@ -344,7 +344,7 @@ class DataConnection(Connection):
         except Exception:
             logger.exception(f"error during callback : {message!r}")
 
-    async def _read(self, reader_func, timeout: float = None) -> bytes:
+    async def _read(self, reader_func, timeout: float = None) -> Optional[bytes]:
         """Read data from the connection using the passed `reader_func`. When an
         error occurs during reading the connection will be CLOSED
 
@@ -496,7 +496,7 @@ class PeerConnection(DataConnection):
         _, offset = uint64.deserialize(0, data)
         return offset
 
-    async def receive_data(self, n_bytes: int, timeout: int = TRANSFER_TIMEOUT) -> bytes:
+    async def receive_data(self, n_bytes: int, timeout: int = TRANSFER_TIMEOUT) -> Optional[bytes]:
         """Receives given amount of bytes on the connection.
 
         In case of error the socket will be disconnected. If no data is received
@@ -533,7 +533,7 @@ class PeerConnection(DataConnection):
             bytes_to_read = await self.download_rate_limiter.take_tokens()
             data = await self.receive_data(bytes_to_read)
             if data is None:
-                return None
+                return
 
             await file_handle.write(data)
             if callback is not None:
@@ -542,7 +542,7 @@ class PeerConnection(DataConnection):
             # Check if all data received and return
             bytes_received += len(data)
             if bytes_received >= filesize:
-                return None
+                return
 
     async def send_data(self, data: bytes):
         try:

@@ -72,6 +72,7 @@ class VirginState(TransferState):
     VALUE = TransferState.VIRGIN
 
     def queue(self):
+        self.transfer.remotely_queued = False
         self.transfer.transition(QueuedState(self.transfer))
 
 
