@@ -176,6 +176,34 @@ class SoulSeekClient:
     def get_downloads(self) -> List[Transfer]:
         return self.transfer_manager.get_downloads()
 
+    async def get_recommendations(self):
+        await self.server_manager.get_recommendations()
+
+    async def get_global_recommendations(self):
+        await self.server_manager.get_global_recommendations()
+
+    async def get_item_recommendations(self, item: str):
+        await self.server_manager.get_item_recommendations(item)
+
+    async def get_similar_users(self, item: str = None):
+        await self.server_manager.get_similar_users(item=item)
+
+    async def get_user_interests(self, user: Union[str, User]):
+        username = user.name if isinstance(user, User) else user
+        await self.server_manager.get_user_interests(username)
+
+    async def add_interest(self, interest: str):
+        await self.server_manager.add_interest(interest)
+
+    async def remove_interest(self, interest: str):
+        await self.server_manager.remove_interest(interest)
+
+    async def add_hated_interest(self, hated_interest: str):
+        await self.server_manager.add_hated_interest(hated_interest)
+
+    async def remove_hated_interest(self, hated_interest: str):
+        await self.server_manager.remove_hated_interest(hated_interest)
+
     async def remove_transfer(self, transfer: Transfer):
         await self.transfer_manager.remove(transfer)
 
