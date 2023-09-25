@@ -4,11 +4,12 @@ from unittest.mock import AsyncMock, Mock, MagicMock
 import pytest
 
 from aioslsk.configuration import Configuration
-from aioslsk.events import TrackUserEvent
-from aioslsk.model import UserStatus
+from aioslsk.events import TrackUserEvent, UntrackUserEvent
+from aioslsk.model import UserStatus, TrackingFlag
 from aioslsk.transfer.model import Transfer, TransferDirection
 from aioslsk.transfer.manager import TransferManager
 from aioslsk.transfer.state import (
+    AbortedState,
     TransferState,
     DownloadingState,
     UploadingState,
@@ -72,7 +73,7 @@ class TestTransferManager:
         assert transfer.state.VALUE == TransferState.VIRGIN
         assert transfer in manager.transfers
         manager._internal_event_bus.emit.assert_awaited_once_with(
-            TrackUserEvent(DEFAULT_USERNAME)
+            TrackUserEvent(DEFAULT_USERNAME, TrackingFlag.TRANSFER)
         )
 
     @pytest.mark.asyncio
@@ -333,3 +334,31 @@ class TestTransferManager:
         transfer2 = Transfer(USER2, 'C:\\dir0', TransferDirection.UPLOAD)
 
         assert manager._prioritize_uploads([transfer, transfer2]) == [transfer2, transfer]
+
+    @pytest.mark.asyncio
+    async def test_manageUserTracking_shouldTrackIfUnfinished(self, manager: TransferManager):
+        transfer0 = Transfer('user0', 'file0-0.mp3', TransferDirection.DOWNLOAD)
+        transfer0.state = DownloadingState(transfer0)
+        transfer1 = Transfer('user0', 'file0-1.mp3', TransferDirection.DOWNLOAD)
+        transfer1.state = CompleteState(transfer1)
+        manager._transfers = [transfer0, transfer1]
+
+        await manager.manage_user_tracking()
+
+        manager._internal_event_bus.emit.assert_awaited_once_with(
+            TrackUserEvent('user0', TrackingFlag.TRANSFER)
+        )
+
+    @pytest.mark.asyncio
+    async def test_manageUserTracking_shouldUntrackIfAllFinished(self, manager: TransferManager):
+        transfer0 = Transfer('user0', 'file0-0.mp3', TransferDirection.DOWNLOAD)
+        transfer0.state = AbortedState(transfer0)
+        transfer1 = Transfer('user0', 'file0-1.mp3', TransferDirection.DOWNLOAD)
+        transfer1.state = CompleteState(transfer1)
+        manager._transfers = [transfer0, transfer1]
+
+        await manager.manage_user_tracking()
+
+        manager._internal_event_bus.emit.assert_awaited_once_with(
+            UntrackUserEvent('user0', TrackingFlag.TRANSFER)
+        )

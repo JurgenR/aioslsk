@@ -32,6 +32,7 @@ from ..events import (
     PeerInitializedEvent,
     TrackUserEvent,
     TransferAddedEvent,
+    UntrackUserEvent,
 )
 from ..protocol.primitives import uint32, uint64
 from ..protocol.messages import (
@@ -48,7 +49,7 @@ from ..protocol.messages import (
 )
 from .model import Transfer, TransferDirection
 from .state import TransferState
-from ..model import UserStatus
+from ..model import UserStatus, TrackingFlag
 from ..settings import Settings
 from ..shares.manager import SharesManager
 from ..state import State
@@ -63,7 +64,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class TransferRequest:
-    """Class representing a request to start transfeRring. An object will be
+    """Class representing a request to start transferring. An object will be
     created when the PeerTransferRequest is sent or received and should be
     destroyed once the transfer ticket has been received or a reply sent that
     the transfer cannot continue.
@@ -233,15 +234,39 @@ class TransferManager:
         ])
 
     def get_downloading(self) -> List[Transfer]:
+        """Returns all transfers that are currently downloading or an attempt is
+        is made to start downloading
+        """
         return [
             transfer for transfer in self._transfers
             if transfer.is_download() and transfer.is_processing()
         ]
 
     def get_uploading(self) -> List[Transfer]:
+        """Returns all transfers that are currently uploading or an attempt is
+        is made to start uploading
+        """
         return [
             transfer for transfer in self._transfers
             if transfer.is_upload() and transfer.is_processing()
+        ]
+
+    def get_finished_transfers(self) -> List[Transfer]:
+        """Returns a complete list of transfers that are in a finalized state
+        (COMPLETE, ABORTED, FAILED)
+        """
+        return [
+            transfer for transfer in self._transfers
+            if transfer.is_finalized()
+        ]
+
+    def get_unfinished_transfers(self) -> List[Transfer]:
+        """Returns a complete list of transfers that are not in a finalized
+        state (COMPLETE, ABORTED, FAILED)
+        """
+        return [
+            transfer for transfer in self._transfers
+            if not transfer.is_finalized()
         ]
 
     def get_download_speed(self) -> float:
@@ -268,7 +293,7 @@ class TransferManager:
         :return: The place in the queue, 0 if not in the queue a value equal or
             greater than 1 indicating the position otherwise
         """
-        _, uploads = await self._get_queued_transfers()
+        _, uploads = self._get_queued_transfers()
         try:
             return uploads.index(transfer)
         except ValueError:
@@ -283,17 +308,39 @@ class TransferManager:
         raise LookupError(
             f"transfer for user {username} and remote_path {remote_path} (direction={direction}) not found")
 
+    async def manage_user_tracking(self):
+        """Remove or add user tracking based on the list of transfers. This
+        method will untrack users for which there are no more unfinished
+        transfers and start tracking users for which there are unfinished
+        transfers
+        """
+        unfinished_users = set(
+            transfer.username
+            for transfer in self.get_unfinished_transfers()
+        )
+        finished_users = set(
+            transfer.username
+            for transfer in self.get_finished_transfers()
+        )
+
+        for username in unfinished_users:
+            await self._internal_event_bus.emit(
+                TrackUserEvent(username, TrackingFlag.TRANSFER)
+            )
+        for username in finished_users - unfinished_users:
+            await self._internal_event_bus.emit(
+                UntrackUserEvent(username, TrackingFlag.TRANSFER)
+            )
+
     async def manage_transfers(self):
         """Manages the transfers. This method analyzes the state of the current
         downloads/uploads and starts them up in case there are free slots
         available
         """
-        downloads, uploads = await self._get_queued_transfers()
-        free_upload_slots = self.get_free_upload_slots()
+        await self.manage_user_tracking()
 
-        for transfer in self.transfers:
-            if not transfer.is_finalized():
-                await self._internal_event_bus.emit(TrackUserEvent(transfer.username))
+        downloads, uploads = self._get_queued_transfers()
+        free_upload_slots = self.get_free_upload_slots()
 
         # Downloads will just get remotely queued
         for download in downloads:
@@ -317,7 +364,7 @@ class TransferManager:
                 )
                 upload._current_task.add_done_callback(upload._upload_task_complete)
 
-    async def _get_queued_transfers(self) -> Tuple[List[Transfer], List[Transfer]]:
+    def _get_queued_transfers(self) -> Tuple[List[Transfer], List[Transfer]]:
         """Returns all transfers eligable for being initialized
 
         :return: a tuple containing 2 lists: the eligable downloads and eligable
@@ -665,7 +712,6 @@ class TransferManager:
             await self.queue(transfer)
 
     async def _on_peer_initialized(self, event: PeerInitializedEvent):
-        """Handle incoming file connections that we did not request"""
         if event.connection.connection_type == PeerConnectionType.FILE:
             if not event.requested:
                 asyncio.create_task(
@@ -756,7 +802,7 @@ class TransferManager:
                     )
                 )
             else:
-                # All clear to download
+                # All good to download
                 # Possibly needs a check to see if there's any inconsistencies
                 # normally we get this response when we were the one requesting
                 # to download so ideally all should be fine here.

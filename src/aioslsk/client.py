@@ -10,7 +10,7 @@ from .shares.cache import (
     SharesCache,
 )
 from .shares.manager import SharesManager
-from .model import Room, User
+from .model import Room, User, TrackingFlag
 from .network.network import Network
 from .peer import PeerManager
 from .server import ServerManager
@@ -215,11 +215,11 @@ class SoulSeekClient:
 
     async def track_user(self, user: Union[str, User]):
         username = user.name if isinstance(user, User) else user
-        await self.server_manager.track_user(username)
+        await self.server_manager.track_user(username, TrackingFlag.REQUESTED)
 
     async def untrack_user(self, user: Union[str, User]):
         username = user.name if isinstance(user, User) else user
-        await self.server_manager.untrack_user(username)
+        await self.server_manager.untrack_user(username, TrackingFlag.REQUESTED)
 
     async def get_room_list(self):
         await self.server_manager.get_room_list()

@@ -1,15 +1,30 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-import enum
+from enum import auto, Enum, Flag
 from typing import Dict, List
 from .protocol.primitives import UserStats
 
 
-class UserStatus(enum.Enum):
+class UserStatus(Enum):
+    """User status values, everything except the UNKNOWN status are used by the
+    server
+    """
     UNKNOWN = -1
     OFFLINE = 0
     AWAY = 1
     ONLINE = 2
+
+
+class TrackingFlag(Flag):
+    """Tracking flags hold information how the user is being tracked"""
+    REQUESTED = auto()
+    """Tracking was explicitly requested by the user"""
+    TRANSFER = auto()
+    """Tracking was requested through transfer manager"""
+    FRIEND = auto()
+    """Tracking because the user is a friend"""
+    ROOM_USER = auto()
+    """Tracking because the user is in a room we are in"""
 
 
 @dataclass
@@ -31,7 +46,14 @@ class User:
     upload_slots: int = None
     queue_length: int = None
 
-    is_tracking: bool = False
+    tracking_flags: TrackingFlag = TrackingFlag(0)
+
+    def has_add_user_flag(self) -> bool:
+        """Returns whether this user has any tracking flags set related to
+        AddUser
+        """
+        add_user_flags = TrackingFlag.FRIEND | TrackingFlag.REQUESTED | TrackingFlag.TRANSFER
+        return self.tracking_flags & add_user_flags != TrackingFlag(0)
 
     def update_from_user_stats(self, user_stats: UserStats):
         self.avg_speed = user_stats.avg_speed
@@ -87,6 +109,9 @@ class ChatMessage:
     user: User
     message: str
     is_admin: bool
+
+    def is_server_message(self) -> bool:
+        return self.is_admin and self.user.name == 'server'
 
 
 @dataclass

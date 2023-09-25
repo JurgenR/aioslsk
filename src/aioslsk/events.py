@@ -5,7 +5,7 @@ import inspect
 import logging
 from typing import Callable, Dict, List, Type, TYPE_CHECKING
 
-from .model import ChatMessage, Room, RoomMessage, User
+from .model import ChatMessage, Room, RoomMessage, User, TrackingFlag
 from .protocol.primitives import (
     DirectoryData,
     MessageDataclass,
@@ -89,16 +89,17 @@ class Event:
 
 @dataclass(frozen=True)
 class ServerConnectedEvent(Event):
-    pass
+    """Emitted when server got connected"""
 
 
 @dataclass(frozen=True)
 class ServerDisconnectedEvent(Event):
-    pass
+    """Emitted when server got disconnected"""
 
 
 @dataclass(frozen=True)
 class LoginEvent:
+    """Emitted when we got a response to a login call"""
     is_success: bool
     greeting: str = None
     reason: str = None
@@ -106,7 +107,7 @@ class LoginEvent:
 
 @dataclass(frozen=True)
 class KickedEvent(Event):
-    pass
+    """Emitted when we are kicked from the server"""
 
 
 @dataclass(frozen=True)
@@ -150,23 +151,27 @@ class RoomTickerRemovedEvent:
 
 @dataclass(frozen=True)
 class UserJoinedRoomEvent(Event):
+    """Emitted when a user joins a chat room"""
     room: Room
     user: User
 
 
 @dataclass(frozen=True)
 class UserLeftRoomEvent(Event):
+    """Emitted when a user leaves a chat room"""
     room: Room
     user: User
 
 
 @dataclass(frozen=True)
 class RoomJoinedEvent(Event):
+    """Emitted after we have joined a chat room"""
     room: Room
 
 
 @dataclass(frozen=True)
 class RoomLeftEvent(Event):
+    """Emitted after we have left a chat room"""
     room: Room
 
 
@@ -182,22 +187,15 @@ class RemovedFromPrivateRoomEvent(Event):
     room: Room
 
 
-@dataclass
-class ServerMessageEvent(Event):
-    """Emitted when the server sends us a message. This is usually a response
-    to an action you tried to perform (adding someone to a private room...)
-    """
-    message: str
-
-
 @dataclass(frozen=True)
 class PrivateMessageEvent(Event):
-    user: User
+    """Emitted when a private message has been received"""
     message: ChatMessage
 
 
 @dataclass(frozen=True)
 class SearchResultEvent(Event):
+    """Emitted when a search result has been received"""
     query: SearchRequest
     result: SearchResult
 
@@ -293,11 +291,13 @@ class PeerInitializedEvent(InternalEvent):
 @dataclass(frozen=True)
 class TrackUserEvent(InternalEvent):
     username: str
+    flag: TrackingFlag
 
 
 @dataclass(frozen=True)
 class UntrackUserEvent(InternalEvent):
     username: str
+    flag: TrackingFlag
 
 
 @dataclass(frozen=True)
