@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+from typing import Union
 
 from .network.connection import CloseReason, ConnectionState, ServerConnection
 from .constants import (
@@ -32,7 +33,6 @@ from .events import (
     ScanCompleteEvent,
     SimilarUsersEvent,
     ServerDisconnectedEvent,
-    ServerMessageEvent,
     TrackUserEvent,
     UntrackUserEvent,
     UserInfoEvent,
@@ -105,7 +105,7 @@ from .protocol.messages import (
     WishlistInterval,
     WishlistSearch,
 )
-from .model import ChatMessage, RoomMessage, User, UserStatus
+from .model import ChatMessage, RoomMessage, User, UserStatus, TrackingFlag
 from .network.network import Network
 from .shares.manager import SharesManager
 from .search import SearchRequest, SearchType
@@ -176,33 +176,46 @@ class ServerManager:
             )
         )
 
-    async def track_user(self, username: str):
+    async def track_user(self, username: str, flag: TrackingFlag):
         """Starts tracking a user. The method sends an `AddUser` only if the
         `is_tracking` variable is set to False. Updates to the user will be
         omitted through the `UserInfoEvent`
         """
         user = self._state.get_or_create_user(username)
 
-        if not user.is_tracking:
+        had_add_user_flag = user.has_add_user_flag()
+        user.tracking_flags |= flag
+        if not had_add_user_flag:
             await self._network.send_server_messages(AddUser.Request(username))
-            user.is_tracking = True
 
     async def track_friends(self):
         tasks = []
         for friend in self._settings.get('users.friends'):
-            tasks.append(asyncio.create_task(self.track_user(friend)))
+            tasks.append(
+                asyncio.create_task(self.track_user(friend, TrackingFlag.FRIEND))
+            )
 
         asyncio.gather(*tasks, return_exceptions=True)
 
-    async def untrack_user(self, user):
+    async def untrack_user(self, user: Union[str, User], flag: TrackingFlag):
+        """Removes the given flag from the user and untracks the user (send
+        `RemoveUser` message) in case none of the AddUser tracking flags are
+        set
+
+        :param user: user to untrack
+        :param flag: tracking flag to remove from the user
+        """
         user = self._state.get_or_create_user(user)
-        # Reset user status, this is needed for the transfer manager who
-        # will skip attempting to transfer for offline user. But if we don't
-        # know if a user is online we will never attempt to start that
-        # transfer
-        await self._network.send_server_messages(RemoveUser.Request(user.name))
-        user.is_tracking = False
-        user.status = UserStatus.UNKNOWN
+        # Check if this is the last AddUser flag to be removed. If so send the
+        # RemoveUser message
+        had_user_add_flag = user.has_add_user_flag()
+        user.tracking_flags &= ~flag
+        if had_user_add_flag and not user.has_add_user_flag():
+            await self._network.send_server_messages(RemoveUser.Request(user.name))
+
+        # If there's no more tracking done reset the user status
+        if user.tracking_flags == TrackingFlag(0):
+            user.status = UserStatus.UNKNOWN
 
     async def auto_join_rooms(self):
         """Automatically joins rooms stored in the settings. This method will
@@ -261,52 +274,37 @@ class ServerManager:
         )
         return self._state.search_queries[ticket]
 
-    async def add_user(self, username: str) -> User:
-        """Request the server to track the user. This is similar to `track_user`
-        except that this method waits for a response. This method will also set
-        `is_tracking` on the user
-
-        :raise asyncio.TimeoutError: raised when the timeout is reached before a
-            response is received
-        :raise NoSuchUserError: raised when user does not exist
-        :return: `User` object
-        """
-        user = self._state.get_or_create_user(username)
-
-        await self._network.send_server_messages(AddUser.Request(username))
-        user.is_tracking = True
-
-    async def get_user_stats(self, username: str):
+    async def get_user_stats(self, username: str):  # pragma: no cover
         await self._network.send_server_messages(GetUserStats.Request(username))
 
-    async def get_user_status(self, username: str):
+    async def get_user_status(self, username: str):  # pragma: no cover
         await self._network.send_server_messages(GetUserStatus.Request(username))
 
-    async def get_room_list(self):
+    async def get_room_list(self):  # pragma: no cover
         """Request the list of chat rooms from the server"""
         await self._network.send_server_messages(RoomList.Request())
 
-    async def join_room(self, room: str, private: bool = False):
+    async def join_room(self, room: str, private: bool = False):  # pragma: no cover
         await self._network.send_server_messages(
             ChatJoinRoom.Request(room, is_private=private)
         )
 
-    async def leave_room(self, room: str):
+    async def leave_room(self, room: str):  # pragma: no cover
         await self._network.send_server_messages(ChatLeaveRoom.Request(room))
 
-    async def add_user_to_room(self, room: str, username: str):
+    async def add_user_to_room(self, room: str, username: str):  # pragma: no cover
         """Adds a user to a private room"""
         await self._network.send_server_messages(
             PrivateRoomAddUser.Request(room=room, username=username)
         )
 
-    async def remove_user_from_room(self, room: str, username: str):
+    async def remove_user_from_room(self, room: str, username: str):  # pragma: no cover
         """Removes a user from a private room"""
         await self._network.send_server_messages(
             PrivateRoomRemoveUser.Request(room=room, username=username)
         )
 
-    async def grant_operator(self, room: str, username: str):
+    async def grant_operator(self, room: str, username: str):  # pragma: no cover
         """Grant operator privileges to the given `username` in `room`. This is
         only applicable to private rooms
         """
@@ -314,41 +312,41 @@ class ServerManager:
             PrivateRoomAddOperator.Request(room=room, username=username)
         )
 
-    async def revoke_operator(self, room: str, username: str):
+    async def revoke_operator(self, room: str, username: str):  # pragma: no cover
         await self._network.send_server_messages(
             PrivateRoomRemoveOperator.Request(room=room, username=username)
         )
 
-    async def set_room_ticker(self, room: str, ticker: str):
+    async def set_room_ticker(self, room: str, ticker: str):  # pragma: no cover
         # No need to update the ticker in the model, a ChatRoomTickerAdded will
         # be sent back to us
         await self._network.send_server_messages(
             ChatRoomTickerSet.Request(room=room, ticker=ticker)
         )
 
-    async def send_private_message(self, username: str, message: str):
+    async def send_private_message(self, username: str, message: str):  # pragma: no cover
         await self._network.send_server_messages(
             ChatPrivateMessage.Request(username, message)
         )
 
-    async def send_room_message(self, room: str, message: str):
+    async def send_room_message(self, room: str, message: str):  # pragma: no cover
         await self._network.send_server_messages(
             ChatRoomMessage.Request(room, message)
         )
 
-    async def drop_room_ownership(self, room: str):
+    async def drop_room_ownership(self, room: str):  # pragma: no cover
         """Drop ownership of the private room"""
         await self._network.send_server_messages(
             PrivateRoomDropOwnership.Request(room)
         )
 
-    async def drop_room_membership(self, room: str):
+    async def drop_room_membership(self, room: str):  # pragma: no cover
         """Drop membership of the private room"""
         await self._network.send_server_messages(
             PrivateRoomDropMembership.Request(room)
         )
 
-    async def get_peer_address(self, username: str):
+    async def get_peer_address(self, username: str):  # pragma: no cover
         """Requests the IP address/port of the peer from the server
 
         :param username: username of the peer
@@ -358,42 +356,42 @@ class ServerManager:
         )
 
     # Recommendations / interests
-    async def get_recommendations(self):
+    async def get_recommendations(self):  # pragma: no cover
         await self._network.send_server_messages(
             GetRecommendations.Request()
         )
 
-    async def get_global_recommendations(self):
+    async def get_global_recommendations(self):  # pragma: no cover
         await self._network.send_server_messages(
             GetGlobalRecommendations.Request()
         )
 
-    async def get_item_recommendations(self, recommendation: str):
+    async def get_item_recommendations(self, recommendation: str):  # pragma: no cover
         await self._network.send_server_messages(
             GetItemRecommendations.Request(recommendation=recommendation)
         )
 
-    async def get_user_interests(self, username: str):
+    async def get_user_interests(self, username: str):  # pragma: no cover
         await self._network.send_server_messages(
             GetUserInterests.Request(username)
         )
 
-    async def add_hated_interest(self, hated_interest: str):
+    async def add_hated_interest(self, hated_interest: str):  # pragma: no cover
         await self._network.send_server_messages(
             AddHatedInterest.Request(hated_interest)
         )
 
-    async def remove_hated_interest(self, hated_interest: str):
+    async def remove_hated_interest(self, hated_interest: str):  # pragma: no cover
         await self._network.send_server_messages(
             RemoveHatedInterest.Request(hated_interest)
         )
 
-    async def add_interest(self, interest: str):
+    async def add_interest(self, interest: str):  # pragma: no cover
         await self._network.send_server_messages(
             AddInterest.Request(interest)
         )
 
-    async def remove_interest(self, interest: str):
+    async def remove_interest(self, interest: str):  # pragma: no cover
         await self._network.send_server_messages(
             RemoveInterest.Request(interest)
         )
@@ -467,6 +465,7 @@ class ServerManager:
         user.update_from_user_stats(message.user_stats)
         user.slots_free = message.slots_free
         user.country = message.country_code
+        user.tracking_flags |= TrackingFlag.ROOM_USER
 
         room = self._state.get_or_create_room(message.room)
         room.add_user(user)
@@ -478,6 +477,13 @@ class ServerManager:
     async def _on_user_left_room(self, message: ChatUserLeftRoom.Response, connection):
         user = self._state.get_or_create_user(message.username)
         room = self._state.get_or_create_room(message.room)
+
+        # Remove tracking flag if there's no room left which the user is in
+        for joined_room in self._state.get_joined_rooms():
+            if joined_room != room and user in joined_room.users:
+                break
+        else:
+            user.tracking_flags &= ~TrackingFlag.ROOM_USER
 
         room.remove_user(user)
 
@@ -494,6 +500,7 @@ class ServerManager:
             user.update_from_user_stats(message.users_stats[idx])
             user.country = message.users_countries[idx]
             user.slots_free = message.users_slots_free[idx]
+            await self.track_user(user.name, TrackingFlag.ROOM_USER)
 
             room.add_user(user)
             await self._event_bus.emit(UserInfoEvent(user))
@@ -508,7 +515,19 @@ class ServerManager:
     @on_message(ChatLeaveRoom.Response)
     async def _on_leave_room(self, message: ChatLeaveRoom.Response, connection):
         room = self._state.get_or_create_room(message.room)
+
+        # Remove tracking flag from users (that are no longer in other rooms)
+        for user in room.users:
+            for joined_room in self._state.get_joined_rooms():
+                if joined_room == room:
+                    continue
+                if user in joined_room.users:
+                    break
+            else:
+                await self.untrack_user(user.name, TrackingFlag.ROOM_USER)
+
         room.joined = False
+        room.users = []
 
         await self._event_bus.emit(RoomLeftEvent(room=room))
 
@@ -619,16 +638,11 @@ class ServerManager:
             message=message.message,
             is_admin=message.is_admin
         )
-        self._state.private_messages[message.chat_id] = chat_message
 
         await self._network.send_server_messages(
             ChatAckPrivateMessage.Request(message.chat_id)
         )
-
-        if message.is_admin and message.username.lower() == 'server':
-            await self._event_bus.emit(ServerMessageEvent(message.message))
-
-        await self._event_bus.emit(PrivateMessageEvent(user, chat_message))
+        await self._event_bus.emit(PrivateMessageEvent(chat_message))
 
     # State related messages
     @on_message(CheckPrivileges.Response)
@@ -818,7 +832,7 @@ class ServerManager:
             if self._network.server_connection.state == ConnectionState.CLOSED:
                 logger.info(f"will attempt to reconnect to server in {timeout} seconds")
                 await asyncio.sleep(timeout)
-                await self.reconnect()
+                await self._reconnect()
 
     def _cancel_connection_watchdog_task(self):
         if self._connection_watchdog_task is not None:
@@ -826,6 +840,10 @@ class ServerManager:
             self._connection_watchdog_task = None
 
     async def _wishlist_job(self, interval: int):
+        """Job handling wishlist queries, this method is intended to be run as
+        a task. This method will run at the given `interval` (returned by the
+        server on start up).
+        """
         while True:
             items = self._settings.get('search.wishlist')
 
@@ -861,10 +879,10 @@ class ServerManager:
     # Listeners
 
     async def _on_track_user(self, event: TrackUserEvent):
-        await self.track_user(event.username)
+        await self.track_user(event.username, event.flag)
 
     async def _on_untrack_user(self, event: UntrackUserEvent):
-        await self.untrack_user(event.username)
+        await self.untrack_user(event.username, event.flag)
 
     async def _on_scan_completed(self, event: ScanCompleteEvent):
         await self.report_shares()
@@ -915,12 +933,12 @@ class ServerManager:
                 self._cancel_connection_watchdog_task()
 
         elif event.state == ConnectionState.CLOSED:
-            for user in self._state.users.values():
-                user.is_tracking = False
+            self._state.reset_users_and_rooms()
 
             await self._event_bus.emit(ServerDisconnectedEvent())
 
-    async def reconnect(self):
+    async def _reconnect(self):
+        """Reconnect after disconnecting"""
         try:
             await self._network.connect_server()
         except ConnectionFailedError:

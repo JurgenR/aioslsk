@@ -1,9 +1,9 @@
 from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, Union
+from typing import Deque, Dict, List, Union
 
-from .model import ChatMessage, Room, User
+from .model import Room, User, UserStatus, TrackingFlag
 from .search import ReceivedSearch, SearchRequest
 
 
@@ -14,7 +14,6 @@ class State:
     # Chat related
     rooms: Dict[str, Room] = field(default_factory=dict)
     users: Dict[str, User] = field(default_factory=dict)
-    private_messages: Dict[int, ChatMessage] = field(default_factory=dict)
 
     # Server vars
     parent_min_speed: int = 0
@@ -28,6 +27,9 @@ class State:
     # Search related
     received_searches: Deque[ReceivedSearch] = field(default_factory=lambda: deque(list(), 500))
     search_queries: Dict[int, SearchRequest] = field(default_factory=dict)
+
+    def get_joined_rooms(self) -> List[Room]:
+        return [room for room in self.rooms.values() if room.joined]
 
     def get_or_create_user(self, user: Union[str, User]) -> User:
         """Retrieves the user with given name or return the existing `User`
@@ -55,3 +57,13 @@ class State:
             room = Room(name=room_name, private=private)
             self.rooms[room_name] = room
             return room
+
+    def reset_users_and_rooms(self):
+        """Performs a reset on all users and rooms"""
+        for user in self.users.values():
+            user.tracking_flags = TrackingFlag(0)
+            user.status = UserStatus.UNKNOWN
+
+        for room in self.rooms.values():
+            room.joined = False
+            room.users = []
