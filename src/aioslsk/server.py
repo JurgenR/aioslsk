@@ -465,7 +465,7 @@ class ServerManager:
         user.update_from_user_stats(message.user_stats)
         user.slots_free = message.slots_free
         user.country = message.country_code
-        user.tracking_flags |= TrackingFlag.ROOM_USER
+        await self.track_user(user.name, TrackingFlag.ROOM_USER)
 
         room = self._state.get_or_create_room(message.room)
         room.add_user(user)
@@ -483,7 +483,7 @@ class ServerManager:
             if joined_room != room and user in joined_room.users:
                 break
         else:
-            user.tracking_flags &= ~TrackingFlag.ROOM_USER
+            await self.untrack_user(user.name, TrackingFlag.ROOM_USER)
 
         room.remove_user(user)
 
