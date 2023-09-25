@@ -427,7 +427,7 @@ class PeerManager:
             locked_results=message.locked_results
         )
         try:
-            query = self._state.search_queries[message.ticket]
+            query = self._state.search_requests[message.ticket]
         except KeyError:
             logger.warning(f"search reply ticket does not match any search query : {message.ticket}")
         else:

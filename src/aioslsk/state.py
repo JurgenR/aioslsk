@@ -26,7 +26,7 @@ class State:
 
     # Search related
     received_searches: Deque[ReceivedSearch] = field(default_factory=lambda: deque(list(), 500))
-    search_queries: Dict[int, SearchRequest] = field(default_factory=dict)
+    search_requests: Dict[int, SearchRequest] = field(default_factory=dict)
 
     def get_joined_rooms(self) -> List[Room]:
         return [room for room in self.rooms.values() if room.joined]

@@ -237,13 +237,13 @@ class ServerManager:
         await self._network.send_server_messages(
             ChatRoomSearch.Request(room, ticket, query)
         )
-        self._state.search_queries[ticket] = SearchRequest(
+        self._state.search_requests[ticket] = SearchRequest(
             ticket=ticket,
             query=query,
             search_type=SearchType.ROOM,
             room=room
         )
-        return self._state.search_queries[ticket]
+        return self._state.search_requests[ticket]
 
     async def search_user(self, username: str, query: str) -> SearchRequest:
         """Performs a search query on a user"""
@@ -252,13 +252,13 @@ class ServerManager:
         await self._network.send_server_messages(
             UserSearch.Request(username, ticket, query)
         )
-        self._state.search_queries[ticket] = SearchRequest(
+        self._state.search_requests[ticket] = SearchRequest(
             ticket=ticket,
             query=query,
             search_type=SearchType.USER,
             username=username
         )
-        return self._state.search_queries[ticket]
+        return self._state.search_requests[ticket]
 
     async def search(self, query: str) -> SearchRequest:
         """Performs a global search query"""
@@ -267,12 +267,12 @@ class ServerManager:
         await self._network.send_server_messages(
             FileSearch.Request(ticket, query)
         )
-        self._state.search_queries[ticket] = SearchRequest(
+        self._state.search_requests[ticket] = SearchRequest(
             ticket=ticket,
             query=query,
             search_type=SearchType.NETWORK
         )
-        return self._state.search_queries[ticket]
+        return self._state.search_requests[ticket]
 
     async def get_user_stats(self, username: str):  # pragma: no cover
         await self._network.send_server_messages(GetUserStats.Request(username))
@@ -848,8 +848,8 @@ class ServerManager:
             items = self._settings.get('search.wishlist')
 
             # Remove all current wishlist searches
-            self._state.search_queries = {
-                ticket: qry for ticket, qry in self._state.search_queries.items()
+            self._state.search_requests = {
+                ticket: qry for ticket, qry in self._state.search_requests.items()
                 if qry.search_type != SearchType.WISHLIST
             }
 
@@ -860,7 +860,7 @@ class ServerManager:
                     continue
 
                 ticket = next(self._ticket_generator)
-                self._state.search_queries[ticket] = SearchRequest(
+                self._state.search_requests[ticket] = SearchRequest(
                     ticket,
                     item['query'],
                     search_type=SearchType.WISHLIST

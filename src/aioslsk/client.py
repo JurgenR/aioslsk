@@ -14,7 +14,7 @@ from .model import Room, User, TrackingFlag
 from .network.network import Network
 from .peer import PeerManager
 from .server import ServerManager
-from .search import SearchRequest
+from .search import SearchRequest, SearchResult
 from .state import State
 from .settings import Settings
 from .transfer.manager import TransferManager
@@ -122,6 +122,11 @@ class SoulSeekClient:
         )
 
     async def start_shares_manager(self, scan=True):
+        """Reads the shares cache and loads the shared directories from the
+        settings
+
+        :param scan: Boolean to indicate whether to start and initial scan or not
+        """
         self.shares_manager.read_cache()
         self.shares_manager.load_from_settings()
         if scan:
@@ -138,8 +143,6 @@ class SoulSeekClient:
         self._stop_event.set()
 
         await self.network.disconnect()
-
-        logger.debug(f"tasks after disconnect : {asyncio.all_tasks()}")
 
         self.peer_manager.stop()
         self.transfer_manager.stop()
@@ -278,12 +281,25 @@ class SoulSeekClient:
         logger.info(f"Starting search for query: {query}")
         return await self.server_manager.search(query)
 
-    def get_search_results_by_ticket(self, ticket: int):
-        """Returns all search results for given ticket"""
-        return self.state.search_queries[ticket]
+    async def search_user(self, query: str, user: Union[str, User]) -> SearchRequest:
+        username = user.name if isinstance(user, User) else user
+        return await self.server_manager.search_user(username, query)
 
-    def remove_search_results_by_ticket(self, ticket: int):
-        return self.state.search_queries.pop(ticket)
+    async def search_room(self, query: str, room: Union[str, Room]) -> SearchRequest:
+        room_name = room.name if isinstance(room, Room) else room
+        return await self.server_manager.search_room(room_name, query)
+
+    def get_search_request_by_ticket(self, ticket: int) -> SearchRequest:
+        """Returns a search request with given ticket"""
+        return self.state.search_requests[ticket]
+
+    def get_search_results_by_ticket(self, ticket: int) -> List[SearchResult]:
+        """Returns all search results for given ticket"""
+        return self.state.search_requests[ticket].results
+
+    def remove_search_request_by_ticket(self, ticket: int) -> SearchRequest:
+        """Removes a search request for given ticket"""
+        return self.state.search_requests.pop(ticket)
 
     async def get_user_stats(self, user: Union[str, User]):
         username = user.name if isinstance(user, User) else user
