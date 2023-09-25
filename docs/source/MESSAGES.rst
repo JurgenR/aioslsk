@@ -1180,8 +1180,6 @@ ChatMessageUsers (Code 149)
    2. **string**: message
 
 
-
-
 .. _ChatEnablePublic:
 
 ChatEnablePublic (Code 150)

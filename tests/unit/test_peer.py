@@ -165,7 +165,7 @@ class TestPeer:
         TICKET = 1234
         connection = AsyncMock()
 
-        manager._state.search_queries[TICKET] = SearchRequest(
+        manager._state.search_requests[TICKET] = SearchRequest(
             TICKET, 'search', SearchType.NETWORK)
 
         reply_message = PeerSearchReply.Request(
@@ -179,14 +179,14 @@ class TestPeer:
         )
         await manager._on_peer_search_reply(reply_message, connection)
 
-        assert 1 == len(manager._state.search_queries[TICKET].results)
+        assert 1 == len(manager._state.search_requests[TICKET].results)
 
         manager._event_bus.emit.assert_has_awaits(
             [
                 call(
                     SearchResultEvent(
-                        manager._state.search_queries[TICKET],
-                        manager._state.search_queries[TICKET].results[0]
+                        manager._state.search_requests[TICKET],
+                        manager._state.search_requests[TICKET].results[0]
                     )
                 ),
                 call(UserInfoEvent(manager._state.get_or_create_user('user0')))
