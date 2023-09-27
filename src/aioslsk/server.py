@@ -429,7 +429,8 @@ class ServerManager:
         )
 
         await self.report_shares()
-        await self.track_user(self._settings.get('credentials.username'))
+        await self.track_user(
+            self._settings.get('credentials.username'), TrackingFlag.FRIEND)
 
         # Perform AddUser for all in the friendlist
         await self.track_friends()

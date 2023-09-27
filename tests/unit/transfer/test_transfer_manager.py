@@ -1,11 +1,14 @@
+import asyncio
 import os
-from unittest.mock import AsyncMock, Mock, MagicMock
+from unittest.mock import AsyncMock, Mock, MagicMock, patch
 
 import pytest
 
 from aioslsk.configuration import Configuration
 from aioslsk.events import TrackUserEvent, UntrackUserEvent
+from aioslsk.exceptions import ConnectionWriteError
 from aioslsk.model import UserStatus, TrackingFlag
+from aioslsk.protocol.messages import PeerPlaceInQueueRequest, PeerPlaceInQueueReply
 from aioslsk.transfer.model import Transfer, TransferDirection
 from aioslsk.transfer.manager import TransferManager
 from aioslsk.transfer.state import (
@@ -134,14 +137,17 @@ class TestTransferManager:
     @pytest.mark.asyncio
     async def test_whenAbortTransfer_shouldSetAbortState(self, manager: TransferManager):
         transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
+        transfer.local_path = '/some/path.mp3'
         await manager.add(transfer)
 
         transfer.state.queue()
         transfer.state.initialize()
         transfer.state.start_transferring()
-        await manager.abort(transfer)
+        with patch('aiofiles.os.remove', return_value=None) as patched_remove:
+            await manager.abort(transfer)
 
         assert transfer.state.VALUE == TransferState.ABORTED
+        patched_remove.assert_awaited_once_with(transfer.local_path)
 
     @pytest.mark.asyncio
     async def test_whenFailTransfer_shouldSetFailState(self, manager: TransferManager):
@@ -362,3 +368,48 @@ class TestTransferManager:
         manager._internal_event_bus.emit.assert_awaited_once_with(
             UntrackUserEvent('user0', TrackingFlag.TRANSFER)
         )
+
+    @pytest.mark.asyncio
+    async def test_requestPlaceInQueue(self, manager: TransferManager):
+        transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
+        expected_place = 10
+
+        response = PeerPlaceInQueueReply.Request(DEFAULT_FILENAME, expected_place)
+        manager._network.wait_for_peer_message = AsyncMock(
+            return_value=(None, response))
+
+        place = await manager.request_place_in_queue(transfer)
+
+        manager._network.send_peer_messages.assert_awaited_once_with(
+            DEFAULT_USERNAME,
+            PeerPlaceInQueueRequest.Request(DEFAULT_FILENAME)
+        )
+        assert place == expected_place
+
+    @pytest.mark.asyncio
+    async def test_requestPlaceInQueue_failSendingRequest(self, manager: TransferManager):
+        transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
+
+        manager._network.send_peer_messages = AsyncMock(
+            side_effect=ConnectionWriteError('write error'))
+
+        place = await manager.request_place_in_queue(transfer)
+
+        manager._network.send_peer_messages.assert_awaited_once_with(
+            DEFAULT_USERNAME,
+            PeerPlaceInQueueRequest.Request(DEFAULT_FILENAME)
+        )
+        assert place == -1
+
+    @pytest.mark.asyncio
+    async def test_requestPlaceInQueue_timeoutWaitingForResponse(self, manager: TransferManager):
+        transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
+
+        with patch('asyncio.wait_for', side_effect=asyncio.TimeoutError()):
+            place = await manager.request_place_in_queue(transfer)
+
+        manager._network.send_peer_messages.assert_awaited_once_with(
+            DEFAULT_USERNAME,
+            PeerPlaceInQueueRequest.Request(DEFAULT_FILENAME)
+        )
+        assert place == -1
