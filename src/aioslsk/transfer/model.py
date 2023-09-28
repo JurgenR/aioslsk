@@ -6,7 +6,7 @@ import os
 import time
 from typing import List
 
-from .state import TransferState, VirginState
+from .state import TransferState, TransferStateListener, VirginState
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,12 @@ class TransferDirection(Enum):
 
 class Transfer:
     """Class representing a transfer"""
-    _UNPICKABLE_FIELDS = ('_speed_log', '_initialize_task', '_remotely_queue_task')
+    _UNPICKABLE_FIELDS = (
+        '_speed_log',
+        '_initialize_task',
+        '_remotely_queue_task',
+        'state_listeners'
+    )
 
     def __init__(self, username: str, remote_path: str, direction: TransferDirection):
         self.state: TransferState = VirginState(self)
@@ -70,17 +75,19 @@ class Transfer:
         """
 
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
-        self._current_task: asyncio.Task = None
 
         self._remotely_queue_task: asyncio.Task = None
         self._initialize_task: asyncio.Task = None
+        self.state_listeners: List[TransferStateListener] = []
 
     def __setstate__(self, obj_state):
         """Called when unpickling"""
         self.__dict__.update(obj_state)
+
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
         self._remotely_queue_task = None
         self._initialize_task = None
+        self.state_listeners = []
         self.__dict__['state'] = TransferState.init_from_state(obj_state['state'], self)
 
     def __getstate__(self):
@@ -143,10 +150,18 @@ class Transfer:
         self.upload_request_attempts = 0
         self.last_upload_request_attempt = 0.0
 
-    def transition(self, state: TransferState):
-        if self.state.VALUE != state.VALUE:
-            logger.debug(f"transitioning transfer state from {self.state.VALUE.name} to {state.VALUE.name}")
-            self.state = state
+    async def transition(self, state: TransferState):
+        if self.state.VALUE == state.VALUE:
+            return
+
+        old_state = self.state
+        logger.debug(f"transitioning transfer state from {old_state.VALUE.name} to {state.VALUE.name}")
+        self.state = state
+
+        for listener in self.state_listeners:
+            await listener.on_transfer_state_changed(
+                self, old_state.VALUE, self.state.VALUE
+            )
 
     def calculate_offset(self) -> int:
         try:

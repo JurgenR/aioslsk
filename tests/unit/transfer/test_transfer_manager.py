@@ -89,60 +89,14 @@ class TestTransferManager:
         assert transfer.state.VALUE == TransferState.QUEUED
 
     @pytest.mark.asyncio
-    async def test_whenDownloadingTransfer_shouldSetDownloadingState(self, manager: TransferManager):
-        transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
-        await manager.add(transfer)
-
-        transfer.state.queue()
-        transfer.state.initialize()
-        await manager._downloading(transfer)
-
-        assert transfer.state.VALUE == TransferState.DOWNLOADING
-
-    @pytest.mark.asyncio
-    async def test_whenUploadingTransfer_shouldSetUploadingState(self, manager: TransferManager):
-        transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.UPLOAD)
-        await manager.add(transfer)
-
-        transfer.state.queue()
-        transfer.state.initialize()
-        await manager._uploading(transfer)
-
-        assert transfer.state.VALUE == TransferState.UPLOADING
-
-    @pytest.mark.asyncio
-    async def test_whenCompleteTransfer_shouldSetCompleteState(self, manager: TransferManager):
-        transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
-        await manager.add(transfer)
-
-        transfer.state.queue()
-        transfer.state.initialize()
-        transfer.state.start_transferring()
-        await manager._complete(transfer)
-
-        assert transfer.state.VALUE == TransferState.COMPLETE
-
-    @pytest.mark.asyncio
-    async def test_whenIncompleteTransfer_shouldSetIncompleteState(self, manager: TransferManager):
-        transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
-        await manager.add(transfer)
-
-        transfer.state.queue()
-        transfer.state.initialize()
-        transfer.state.start_transferring()
-        await manager._incomplete(transfer)
-
-        assert transfer.state.VALUE == TransferState.INCOMPLETE
-
-    @pytest.mark.asyncio
     async def test_whenAbortTransfer_download_shouldSetAbortStateAndDeleteFile(self, manager: TransferManager):
         transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
         transfer.local_path = '/some/path.mp3'
         await manager.add(transfer)
 
-        transfer.state.queue()
-        transfer.state.initialize()
-        transfer.state.start_transferring()
+        await transfer.state.queue()
+        await transfer.state.initialize()
+        await transfer.state.start_transferring()
         with patch('aiofiles.os.path.exists', return_value=True):
             with patch('aiofiles.os.remove', return_value=None) as patched_remove:
                 await manager.abort(transfer)
@@ -156,28 +110,15 @@ class TestTransferManager:
         transfer.local_path = '/some/path.mp3'
         await manager.add(transfer)
 
-        transfer.state.queue()
-        transfer.state.initialize()
-        transfer.state.start_transferring()
+        await transfer.state.queue()
+        await transfer.state.initialize()
+        await transfer.state.start_transferring()
         with patch('aiofiles.os.path.exists', return_value=True):
             with patch('aiofiles.os.remove', return_value=None) as patched_remove:
                 await manager.abort(transfer)
 
         assert transfer.state.VALUE == TransferState.ABORTED
         patched_remove.assert_not_awaited()
-
-    @pytest.mark.asyncio
-    async def test_whenFailTransfer_shouldSetFailState(self, manager: TransferManager):
-        transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
-        await manager.add(transfer)
-
-        transfer.state.queue()
-        transfer.state.initialize()
-        transfer.state.start_transferring()
-        await manager._fail(transfer, reason="nok")
-
-        assert transfer.state.VALUE == TransferState.FAILED
-        assert transfer.fail_reason == "nok"
 
     # Speed calculations
     def test_whenGetUploadSpeed_returnsUploadSpeed(self, manager: TransferManager):
