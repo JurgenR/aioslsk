@@ -52,7 +52,3 @@ class ConnectionReadError(NetworkError):
 
 class ConnectionWriteError(NetworkError):
     pass
-
-
-class IncompleteFileReceiveError(NetworkError):
-    pass

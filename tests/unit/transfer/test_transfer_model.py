@@ -35,26 +35,31 @@ class TestTransfer:
 
         assert 0.0 == transfer.get_speed()
 
-    def test_getSpeed_transferComplete_returnAverageSpeed(self):
+    # WARNING: This test fails with logging enabled. The logging library will
+    # make use of the time.time and take away the mocked values for its own use
+    # resulting in a StopIteration error
+    @pytest.mark.asyncio
+    async def test_getSpeed_transferComplete_returnAverageSpeed(self):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state = InitializingState(transfer)
 
         with patch('time.time', side_effect=[0.0, 2.0, ]):
             transfer.filesize = 100
-            transfer.state.start_transferring()
+            await transfer.state.start_transferring()
             transfer.bytes_transfered = 100
-            transfer.state.complete()
+            await transfer.state.complete()
 
         assert 50.0 == transfer.get_speed()
 
-    def test_getSpeed_transferProcessing_returnAverageSpeed(self):
+    @pytest.mark.asyncio
+    async def test_getSpeed_transferProcessing_returnAverageSpeed(self):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
-        transfer.state.queue()
-        transfer.state.initialize()
+        await transfer.state.queue()
+        await transfer.state.initialize()
 
         with patch('time.time', return_value=0.0):
             transfer.filesize = 100
-            transfer.state.start_transferring()
+            await transfer.state.start_transferring()
             transfer.bytes_transfered = 30
 
         with patch('time.monotonic', side_effect=[0.05, 0.05, 0.15, 0.15, 0.25, 0.25, 0.3]):
@@ -67,21 +72,23 @@ class TestTransfer:
 
             assert 120.0 == transfer.get_speed()
 
-    def test_getSpeed_transferProcessing_noEntries_returnZero(self):
+    @pytest.mark.asyncio
+    async def test_getSpeed_transferProcessing_noEntries_returnZero(self):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
-        transfer.state.queue()
-        transfer.state.initialize()
+        await transfer.state.queue()
+        await transfer.state.initialize()
 
         with patch('time.time', return_value=0.0):
             transfer.filesize = 100
-            transfer.state.start_transferring()
+            await transfer.state.start_transferring()
             transfer.bytes_transfered = 30
 
         assert 0.0 == transfer.get_speed()
 
-    def test_setState_alreadyInState_shouldDoNothing(self):
+    @pytest.mark.asyncio
+    async def test_setState_alreadyInState_shouldDoNothing(self):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
-        transfer.state.queue()
-        transfer.state.queue()
+        await transfer.state.queue()
+        await transfer.state.queue()
 
         assert TransferState.QUEUED == transfer.state.VALUE

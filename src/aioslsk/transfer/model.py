@@ -4,8 +4,9 @@ from enum import Enum
 import logging
 import os
 import time
+from typing import List
 
-from .state import TransferState, VirginState
+from .state import TransferState, TransferStateListener, VirginState
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,12 @@ class TransferDirection(Enum):
 
 class Transfer:
     """Class representing a transfer"""
-    _UNPICKABLE_FIELDS = ('_speed_log', '_current_task')
+    _UNPICKABLE_FIELDS = (
+        '_speed_log',
+        '_transfer_task',
+        '_remotely_queue_task',
+        'state_listeners'
+    )
 
     def __init__(self, username: str, remote_path: str, direction: TransferDirection):
         self.state: TransferState = VirginState(self)
@@ -69,13 +75,19 @@ class Transfer:
         """
 
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
-        self._current_task: asyncio.Task = None
+
+        self._remotely_queue_task: asyncio.Task = None
+        self._transfer_task: asyncio.Task = None
+        self.state_listeners: List[TransferStateListener] = []
 
     def __setstate__(self, obj_state):
         """Called when unpickling"""
         self.__dict__.update(obj_state)
+
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
-        self._current_task = None
+        self._remotely_queue_task = None
+        self._transfer_task = None
+        self.state_listeners = []
         self.__dict__['state'] = TransferState.init_from_state(obj_state['state'], self)
 
     def __getstate__(self):
@@ -91,6 +103,17 @@ class Transfer:
 
         return obj_state
 
+    def reset_progress(self):
+        self.reset_times()
+        self.bytes_read = 0
+        self.bytes_written = 0
+        self.bytes_transfered = 0
+        self._offset = None
+        self.local_path = None
+        self.fail_reason = None
+        self.remotely_queued = False
+        self.place_in_queue = None
+
     def reset_times(self):
         """Clear all time related variables"""
         self.start_time = None
@@ -100,13 +123,15 @@ class Transfer:
     def set_start_time(self):
         """Set the start time, clear the complete time"""
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
+        logger.debug("setting start time")
         self.start_time = time.time()
         self.complete_time = None
 
     def set_complete_time(self):
-        """Set the complete time if the start time has been set"""
+        """Set the complete time only if the start time has not been set"""
         if self.start_time is not None:
             self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
+            logger.debug("setting complete time")
             self.complete_time = time.time()
 
     def increase_queue_attempts(self):
@@ -125,10 +150,18 @@ class Transfer:
         self.upload_request_attempts = 0
         self.last_upload_request_attempt = 0.0
 
-    def transition(self, state: TransferState):
-        if self.state.VALUE != state.VALUE:
-            logger.debug(f"transitioning transfer state from {self.state!r} to {state!r}")
-            self.state = state
+    async def transition(self, state: TransferState):
+        if self.state.VALUE == state.VALUE:
+            return
+
+        old_state = self.state
+        logger.debug(f"transitioning transfer state from {old_state.VALUE.name} to {state.VALUE.name}")
+        self.state = state
+
+        for listener in self.state_listeners:
+            await listener.on_transfer_state_changed(
+                self, old_state.VALUE, self.state.VALUE
+            )
 
     def calculate_offset(self) -> int:
         try:
@@ -176,6 +209,7 @@ class Transfer:
 
         # Transfer complete
         if self.complete_time is None:
+            logger.debug("calling time again")
             transfer_duration = time.time() - self.start_time
         else:
             transfer_duration = self.complete_time - self.start_time
@@ -203,6 +237,7 @@ class Transfer:
         return self.direction == TransferDirection.DOWNLOAD
 
     def is_finalized(self) -> bool:
+        """Return true if the transfer is in a finalized state"""
         return self.state.VALUE in (
             TransferState.COMPLETE,
             TransferState.ABORTED,
@@ -210,6 +245,9 @@ class Transfer:
         )
 
     def is_processing(self) -> bool:
+        """Return true if an attempt is being made to start transferring the
+        file or the transfer is currently in progress.
+        """
         return self.state.VALUE in (
             TransferState.DOWNLOADING,
             TransferState.UPLOADING,
@@ -217,6 +255,7 @@ class Transfer:
         )
 
     def is_transferring(self) -> bool:
+        """Return true if the transfer is in progress"""
         return self.state.VALUE in (
             TransferState.DOWNLOADING,
             TransferState.UPLOADING,
@@ -225,14 +264,26 @@ class Transfer:
     def is_transfered(self) -> bool:
         return self.filesize == self.bytes_transfered
 
-    def _queue_remotely_task_complete(self, task: asyncio.Task):
-        self._current_task = None
+    def cancel_tasks(self) -> List[asyncio.Task]:
+        """Cancels all tasks for the transfer, this method returns the tasks
+        which have been cancelled
+        """
+        tasks = []
+        if self._remotely_queue_task is not None:
+            tasks.append(self._remotely_queue_task)
+            self._remotely_queue_task.cancel()
 
-    def _upload_task_complete(self, task: asyncio.Task):
-        self._current_task = None
+        if self._transfer_task is not None:
+            tasks.append(self._transfer_task)
+            self._transfer_task.cancel()
 
-    def _download_task_complete(self, task: asyncio.Task):
-        self._current_task = None
+        return tasks
+
+    def _remotely_queue_task_complete(self, task: asyncio.Task):
+        self._remotely_queue_task = None
+
+    def _transfer_task_complete(self, task: asyncio.Task):
+        self._transfer_task = None
 
     def _transfer_progress_callback(self, data: bytes):
         self.bytes_transfered += len(data)
@@ -247,5 +298,5 @@ class Transfer:
         return (
             f"Transfer(username={self.username!r}, remote_path={self.remote_path!r}, "
             f"local_path={self.local_path!r}, direction={self.direction}, "
-            f"state={self.state}, _current_task={self._current_task!r})"
+            f"state={self.state})"
         )

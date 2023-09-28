@@ -12,6 +12,14 @@ class NamingStrategy:
         return True
 
     def apply(self, remote_path: str, local_dir: str, local_filename: str) -> Tuple[str, str]:
+        """Apply the naming changes
+
+        :param remote_path: the original remote path
+        :param local_dir: the local directory the file should be written to
+        :param local_filename: the local filename the file should be written to
+        :return: the `local_dir` and `local_filename` after applying the desired
+            changes
+        """
         raise NotImplementedError("'apply' should be overwritten by a subclass")
 
 
@@ -23,7 +31,7 @@ class DefaultNamingStrategy(NamingStrategy):
 
 
 class KeepDirectoryStrategy(NamingStrategy):
-    """Keeps the original directory the remote file was in. """
+    """Keeps the original directory the remote file was in"""
 
     def apply(self, remote_path: str, local_dir: str, local_filename: str) -> Tuple[str, str]:
         # -1 filename

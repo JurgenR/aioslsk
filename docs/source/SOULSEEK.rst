@@ -78,7 +78,7 @@ When a peer connection is accepted on the obfuscated port all messaging should b
 Connecting to a peer
 --------------------
 
-The process uses the server as a middle man in case we fail to connect to the other peer. To obtain the IP address and port of the peer the :ref:`GetPeerAddress` message is first requested from the server.
+The process uses the server to request the IP as well as a middle man in case we fail to connect to the other peer. To obtain the IP address and port of the peer the :ref:`GetPeerAddress` message is first requested from the server.
 
 We can connect to them:
 

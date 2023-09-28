@@ -469,8 +469,9 @@ class Network:
 
     async def _make_direct_connection(
             self, ticket: int, username: str, typ: str, ip: int, port: int, obfuscate: bool) -> PeerConnection:
-        """Attempts to make a direct connection to the peer. After completion
-        a peer init request will be sent
+        """Attempts to make a direct connection to the peer and send a `PeerInit`
+        message. This will be the first step in case we are the one initiating
+        the connection
         """
         logger.debug(f"attempting to connect to peer : {username!r} {ip}:{port}")
         connection = PeerConnection(
@@ -494,11 +495,11 @@ class Network:
     async def _make_indirect_connection(
             self, ticket: int, username: str, typ: str) -> PeerConnection:
         """Attempts to make an indirect connection by sending a `ConnectToPeer`
-        message to the server and waiting for an incoming connection and
-        `PeerPierceFirewall` message.
+        message to the server. The method will wait for an incoming connection
+        with a `PeerPierceFirewall` message containing the provided ticket or a
+        `CannotConnect` message from the server.
 
-        A `PeerInitializedEvent` will be emitted in case of success
-
+        :return: `PeerConnection` object in case of success
         :raise PeerConnectionError: in case timeout was reached or we received a
             `CannotConnect` message from the server containing the `ticket`
         """
@@ -679,11 +680,15 @@ class Network:
             if message_data:
                 peer_init_message = connection.decode_message_data(message_data)
             else:
-                # EOF reached before receiving a message
+                # EOF reached before receiving a message. Connection should've
+                # been automatically closed
                 return
         except ConnectionReadError:
+            # Some read error. Connection should've been automatically closed
             return
         except MessageDeserializationError:
+            # Couldn't deserialize the first message. Assume something is broken
+            # and disconnect
             await connection.disconnect(CloseReason.REQUESTED)
             return
 
@@ -735,6 +740,12 @@ class Network:
                 expected_response.set_result((connection, message, ))
 
     # Settings listeners
+    def load_speed_limits(self):
+        """Loads the speed limits from the settings"""
+        self.set_download_speed_limit(
+            self._settings.get('sharing.limits.download_speed_kbps'))
+        self.set_upload_speed_limit(
+            self._settings.get('sharing.limits.upload_speed_kbps'))
 
     def set_upload_speed_limit(self, limit_kbps: int):
         """Modifies the upload speed limit. Passing 0 will set the upload speed
@@ -743,7 +754,8 @@ class Network:
         :param limit_kbps: the new upload limit
         """
         new_limiter = RateLimiter.create_limiter(limit_kbps)
-        new_limiter.copy_tokens(self._upload_rate_limiter)
+        if self._upload_rate_limiter is not None:
+            new_limiter.copy_tokens(self._upload_rate_limiter)
         self._upload_rate_limiter = new_limiter
 
         for conn in self.peer_connections:
@@ -756,7 +768,8 @@ class Network:
         :param limit_kbps: the new download limit
         """
         new_limiter = RateLimiter.create_limiter(limit_kbps)
-        new_limiter.copy_tokens(self._download_rate_limiter)
+        if self._download_rate_limiter is not None:
+            new_limiter.copy_tokens(self._download_rate_limiter)
         self._download_rate_limiter = new_limiter
 
         for conn in self.peer_connections:

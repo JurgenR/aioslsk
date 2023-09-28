@@ -29,11 +29,12 @@ class TestTransferState:
         with pytest.raises(Exception):
             TransferState.init_from_state('bogus')
 
-    def test_whenTransitionVirginToQueued_shouldResetRemotelyQueued(self):
+    @pytest.mark.asyncio
+    async def test_whenTransitionVirginToQueued_shouldResetRemotelyQueued(self):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.remotely_queued = True
 
-        transfer.state.queue()
+        await transfer.state.queue()
 
         assert transfer.remotely_queued is False
         assert transfer.state.VALUE == TransferState.QUEUED
@@ -42,14 +43,15 @@ class TestTransferState:
         DownloadingState,
         UploadingState,
     ])
-    def test_whenTransitionToFailed_shouldSetStateAndCompleteTime(self, initial_state: Type[TransferState]):
+    @pytest.mark.asyncio
+    async def test_whenTransitionToFailed_shouldSetStateAndCompleteTime(self, initial_state: Type[TransferState]):
         time_mock = MagicMock(return_value=12.0)
 
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state = initial_state(transfer)
         transfer.start_time = 1.0
         with patch('time.time', time_mock):
-            transfer.state.fail(reason='err')
+            await transfer.state.fail(reason='err')
 
         assert transfer.complete_time == 12.0
         assert transfer.state.VALUE == TransferState.FAILED
@@ -60,10 +62,11 @@ class TestTransferState:
         InitializingState,
         IncompleteState,
     ])
-    def test_whenTransitionToFailed_shouldSetState(self, initial_state: Type[TransferState]):
+    @pytest.mark.asyncio
+    async def test_whenTransitionToFailed_shouldSetState(self, initial_state: Type[TransferState]):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state = initial_state(transfer)
-        transfer.state.fail(reason='err')
+        await transfer.state.fail(reason='err')
 
         assert transfer.complete_time is None
         assert transfer.state.VALUE == TransferState.FAILED
@@ -73,14 +76,15 @@ class TestTransferState:
         DownloadingState,
         UploadingState,
     ])
-    def test_whenTransitionToAborted_shouldSetStateAndCompleteTime(self, initial_state: Type[TransferState]):
+    @pytest.mark.asyncio
+    async def test_whenTransitionToAborted_shouldSetStateAndCompleteTime(self, initial_state: Type[TransferState]):
         time_mock = MagicMock(return_value=12.0)
 
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state = initial_state(transfer)
         transfer.start_time = 1.0
         with patch('time.time', time_mock):
-            transfer.state.abort()
+            await transfer.state.abort()
 
         assert transfer.complete_time == 12.0
         assert transfer.state.VALUE == TransferState.ABORTED
@@ -90,10 +94,11 @@ class TestTransferState:
         InitializingState,
         IncompleteState,
     ])
-    def test_whenTransitionToAborted_shouldSetState(self, initial_state: Type[TransferState]):
+    @pytest.mark.asyncio
+    async def test_whenTransitionToAborted_shouldSetState(self, initial_state: Type[TransferState]):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state = initial_state(transfer)
-        transfer.state.abort()
+        await transfer.state.abort()
 
         assert transfer.complete_time is None
         assert transfer.state.VALUE == TransferState.ABORTED
@@ -101,10 +106,11 @@ class TestTransferState:
     @pytest.mark.parametrize('initial_state', [
         InitializingState,
     ])
-    def test_whenTransitionToQueued_shouldSetState(self, initial_state: Type[TransferState]):
+    @pytest.mark.asyncio
+    async def test_whenTransitionToQueued_shouldSetState(self, initial_state: Type[TransferState]):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state = initial_state(transfer)
-        transfer.state.queue()
+        await transfer.state.queue()
 
         assert transfer.state.VALUE == TransferState.QUEUED
 
@@ -114,69 +120,75 @@ class TestTransferState:
         AbortedState,
         FailedState,
     ])
-    def test_whenTransitionToQueued_shouldSetStateAndResetTimes(self, initial_state: Type[TransferState]):
+    @pytest.mark.asyncio
+    async def test_whenTransitionToQueued_shouldSetStateAndResetTimes(self, initial_state: Type[TransferState]):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state = initial_state(transfer)
         transfer.start_time = 1.0
         transfer.complete_time = 2.0
-        transfer.state.queue()
+        await transfer.state.queue()
 
         assert transfer.start_time is None
         assert transfer.complete_time is None
         assert transfer.state.VALUE == TransferState.QUEUED
 
-    def test_whenTransitionQueuedToInitializing_shouldSetState(self):
+    @pytest.mark.asyncio
+    async def test_whenTransitionQueuedToInitializing_shouldSetState(self):
         transfer = Transfer(None, None, TransferDirection.UPLOAD)
         transfer.state = QueuedState(transfer)
-        transfer.state.initialize()
+        await transfer.state.initialize()
 
         assert transfer.state.VALUE == TransferState.INITIALIZING
 
-    def test_whenTransitionDownloadingToIncomplete_shouldSetCompleteTime(self):
+    @pytest.mark.asyncio
+    async def test_whenTransitionDownloadingToIncomplete_shouldSetCompleteTime(self):
         time_mock = MagicMock(return_value=12.0)
 
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state = DownloadingState(transfer)
         transfer.start_time = 1.0
         with patch('time.time', time_mock):
-            transfer.state.incomplete()
+            await transfer.state.incomplete()
 
         assert transfer.complete_time == 12.0
         assert transfer.state.VALUE == TransferState.INCOMPLETE
 
-    def test_whenTransitionDownloadingToComplete_shouldSetCompleteTime(self):
+    @pytest.mark.asyncio
+    async def test_whenTransitionDownloadingToComplete_shouldSetCompleteTime(self):
         time_mock = MagicMock(return_value=12.0)
 
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state = DownloadingState(transfer)
         transfer.start_time = 1.0
         with patch('time.time', time_mock):
-            transfer.state.complete()
+            await transfer.state.complete()
 
         assert transfer.complete_time == 12.0
         assert transfer.state.VALUE == TransferState.COMPLETE
 
-    def test_whenTransitionInitializingToUploading_shouldSetStartTime(self):
+    @pytest.mark.asyncio
+    async def test_whenTransitionInitializingToUploading_shouldSetStartTime(self):
         time_mock = MagicMock(return_value=2.0)
 
         transfer = Transfer(None, None, TransferDirection.UPLOAD)
         transfer.state = InitializingState(transfer)
         transfer.remotely_queued = True
         with patch('time.time', time_mock):
-            transfer.state.start_transferring()
+            await transfer.state.start_transferring()
 
         assert transfer.remotely_queued == False
         assert transfer.start_time == 2.0
         assert transfer.state.VALUE == TransferState.UPLOADING
 
-    def test_whenTransitionInitializingToDownloading_shouldSetStartTime(self):
+    @pytest.mark.asyncio
+    async def test_whenTransitionInitializingToDownloading_shouldSetStartTime(self):
         time_mock = MagicMock(return_value=2.0)
 
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state = InitializingState(transfer)
         transfer.remotely_queued = True
         with patch('time.time', time_mock):
-            transfer.state.start_transferring()
+            await transfer.state.start_transferring()
 
         assert transfer.remotely_queued == False
         assert transfer.start_time == 2.0
