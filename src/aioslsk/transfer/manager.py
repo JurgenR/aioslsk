@@ -348,13 +348,13 @@ class TransferManager:
 
         # Uploads should be initialized and transfered if possible
         for upload in uploads[:free_upload_slots]:
-            if not upload._initialize_task:
-                upload._initialize_task = asyncio.create_task(
+            if not upload._transfer_task:
+                upload._transfer_task = asyncio.create_task(
                     self._initialize_upload(upload),
                     name=f'initialize-upload-{task_counter()}'
                 )
-                upload._initialize_task.add_done_callback(
-                    upload._initialize_task_complete
+                upload._transfer_task.add_done_callback(
+                    upload._transfer_task_complete
                 )
 
     def _get_queued_transfers(self) -> Tuple[List[Transfer], List[Transfer]]:
@@ -903,12 +903,12 @@ class TransferManager:
                 # Possibly needs a check to see if there's any inconsistencies
                 # normally we get this response when we were the one requesting
                 # to download so ideally all should be fine here.
-                transfer._initialize_task = asyncio.create_task(
+                transfer._transfer_task = asyncio.create_task(
                     self._initialize_download(transfer, connection, message),
                     name=f'initialize-download-{task_counter()}'
                 )
-                transfer._initialize_task.add_done_callback(
-                    transfer._initialize_task_complete
+                transfer._transfer_task.add_done_callback(
+                    transfer._transfer_task_complete
                 )
 
     @on_message(PeerPlaceInQueueRequest.Request)

@@ -24,7 +24,7 @@ class Transfer:
     """Class representing a transfer"""
     _UNPICKABLE_FIELDS = (
         '_speed_log',
-        '_initialize_task',
+        '_transfer_task',
         '_remotely_queue_task',
         'state_listeners'
     )
@@ -77,7 +77,7 @@ class Transfer:
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
 
         self._remotely_queue_task: asyncio.Task = None
-        self._initialize_task: asyncio.Task = None
+        self._transfer_task: asyncio.Task = None
         self.state_listeners: List[TransferStateListener] = []
 
     def __setstate__(self, obj_state):
@@ -86,7 +86,7 @@ class Transfer:
 
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
         self._remotely_queue_task = None
-        self._initialize_task = None
+        self._transfer_task = None
         self.state_listeners = []
         self.__dict__['state'] = TransferState.init_from_state(obj_state['state'], self)
 
@@ -273,17 +273,17 @@ class Transfer:
             tasks.append(self._remotely_queue_task)
             self._remotely_queue_task.cancel()
 
-        if self._initialize_task is not None:
-            tasks.append(self._initialize_task)
-            self._initialize_task.cancel()
+        if self._transfer_task is not None:
+            tasks.append(self._transfer_task)
+            self._transfer_task.cancel()
 
         return tasks
 
     def _remotely_queue_task_complete(self, task: asyncio.Task):
         self._remotely_queue_task = None
 
-    def _initialize_task_complete(self, task: asyncio.Task):
-        self._initialize_task = None
+    def _transfer_task_complete(self, task: asyncio.Task):
+        self._transfer_task = None
 
     def _transfer_progress_callback(self, data: bytes):
         self.bytes_transfered += len(data)
