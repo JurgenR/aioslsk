@@ -35,6 +35,9 @@ class TestTransfer:
 
         assert 0.0 == transfer.get_speed()
 
+    # WARNING: This test fails with logging enabled. The logging library will
+    # make use of the time.time and take away the mocked values for its own use
+    # resulting in a StopIteration error
     def test_getSpeed_transferComplete_returnAverageSpeed(self):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state = InitializingState(transfer)

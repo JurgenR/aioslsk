@@ -103,6 +103,9 @@ class Transfer:
         self.bytes_transfered = 0
         self._offset = None
         self.local_path = None
+        self.fail_reason = None
+        self.remotely_queued = False
+        self.place_in_queue = None
 
     def reset_times(self):
         """Clear all time related variables"""
@@ -113,6 +116,7 @@ class Transfer:
     def set_start_time(self):
         """Set the start time, clear the complete time"""
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
+        logger.debug("setting start time")
         self.start_time = time.time()
         self.complete_time = None
 
@@ -120,6 +124,7 @@ class Transfer:
         """Set the complete time only if the start time has not been set"""
         if self.start_time is not None:
             self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
+            logger.debug("setting complete time")
             self.complete_time = time.time()
 
     def increase_queue_attempts(self):
@@ -140,7 +145,7 @@ class Transfer:
 
     def transition(self, state: TransferState):
         if self.state.VALUE != state.VALUE:
-            logger.debug(f"transitioning transfer state from {self.state!r} to {state!r}")
+            logger.debug(f"transitioning transfer state from {self.state.VALUE.name} to {state.VALUE.name}")
             self.state = state
 
     def calculate_offset(self) -> int:
@@ -189,6 +194,7 @@ class Transfer:
 
         # Transfer complete
         if self.complete_time is None:
+            logger.debug("calling time again")
             transfer_duration = time.time() - self.start_time
         else:
             transfer_duration = self.complete_time - self.start_time

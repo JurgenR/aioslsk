@@ -135,7 +135,7 @@ class TestTransferManager:
         assert transfer.state.VALUE == TransferState.INCOMPLETE
 
     @pytest.mark.asyncio
-    async def test_whenAbortTransfer_shouldSetAbortState(self, manager: TransferManager):
+    async def test_whenAbortTransfer_download_shouldSetAbortStateAndDeleteFile(self, manager: TransferManager):
         transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
         transfer.local_path = '/some/path.mp3'
         await manager.add(transfer)
@@ -143,11 +143,28 @@ class TestTransferManager:
         transfer.state.queue()
         transfer.state.initialize()
         transfer.state.start_transferring()
-        with patch('aiofiles.os.remove', return_value=None) as patched_remove:
-            await manager.abort(transfer)
+        with patch('aiofiles.os.path.exists', return_value=True):
+            with patch('aiofiles.os.remove', return_value=None) as patched_remove:
+                await manager.abort(transfer)
 
         assert transfer.state.VALUE == TransferState.ABORTED
         patched_remove.assert_awaited_once_with(transfer.local_path)
+
+    @pytest.mark.asyncio
+    async def test_whenAbortTransfer_upload_shouldSetAbortState(self, manager: TransferManager):
+        transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.UPLOAD)
+        transfer.local_path = '/some/path.mp3'
+        await manager.add(transfer)
+
+        transfer.state.queue()
+        transfer.state.initialize()
+        transfer.state.start_transferring()
+        with patch('aiofiles.os.path.exists', return_value=True):
+            with patch('aiofiles.os.remove', return_value=None) as patched_remove:
+                await manager.abort(transfer)
+
+        assert transfer.state.VALUE == TransferState.ABORTED
+        patched_remove.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_whenFailTransfer_shouldSetFailState(self, manager: TransferManager):

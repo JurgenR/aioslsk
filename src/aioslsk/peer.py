@@ -217,7 +217,7 @@ class PeerManager:
         ]
 
         if self.parent:
-            logger.info("notifying server we are no longer looking for parent")
+            logger.info("notifying server we are not looking for parent")
             messages.extend([
                 ToggleParentSearch.Request(False),
                 AcceptChildren.Request(True)

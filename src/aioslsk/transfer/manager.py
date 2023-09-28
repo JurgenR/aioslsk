@@ -125,16 +125,18 @@ class TransferManager:
 
     async def abort(self, transfer: Transfer):
         """Aborts the given transfer. This will cancel all pending transfers
-        and remove the file
+        and remove the file (in case of download)
         """
         tasks = transfer.cancel_tasks()
         transfer.state.abort()
         await asyncio.gather(*tasks, return_exceptions=True)
 
-        try:
-            await self._remove_download_path(transfer)
-        except OSError:
-            logger.warning(f"failed to remove file during abort : {transfer.local_path}")
+        # Only remove file when downloading
+        if transfer.is_download():
+            try:
+                await self._remove_download_path(transfer)
+            except OSError:
+                logger.warning(f"failed to remove file during abort : {transfer.local_path}")
 
         await self.manage_transfers()
 
@@ -415,7 +417,8 @@ class TransferManager:
         return list(reversed([upload for _, upload in ranking]))
 
     async def _remove_download_path(self, transfer: Transfer):
-        await asyncos.remove(transfer.local_path)
+        if await asyncos.path.exists(transfer.local_path):
+            await asyncos.remove(transfer.local_path)
 
     async def _prepare_download_path(self, transfer: Transfer):
         if transfer.local_path is None:
@@ -750,6 +753,17 @@ class TransferManager:
             )
         )
 
+        # If the transfer already existed in the queue we need to check if we
+        # didn't abort it otherwise send a fail message
+        if transfer.state.VALUE == TransferState.ABORTED:
+            await connection.queue_message(
+                PeerTransferQueueFailed.Request(
+                    filename=message.filename,
+                    reason='Cancelled'
+                )
+            )
+            return
+
         # Check if the shared file exists
         try:
             item = self._shares_manager.get_shared_item(
@@ -859,13 +873,22 @@ class TransferManager:
                 # - ABORTED : Aborted (or Cancelled?)
                 # - COMPLETE : Should go back to QUEUED (reset values for transfer)?
                 # - INCOMPLETE : Should go back to QUEUED?
-                await connection.send_message(
-                    PeerTransferReply.Request(
-                        ticket=message.ticket,
-                        allowed=False,
-                        reason='Queued'
+                if transfer.state.VALUE == TransferState.ABORTED:
+                    await connection.send_message(
+                        PeerTransferReply.Request(
+                            ticket=message.ticket,
+                            allowed=False,
+                            reason='Cancelled'
+                        )
                     )
-                )
+                else:
+                    await connection.send_message(
+                        PeerTransferReply.Request(
+                            ticket=message.ticket,
+                            allowed=False,
+                            reason='Queued'
+                        )
+                    )
 
         else:
             # Download
