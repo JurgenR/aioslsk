@@ -300,7 +300,8 @@ class Network:
         type.
 
         Optionally this method takes `ip`, `port` and `obfuscate` parameters. If
-        not given it will be requested to the server.
+        not given it will be requested to the server (GetPeerAddress) before
+        attempting connection
 
         :param username: username of the peer
         :param typ: connection type ('P', 'D', 'F')
@@ -377,6 +378,10 @@ class Network:
     async def get_peer_connection(self, username: str, typ: PeerConnectionType = PeerConnectionType.PEER) -> PeerConnection:
         """Gets a peer connection for the given `username`. It will first try to
         re-use an existing connection, otherwise it will create a new connection
+
+        :param username: username of the peer to connect to
+        :param typ: Type of connection to create or reuse
+        :return: A `PeerConnection` instance
         """
         connections = self.get_active_peer_connections(username, typ)
         if connections:

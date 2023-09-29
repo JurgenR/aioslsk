@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 from enum import auto, Enum
-from typing import BinaryIO, List, Optional, TYPE_CHECKING, Union
+from typing import BinaryIO, Callable, List, Optional, TYPE_CHECKING, Union
 import logging
 import socket
 import struct
@@ -88,7 +88,7 @@ class Connection:
     def __init__(self, hostname: str, port: int, network: Network):
         self.hostname: str = hostname
         self.port: int = port
-        self.network = network
+        self.network: Network = network
         self.state: ConnectionState = ConnectionState.UNINITIALIZED
 
     async def set_state(self, state: ConnectionState, close_reason: CloseReason = CloseReason.UNKNOWN):
@@ -98,7 +98,7 @@ class Connection:
     def _is_closing(self) -> bool:
         return self.network._stop_event.is_set() or self.state in (ConnectionState.CLOSING, ConnectionState.CLOSED)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(hostname={self.hostname!r}, port={self.port}, "
             f"state={self.state})")
@@ -135,6 +135,10 @@ class ListeningConnection(Connection):
             await self.set_state(ConnectionState.CLOSED, close_reason=reason)
 
     async def connect(self):
+        """Open a listening connection on the current `hostname` and `port`
+
+        :raise ConnectionFailedError: raised when binding failed
+        """
         logger.info(
             f"open {self.hostname}:{self.port} : listening connection")
         await self.set_state(ConnectionState.CONNECTING)
@@ -177,8 +181,8 @@ class DataConnection(Connection):
 
         self._reader: asyncio.StreamReader = None
         self._writer: asyncio.StreamWriter = None
-        self._reader_task = None
-        self.read_timeout = None
+        self._reader_task: asyncio.Task = None
+        self.read_timeout: float = None
 
     def get_connecting_ip(self) -> str:
         """Gets the IP address being used to connect to the server/peer.
@@ -217,6 +221,9 @@ class DataConnection(Connection):
     async def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
         """Disconnects the TCP connection. The method will not raise an
         exception in case the connection wasn't yet connected
+
+        :param reason: optional reason for the disconnect. This parameter is
+            purely informational
         """
         # Prevents this method being called twice during the process of
         # disconnecting. This is necessary because during disconnecting the
@@ -305,6 +312,7 @@ class DataConnection(Connection):
         """De-obfuscates and deserializes message data into a `MessageDataclass`
         object. See `deserialize_message`
 
+        :param data: message bytes to decode
         :return: object of `MessageDataclass`
         :raise MessageDeserializationError: raised when deserialization failed
         """
@@ -392,6 +400,7 @@ class DataConnection(Connection):
         serialized. If the `obfuscated` flag is set for the connection the
         message or bytes will first be obfuscated
 
+        :param message: message to be sent over the connection
         :raise ConnectionWriteError: error or timeout occured during writing
         """
         if self._is_closing():
@@ -418,9 +427,9 @@ class DataConnection(Connection):
             await self.disconnect(CloseReason.WRITE_ERROR)
             raise ConnectionWriteError(f"{self.hostname}:{self.port} : exception during writing") from exc
 
-    def deserialize_message(self, message_data: bytes):
+    def deserialize_message(self, message_data: bytes) -> MessageDataclass:
         """Should be called after a full message has been received. This method
-        should parse the message and notify the listeners
+        should parse the message
         """
         raise NotImplementedError(
             "'deserialize_message' should be overwritten by a subclass")
@@ -438,7 +447,7 @@ class ServerConnection(DataConnection):
         await super().connect(timeout=timeout)
         self._start_reader_task()
 
-    def deserialize_message(self, message_data: bytes):
+    def deserialize_message(self, message_data: bytes) -> MessageDataclass:
         return ServerMessage.deserialize_response(message_data)
 
 
@@ -463,6 +472,18 @@ class PeerConnection(DataConnection):
         await super().connect(timeout=timeout)
 
     def set_connection_state(self, state: PeerConnectionState):
+        """Sets the current connection state.
+
+        If the current state is AWAITING_INIT and the connection type is a
+        distributed or file connection the `obfuscated` flag for this connection
+        will be set to `False`
+
+        If the state goes to the ESTABLISHED state the message reader task will
+        be started. In all other cases it will be stopped (in case the task was
+        running)
+
+        :param state: The new state of the connection
+        """
         # Set non-peer connections to non-obfuscated
         if state != PeerConnectionState.AWAITING_INIT:
             if self.connection_type != PeerConnectionType.PEER:
@@ -472,7 +493,7 @@ class PeerConnection(DataConnection):
             self._start_reader_task()
         else:
             # This shouldn't occur, during all other states we call the
-            # receive_* methods directly. But it can do no harn
+            # receive_* methods directly. But it can do no harm
             self._stop_reader_task()
 
         logger.debug(f"{self.hostname}:{self.port} setting state to {state} : {self!r}")
@@ -527,7 +548,18 @@ class PeerConnection(DataConnection):
             else:
                 return data
 
-    async def receive_file(self, file_handle: BinaryIO, filesize: int, callback=None):
+    async def receive_file(self, file_handle: BinaryIO, filesize: int, callback: Callable[[bytes], None] = None):
+        """Receives a file on the current connection and writes it to the given
+        `file_handle`
+
+        This method will attempt to keep reading data until EOF is received from
+        the connection or the amount of received bytes has reached the `filesize`
+
+        :param file_handle: a file handle to write the received data to
+        :param filesize: expected filesize
+        :param callback: optional callback that gets called each time a chunk
+            of data is received
+        """
         bytes_received = 0
         while True:
             bytes_to_read = await self.download_rate_limiter.take_tokens()
@@ -557,10 +589,13 @@ class PeerConnection(DataConnection):
             await self.disconnect(CloseReason.WRITE_ERROR)
             raise ConnectionWriteError(f"{self.hostname}:{self.port} : write error") from exc
 
-    async def send_file(self, file_handle: BinaryIO, callback=None):
-        """Sends over the connection
+    async def send_file(self, file_handle: BinaryIO, callback: Callable[[bytes], None] = None):
+        """Sends a file over the connection. This method makes use of the
+        `upload_rate_limiter` to limit how many bytes are being sent at a time.
 
         :param file_handle: binary opened file handle
+        :param callback: progress callback that gets called each time a chunk
+            of data was sent
         """
         while True:
             bytes_to_write = await self.upload_rate_limiter.take_tokens()
@@ -569,9 +604,10 @@ class PeerConnection(DataConnection):
                 return
 
             await self.send_data(data)
-            callback(data)
+            if callback is not None:
+                callback(data)
 
-    def deserialize_message(self, message_data: bytes):
+    def deserialize_message(self, message_data: bytes) -> MessageDataclass:
         if self.connection_state == PeerConnectionState.AWAITING_INIT:
             return PeerInitializationMessage.deserialize_request(message_data)
 
