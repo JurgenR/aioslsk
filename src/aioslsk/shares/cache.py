@@ -1,22 +1,29 @@
 import os
 import shelve
-from typing import List
+from typing import List, Protocol
 from .model import SharedDirectory
 
 
-class SharesCache:
+class SharesCache(Protocol):
     """Abstract base class for storing shares"""
 
     def read(self) -> List[SharedDirectory]:
-        raise NotImplementedError(
-            "'read' needs to be overwritten in a subclass")
+        ...
 
     def write(self, shared_directories: List[SharedDirectory]):
-        raise NotImplementedError(
-            "'write' needs to be overwritten in a subclass")
+        ...
 
 
-class SharesShelveCache(SharesCache):
+class SharesNullCache:
+
+    def read(self) -> List[SharedDirectory]:
+        return []
+
+    def write(self, shared_directories: List[SharedDirectory]):
+        pass
+
+
+class SharesShelveCache:
     DEFAULT_FILENAME = 'shares_index'
 
     def __init__(self, data_directory: str):

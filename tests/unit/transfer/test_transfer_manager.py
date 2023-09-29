@@ -4,11 +4,11 @@ from unittest.mock import AsyncMock, Mock, MagicMock, patch
 
 import pytest
 
-from aioslsk.configuration import Configuration
 from aioslsk.events import TrackUserEvent, UntrackUserEvent
 from aioslsk.exceptions import ConnectionWriteError
 from aioslsk.model import UserStatus, TrackingFlag
 from aioslsk.protocol.messages import PeerPlaceInQueueRequest, PeerPlaceInQueueReply
+from aioslsk.transfer.cache import TransferShelveCache
 from aioslsk.transfer.model import Transfer, TransferDirection
 from aioslsk.transfer.manager import TransferManager
 from aioslsk.transfer.state import (
@@ -57,12 +57,12 @@ def manager(tmpdir):
 
     return TransferManager(
         State(),
-        Configuration(tmpdir, tmpdir),
         Settings(DEFAULT_SETTINGS),
         event_bus, # event bus
         internal_event_bus, # internal event bus
         None, # file manager
-        network # network
+        network, # network
+        cache=TransferShelveCache(tmpdir)
     )
 
 

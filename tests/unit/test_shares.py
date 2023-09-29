@@ -1,7 +1,7 @@
 from aioslsk.configuration import Configuration
 from aioslsk.events import InternalEventBus
 from aioslsk.exceptions import FileNotFoundError, FileNotSharedError
-from aioslsk.shares.cache import SharesCache, SharesShelveCache
+from aioslsk.shares.cache import SharesShelveCache
 from aioslsk.shares.manager import SharesManager, extract_attributes
 from aioslsk.shares.model import DirectoryShareMode, SharedDirectory, SharedItem
 from aioslsk.settings import Settings
@@ -67,17 +67,17 @@ SHARED_DIRECTORY.items = set(SHARED_ITEMS.values())
 
 async def _load_and_scan(manager: SharesManager):
     manager.load_from_settings()
-    await manager.scan(wait_for_attributes=True)
+    await manager.scan()
 
 
 @pytest.fixture
 def manager(tmp_path):
-    return SharesManager(Settings(DEFAULT_SETTINGS), SharesCache(), InternalEventBus())
+    return SharesManager(Settings(DEFAULT_SETTINGS), InternalEventBus())
 
 
 @pytest.fixture
 def manager_query(tmp_path):
-    manager = SharesManager(Settings(DEFAULT_SETTINGS), SharesCache(), InternalEventBus())
+    manager = SharesManager(Settings(DEFAULT_SETTINGS), InternalEventBus())
     manager._shared_directories = [SHARED_DIRECTORY]
     manager.build_term_map(SHARED_DIRECTORY)
 
@@ -275,9 +275,9 @@ class TestSharesManagerSharedDirectoryManagement:
         assert 3 == len(directory.items)
 
     @pytest.mark.asyncio
-    async def test_scan_waitForAttributes(self, manager: SharesManager):
+    async def test_scan(self, manager: SharesManager):
         manager.load_from_settings()
-        await manager.scan(wait_for_attributes=True)
+        await manager.scan()
         directory = manager.shared_directories[0]
         assert 3 == len(directory.items)
         for item in directory.items:

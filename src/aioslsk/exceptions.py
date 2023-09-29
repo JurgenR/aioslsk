@@ -30,6 +30,10 @@ class FileNotSharedError(FileError):
     pass
 
 
+class SharedDirectoryError(AioSlskException):
+    pass
+
+
 class NetworkError(AioSlskException):
     pass
 

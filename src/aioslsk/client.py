@@ -17,6 +17,7 @@ from .server import ServerManager
 from .search import SearchRequest, SearchResult
 from .state import State
 from .settings import Settings
+from .transfer.cache import TransferCache, TransferShelveCache
 from .transfer.manager import TransferManager
 from .transfer.model import Transfer, TransferDirection
 from .utils import ticket_generator
@@ -56,18 +57,19 @@ class SoulSeekClient:
         shares_cache: SharesCache = SharesShelveCache(self.configuration.data_directory)
         self.shares_manager: SharesManager = SharesManager(
             self.settings,
-            shares_cache,
-            self._internal_events
+            self._internal_events,
+            cache=shares_cache
         )
 
+        transfer_cache: TransferCache = TransferShelveCache(self.configuration.data_directory)
         self.transfer_manager: TransferManager = TransferManager(
             self.state,
-            self.configuration,
             self.settings,
             self.events,
             self._internal_events,
             self.shares_manager,
-            self.network
+            self.network,
+            cache=transfer_cache
         )
         self.peer_manager: PeerManager = PeerManager(
             self.state,
@@ -92,7 +94,12 @@ class SoulSeekClient:
         return asyncio.get_running_loop()
 
     async def start(self, scan_shares=True):
-        """Starts the client
+        """Performs a full start up of the client consisting of:
+        * Connecting to the server
+        * Opening listening ports
+        * Performs a login with the provided user credentials
+        * Reading transfer and shares caches
+        * Optionally performs an initial scan of the shares
 
         :param scan_shares: start a shares scan as soon as the client starts
         """
@@ -110,6 +117,9 @@ class SoulSeekClient:
         await self.transfer_manager.manage_transfers()
 
     async def connect(self):
+        """Initializes the network by connecting to the server and opening the
+        configured listening ports
+        """
         await self.network.initialize()
 
     async def login(self):
@@ -139,13 +149,20 @@ class SoulSeekClient:
         await self._stop_event.wait()
 
     async def stop(self):
+        """Stops the client this method consists of:
+
+        * Disconnecting the network and waiting for all connections to close
+        * Cancel all pending tasks
+        * Write the transfer and shares caches
+        """
         logger.info("signaling client to exit")
         self._stop_event.set()
 
         await self.network.disconnect()
 
-        self.peer_manager.stop()
-        self.transfer_manager.stop()
+        cancelled_tasks = self.peer_manager.stop() + self.transfer_manager.stop()
+        await asyncio.gather(*cancelled_tasks, return_exceptions=True)
+
         self.shares_manager.write_cache()
         self.transfer_manager.write_cache()
 

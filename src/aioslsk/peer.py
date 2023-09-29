@@ -595,14 +595,30 @@ class PeerManager:
         for child in self.children:
             child.connection.queue_messages(*messages)
 
-    def stop(self):
-        self._cancel_search_reply_tasks()
-        self._cancel_potential_parent_tasks()
+    def stop(self) -> List[asyncio.Task]:
+        """Cancels all pending tasks
 
-    def _cancel_search_reply_tasks(self):
+        :return: a list of tasks that have been cancelled so that they can be
+            awaited
+        """
+        search_tasks = self._cancel_search_reply_tasks()
+        potential_parent_tasks = self._cancel_potential_parent_tasks()
+        return search_tasks + potential_parent_tasks
+
+    def _cancel_search_reply_tasks(self) -> List[asyncio.Task]:
+        cancelled_tasks = []
+
         for task in self._search_reply_tasks:
             task.cancel()
+            cancelled_tasks.append(task)
 
-    def _cancel_potential_parent_tasks(self):
+        return cancelled_tasks
+
+    def _cancel_potential_parent_tasks(self) -> List[asyncio.Task]:
+        cancelled_tasks = []
+
         for task in self._potential_parent_tasks:
             task.cancel()
+            cancelled_tasks.append(task)
+
+        return cancelled_tasks

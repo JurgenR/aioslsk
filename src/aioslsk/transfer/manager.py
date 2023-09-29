@@ -7,8 +7,7 @@ from operator import itemgetter
 import os
 from typing import Dict, List, Tuple, TYPE_CHECKING
 
-from .cache import TransferCache, TransferShelveCache
-from ..configuration import Configuration
+from .cache import TransferNullCache, TransferCache
 from ..constants import TRANSFER_REPLY_TIMEOUT
 from ..exceptions import (
     ConnectionReadError,
@@ -73,20 +72,18 @@ class Reasons:
 class TransferManager:
 
     def __init__(
-            self, state: State, configuration: Configuration, settings: Settings,
+            self, state: State, settings: Settings,
             event_bus: EventBus, internal_event_bus: InternalEventBus,
-            shares_manager: SharesManager, network: Network):
+            shares_manager: SharesManager, network: Network,
+            cache: TransferCache = None):
         self._state = state
-        self._configuration: Configuration = configuration
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._internal_event_bus: InternalEventBus = internal_event_bus
-        self._ticket_generator = ticket_generator()
-
         self._shares_manager: SharesManager = shares_manager
         self._network: Network = network
-
-        self._cache: TransferCache = TransferShelveCache(self._configuration.data_directory)
+        self.cache: TransferCache = cache if cache else TransferNullCache()
+        self._ticket_generator = ticket_generator()
 
         self._transfers: List[Transfer] = []
         self._file_connection_futures: Dict[int, asyncio.Future] = {}
@@ -100,7 +97,7 @@ class TransferManager:
         """Reads the transfers from the cache. It's important that this method
         gets called before `manage_transfers`.
         """
-        transfers: List[Transfer] = self._cache.read()
+        transfers: List[Transfer] = self.cache.read()
         for transfer in transfers:
             # Analyze the current state of the stored transfers and set them to
             # the correct state
@@ -123,12 +120,18 @@ class TransferManager:
 
     def write_cache(self):
         """Write all current transfers back to the """
-        self._cache.write(self._transfers)
+        self.cache.write(self._transfers)
 
-    def stop(self):
-        """Cancel all current transfer actions"""
+    def stop(self) -> List[asyncio.Task]:
+        """Cancel all current transfer actions
+
+        :return: a list of tasks that have been cancelled so that they can be
+            awaited
+        """
+        cancelled_tasks = []
         for transfer in self.transfers:
-            transfer.cancel_tasks()
+            cancelled_tasks.extend(transfer.cancel_tasks())
+        return cancelled_tasks
 
     @property
     def transfers(self):

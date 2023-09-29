@@ -2,22 +2,29 @@ import hashlib
 import logging
 import os
 import shelve
-from typing import List
+from typing import List, Protocol
 from .model import Transfer
 
 logger = logging.getLogger(__name__)
 
 
-class TransferCache:
+class TransferCache(Protocol):
     """Abstract base class for storing shares"""
 
     def read(self) -> List['Transfer']:
-        raise NotImplementedError(
-            "'read' needs to be overwritten in a subclass")
+        ...
 
     def write(self, transfers: List['Transfer']):
-        raise NotImplementedError(
-            "'write' needs to be overwritten in a subclass")
+        ...
+
+
+class TransferNullCache:
+
+    def read(self) -> List['Transfer']:
+        return []
+
+    def write(self, transfers: List['Transfer']):
+        pass
 
 
 class TransferShelveCache:

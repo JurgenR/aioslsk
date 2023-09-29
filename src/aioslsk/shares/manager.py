@@ -1,6 +1,5 @@
 from aiofiles import os as asyncos
 import asyncio
-from concurrent.futures import Future
 from functools import partial
 import logging
 import mutagen
@@ -13,9 +12,13 @@ from typing import Dict, List, Set, Tuple, Union
 import uuid
 from weakref import WeakSet
 
-from .cache import SharesCache
+from .cache import SharesNullCache, SharesCache
 from ..events import InternalEventBus, ScanCompleteEvent
-from ..exceptions import FileNotFoundError, FileNotSharedError
+from ..exceptions import (
+    FileNotFoundError,
+    FileNotSharedError,
+    SharedDirectoryError,
+)
 from .model import DirectoryShareMode, SharedDirectory, SharedItem
 from ..naming import (
     chain_strategies,
@@ -112,7 +115,7 @@ def extract_attributes(filepath: str) -> List[Tuple[int, int]]:
             ]
 
     except mutagen.MutagenError as exc:
-        logger.warn(
+        logger.warning(
             f"failed retrieve audio file metadata. path={filepath!r}", exc_info=exc)
 
     return attributes
@@ -121,14 +124,14 @@ def extract_attributes(filepath: str) -> List[Tuple[int, int]]:
 class SharesManager:
     _ALIAS_LENGTH = 5
 
-    def __init__(self, settings: Settings, cache: SharesCache, internal_event_bus: InternalEventBus):
+    def __init__(self, settings: Settings, internal_event_bus: InternalEventBus, cache: SharesCache = None):
         self._settings: Settings = settings
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._term_map: Dict[str, Set[SharedItem]] = {}
         self._shared_directories: List[SharedDirectory] = list()
-        self._shared_directories_lock = asyncio.Lock()
+        self.scan_task: asyncio.Task = None
 
-        self.cache: SharesCache = cache
+        self.cache: SharesCache = cache if cache else SharesNullCache()
         self.executor = None
 
         self.naming_strategies = [
@@ -219,7 +222,8 @@ class SharesManager:
         in the cache but does not exist on disk a `FileNotFoundError` is raised
 
         If a `username` is passed this will also check if the file is locked
-        and raise a `FileNotSharedError`
+        and raise a `FileNotSharedError` if the file is not accessible for that
+        user
 
         :param remote_path: the remote_path
         :param username:
@@ -286,6 +290,15 @@ class SharesManager:
         return directory_object
 
     def remove_shared_directory(self, directory: SharedDirectory):
+        """Removes the given shared directory. If the directory was a
+        subdirectory of another shared directory its items will be moved into
+        that directory
+        """
+        if directory not in self._shared_directories:
+            raise SharedDirectoryError(
+                "attempted to remove directory which was not added to the manager"
+            )
+
         self._shared_directories.remove(directory)
 
         parents = self._get_parent_directories(directory)
@@ -295,65 +308,32 @@ class SharesManager:
             parent = parents[-1]
             parent.items |= directory.items
 
-    async def scan(self, wait_for_attributes: bool = False):
-        """Scans all directories in `shared_directories` list
+    async def scan_directory_files(self, shared_directory: SharedDirectory):
+        """Scans the files for the given `shared_directory`
 
-        :param wait_for_attributes: wait for the attribute scans to complete
+        :param shared_directory: `SharedDirectory` instance to scan
+        :raise SharedDirectoryError: raised when the passed `shared_directory`
+            was not added to the manager
         """
         loop = asyncio.get_running_loop()
 
-        start_time = time.time()
-
-        scan_futures = []
-        # Scan files
-        for shared_directory in self._shared_directories:
-            logger.info(f"scheduling scan for directory : {shared_directory!r})")
-            scan_future = loop.run_in_executor(
-                self.executor,
-                partial(scan_directory, shared_directory, children=self._get_child_directories(shared_directory))
+        if shared_directory not in self._shared_directories:
+            raise SharedDirectoryError(
+                "attempted to scan directory which was not added to the manager"
             )
-            scan_future.add_done_callback(
-                partial(self._scan_directory_callback, shared_directory)
-            )
-            scan_futures.append(scan_future)
 
-        await asyncio.gather(*scan_futures, return_exceptions=True)
-
-        for shared_directory in self._shared_directories:
-            self.build_term_map(shared_directory)
-
-        # Scan attributes
-        extract_futures = []
-        for shared_directory in self._shared_directories:
-            for item in shared_directory.items:
-                amount_scheduled = 0
-                if item.attributes is None:
-                    future = loop.run_in_executor(
-                        self.executor,
-                        partial(extract_attributes, item.get_absolute_path())
-                    )
-                    future.add_done_callback(
-                        partial(self._extract_attributes_callback, item)
-                    )
-                    extract_futures.append(future)
-                    amount_scheduled += 1
-                logger.debug(
-                    f"scheduled {amount_scheduled} items for attribute extracting for directory {shared_directory}")
-
-        if wait_for_attributes:
-            await asyncio.gather(*extract_futures, return_exceptions=True)
-
-        logger.info(f"completed scan in {time.time() - start_time} seconds")
-        folder_count, file_count = self.get_stats()
-        await self._internal_event_bus.emit(
-            ScanCompleteEvent(folder_count, file_count)
-        )
-
-    def _scan_directory_callback(self, shared_directory: SharedDirectory, future: Future):
+        logger.info(f"scheduling scan for directory : {shared_directory!r})")
         try:
-            shared_items: Set[SharedItem] = future.result()
+            shared_items: Set[SharedItem] = await loop.run_in_executor(
+                self.executor,
+                partial(
+                    scan_directory,
+                    shared_directory,
+                    children=self._get_child_directories(shared_directory)
+                )
+            )
         except Exception:
-            logger.exception(f"exception adding directory : {shared_directory!r}")
+            logger.exception(f"exception scanning directory : {shared_directory!r}")
         else:
             logger.debug(f"scan found {len(shared_items)} files for directory {shared_directory!r}")
 
@@ -363,11 +343,71 @@ class SharesManager:
             # set
             shared_directory.items -= (shared_directory.items ^ shared_items)
 
-    def _extract_attributes_callback(self, shared_item: SharedItem, future: Future):
-        try:
-            shared_item.attributes = future.result()
-        except Exception:
-            logger.warn(f"exception fetching shared item attributes : {shared_item!r}")
+        self.build_term_map(shared_directory)
+
+    async def scan_directory_file_attributes(self, shared_directory: SharedDirectory):
+        """Scans the file attributes for files in the given `shared_directory`.
+        only files that do not yet have attributes will be scanned
+
+        The results of the scan are handled internally and are automatically to
+        the `SharedItem` object for which the scan was performed
+
+        :param shared_directory: `SharedDirectory` instance for which the files
+            need to be scanned
+        :return: List of futures for each file that needs to be scanned
+        """
+        def extract_item_attributes(item: SharedItem):
+            return item, extract_attributes(item.get_absolute_path())
+
+        loop = asyncio.get_running_loop()
+
+        # Schedule the items on the executor
+        extract_futures = []
+        for item in shared_directory.items:
+            if item.attributes is None:
+                future = loop.run_in_executor(
+                    self.executor,
+                    partial(extract_item_attributes, item)
+                )
+                extract_futures.append(future)
+
+        logger.debug(
+            f"scheduled {len(extract_futures)} / {len(shared_directory.items)} items "
+            f"for attribute extracting for directory {shared_directory}")
+
+        for future in asyncio.as_completed(extract_futures):
+            try:
+                item, attributes = await future
+            except Exception:
+                logger.warning(f"exception fetching shared item attributes")
+            else:
+                item.attributes = attributes
+
+    async def scan(self):
+        """Scan the files and their attributes for all directories currently
+        defined in the `shared_directories`
+
+        This method will emit a `ScanCompleteEvent` on the internal event bus
+        """
+        start_time = time.perf_counter()
+
+        files_tasks = [
+            self.scan_directory_files(shared_directory)
+            for shared_directory in self._shared_directories
+        ]
+        await asyncio.gather(*files_tasks, return_exceptions=True)
+
+        attribute_futures = [
+            self.scan_directory_file_attributes(shared_directory)
+            for shared_directory in self._shared_directories
+        ]
+        await asyncio.gather(*attribute_futures, return_exceptions=True)
+
+        logger.info(f"completed scan in {time.perf_counter() - start_time} seconds")
+        folder_count, file_count = self.get_stats()
+        await self._internal_event_bus.emit(
+            ScanCompleteEvent(folder_count, file_count)
+        )
 
     def get_filesize(self, shared_item: SharedItem) -> int:
         return os.path.getsize(shared_item.get_absolute_path())
@@ -382,6 +422,9 @@ class SharesManager:
         the remaining results using regular expressions.
 
         :param query: the query to perform on the shared directories
+        :param username: optionally the username of the user making the query.
+            This is used to determine locked results, if not given the locked
+            results list will be empty
         :return: two lists of visible results and locked results
         """
         if not isinstance(query, SearchQuery):
