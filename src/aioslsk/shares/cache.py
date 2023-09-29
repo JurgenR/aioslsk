@@ -16,10 +16,10 @@ class SharesCache(Protocol):
 
 class SharesNullCache:
 
-    def read(self) -> List[SharedDirectory]:
+    def read(self) -> List[SharedDirectory]:  # pragma: no cover
         return []
 
-    def write(self, shared_directories: List[SharedDirectory]):
+    def write(self, shared_directories: List[SharedDirectory]):  # pragma: no cover
         pass
 
 

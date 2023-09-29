@@ -20,10 +20,10 @@ class TransferCache(Protocol):
 
 class TransferNullCache:
 
-    def read(self) -> List['Transfer']:
+    def read(self) -> List['Transfer']:  # pragma: no cover
         return []
 
-    def write(self, transfers: List['Transfer']):
+    def write(self, transfers: List['Transfer']):  # pragma: no cover
         pass
 
 

@@ -1,3 +1,4 @@
+from aiofiles import os as asyncos
 import asyncio
 from collections import deque
 from enum import Enum
@@ -53,11 +54,7 @@ class Transfer:
         """
 
         self.bytes_transfered: int = 0
-        """Amount of bytes transfered (uploads and downloads)"""
-        self.bytes_written: int = 0
-        """Amount of bytes written to file (downloads)"""
-        self.bytes_read: int = 0
-        """Amount of bytes read from file (uploads)"""
+        """Amount of bytes transfered"""
 
         self.queue_attempts: int = 0
         self.last_queue_attempt: float = 0.0
@@ -105,8 +102,6 @@ class Transfer:
 
     def reset_progress(self):
         self.reset_times()
-        self.bytes_read = 0
-        self.bytes_written = 0
         self.bytes_transfered = 0
         self._offset = None
         self.local_path = None
@@ -162,17 +157,6 @@ class Transfer:
             await listener.on_transfer_state_changed(
                 self, old_state.VALUE, self.state.VALUE
             )
-
-    def calculate_offset(self) -> int:
-        try:
-            offset = os.path.getsize(self.local_path)
-        except (OSError, TypeError):
-            offset = 0
-
-        self._offset = offset
-        self.bytes_transfered = offset
-        self.bytes_written = offset
-        return offset
 
     def set_offset(self, offset: int):
         self._offset = offset
@@ -294,7 +278,7 @@ class Transfer:
         own_vars = (self.remote_path, self.username, self.direction, )
         return other_vars == own_vars
 
-    def __repr__(self):
+    def __repr__(self):  # pragma: no cover
         return (
             f"Transfer(username={self.username!r}, remote_path={self.remote_path!r}, "
             f"local_path={self.local_path!r}, direction={self.direction}, "

@@ -216,7 +216,7 @@ class SharesManager:
             self._add_item_to_term_map(item)
         logger.debug(f"term map contains {len(self._term_map)} terms")
 
-    def get_shared_item(self, remote_path: str, username: str = None) -> SharedItem:
+    async def get_shared_item(self, remote_path: str, username: str = None) -> SharedItem:
         """Gets a shared item from the cache based on the given file path. If
         the file does not exist in the `shared_items` or the file is present
         in the cache but does not exist on disk a `FileNotFoundError` is raised
@@ -238,7 +238,7 @@ class SharesManager:
             except FileNotFoundError:
                 pass
             else:
-                if not os.path.exists(item.get_absolute_path()):
+                if not await asyncos.path.exists(item.get_absolute_path()):
                     raise FileNotFoundError(
                         f"file with remote_path {remote_path} found in cache but not on disk"
                     )
@@ -253,7 +253,7 @@ class SharesManager:
             self, shared_directory: str,
             share_mode: DirectoryShareMode = DirectoryShareMode.EVERYONE, users: List[str] = None) -> SharedDirectory:
         """Adds a shared directory. This method will call `generate_alias` and
-        add the directory to the directory map
+        add the directory to the directory map.
 
         :param shared_directory: path of the shared directory
         :param share_mode: the share mode for the directory
@@ -293,6 +293,10 @@ class SharesManager:
         """Removes the given shared directory. If the directory was a
         subdirectory of another shared directory its items will be moved into
         that directory
+
+        :param shared_directory: `SharedDirectory` instance to remove
+        :raise SharedDirectoryError: raised when the passed `shared_directory`
+            was not added to the manager
         """
         if directory not in self._shared_directories:
             raise SharedDirectoryError(

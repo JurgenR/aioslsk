@@ -426,6 +426,17 @@ class TransferManager:
         path, _ = os.path.split(transfer.local_path)
         await self._shares_manager.create_directory(path)
 
+    async def _calculate_offset(self, transfer: Transfer) -> int:
+        """Calculates the offset when downloading a file by inspecting the file
+        at the local path.
+
+        :return: the calculated offset (in bytes)
+        """
+        try:
+            return asyncos.path.getsize(transfer.local_path)
+        except (OSError, TypeError):
+            return 0
+
     async def _queue_remotely(self, transfer: Transfer):
         """Remotely queue the given transfer. If the message was successfully
         delivered the transfer will go in REMOTELY_QUEUED state. Otherwise the
@@ -521,7 +532,8 @@ class TransferManager:
         # The transfer ticket should already have been received (otherwise the
         # future could not have completed)
         # Calculate and send the file offset
-        offset = transfer.calculate_offset()
+        offset = await self._calculate_offset(transfer)
+        transfer.set_offset(offset)
         try:
             await file_connection.send_message(uint64(offset).serialize())
 
@@ -764,7 +776,7 @@ class TransferManager:
 
         # Check if the shared file exists
         try:
-            item = self._shares_manager.get_shared_item(
+            item = await self._shares_manager.get_shared_item(
                 message.filename, connection.username)
             transfer.local_path = item.get_absolute_path()
             transfer.filesize = self._shares_manager.get_filesize(item)
@@ -832,7 +844,7 @@ class TransferManager:
             # The other peer is asking us to upload a file. Check if this is not
             # a locked file for the given user
             try:
-                self._shares_manager.get_shared_item(
+                await self._shares_manager.get_shared_item(
                     message.filename, username=connection.username)
 
             except (FileNotFoundError, FileNotSharedError):

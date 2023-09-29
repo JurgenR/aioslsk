@@ -200,13 +200,14 @@ class Network:
                 await self.disconnect_listening_connections()
                 raise ListeningConnectionFailedError("failed to connect non-obfuscated listening port")
 
-    async def disconnect_listening_connections(self):
-        await asyncio.gather(
+    async def disconnect_listening_connections(self) -> asyncio.Future:
+        return asyncio.gather(
             *[
                 listening_connection.disconnect(CloseReason.REQUESTED)
                 for listening_connection in self.listening_connections
                 if listening_connection
-            ]
+            ],
+            return_exceptions=True
         )
 
     async def connect_server(self):

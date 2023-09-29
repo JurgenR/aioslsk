@@ -1,21 +1,20 @@
-from aioslsk.configuration import Configuration
 from aioslsk.events import InternalEventBus
 from aioslsk.exceptions import FileNotFoundError, FileNotSharedError
-from aioslsk.shares.cache import SharesShelveCache
 from aioslsk.shares.manager import SharesManager, extract_attributes
 from aioslsk.shares.model import DirectoryShareMode, SharedDirectory, SharedItem
+from aioslsk.naming import DefaultNamingStrategy, KeepDirectoryStrategy
 from aioslsk.settings import Settings
 
 import mutagen
 import pytest
 from pytest_unordered import unordered
 import os
-import shutil
+import sys
 from typing import List
 from unittest.mock import patch
 
 
-RESOURCES = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'resources')
+RESOURCES = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'resources')
 SHARED_DIR_PATH = os.path.join(RESOURCES, 'shared')
 
 FRIEND = 'friend0'
@@ -82,13 +81,6 @@ def manager_query(tmp_path):
     manager.build_term_map(SHARED_DIRECTORY)
 
     return manager
-
-
-@pytest.fixture
-def configuration(tmpdir) -> Configuration:
-    settings_dir = os.path.join(tmpdir, 'settings')
-    data_dir = os.path.join(tmpdir, 'data')
-    return Configuration(settings_dir, data_dir)
 
 
 class TestFunctions:
@@ -265,7 +257,7 @@ class TestSharesManagerSharedDirectoryManagement:
     def test_loadFromSettings(self, manager: SharesManager):
         manager.load_from_settings()
         assert 1 == len(manager.shared_directories)
-        assert manager.shared_directories[0].absolute_path == SHARED_DIR_PATH
+        assert manager.shared_directories[0].absolute_path == os.path.abspath(SHARED_DIR_PATH)
 
     @pytest.mark.asyncio
     async def test_scan(self, manager: SharesManager):
@@ -417,10 +409,10 @@ class TestSharesManager:
         remote_path = list(manager.shared_directories[1].items)[0].get_remote_path()
 
         with pytest.raises(FileNotSharedError):
-            manager.get_shared_item(remote_path, 'notfriend')
+            await manager.get_shared_item(remote_path, 'notfriend')
 
     @pytest.mark.asyncio
-    async def test_getSharedItem_withUsername_shared_shouldRaise(self, manager: SharesManager):
+    async def test_getSharedItem_withUsername_shared_shouldReturn(self, manager: SharesManager):
         manager._settings = SETTINGS_SUBDIR_FRIENDS
         await _load_and_scan(manager)
 
@@ -429,15 +421,33 @@ class TestSharesManager:
         item = manager.get_shared_item(remote_path, FRIEND)
         assert item is not None
 
+    @pytest.mark.asyncio
+    async def test_getSharedItem_notExistsOnDisk_shouldRaise(self, manager: SharesManager):
+        manager._settings = SETTINGS_SUBDIR_FRIENDS
+        await _load_and_scan(manager)
 
-class TestSharesShelveCache:
+        remote_path = list(manager.shared_directories[1].items)[0].get_remote_path()
 
-    def test_read(self, configuration: Configuration):
-        shutil.copytree(os.path.join(RESOURCES, 'data'), configuration.data_directory, dirs_exist_ok=True)
-        cache = SharesShelveCache(configuration.data_directory)
-        directories = cache.read()
-        assert [SHARED_DIRECTORY, ] == directories
+        with patch('aiofiles.os.path.exists', return_value=False):
+            with pytest.raises(FileNotFoundError):
+                await manager.get_shared_item(remote_path)
 
-    def test_write(self, configuration: Configuration):
-        cache = SharesShelveCache(configuration.data_directory)
-        cache.write([SHARED_DIRECTORY, ])
+    def test_calculateDownloadPath(self, manager: SharesManager):
+        if sys.platform.startswith('win32'):
+            download_path = 'C:\\download'
+        else:
+            download_path = '/home/download'
+        manager._settings = Settings({
+            'sharing': {
+                'download': download_path
+            }
+        })
+        manager.naming_strategies = [
+            DefaultNamingStrategy(),
+            KeepDirectoryStrategy()
+        ]
+
+        remote_path = '@@abcdef\\directory\\file.mp3'
+        local_path, local_filename = manager.calculate_download_path(remote_path)
+        assert local_path == os.path.join(download_path, 'directory')
+        assert local_filename == 'file.mp3'
