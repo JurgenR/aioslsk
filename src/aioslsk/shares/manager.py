@@ -413,8 +413,8 @@ class SharesManager:
             ScanCompleteEvent(folder_count, file_count)
         )
 
-    def get_filesize(self, shared_item: SharedItem) -> int:
-        return os.path.getsize(shared_item.get_absolute_path())
+    async def get_filesize(self, shared_item: SharedItem) -> int:
+        return await asyncos.path.getsize(shared_item.get_absolute_path())
 
     def query(self, query: Union[str, SearchQuery], username: str = None) -> Tuple[List[SharedItem], Tuple[List[SharedItem]]]:
         """Performs a query on the `shared_directories` returning the matching

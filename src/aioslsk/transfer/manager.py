@@ -779,7 +779,7 @@ class TransferManager:
             item = await self._shares_manager.get_shared_item(
                 message.filename, connection.username)
             transfer.local_path = item.get_absolute_path()
-            transfer.filesize = self._shares_manager.get_filesize(item)
+            transfer.filesize = await self._shares_manager.get_filesize(item)
 
         except (FileNotFoundError, FileNotSharedError):
             await transfer.state.fail(reason=Reasons.FILE_NOT_SHARED)
