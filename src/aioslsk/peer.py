@@ -90,6 +90,9 @@ class PeerManager:
         self._ticket_generator = ticket_generator()
 
         self.parent: DistributedPeer = None
+        """Distributed parent. This variable is `None` if we are looking for
+        parents
+        """
         self.children: List[DistributedPeer] = []
         self.potential_parents: List[str] = []
         self.distributed_peers: List[DistributedPeer] = []
@@ -131,7 +134,19 @@ class PeerManager:
     def _get_advertised_branch_values(self) -> Tuple[str, int]:
         """Returns the advertised branch values. These values are to be sent to
         the children and the server to let them know where we are in the
-        distributed tree
+        distributed tree.
+
+        If no parent:
+            * level = 0
+            * root = our own username
+
+        If we are the root:
+            * level = 0
+            * root = our own username
+
+        If we have a parent:
+            * level = level parent advertised + 1
+            * root = whatever our parent sent us initially
         """
         username = self._settings.get('credentials.username')
         if self.parent:
@@ -170,12 +185,7 @@ class PeerManager:
                     )
 
         await self._notify_server_of_parent()
-
-        # Notify children of new parent
-        await self.send_messages_to_children(
-            DistributedBranchLevel.Request(peer.branch_level + 1),
-            DistributedBranchRoot.Request(peer.branch_root),
-        )
+        await self._notify_children_of_branch_values()
 
     async def _check_if_new_parent(self, peer: DistributedPeer):
         """Called after BranchRoot or BranchLevel, checks if all information is
@@ -188,6 +198,8 @@ class PeerManager:
                 await self._set_parent(peer)
             else:
                 await peer.connection.disconnect(reason=CloseReason.REQUESTED)
+        else:
+            logger.debug(f"{self._settings.get('credentials.username')} : not enough info for parent : {peer}")
 
     async def _unset_parent(self):
         logger.debug(f"unset parent {self.parent!r}")
@@ -233,6 +245,13 @@ class PeerManager:
 
         await self._network.send_server_messages(*messages)
 
+    async def _notify_children_of_branch_values(self):
+        root, level = self._get_advertised_branch_values()
+        await self.send_messages_to_children(
+            DistributedBranchLevel.Request(level),
+            DistributedBranchRoot.Request(root)
+        )
+
     async def _check_if_new_child(self, peer: DistributedPeer):
         """Potentially adds a distributed connection to our list of children.
         """
@@ -244,12 +263,10 @@ class PeerManager:
     async def _add_child(self, peer: DistributedPeer):
         logger.debug(f"adding distributed connection as child : {peer!r}")
         self.children.append(peer)
-        # Let the child know where it is in the distributed tree
+        # Let the child know where we are in the distributed tree
         root, level = self._get_advertised_branch_values()
-        peer.connection.queue_messages(
-            DistributedBranchLevel.Request(root),
-            DistributedBranchRoot.Request(self.parent.branch_root),
-        )
+        await peer.connection.send_message(DistributedBranchLevel.Request(level))
+        await peer.connection.send_message(DistributedBranchRoot.Request(root))
 
     def _search_reply_task_callback(self, ticket: int, username: str, query: str, task: asyncio.Task):
         """Callback for a search reply task. This callback simply logs the
@@ -367,7 +384,6 @@ class PeerManager:
             )
             await self._set_parent(parent)
 
-        logger.info(f"replying as {username} to {message.username}")
         await self._query_shares_and_reply(
             message.ticket, message.username, message.query)
 
@@ -502,26 +518,27 @@ class PeerManager:
             await self._check_if_new_parent(peer)
         else:
             logger.info(f"parent advertised new branch level : {message.level}")
-            await self._network.send_server_messages(
-                BranchLevel.Request(message.level + 1))
-            await self.send_messages_to_children(
-                DistributedBranchLevel.Request(message.level + 1))
+            await self._notify_children_of_branch_values()
 
     @on_message(DistributedBranchRoot.Request)
     async def _on_distributed_branch_root(self, message: DistributedBranchRoot.Request, connection: PeerConnection):
         logger.info(f"branch root {message.username!r}: {connection!r}")
 
         peer = self.get_distributed_peer(connection.username, connection)
-        peer.branch_root = message.username
 
+        # When we receive branch level 0 we automatically assume the root is the
+        # peer who sent the sender
+        # Don't do anything if the branch root is what we expected it to be
+        if peer.branch_root == message.username:
+            logger.debug(f"{self._settings.get('credentials.username')} : skipping parent check")
+            return
+
+        peer.branch_root = message.username
         if peer != self.parent:
             await self._check_if_new_parent(peer)
         else:
             logger.info(f"parent advertised new branch root : {message.username}")
-            await self._network.send_server_messages(
-                BranchRoot.Request(message.username))
-            await self.send_messages_to_children(
-                DistributedBranchRoot.Request(message.username))
+            await self._notify_children_of_branch_values()
 
     @on_message(DistributedChildDepth)
     async def _on_distributed_child_depth(self, message: DistributedChildDepth.Request, connection: PeerConnection):
@@ -554,7 +571,11 @@ class PeerManager:
         if event.connection.connection_type == PeerConnectionType.DISTRIBUTED:
             peer = DistributedPeer(event.connection.username, event.connection)
             self.distributed_peers.append(peer)
-            await self._check_if_new_child(peer)
+
+            # Only check if the peer is a potential child if the connection
+            # was not requested by us
+            if not event.requested:
+                await self._check_if_new_child(peer)
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message

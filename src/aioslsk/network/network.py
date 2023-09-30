@@ -394,8 +394,8 @@ class Network:
             self._expected_response_futures.remove(expected_response)
 
     def _remove_connection_future(self, ticket: int, connection_future: asyncio.Future):
+        logger.debug(f"removing expected incoming connection with {ticket=}")
         self._expected_connection_futures.pop(ticket)
-        logger.debug(f"removed expected connection with {ticket=}")
 
     def wait_for_server_message(self, message_class, **kwargs) -> ExpectedResponse:
         """Waits for a server message to arrive, the message must match the
@@ -509,8 +509,6 @@ class Network:
         :raise PeerConnectionError: in case timeout was reached or we received a
             `CannotConnect` message from the server containing the `ticket`
         """
-        await self.server_connection.send_message(ConnectToPeer.Request(ticket, username, typ))
-
         # Wait for either a established connection with PeerPierceFirewall or a
         # CannotConnect from the server
         expected_connection_future = asyncio.Future()
@@ -521,6 +519,10 @@ class Network:
 
         cannot_connect_future = self.wait_for_server_message(
             CannotConnect.Response, ticket=ticket)
+
+        # Send the connect to peer message
+        await self.server_connection.send_message(
+            ConnectToPeer.Request(ticket, username, typ))
 
         futures = (expected_connection_future, cannot_connect_future)
         done, pending = await asyncio.wait(

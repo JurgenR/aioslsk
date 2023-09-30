@@ -433,7 +433,7 @@ class TransferManager:
         :return: the calculated offset (in bytes)
         """
         try:
-            return asyncos.path.getsize(transfer.local_path)
+            return await asyncos.path.getsize(transfer.local_path)
         except (OSError, TypeError):
             return 0
 
