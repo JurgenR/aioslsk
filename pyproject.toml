@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Asyncio based SoulSeek client"
 authors = ["JurgenR <1249228+JurgenR@users.noreply.github.com>"]
 readme = "README.rst"
+packages = [{include = "aioslsk", from = "src"}]
 
 [tool.poetry.dependencies]
 python = ">=3.8,<3.12"
