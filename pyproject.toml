@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "aioslsk"
-version = "0.1.0"
+version = "v0.2.0"
 description = "Asyncio based SoulSeek client"
 authors = ["JurgenR <1249228+JurgenR@users.noreply.github.com>"]
 readme = "README.rst"
