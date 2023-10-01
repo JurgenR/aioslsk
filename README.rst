@@ -101,8 +101,6 @@ Sharing
 +------------------------------------+---------------+-----------------------------------------------------------------------------------+-----------+
 | sharing.directories                | array[object] | List of shared directories:                                                       | <not set> |
 +------------------------------------+---------------+-----------------------------------------------------------------------------------+-----------+
-| sharing.index.store_interval       | integer       | Shared items index automatically gets stored, this parameter defines the interval | 120       |
-+------------------------------------+---------------+-----------------------------------------------------------------------------------+-----------+
 
 The `sharing.directories` list contains objects which have the following parameters:
 

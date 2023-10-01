@@ -210,7 +210,13 @@ class SharesManager:
             logger.info(f"creating directory : {absolute_path}")
             await asyncos.makedirs(absolute_path, exist_ok=True)
 
-    def build_term_map(self, shared_directory: SharedDirectory):
+    def rebuild_term_map(self):
+        logger.info("rebuilding term map")
+        self._term_map = {}
+        for shared_directory in self.shared_directories:
+            self._build_term_map(shared_directory)
+
+    def _build_term_map(self, shared_directory: SharedDirectory):
         """Builds a list of valid terms for the given shared directory"""
         for item in shared_directory.items:
             self._add_item_to_term_map(item)
@@ -312,6 +318,8 @@ class SharesManager:
             parent = parents[-1]
             parent.items |= directory.items
 
+        self._cleanup_term_map()
+
     async def scan_directory_files(self, shared_directory: SharedDirectory):
         """Scans the files for the given `shared_directory`
 
@@ -347,7 +355,8 @@ class SharesManager:
             # set
             shared_directory.items -= (shared_directory.items ^ shared_items)
 
-        self.build_term_map(shared_directory)
+        self._build_term_map(shared_directory)
+        self._cleanup_term_map()
 
     async def scan_directory_file_attributes(self, shared_directory: SharedDirectory):
         """Scans the file attributes for files in the given `shared_directory`.
@@ -636,6 +645,12 @@ class SharesManager:
             if term not in self._term_map:
                 self._term_map[term] = WeakSet()
             self._term_map[term].add(item)
+
+    def _cleanup_term_map(self):
+        self._term_map = {
+            term: values for term, values in self._term_map.items()
+            if len(values) > 0
+        }
 
     def _get_parent_directories(self, shared_directory: SharedDirectory) -> List[SharedDirectory]:
         """Returns a list of parent shared directories. The parent directories

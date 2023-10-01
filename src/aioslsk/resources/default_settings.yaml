@@ -10,9 +10,6 @@ network:
   upnp:
     enabled: true
     lease_duration: 0
-  timeout:
-    peer: 10
-    distributed: 120
   reconnect:
     auto: true
     timeout: 10
@@ -35,8 +32,6 @@ sharing:
     upload_speed_kbps: 0
     download_speed_kbps: 0
   download: null
-  index:
-    store_interval: 120
   directories: []
 
 chats:
