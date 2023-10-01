@@ -78,7 +78,7 @@ def manager(tmp_path):
 def manager_query(tmp_path):
     manager = SharesManager(Settings(DEFAULT_SETTINGS), InternalEventBus())
     manager._shared_directories = [SHARED_DIRECTORY]
-    manager.build_term_map(SHARED_DIRECTORY)
+    manager._build_term_map(SHARED_DIRECTORY)
 
     return manager
 
