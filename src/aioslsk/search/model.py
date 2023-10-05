@@ -4,7 +4,7 @@ from enum import auto, Enum
 import re
 from typing import List
 
-from .protocol.primitives import FileData
+from ..protocol.primitives import FileData
 
 
 class SearchType(Enum):

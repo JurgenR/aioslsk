@@ -1,19 +1,17 @@
-from aioslsk.events import UserDirectoryEvent, UserInfoEvent, SearchResultEvent
-from aioslsk.protocol.primitives import DirectoryData, FileData
+from aioslsk.events import UserDirectoryEvent
+from aioslsk.protocol.primitives import DirectoryData
 from aioslsk.protocol.messages import (
     PeerDirectoryContentsRequest,
     PeerDirectoryContentsReply,
     PeerUserInfoReply,
     PeerUserInfoRequest,
-    PeerSearchReply,
 )
 from aioslsk.peer import PeerManager
-from aioslsk.search import SearchRequest, SearchType
 from aioslsk.settings import Settings
 from aioslsk.state import State
 
 import pytest
-from unittest.mock import ANY, AsyncMock, call, Mock, PropertyMock
+from unittest.mock import ANY, AsyncMock, Mock
 
 
 USER_DESCRIPTION = 'describes the user'
@@ -71,7 +69,7 @@ class TestPeer:
     async def test_onPeerInfoRequest_withInfo_shouldSendPeerInfoReply(self):
         manager = self._create_peer_manager(SETTINGS_WITH_INFO)
         connection = AsyncMock()
-        type(manager._transfer_manager).upload_slots = PropertyMock(return_value=UPLOAD_SLOTS)
+        manager._transfer_manager.get_upload_slots = Mock(return_value=UPLOAD_SLOTS)
         manager._transfer_manager.get_queue_size = Mock(return_value=QUEUE_SIZE)
         manager._transfer_manager.has_slots_free = Mock(return_value=HAS_SLOTS_FREE)
 
@@ -91,7 +89,7 @@ class TestPeer:
     async def test_onPeerInfoRequest_withoutInfo_shouldSendPeerInfoReply(self):
         manager = self._create_peer_manager(DEFAULT_SETTINGS)
         connection = AsyncMock()
-        type(manager._transfer_manager).upload_slots = PropertyMock(return_value=UPLOAD_SLOTS)
+        manager._transfer_manager.get_upload_slots = Mock(return_value=UPLOAD_SLOTS)
         manager._transfer_manager.get_queue_size = Mock(return_value=QUEUE_SIZE)
         manager._transfer_manager.has_slots_free = Mock(return_value=HAS_SLOTS_FREE)
 
@@ -126,7 +124,7 @@ class TestPeer:
         manager = self._create_peer_manager()
         manager._shares_manager.create_directory_reply.return_value = DIRECTORY_DATA
 
-        connection = Mock()
+        connection = AsyncMock()
         connection.username = USER
 
         await manager._on_peer_directory_contents_req(
@@ -134,7 +132,7 @@ class TestPeer:
         )
 
         manager._shares_manager.create_directory_reply.assert_called_once_with(DIRECTORY)
-        connection.queue_message.assert_called_once_with(
+        connection.send_message.assert_called_once_with(
             PeerDirectoryContentsReply.Request(TICKET, DIRECTORY, DIRECTORY_DATA)
         )
 
@@ -157,39 +155,4 @@ class TestPeer:
 
         manager._event_bus.emit.assert_awaited_once_with(
             UserDirectoryEvent(user, DIRECTORY, DIRECTORIES)
-        )
-
-    @pytest.mark.asyncio
-    async def test_onPeerSearchReply_shouldStoreResultsAndEmit(self):
-        manager = self._create_peer_manager()
-        TICKET = 1234
-        connection = AsyncMock()
-
-        manager._state.search_requests[TICKET] = SearchRequest(
-            TICKET, 'search', SearchType.NETWORK)
-
-        reply_message = PeerSearchReply.Request(
-            'user0',
-            TICKET,
-            results=[FileData(1, 'myfile.mp3', 10000, 'mp3', attributes=[])],
-            has_slots_free=True,
-            avg_speed=100,
-            queue_size=2,
-            locked_results=[FileData(1, 'locked.mp3', 10000, 'mp3', attributes=[])]
-        )
-        await manager._on_peer_search_reply(reply_message, connection)
-
-        assert 1 == len(manager._state.search_requests[TICKET].results)
-
-        manager._event_bus.emit.assert_has_awaits(
-            [
-                call(
-                    SearchResultEvent(
-                        manager._state.search_requests[TICKET],
-                        manager._state.search_requests[TICKET].results[0]
-                    )
-                ),
-                call(UserInfoEvent(manager._state.get_or_create_user('user0')))
-            ]
-
         )

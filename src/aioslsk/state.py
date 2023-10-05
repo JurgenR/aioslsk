@@ -1,10 +1,8 @@
 from __future__ import annotations
-from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, List, Union
+from typing import Dict, List, Union
 
 from .model import Room, User, UserStatus, TrackingFlag
-from .search import ReceivedSearch, SearchRequest
 
 
 @dataclass
@@ -23,10 +21,6 @@ class State:
     search_inactivity_timeout: int = 0
     distributed_alive_interval: int = 0
     wishlist_interval: int = 0
-
-    # Search related
-    received_searches: Deque[ReceivedSearch] = field(default_factory=lambda: deque(list(), 500))
-    search_requests: Dict[int, SearchRequest] = field(default_factory=dict)
 
     def get_joined_rooms(self) -> List[Room]:
         return [room for room in self.rooms.values() if room.joined]

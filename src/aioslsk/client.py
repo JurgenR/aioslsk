@@ -4,6 +4,7 @@ import logging
 from typing import List, Union
 
 from .configuration import Configuration
+from .distributed import DistributedNetwork
 from .events import EventBus, InternalEventBus
 from .shares.cache import (
     SharesShelveCache,
@@ -14,7 +15,8 @@ from .model import Room, User, TrackingFlag
 from .network.network import Network
 from .peer import PeerManager
 from .server import ServerManager
-from .search import SearchRequest, SearchResult
+from .search.manager import SearchManager
+from .search.model import SearchRequest, SearchResult
 from .state import State
 from .settings import Settings
 from .transfer.cache import TransferCache, TransferShelveCache
@@ -47,47 +49,21 @@ class SoulSeekClient:
 
         self.state: State = State()
 
-        self.network: Network = Network(
-            self.state,
-            self.settings,
-            self._internal_events,
-            self._stop_event
-        )
+        self.network: Network = self.create_network()
 
         shares_cache: SharesCache = SharesShelveCache(self.configuration.data_directory)
-        self.shares_manager: SharesManager = SharesManager(
-            self.settings,
-            self._internal_events,
-            cache=shares_cache
+        self.shares_manager: SharesManager = self.create_shares_manager(
+            shares_cache
         )
 
         transfer_cache: TransferCache = TransferShelveCache(self.configuration.data_directory)
-        self.transfer_manager: TransferManager = TransferManager(
-            self.state,
-            self.settings,
-            self.events,
-            self._internal_events,
-            self.shares_manager,
-            self.network,
-            cache=transfer_cache
+        self.transfer_manager: TransferManager = self.create_transfer_manager(
+            transfer_cache
         )
-        self.peer_manager: PeerManager = PeerManager(
-            self.state,
-            self.settings,
-            self.events,
-            self._internal_events,
-            self.shares_manager,
-            self.transfer_manager,
-            self.network
-        )
-        self.server_manager: ServerManager = ServerManager(
-            self.state,
-            self.settings,
-            self.events,
-            self._internal_events,
-            self.shares_manager,
-            self.network
-        )
+        self.peer_manager: PeerManager = self.create_peer_manager()
+        self.search_manager: SearchManager = self.create_search_manager()
+        self.distributed_network: DistributedNetwork = self.create_distributed_network()
+        self.server_manager: ServerManager = self.create_server_manager()
 
     @property
     def event_loop(self):
@@ -160,7 +136,11 @@ class SoulSeekClient:
 
         await self.network.disconnect()
 
-        cancelled_tasks = self.peer_manager.stop() + self.transfer_manager.stop()
+        cancelled_tasks = (
+            self.transfer_manager.stop() +
+            self.search_manager.stop() +
+            self.distributed_network.stop()
+        )
         await asyncio.gather(*cancelled_tasks, return_exceptions=True)
 
         self.shares_manager.write_cache()
@@ -296,27 +276,27 @@ class SoulSeekClient:
         """Performs a search, returns the generated ticket number for the search
         """
         logger.info(f"Starting search for query: {query}")
-        return await self.server_manager.search(query)
+        return await self.search_manager.search(query)
 
     async def search_user(self, query: str, user: Union[str, User]) -> SearchRequest:
         username = user.name if isinstance(user, User) else user
-        return await self.server_manager.search_user(username, query)
+        return await self.search_manager.search_user(username, query)
 
     async def search_room(self, query: str, room: Union[str, Room]) -> SearchRequest:
         room_name = room.name if isinstance(room, Room) else room
-        return await self.server_manager.search_room(room_name, query)
+        return await self.search_manager.search_room(room_name, query)
 
     def get_search_request_by_ticket(self, ticket: int) -> SearchRequest:
         """Returns a search request with given ticket"""
-        return self.state.search_requests[ticket]
+        return self.search_manager.search_requests[ticket]
 
     def get_search_results_by_ticket(self, ticket: int) -> List[SearchResult]:
         """Returns all search results for given ticket"""
-        return self.state.search_requests[ticket].results
+        return self.search_manager.search_requests[ticket].results
 
     def remove_search_request_by_ticket(self, ticket: int) -> SearchRequest:
         """Removes a search request for given ticket"""
-        return self.state.search_requests.pop(ticket)
+        return self.search_manager.search_requests.pop(ticket)
 
     async def get_user_stats(self, user: Union[str, User]):
         username = user.name if isinstance(user, User) else user
@@ -338,3 +318,73 @@ class SoulSeekClient:
     async def get_user_directory(self, user: Union[str, User], directory: List[str]):
         username = user.name if isinstance(user, User) else user
         await self.peer_manager.get_user_directory(username, directory)
+
+    # Creation methods
+
+    def create_network(self) -> Network:
+        return Network(
+            self.state,
+            self.settings,
+            self._internal_events,
+            self._stop_event
+        )
+
+    def create_shares_manager(self, cache: SharesCache) -> SharesManager:
+        return SharesManager(
+            self.settings,
+            self._internal_events,
+            cache=cache
+        )
+
+    def create_transfer_manager(self, cache: TransferCache) -> TransferManager:
+        return TransferManager(
+            self.state,
+            self.settings,
+            self.events,
+            self._internal_events,
+            self.shares_manager,
+            self.network,
+            cache=cache
+        )
+
+    def create_search_manager(self) -> SearchManager:
+        return SearchManager(
+            self.state,
+            self.settings,
+            self.events,
+            self._internal_events,
+            self.shares_manager,
+            self.transfer_manager,
+            self.network
+        )
+
+    def create_server_manager(self) -> ServerManager:
+        return ServerManager(
+            self.state,
+            self.settings,
+            self.events,
+            self._internal_events,
+            self.shares_manager,
+            self.network
+        )
+
+    def create_peer_manager(self) -> PeerManager:
+        return PeerManager(
+            self.state,
+            self.settings,
+            self.events,
+            self._internal_events,
+            self.shares_manager,
+            self.transfer_manager,
+            self.network
+        )
+
+    def create_distributed_network(self) -> DistributedNetwork:
+        return DistributedNetwork(
+            self.state,
+            self.settings,
+            self.events,
+            self._internal_events,
+            self.shares_manager,
+            self.network
+        )

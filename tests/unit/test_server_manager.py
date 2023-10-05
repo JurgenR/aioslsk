@@ -26,7 +26,7 @@ from aioslsk.protocol.messages import (
     RemoveUser,
 )
 from aioslsk.protocol.primitives import RoomTicker, UserStats
-from aioslsk.search import SearchType
+from aioslsk.search.model import SearchType
 from aioslsk.settings import Settings
 from aioslsk.server import ServerManager
 from aioslsk.state import State
@@ -397,39 +397,4 @@ class TestServerManager:
     @pytest.mark.asyncio
     async def test_whenSetRoomTicker_shouldSetRoomTicker(self, manager: ServerManager):
         await manager.set_room_ticker('room0', 'hello')
-        manager._network.send_server_messages.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_searchNetwork_shouldSearchAndCreateEntry(self, manager: ServerManager):
-        search_query = await manager.search('my query')
-        assert 'my query' == search_query.query
-        assert isinstance(search_query.ticket, int)
-        assert SearchType.NETWORK == search_query.search_type
-
-        manager._network.send_server_messages.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_searchRoom_shouldSearchAndCreateEntry(self, manager: ServerManager):
-        query = 'my query'
-        room_name = 'room0'
-
-        search_query = await manager.search_room(room_name, query)
-        assert query == search_query.query
-        assert isinstance(search_query.ticket, int)
-        assert SearchType.ROOM == search_query.search_type
-        assert room_name == search_query.room
-
-        manager._network.send_server_messages.assert_awaited_once()
-
-    @pytest.mark.asyncio
-    async def test_searchUser_shouldSearchAndCreateEntry(self, manager: ServerManager):
-        query = 'my query'
-        username = 'room0'
-
-        search_query = await manager.search_user(username, query)
-        assert query == search_query.query
-        assert isinstance(search_query.ticket, int)
-        assert SearchType.USER == search_query.search_type
-        assert username == search_query.username
-
         manager._network.send_server_messages.assert_awaited_once()

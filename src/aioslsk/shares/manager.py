@@ -26,7 +26,7 @@ from ..naming import (
     NumberDuplicateStrategy,
 )
 from ..protocol.primitives import DirectoryData
-from ..search import SearchQuery
+from ..search.model import SearchQuery
 from ..settings import Settings
 from .utils import create_term_pattern, convert_items_to_file_data
 

@@ -11,7 +11,7 @@ from .protocol.primitives import (
     MessageDataclass,
     ItemRecommendation,
 )
-from .search import SearchRequest, SearchResult
+from .search.model import SearchRequest, SearchResult
 
 if TYPE_CHECKING:
     from .network.connection import (
