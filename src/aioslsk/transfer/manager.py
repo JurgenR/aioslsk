@@ -119,7 +119,7 @@ class TransferManager:
             await self._add_transfer(transfer)
 
     def write_cache(self):
-        """Write all current transfers back to the """
+        """Write all current transfers back to the cache"""
         self.cache.write(self._transfers)
 
     def stop(self) -> List[asyncio.Task]:
@@ -136,10 +136,6 @@ class TransferManager:
     @property
     def transfers(self):
         return self._transfers
-
-    @property
-    def upload_slots(self):
-        return self._settings.get('sharing.limits.upload_slots')
 
     async def abort(self, transfer: Transfer):
         """Aborts the given transfer. This will cancel all pending transfers
@@ -208,6 +204,10 @@ class TransferManager:
     def get_downloads(self) -> List[Transfer]:
         return [transfer for transfer in self._transfers if transfer.is_download()]
 
+    def get_upload_slots(self) -> int:
+        """Returns the total amount of upload slots"""
+        return self._settings.get('sharing.limits.upload_slots')
+
     def has_slots_free(self) -> bool:
         return self.get_free_upload_slots() > 0
 
@@ -217,7 +217,7 @@ class TransferManager:
             if transfer.is_upload() and transfer.is_processing():
                 uploading_transfers.append(transfer)
 
-        available_slots = self.upload_slots - len(uploading_transfers)
+        available_slots = self.get_upload_slots() - len(uploading_transfers)
         return max(0, available_slots)
 
     def get_queue_size(self) -> int:

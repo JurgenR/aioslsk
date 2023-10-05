@@ -53,7 +53,7 @@ User
 +------------------------------+--------+------------------------------------------------------------------------+-----------+
 | credentials.info.description | string | Personal description, will be returned when a peer request info on you | <not set> |
 +------------------------------+--------+------------------------------------------------------------------------+-----------+
-| credentials.info.pciture     | string | Picture, will be returned when a peer request info on you              | <not set> |
+| credentials.info.picture     | string | Picture, will be returned when a peer request info on you              | <not set> |
 +------------------------------+--------+------------------------------------------------------------------------+-----------+
 
 
@@ -99,7 +99,7 @@ Sharing
 +------------------------------------+---------------+-----------------------------------------------------------------------------------+-----------+
 | sharing.download                   | string        | Directory to which files will be downloaded to                                    | <not set> |
 +------------------------------------+---------------+-----------------------------------------------------------------------------------+-----------+
-| sharing.directories                | array[object] | List of shared directories:                                                       | <not set> |
+| sharing.directories                | array[object] | List of shared directories (see structure for each entry below)                   | <empty>   |
 +------------------------------------+---------------+-----------------------------------------------------------------------------------+-----------+
 
 The `sharing.directories` list contains objects which have the following parameters:

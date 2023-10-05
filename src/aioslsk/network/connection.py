@@ -183,6 +183,7 @@ class DataConnection(Connection):
         self._writer: asyncio.StreamWriter = None
         self._reader_task: asyncio.Task = None
         self.read_timeout: float = None
+        self._queued_messages: List[asyncio.Task] = []
 
     def get_connecting_ip(self) -> str:
         """Gets the IP address being used to connect to the server/peer.
@@ -233,6 +234,7 @@ class DataConnection(Connection):
 
         await self.set_state(ConnectionState.CLOSING, close_reason=reason)
         logger.debug(f"{self.hostname}:{self.port} : disconnecting : {reason.name}")
+        self._cancel_queued_messages()
         try:
             if self._writer is not None:
                 if not self._writer.is_closing():
@@ -383,16 +385,23 @@ class DataConnection(Connection):
             raise ConnectionReadError(f"{self.hostname}:{self.port} : exception during reading") from exc
 
     def queue_message(self, message: Union[bytes, MessageDataclass]) -> asyncio.Task:
-        return asyncio.create_task(
+        task = asyncio.create_task(
             self.send_message(message),
             name=f'queue-message-task-{task_counter()}'
         )
+        self._queued_messages.append(task)
+        task.add_done_callback(self._queued_messages.remove)
+        return task
 
     def queue_messages(self, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
         return [
             self.queue_message(message)
             for message in messages
         ]
+
+    def _cancel_queued_messages(self):
+        for qmessage_task in self._queued_messages:
+            qmessage_task.cancel()
 
     async def send_message(self, message: Union[bytes, MessageDataclass]):
         """Sends a message or a set of bytes over the connection. In case an

@@ -4,7 +4,7 @@ from enum import auto, Enum
 import re
 from typing import List
 
-from .protocol.primitives import FileData
+from ..protocol.primitives import FileData
 
 
 class SearchType(Enum):
@@ -16,10 +16,12 @@ class SearchType(Enum):
 
 @dataclass
 class ReceivedSearch:
-    """Used for keeping track of searches received from the distributed parent"""
+    """Used for keeping track of searches received from the distributed parent
+    or server
+    """
     username: str
     query: str
-    matched_files: int
+    result_count: int
 
 
 @dataclass

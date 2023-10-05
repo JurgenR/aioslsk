@@ -53,7 +53,6 @@ from .protocol.messages import (
     ChatLeaveRoom,
     ChatPrivateMessage,
     ChatAckPrivateMessage,
-    ChatRoomSearch,
     ChatRoomTickers,
     ChatRoomTickerAdded,
     ChatRoomTickerRemoved,
@@ -62,7 +61,6 @@ from .protocol.messages import (
     ChatUserLeftRoom,
     CheckPrivileges,
     DistributedAliveInterval,
-    FileSearch,
     GetGlobalRecommendations,
     GetItemRecommendations,
     GetItemSimilarUsers,
@@ -101,14 +99,11 @@ from .protocol.messages import (
     SetListenPort,
     SetStatus,
     SharedFoldersFiles,
-    UserSearch,
     WishlistInterval,
-    WishlistSearch,
 )
 from .model import ChatMessage, RoomMessage, User, UserStatus, TrackingFlag
 from .network.network import Network
 from .shares.manager import SharesManager
-from .search import SearchRequest, SearchType
 from .settings import Settings
 from .state import State
 from .utils import task_counter, ticket_generator
@@ -119,7 +114,10 @@ logger = logging.getLogger(__name__)
 
 class ServerManager:
 
-    def __init__(self, state: State, settings: Settings, event_bus: EventBus, internal_event_bus: InternalEventBus, shares_manager: SharesManager, network: Network):
+    def __init__(
+            self, state: State, settings: Settings,
+            event_bus: EventBus, internal_event_bus: InternalEventBus,
+            shares_manager: SharesManager, network: Network):
         self._state: State = state
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
@@ -130,7 +128,6 @@ class ServerManager:
         self._ticket_generator = ticket_generator()
 
         self._ping_task: asyncio.Task = None
-        self._wishlist_task: asyncio.Task = None
         self._post_login_task: asyncio.Task = None
         self._connection_watchdog_task: asyncio.Task = None
 
@@ -179,7 +176,10 @@ class ServerManager:
     async def track_user(self, username: str, flag: TrackingFlag):
         """Starts tracking a user. The method sends an `AddUser` only if the
         `is_tracking` variable is set to False. Updates to the user will be
-        omitted through the `UserInfoEvent`
+        emitted through the `UserInfoEvent` event
+
+        :param user: user to track
+        :param flag: tracking flag to add from the user
         """
         user = self._state.get_or_create_user(username)
 
@@ -189,11 +189,10 @@ class ServerManager:
             await self._network.send_server_messages(AddUser.Request(username))
 
     async def track_friends(self):
+        """Starts tracking the users defined defined in the friends list"""
         tasks = []
         for friend in self._settings.get('users.friends'):
-            tasks.append(
-                asyncio.create_task(self.track_user(friend, TrackingFlag.FRIEND))
-            )
+            tasks.append(self.track_user(friend, TrackingFlag.FRIEND))
 
         asyncio.gather(*tasks, return_exceptions=True)
 
@@ -229,50 +228,6 @@ class ServerManager:
         await self._network.send_server_messages(
             *[ChatJoinRoom.Request(room) for room in rooms]
         )
-
-    async def search_room(self, room: str, query: str) -> SearchRequest:
-        """Performs a search query on all users in a room"""
-        ticket = next(self._ticket_generator)
-
-        await self._network.send_server_messages(
-            ChatRoomSearch.Request(room, ticket, query)
-        )
-        self._state.search_requests[ticket] = SearchRequest(
-            ticket=ticket,
-            query=query,
-            search_type=SearchType.ROOM,
-            room=room
-        )
-        return self._state.search_requests[ticket]
-
-    async def search_user(self, username: str, query: str) -> SearchRequest:
-        """Performs a search query on a user"""
-        ticket = next(self._ticket_generator)
-
-        await self._network.send_server_messages(
-            UserSearch.Request(username, ticket, query)
-        )
-        self._state.search_requests[ticket] = SearchRequest(
-            ticket=ticket,
-            query=query,
-            search_type=SearchType.USER,
-            username=username
-        )
-        return self._state.search_requests[ticket]
-
-    async def search(self, query: str) -> SearchRequest:
-        """Performs a global search query"""
-        ticket = next(self._ticket_generator)
-
-        await self._network.send_server_messages(
-            FileSearch.Request(ticket, query)
-        )
-        self._state.search_requests[ticket] = SearchRequest(
-            ticket=ticket,
-            query=query,
-            search_type=SearchType.NETWORK
-        )
-        return self._state.search_requests[ticket]
 
     async def get_user_stats(self, username: str):  # pragma: no cover
         await self._network.send_server_messages(GetUserStats.Request(username))
@@ -713,12 +668,6 @@ class ServerManager:
     @on_message(WishlistInterval.Response)
     async def _on_wish_list_interval(self, message: WishlistInterval.Response, connection):
         self._state.wishlist_interval = message.interval
-        self._cancel_wishlist_task()
-
-        self._wishlist_task = asyncio.create_task(
-            self._wishlist_job(message.interval),
-            name=f'wishlist-job-{task_counter()}'
-        )
 
     @on_message(AddUser.Response)
     async def _on_add_user(self, message: AddUser.Response, connection):
@@ -840,43 +789,6 @@ class ServerManager:
             self._connection_watchdog_task.cancel()
             self._connection_watchdog_task = None
 
-    async def _wishlist_job(self, interval: int):
-        """Job handling wishlist queries, this method is intended to be run as
-        a task. This method will run at the given `interval` (returned by the
-        server on start up).
-        """
-        while True:
-            items = self._settings.get('search.wishlist')
-
-            # Remove all current wishlist searches
-            self._state.search_requests = {
-                ticket: qry for ticket, qry in self._state.search_requests.items()
-                if qry.search_type != SearchType.WISHLIST
-            }
-
-            logger.info(f"starting wishlist search of {len(items)} items")
-            # Recreate
-            for item in items:
-                if not item['enabled']:
-                    continue
-
-                ticket = next(self._ticket_generator)
-                self._state.search_requests[ticket] = SearchRequest(
-                    ticket,
-                    item['query'],
-                    search_type=SearchType.WISHLIST
-                )
-                self._network.queue_server_messages(
-                    WishlistSearch.Request(ticket, item['query'])
-                )
-
-            await asyncio.sleep(interval)
-
-    def _cancel_wishlist_task(self):
-        if self._wishlist_task is not None:
-            self._wishlist_task.cancel()
-            self._wishlist_task = None
-
     # Listeners
 
     async def _on_track_user(self, event: TrackUserEvent):
@@ -912,7 +824,6 @@ class ServerManager:
 
         elif event.state == ConnectionState.CLOSING:
 
-            self._cancel_wishlist_task()
             self._cancel_ping_task()
             # When `disconnect` is called on the connection it will always first
             # go into the CLOSING state. The watchdog will only attempt to

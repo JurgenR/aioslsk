@@ -11,7 +11,7 @@ from .protocol.primitives import (
     MessageDataclass,
     ItemRecommendation,
 )
-from .search import SearchRequest, SearchResult
+from .search.model import SearchRequest, SearchResult
 
 if TYPE_CHECKING:
     from .network.connection import (
@@ -198,6 +198,14 @@ class SearchResultEvent(Event):
     """Emitted when a search result has been received"""
     query: SearchRequest
     result: SearchResult
+
+
+@dataclass(frozen=True)
+class SearchRequestReceivedEvent(Event):
+    """Emitted when a search request by another user has been received"""
+    username: str
+    query: str
+    result_count: int
 
 
 @dataclass(frozen=True)
