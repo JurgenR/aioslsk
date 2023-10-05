@@ -201,6 +201,14 @@ class SearchResultEvent(Event):
 
 
 @dataclass(frozen=True)
+class SearchRequestReceivedEvent(Event):
+    """Emitted when a search request by another user has been received"""
+    username: str
+    query: str
+    result_count: int
+
+
+@dataclass(frozen=True)
 class SimilarUsersEvent(Event):
     users: List[User]
     item: str = None

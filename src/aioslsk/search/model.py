@@ -16,10 +16,12 @@ class SearchType(Enum):
 
 @dataclass
 class ReceivedSearch:
-    """Used for keeping track of searches received from the distributed parent"""
+    """Used for keeping track of searches received from the distributed parent
+    or server
+    """
     username: str
     query: str
-    matched_files: int
+    result_count: int
 
 
 @dataclass

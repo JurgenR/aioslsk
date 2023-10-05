@@ -17,9 +17,8 @@ from ..events import (
     InternalEventBus,
     ConnectionStateChangedEvent,
     MessageReceivedEvent,
-    UserDirectoryEvent,
     UserInfoEvent,
-    UserSharesReplyEvent,
+    SearchRequestReceivedEvent,
     SearchResultEvent,
 )
 from ..protocol.messages import (
@@ -27,14 +26,7 @@ from ..protocol.messages import (
     DistributedSearchRequest,
     DistributedServerSearchRequest,
     FileSearch,
-    MessageDataclass,
-    PeerDirectoryContentsRequest,
-    PeerDirectoryContentsReply,
     PeerSearchReply,
-    PeerSharesRequest,
-    PeerSharesReply,
-    PeerUserInfoReply,
-    PeerUserInfoRequest,
     ServerSearchRequest,
     UserSearch,
     WishlistInterval,
@@ -145,11 +137,19 @@ class SearchManager:
         """
         visible, locked = self._shares_manager.query(query, username=username)
 
+        result_count = len(visible) + len(locked)
         self.received_searches.append(
             ReceivedSearch(
                 username=username,
                 query=query,
-                matched_files=len(visible) + len(locked)
+                result_count=result_count
+            )
+        )
+        await self._event_bus.emit(
+            SearchRequestReceivedEvent(
+                username=username,
+                query=query,
+                result_count=result_count
             )
         )
 
