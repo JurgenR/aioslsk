@@ -1,3 +1,5 @@
+from __future__ import annotations
+import json
 import os
 from typing import Any, Callable, Dict, List
 
@@ -7,11 +9,17 @@ RESOURCES_DIRECTORY: str = os.path.join(
 
 
 class Settings:
-    DEFAULT_SETTINGS: str = os.path.join(RESOURCES_DIRECTORY, 'default_settings.yaml')
+    DEFAULT_SETTINGS: str = os.path.join(RESOURCES_DIRECTORY, 'default_settings.json')
 
     def __init__(self, settings: dict):
         self._settings: dict = settings
         self.listeners: Dict[str, List[Callable]] = {}
+
+    @classmethod
+    def create(cls) -> Settings:
+        """Creates a new `Settings` object from the defaults"""
+        with open(cls.DEFAULT_SETTINGS, 'r') as fh:
+            return Settings(json.load(fh))
 
     def add_listener(self, key, callback):
         if key in self.listeners:

@@ -3,13 +3,9 @@ import asyncio
 import logging
 from typing import List, Union
 
-from .configuration import Configuration
 from .distributed import DistributedNetwork
 from .events import EventBus, InternalEventBus
-from .shares.cache import (
-    SharesShelveCache,
-    SharesCache,
-)
+from .shares.cache import SharesCache, SharesNullCache
 from .shares.manager import SharesManager
 from .model import Room, User, TrackingFlag
 from .network.network import Network
@@ -19,7 +15,7 @@ from .search.manager import SearchManager
 from .search.model import SearchRequest, SearchResult
 from .state import State
 from .settings import Settings
-from .transfer.cache import TransferCache, TransferShelveCache
+from .transfer.cache import TransferCache, TransferNullCache
 from .transfer.manager import TransferManager
 from .transfer.model import Transfer, TransferDirection
 from .utils import ticket_generator
@@ -33,13 +29,14 @@ logger = logging.getLogger(__name__)
 
 
 class SoulSeekClient:
+    """SoulSeek client class"""
 
-    def __init__(self, configuration: Configuration, settings_name: str = None, event_bus: EventBus = None):
+    def __init__(
+            self, settings: Settings,
+            shares_cache: SharesCache = None, transfer_cache: TransferCache = None,
+            event_bus: EventBus = None):
         super().__init__()
-        self.configuration: Configuration = configuration
-        self.settings: Settings = configuration.load_settings(
-            settings_name or DEFAULT_SETTINGS_NAME
-        )
+        self.settings: Settings = settings
 
         self._ticket_generator = ticket_generator()
         self._stop_event: asyncio.Event = None
@@ -51,14 +48,12 @@ class SoulSeekClient:
 
         self.network: Network = self.create_network()
 
-        shares_cache: SharesCache = SharesShelveCache(self.configuration.data_directory)
         self.shares_manager: SharesManager = self.create_shares_manager(
-            shares_cache
+            shares_cache or SharesNullCache()
         )
 
-        transfer_cache: TransferCache = TransferShelveCache(self.configuration.data_directory)
         self.transfer_manager: TransferManager = self.create_transfer_manager(
-            transfer_cache
+            transfer_cache or TransferNullCache()
         )
         self.peer_manager: PeerManager = self.create_peer_manager()
         self.search_manager: SearchManager = self.create_search_manager()
@@ -73,7 +68,7 @@ class SoulSeekClient:
         """Performs a full start up of the client consisting of:
         * Connecting to the server
         * Opening listening ports
-        * Performs a login with the provided user credentials
+        * Performs a login with the user credentials defined in the settings
         * Reading transfer and shares caches
         * Optionally performs an initial scan of the shares
 
@@ -128,7 +123,7 @@ class SoulSeekClient:
         """Stops the client this method consists of:
 
         * Disconnecting the network and waiting for all connections to close
-        * Cancel all pending tasks
+        * Cancel all pending tasks and waiting for them to complete
         * Write the transfer and shares caches
         """
         logger.info("signaling client to exit")
@@ -150,14 +145,22 @@ class SoulSeekClient:
         message = f"unhandled exception on loop {loop!r} : context : {context!r}"
         logger.exception(message, exc_info=context.get('exception', None))
 
+    async def __aenter__(self) -> SoulSeekClient:
+        await self.start()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.stop()
+
     @property
     def transfers(self):
         return self.transfer_manager._transfers
 
-    def save_settings(self):
-        self.configuration.save_settings(DEFAULT_SETTINGS_NAME, self.settings)
-
     async def download(self, user: Union[str, User], filename: str) -> Transfer:
+        """Requests to start a downloading the file from the given user
+
+        :return: a `Transfer` object from which the status of the transfer can
+            be requested
+        """
         if isinstance(user, User):
             user = user.name
         transfer = await self.transfer_manager.add(
@@ -381,10 +384,7 @@ class SoulSeekClient:
 
     def create_distributed_network(self) -> DistributedNetwork:
         return DistributedNetwork(
-            self.state,
             self.settings,
-            self.events,
             self._internal_events,
-            self.shares_manager,
             self.network
         )

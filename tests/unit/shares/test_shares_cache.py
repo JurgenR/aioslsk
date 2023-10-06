@@ -1,8 +1,6 @@
-from aioslsk.configuration import Configuration
+# from aioslsk.configuration import Configuration
 from aioslsk.shares.cache import SharesShelveCache
 from aioslsk.shares.model import SharedDirectory, SharedItem
-
-import pytest
 import os
 import shutil
 
@@ -18,21 +16,14 @@ SHARED_ITEMS = {
 SHARED_DIRECTORY.items = set(SHARED_ITEMS.values())
 
 
-@pytest.fixture
-def configuration(tmpdir) -> Configuration:
-    settings_dir = os.path.join(tmpdir, 'settings')
-    data_dir = os.path.join(tmpdir, 'data')
-    return Configuration(settings_dir, data_dir)
-
-
 class TestSharesShelveCache:
 
-    def test_read(self, configuration: Configuration):
-        shutil.copytree(os.path.join(RESOURCES, 'data'), configuration.data_directory, dirs_exist_ok=True)
-        cache = SharesShelveCache(configuration.data_directory)
+    def test_read(self, tmpdir: str):
+        shutil.copytree(os.path.join(RESOURCES, 'data'), tmpdir, dirs_exist_ok=True)
+        cache = SharesShelveCache(tmpdir)
         directories = cache.read()
         assert [SHARED_DIRECTORY, ] == directories
 
-    def test_write(self, configuration: Configuration):
-        cache = SharesShelveCache(configuration.data_directory)
+    def test_write(self, tmpdir: str):
+        cache = SharesShelveCache(tmpdir)
         cache.write([SHARED_DIRECTORY, ])

@@ -140,11 +140,6 @@ class Network:
         self._download_rate_limiter: RateLimiter = RateLimiter.create_limiter(
             self._settings.get('sharing.limits.download_speed_kbps'))
 
-        self._settings.add_listener(
-            'sharing.limits.upload_speed_kbps', self._on_upload_speed_changed)
-        self._settings.add_listener(
-            'sharing.limits.download_speed_kbps', self._on_download_speed_changed)
-
         # Debugging
         self._user_ip_overrides: Dict[str, str] = self._settings.get('debug.user_ip_overrides')
 
@@ -160,7 +155,8 @@ class Network:
         await self.connect_listening_ports()
         await self.connect_server()
 
-        if self._log_connections_task is None:
+        log_connections = self._settings.get('debug.log_connection_count')
+        if log_connections and self._log_connections_task is None:
             self._log_connections_task = asyncio.create_task(
                 self._log_connections_job(),
                 name=f'log-connections-{task_counter()}'
@@ -247,7 +243,7 @@ class Network:
 
     async def _log_connections_job(self):
         while True:
-            await asyncio.sleep(1)
+            await asyncio.sleep(10)
             count = len(self.peer_connections)
             logger.info(
                 f"currently {count} peer connections ({len(self._create_peer_connection_tasks)} tasks)")
@@ -749,7 +745,7 @@ class Network:
 
     # Settings listeners
     def load_speed_limits(self):
-        """Loads the speed limits from the settings"""
+        """(Re)loads the speed limits from the settings"""
         self.set_download_speed_limit(
             self._settings.get('sharing.limits.download_speed_kbps'))
         self.set_upload_speed_limit(
@@ -782,14 +778,6 @@ class Network:
 
         for conn in self.peer_connections:
             conn.download_rate_limiter = self._download_rate_limiter
-
-    def _on_upload_speed_changed(self, limit_kbps: int):
-        """Called when upload speed is changed in the settings"""
-        self.set_upload_speed_limit(limit_kbps=limit_kbps)
-
-    def _on_download_speed_changed(self, limit_kbps: int):
-        """Called when download speed is changed in the settings"""
-        self.set_download_speed_limit(limit_kbps=limit_kbps)
 
     # Task callbacks
     def _handle_connect_to_peer_callback(self, message: ConnectToPeer.Response, task: asyncio.Task):

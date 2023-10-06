@@ -15,27 +15,40 @@ Package
 -------
 
 
-Development
------------
+Dependencies:
 
-Install poetry_ and setup the project dependencies by running:
-
-.. code-block:: shell
-
-    poetry install
+* mutagen_ : library used for extracting audio metadata
+* aiofiles_ : asyncio library for file management
+* async-upnp-client_ : library for managing UPnP configuration
 
 
-Usage
-=====
+Quick Usage
+===========
 
-Create a `Configuration` object pointing with the locations in which to store settings/configs, ...
+Starting the client and sending a private message:
 
 .. code-block:: python
 
-    config = Configuration(
-        settings_directory="/my/settings/directory",
-        data_directory="/my/data/directory"
-    )
+    import asyncio
+    from aioslsk.client import SoulSeekClient
+    from aioslsk.settings import Settings
+
+    async def main():
+        client: SoulSeekClient = SoulSeekClient(settings)
+
+        # Create default settings and configure credentials
+        settings: Settings = Settings.create()
+        settings.set('credentials.username', 'my_user')
+        settings.set('credentials.password', 'Secret123')
+
+        await client.start()
+
+        # Send a private message
+        await client.send_private_message('my_friend', 'Hi!')
+
+        await client.stop()
+
+    asyncio.run(main())
 
 
 Configuration Parameters
@@ -71,15 +84,15 @@ Network
 +-----------------------------------+---------+---------------------------------------------------------------------------------------------------+--------------------+
 | network.listening.obfuscated_port | integer | Port to listen for other peers (obfuscated)                                                       | 61001              |
 +-----------------------------------+---------+---------------------------------------------------------------------------------------------------+--------------------+
-| network.listening.error_mode      | string  | Defines when an error should be raised when connecting the listening connection (all, any, clear) | all                |
+| network.listening.error_mode      | string  | Defines when an error should be raised when connecting the listening connection (all, any, clear) | clear              |
 +-----------------------------------+---------+---------------------------------------------------------------------------------------------------+--------------------+
-| network.use_upnp                  | boolean | Enable UPNP                                                                                       | false              |
+| network.use_upnp                  | boolean | Automatically configure UPnP for the listening ports                                              | false              |
 +-----------------------------------+---------+---------------------------------------------------------------------------------------------------+--------------------+
 | network.upnp_lease_duration       | integer | Length of the UPNP lease duration. 0 = indefinitely                                               | 0                  |
 +-----------------------------------+---------+---------------------------------------------------------------------------------------------------+--------------------+
-| network.reconnect.auto            | boolean | Automatically try to reconnect to the server                                                      | true               |
+| network.reconnect.auto            | boolean | Automatically try to reconnect to the server when the server disconnects                          | true               |
 +-----------------------------------+---------+---------------------------------------------------------------------------------------------------+--------------------+
-| network.reconnect.timeout         | integer | Timeout after which we should try connecting to the server                                        | 10                 |
+| network.reconnect.timeout         | integer | Timeout after which we should try reconnecting to the server                                      | 10                 |
 +-----------------------------------+---------+---------------------------------------------------------------------------------------------------+--------------------+
 | network.peer.obfuscate            | boolean | When true, prefer obfuscated connections as much as possible                                      | false              |
 +-----------------------------------+---------+---------------------------------------------------------------------------------------------------+--------------------+
@@ -146,17 +159,28 @@ Search
 Debug
 -----
 
-+-------------------------+---------------------+-------------------------------------------------+---------+
-|        Parameter        |        Type         |                   Description                   | Default |
-+=========================+=====================+=================================================+=========+
-| debug.search_for_parent | boolean             | Toggle searching for a distributed parent       | false   |
-+-------------------------+---------------------+-------------------------------------------------+---------+
-| debug.user_ip_overrides | map[string, string] | Mapping of username and IP addresses, overrides | <empty> |
-+-------------------------+---------------------+-------------------------------------------------+---------+
++----------------------------+---------------------+----------------------------------------------------+---------+
+|         Parameter          |        Type         |                    Description                     | Default |
++============================+=====================+====================================================+=========+
+| debug.search_for_parent    | boolean             | Toggle searching for a distributed parent          | false   |
++----------------------------+---------------------+----------------------------------------------------+---------+
+| debug.user_ip_overrides    | map[string, string] | Mapping of username and IP addresses, overrides    | <empty> |
++----------------------------+---------------------+----------------------------------------------------+---------+
+| debug.log_connection_count | boolean             | Periodically log the amount of current connections | false   |
++----------------------------+---------------------+----------------------------------------------------+---------+
 
+
+Development
+===========
+
+Install poetry_ and setup the project dependencies by running:
+
+.. code-block:: shell
+
+    poetry install
 
 Building the documentation
-==========================
+--------------------------
 
 .. code-block:: bash
 
@@ -165,7 +189,7 @@ Building the documentation
 
 
 Running Tests
-=============
+-------------
 
 Running all tests:
 
@@ -181,3 +205,6 @@ Running all tests with code coverage report:
 
 
 .. _poetry: https://python-poetry.org/
+.. _mutagen: https://github.com/quodlibet/mutagen
+.. _aiofiles: https://github.com/Tinche/aiofiles
+.. _async-upnp-client: https://github.com/StevenLooman/async_upnp_client

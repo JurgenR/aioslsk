@@ -1,0 +1,58 @@
+{
+  "network": {
+    "server": {
+      "hostname": "server.slsknet.org",
+      "port": 2416
+    },
+    "listening": {
+      "error_mode": "clear",
+      "port": 61000,
+      "obfuscated_port": 61001
+    },
+    "upnp": {
+      "enabled": true,
+      "lease_duration": 0
+    },
+    "reconnect": {
+      "auto": true,
+      "timeout": 10
+    },
+    "peer": {
+      "obfuscate": false
+    }
+  },
+  "credentials": {
+    "username": null,
+    "password": null,
+    "info": {
+      "description": null,
+      "picture": null
+    }
+  },
+  "search": {
+    "wishlist": []
+  },
+  "sharing": {
+    "limits": {
+      "upload_slots": 2,
+      "upload_speed_kbps": 0,
+      "download_speed_kbps": 0
+    },
+    "download": null,
+    "directories": []
+  },
+  "chats": {
+    "auto_join": true,
+    "private_room_invites": true,
+    "rooms": []
+  },
+  "users": {
+    "friends": [],
+    "blocked": []
+  },
+  "debug": {
+    "search_for_parent": true,
+    "user_ip_overrides": {},
+    "log_connection_count": false
+  }
+}

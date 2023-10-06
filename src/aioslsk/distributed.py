@@ -14,7 +14,6 @@ from .network.connection import (
 from .events import (
     on_message,
     build_message_map,
-    EventBus,
     InternalEventBus,
     ConnectionStateChangedEvent,
     LoginSuccessEvent,
@@ -37,7 +36,6 @@ from .protocol.messages import (
 )
 from .network.network import Network
 from .settings import Settings
-from .shares.manager import SharesManager
 from .state import State
 from .utils import task_counter, ticket_generator
 
@@ -58,22 +56,17 @@ class DistributedNetwork:
     """Class responsible for handling the distributed network"""
 
     def __init__(
-            self, state: State, settings: Settings,
-            event_bus: EventBus, internal_event_bus: InternalEventBus,
-            shares_manager: SharesManager,
+            self, settings: Settings, internal_event_bus: InternalEventBus,
             network: Network):
-        self._state: State = state
         self._settings: Settings = settings
-        self._event_bus: EventBus = event_bus
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._network: Network = network
-        self._shares_manager: SharesManager = shares_manager
 
         self._ticket_generator = ticket_generator()
 
         self.parent: DistributedPeer = None
-        """Distributed parent. This variable is `None` if we are looking for
-        parents
+        """Distributed parent. This variable is `None` if we are looking for a
+        parent
         """
         self.children: List[DistributedPeer] = []
         self.potential_parents: List[str] = []
