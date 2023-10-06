@@ -5,7 +5,15 @@ description = "Asyncio based SoulSeek client"
 authors = ["JurgenR <1249228+JurgenR@users.noreply.github.com>"]
 readme = "README.rst"
 packages = [{include = "aioslsk", from = "src"}]
-requires-python = "~=3.8"
+keywords = ["soulseek", "p2p", "async"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Communications :: File Sharing"
+]
 
 [tool.poetry.dependencies]
 python = ">=3.8,<3.12"
