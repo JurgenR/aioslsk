@@ -48,10 +48,13 @@ class PeerManager:
 
         self._ticket_generator = ticket_generator()
 
+        self.MESSAGE_MAP = build_message_map(self)
+
+        self.register_listeners()
+
+    def register_listeners(self):
         self._internal_event_bus.register(
             MessageReceivedEvent, self._on_message_received)
-
-        self.MESSAGE_MAP = build_message_map(self)
 
     # External methods
     async def get_user_info(self, username: str):
@@ -130,7 +133,7 @@ class PeerManager:
     @on_message(PeerUserInfoReply.Request)
     async def _on_peer_user_info_reply(self, message: PeerUserInfoReply.Request, connection: PeerConnection):
         user = self._state.get_or_create_user(connection.username)
-        user.description = message
+        user.description = message.description
         user.picture = message.picture
         user.upload_slots = message.upload_slots
         user.queue_length = message.queue_size

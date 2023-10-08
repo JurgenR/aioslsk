@@ -66,15 +66,18 @@ class SearchManager:
         self.received_searches: Deque[ReceivedSearch] = deque(list(), 500)
         self.search_requests: Dict[int, SearchRequest] = {}
 
-        self._internal_event_bus.register(
-            ConnectionStateChangedEvent, self._on_state_changed)
-        self._internal_event_bus.register(
-            MessageReceivedEvent, self._on_message_received)
+        self.register_listeners()
 
         self.MESSAGE_MAP = build_message_map(self)
 
         self._search_reply_tasks: List[asyncio.Task] = []
         self._wishlist_task: asyncio.Task = None
+
+    def register_listeners(self):
+        self._internal_event_bus.register(
+            ConnectionStateChangedEvent, self._on_state_changed)
+        self._internal_event_bus.register(
+            MessageReceivedEvent, self._on_message_received)
 
     async def search_room(self, room: str, query: str) -> SearchRequest:
         """Performs a search query on all users in a room

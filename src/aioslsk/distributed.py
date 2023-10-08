@@ -72,6 +72,13 @@ class DistributedNetwork:
         self.potential_parents: List[str] = []
         self.distributed_peers: List[DistributedPeer] = []
 
+        self.MESSAGE_MAP = build_message_map(self)
+
+        self.register_listeners()
+
+        self._potential_parent_tasks: List[asyncio.Task] = []
+
+    def register_listeners(self):
         self._internal_event_bus.register(
             PeerInitializedEvent, self._on_peer_connection_initialized)
         self._internal_event_bus.register(
@@ -80,10 +87,6 @@ class DistributedNetwork:
             MessageReceivedEvent, self._on_message_received)
         self._internal_event_bus.register(
             LoginSuccessEvent, self._on_login_success)
-
-        self.MESSAGE_MAP = build_message_map(self)
-
-        self._potential_parent_tasks: List[asyncio.Task] = []
 
     def _get_advertised_branch_values(self) -> Tuple[str, int]:
         """Returns the advertised branch values. These values are to be sent to

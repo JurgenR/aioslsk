@@ -5,7 +5,7 @@ import asyncio
 import logging
 from operator import itemgetter
 import os
-from typing import Dict, List, Tuple, TYPE_CHECKING
+from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 
 from .cache import TransferNullCache, TransferCache
 from ..constants import TRANSFER_REPLY_TIMEOUT
@@ -15,6 +15,8 @@ from ..exceptions import (
     FileNotFoundError,
     FileNotSharedError,
     PeerConnectionError,
+    RequestPlaceFailedError,
+    TransferNotFoundError,
 )
 from ..network.connection import (
     CloseReason,
@@ -90,12 +92,21 @@ class TransferManager:
 
         self.MESSAGE_MAP = build_message_map(self)
 
-        self._internal_event_bus.register(MessageReceivedEvent, self._on_message_received)
-        self._internal_event_bus.register(PeerInitializedEvent, self._on_peer_initialized)
+        self.register_listeners()
+
+    @property
+    def transfers(self):
+        return self._transfers
+
+    def register_listeners(self):
+        self._internal_event_bus.register(
+            MessageReceivedEvent, self._on_message_received)
+        self._internal_event_bus.register(
+            PeerInitializedEvent, self._on_peer_initialized)
 
     async def read_cache(self) -> List[Transfer]:
-        """Reads the transfers from the cache. It's important that this method
-        gets called before `manage_transfers`.
+        """Reads the transfers from the caches and corrects the state of those
+        transfers
         """
         transfers: List[Transfer] = self.cache.read()
         for transfer in transfers:
@@ -133,14 +144,18 @@ class TransferManager:
             cancelled_tasks.extend(transfer.cancel_tasks())
         return cancelled_tasks
 
-    @property
-    def transfers(self):
-        return self._transfers
-
     async def abort(self, transfer: Transfer):
         """Aborts the given transfer. This will cancel all pending transfers
         and remove the file (in case of download)
+
+        :param transfer: `Transfer` object to abort
+        :raise TransferNotFoundError: if the transfer has not been added to the
+            manager first
         """
+        if transfer not in self.transfers:
+            raise TransferNotFoundError(
+                "cannot queue transfer: transfer was not added to the manager")
+
         tasks = transfer.cancel_tasks()
         await transfer.state.abort()
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -153,7 +168,15 @@ class TransferManager:
                 logger.warning(f"failed to remove file during abort : {transfer.local_path}")
 
     async def queue(self, transfer: Transfer):
-        """Places given transfer on the queue"""
+        """Places given transfer (back) in the queue
+
+        :param transfer: `Transfer` object to queue
+        :raise TransferNotFoundError: if the transfer has not been added to the
+            manager first
+        """
+        if transfer not in self.transfers:
+            raise TransferNotFoundError(
+                "cannot queue transfer: transfer was not added to the manager")
         await transfer.state.queue()
 
     async def on_transfer_state_changed(
@@ -459,10 +482,11 @@ class TransferManager:
             transfer.reset_queue_attempts()
             await self.manage_transfers()
 
-    async def request_place_in_queue(self, transfer: Transfer) -> int:
-        """Requests the place in queue for the given transfer
+    async def request_place_in_queue(self, transfer: Transfer) -> Optional[int]:
+        """Requests the place in queue for the given transfer. The method will
+        return the value in case of success and return the value
 
-        :return: place in queue or `0` in case of error
+        :return: place in queue or `None` in case of error
         """
         try:
             await self._network.send_peer_messages(
@@ -471,21 +495,24 @@ class TransferManager:
             )
         except ConnectionWriteError:
             logger.info(f"failed to request place in queue of transfer : {transfer}")
-            return -1
+            raise RequestPlaceFailedError("failed to request place in queue")
 
         try:
             _, response = await asyncio.wait_for(
-                self._network.wait_for_peer_message(
+                self._network.create_peer_message_future(
                     peer=transfer.username,
                     message_class=PeerPlaceInQueueReply.Request,
-                    remote_path=transfer.remote_path
+                    fields={
+                        'filename': transfer.remote_path
+                    }
                 ),
                 timeout=15
             )
         except asyncio.TimeoutError:
             logger.info(f"timeout receiving response to place in queue for transfer : {transfer}")
-            return -1
+            raise RequestPlaceFailedError("failed to request place in queue")
         else:
+            transfer.place_in_queue = response.place
             return response.place
 
     async def _initialize_download(
@@ -582,10 +609,12 @@ class TransferManager:
 
         try:
             connection, response = await asyncio.wait_for(
-                self._network.wait_for_peer_message(
+                self._network.create_peer_message_future(
                     transfer.username,
                     PeerTransferReply.Request,
-                    ticket=ticket
+                    fields={
+                        'ticket': ticket
+                    }
                 ),
                 TRANSFER_REPLY_TIMEOUT
             )

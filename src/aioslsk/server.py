@@ -133,6 +133,13 @@ class ServerManager:
 
         self.MESSAGE_MAP = build_message_map(self)
 
+        self.register_listeners()
+
+    @property
+    def connection_state(self) -> ConnectionState:
+        return self._network.server_connection.state
+
+    def register_listeners(self):
         self._internal_event_bus.register(
             MessageReceivedEvent, self._on_message_received)
         self._internal_event_bus.register(
@@ -141,10 +148,6 @@ class ServerManager:
             TrackUserEvent, self._on_track_user)
         self._internal_event_bus.register(
             UntrackUserEvent, self._on_untrack_user)
-
-    @property
-    def connection_state(self) -> ConnectionState:
-        return self._network.server_connection.state
 
     async def send_ping(self):
         """Send ping to the server"""

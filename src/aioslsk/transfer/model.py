@@ -144,9 +144,6 @@ class Transfer:
         self.last_upload_request_attempt = 0.0
 
     async def transition(self, state: TransferState):
-        if self.state.VALUE == state.VALUE:
-            return
-
         old_state = self.state
         logger.debug(f"transitioning transfer state from {old_state.VALUE.name} to {state.VALUE.name}")
         self.state = state

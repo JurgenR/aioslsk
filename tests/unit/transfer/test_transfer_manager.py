@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, Mock, MagicMock, patch
 import pytest
 
 from aioslsk.events import TrackUserEvent, UntrackUserEvent
-from aioslsk.exceptions import ConnectionWriteError
+from aioslsk.exceptions import ConnectionWriteError, RequestPlaceFailedError
 from aioslsk.model import UserStatus, TrackingFlag
 from aioslsk.protocol.messages import PeerPlaceInQueueRequest, PeerPlaceInQueueReply
 from aioslsk.transfer.cache import TransferShelveCache
@@ -333,7 +333,7 @@ class TestTransferManager:
         expected_place = 10
 
         response = PeerPlaceInQueueReply.Request(DEFAULT_FILENAME, expected_place)
-        manager._network.wait_for_peer_message = AsyncMock(
+        manager._network.create_peer_message_future = AsyncMock(
             return_value=(None, response))
 
         place = await manager.request_place_in_queue(transfer)
@@ -342,6 +342,7 @@ class TestTransferManager:
             DEFAULT_USERNAME,
             PeerPlaceInQueueRequest.Request(DEFAULT_FILENAME)
         )
+        assert transfer.place_in_queue == expected_place
         assert place == expected_place
 
     @pytest.mark.asyncio
@@ -351,23 +352,23 @@ class TestTransferManager:
         manager._network.send_peer_messages = AsyncMock(
             side_effect=ConnectionWriteError('write error'))
 
-        place = await manager.request_place_in_queue(transfer)
+        with pytest.raises(RequestPlaceFailedError):
+            await manager.request_place_in_queue(transfer)
 
         manager._network.send_peer_messages.assert_awaited_once_with(
             DEFAULT_USERNAME,
             PeerPlaceInQueueRequest.Request(DEFAULT_FILENAME)
         )
-        assert place == -1
 
     @pytest.mark.asyncio
     async def test_requestPlaceInQueue_timeoutWaitingForResponse(self, manager: TransferManager):
         transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
 
-        with patch('asyncio.wait_for', side_effect=asyncio.TimeoutError()):
-            place = await manager.request_place_in_queue(transfer)
+        with pytest.raises(RequestPlaceFailedError):
+            with patch('asyncio.wait_for', side_effect=asyncio.TimeoutError()):
+                await manager.request_place_in_queue(transfer)
 
         manager._network.send_peer_messages.assert_awaited_once_with(
             DEFAULT_USERNAME,
             PeerPlaceInQueueRequest.Request(DEFAULT_FILENAME)
         )
-        assert place == -1

@@ -3,7 +3,7 @@ import asyncio
 import enum
 from functools import partial
 import logging
-from typing import Any, Dict, List, Union, Tuple
+from typing import Any, Dict, List, Optional, Union, Tuple
 
 from ..constants import (
     DEFAULT_LISTENING_HOST,
@@ -45,7 +45,6 @@ from ..protocol.messages import (
 )
 from . import upnp
 from .rate_limiter import RateLimiter
-from ..state import State
 from ..settings import Settings
 from ..utils import task_counter, ticket_generator
 
@@ -100,8 +99,7 @@ class ExpectedResponse(asyncio.Future):
 
 class Network:
 
-    def __init__(self, state: State, settings: Settings, internal_event_bus: InternalEventBus, stop_event: asyncio.Event):
-        self._state = state
+    def __init__(self, settings: Settings, internal_event_bus: InternalEventBus, stop_event: asyncio.Event):
         self._settings: Settings = settings
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._upnp = upnp.UPNP(self._settings)
@@ -116,7 +114,7 @@ class Network:
             self._settings.get('network.server.port'),
             self
         )
-        self.listening_connections: Tuple[ListeningConnection] = (
+        self.listening_connections: Tuple[Optional[ListeningConnection], Optional[ListeningConnection]] = (
             ListeningConnection(
                 DEFAULT_LISTENING_HOST,
                 self._settings.get('network.listening.port'),
@@ -358,8 +356,12 @@ class Network:
             returned
         """
         await self.server_connection.send_message(GetPeerAddress.Request(username))
-        _, response = await self.wait_for_server_message(
-            GetPeerAddress.Response, username=username)
+        _, response = await self.create_server_message_future(
+            GetPeerAddress.Response,
+            fields={
+                'username': username
+            }
+        )
 
         if response.ip == '0.0.0.0':
             logger.warning(f"GetPeerAddress : no address returned for username : {username}")
@@ -393,34 +395,45 @@ class Network:
         logger.debug(f"removing expected incoming connection with {ticket=}")
         self._expected_connection_futures.pop(ticket)
 
-    def wait_for_server_message(self, message_class, **kwargs) -> ExpectedResponse:
-        """Waits for a server message to arrive, the message must match the
-        `message_class` and fields defined in the keyword arguments.
+    def create_server_message_future(
+            self, message_class, fields: Dict[str, Any] = None) -> ExpectedResponse:
+        """Creates a future for a server message to arrive, the message must
+        match the `message_class` and fields defined in the keyword arguments.
 
+        The future will be stored by the current class and will be removed once
+        the future is complete or cancelled.
+
+        :param message_class: The expected `MessageDataClass`
         :return: `ExpectedResponse` object
         """
+        fields = fields or {}
         future = ExpectedResponse(
             ServerConnection,
             message_class=message_class,
-            fields=kwargs
+            fields=fields
         )
         self._expected_response_futures.append(future)
         future.add_done_callback(self._remove_response_future)
         return future
 
-    def wait_for_peer_message(self, peer: str, message_class, **kwargs) -> ExpectedResponse:
-        """Waits for a peer message to arrive, the message must match the
-        `message_class` and fields defined in the keyword arguments and must be
-        coming from a connection by `peer`.
+    def create_peer_message_future(
+            self, peer: str, message_class, fields: Dict[str, Any] = None) -> ExpectedResponse:
+        """Creates a future for a peer message to arrive, the message must match
+        the `message_class` and fields defined in the keyword arguments and
+        must be coming from a connection by `peer`.
+
+        The future will be stored by the current class and will be removed once
+        the future is complete or cancelled.
 
         :param peer: name of the peer for which the message should be received
         :return: `ExpectedResponse` object
         """
+        fields = fields or {}
         future = ExpectedResponse(
             PeerConnection,
             message_class=message_class,
             peer=peer,
-            fields=kwargs
+            fields=fields
         )
         self._expected_response_futures.append(future)
         future.add_done_callback(self._remove_response_future)
@@ -513,8 +526,12 @@ class Network:
         )
         self._expected_connection_futures[ticket] = expected_connection_future
 
-        cannot_connect_future = self.wait_for_server_message(
-            CannotConnect.Response, ticket=ticket)
+        cannot_connect_future = self.create_server_message_future(
+            CannotConnect.Response,
+            fields={
+                'ticket': ticket
+            }
+        )
 
         # Send the connect to peer message
         await self.server_connection.send_message(
@@ -591,21 +608,30 @@ class Network:
         await self._internal_event_bus.emit(
             PeerInitializedEvent(peer_connection, requested=False))
 
-    async def send_peer_messages(self, username: str, *messages: List[Union[bytes, MessageDataclass]]):
+    async def send_peer_messages(
+            self, username: str, *messages: List[Union[bytes, MessageDataclass]],
+            raise_on_error: bool = True):
         """Sends a list of messages to the peer with given `username`. This uses
         `get_peer_connection` and will attempt to re-use a connection or create
-        a new one
+        a new peer (P) connection
 
+        :param username: Peer username to send the messages to
+        :param messages: List of messages to send
+        :param raise_on_error: When `True` an exception is raised when a message
+            failed to send, if `False` a list of tuples with the result for each
+            message will be returned
         :return: a list of tuples containing the sent messages and the result
             of the sent messages. If `None` is returned for a message it was
-            successfully sent, otherwise the result will contain the exception
+            successfully sent, otherwise the result will contain the exception.
+            `None` if the `raise_on_error` is `True`
         """
         connection = await self.get_peer_connection(username)
         results = await asyncio.gather(
             *[connection.send_message(message) for message in messages],
-            return_exceptions=True
+            return_exceptions=not raise_on_error
         )
-        return list(zip(messages, results))
+        if not raise_on_error:
+            return list(zip(messages, results))
 
     def queue_server_messages(self, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
         """Queues server messages
@@ -614,12 +640,26 @@ class Network:
         """
         return self.server_connection.queue_messages(*messages)
 
-    async def send_server_messages(self, *messages: List[Union[bytes, MessageDataclass]]):
+    async def send_server_messages(
+            self, *messages: List[Union[bytes, MessageDataclass]],
+            raise_on_error: bool = True):
+        """Sends a list of messages to the server
+
+        :param messages: List of messages to send
+        :param raise_on_error: When `True` an exception is raised when a message
+            failed to send, if `False` a list of tuples with the result for each
+            message will be returned
+        :return: a list of tuples containing the sent messages and the result
+            of the sent messages. If `None` is returned for a message it was
+            successfully sent, otherwise the result will contain the exception.
+            `None` if the `raise_on_error` is `True`
+        """
         results = await asyncio.gather(
             *[self.server_connection.send_message(message) for message in messages],
-            return_exceptions=True
+            return_exceptions=not raise_on_error
         )
-        return list(zip(messages, results))
+        if not raise_on_error:
+            return list(zip(messages, results))
 
     # Methods called by connections
 

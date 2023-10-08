@@ -6,23 +6,19 @@ aioslsk is a Python library for the SoulSeek protocol built on top of asyncio.
 
 Supported Python versions are currently 3.8 - 3.11
 
-.. contents::
+Documentation:
+
+
 
 Installation
 ============
 
-Package
--------
+.. code-block:: shell
+
+    pip install aioslsk
 
 
-Dependencies:
-
-* mutagen_ : library used for extracting audio metadata
-* aiofiles_ : asyncio library for file management
-* async-upnp-client_ : library for managing UPnP configuration
-
-
-Quick Usage
+Quick Start
 ===========
 
 Starting the client and sending a private message:
@@ -51,8 +47,8 @@ Starting the client and sending a private message:
     asyncio.run(main())
 
 
-Configuration Parameters
-========================
+Settings Parameters
+===================
 
 User
 ----
@@ -178,6 +174,17 @@ Install poetry_ and setup the project dependencies by running:
 .. code-block:: shell
 
     poetry install
+
+
+Dependencies
+------------
+
+The package uses several dependencies:
+
+* mutagen_ : library used for extracting audio metadata
+* aiofiles_ : asyncio library for filesystem management
+* async-upnp-client_ : library for managing UPnP configuration
+
 
 Building the documentation
 --------------------------

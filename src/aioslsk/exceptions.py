@@ -34,6 +34,14 @@ class SharedDirectoryError(AioSlskException):
     pass
 
 
+class TransferNotFoundError(AioSlskException):
+    pass
+
+
+class RequestPlaceFailedError(AioSlskException):
+    pass
+
+
 class NetworkError(AioSlskException):
     pass
 
