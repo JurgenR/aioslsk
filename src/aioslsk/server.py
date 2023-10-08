@@ -60,7 +60,6 @@ from .protocol.messages import (
     ChatUserJoinedRoom,
     ChatUserLeftRoom,
     CheckPrivileges,
-    DistributedAliveInterval,
     GetGlobalRecommendations,
     GetItemRecommendations,
     GetItemSimilarUsers,
@@ -72,10 +71,6 @@ from .protocol.messages import (
     GetUserStats,
     Kicked,
     Login,
-    MinParentsInCache,
-    ParentInactivityTimeout,
-    ParentMinSpeed,
-    ParentSpeedRatio,
     Ping,
     PrivateRoomAddUser,
     PrivateRoomRemoveUser,
@@ -95,7 +90,6 @@ from .protocol.messages import (
     RemoveInterest,
     RemoveUser,
     RoomList,
-    SearchInactivityTimeout,
     SetListenPort,
     SetStatus,
     SharedFoldersFiles,
@@ -113,6 +107,9 @@ logger = logging.getLogger(__name__)
 
 
 class ServerManager:
+    """Class handling server messages. This class is mostly responsible for
+    messages received from the server regarding rooms, users and state variables
+    """
 
     def __init__(
             self, state: State, settings: Settings,
@@ -632,30 +629,6 @@ class ServerManager:
             room.is_operator = True
 
         await self._event_bus.emit(RoomListEvent(rooms=self._state.rooms.values()))
-
-    @on_message(ParentMinSpeed.Response)
-    async def _on_parent_min_speed(self, message: ParentMinSpeed.Response, connection):
-        self._state.parent_min_speed = message.speed
-
-    @on_message(ParentSpeedRatio.Response)
-    async def _on_parent_speed_ratio(self, message: ParentSpeedRatio.Response, connection):
-        self._state.parent_speed_ratio = message.ratio
-
-    @on_message(MinParentsInCache.Response)
-    async def _on_min_parents_in_cache(self, message: MinParentsInCache.Response, connection):
-        self._state.min_parents_in_cache = message.amount
-
-    @on_message(DistributedAliveInterval.Response)
-    async def _on_ditributed_alive_interval(self, message: DistributedAliveInterval.Response, connection):
-        self._state.distributed_alive_interval = message.interval
-
-    @on_message(ParentInactivityTimeout.Response)
-    async def _on_parent_inactivity_timeout(self, message: ParentInactivityTimeout.Response, connection):
-        self._state.parent_inactivity_timeout = message.timeout
-
-    @on_message(SearchInactivityTimeout.Response)
-    async def _on_search_inactivity_timeout(self, message: SearchInactivityTimeout.Response, connection):
-        self._state.search_inactivity_timeout = message.timeout
 
     @on_message(PrivilegedUsers.Response)
     async def _on_privileged_users(self, message: PrivilegedUsers.Response, connection):

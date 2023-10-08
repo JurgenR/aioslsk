@@ -54,13 +54,14 @@ def manager(tmpdir):
     internal_event_bus = Mock()
     internal_event_bus.emit = AsyncMock()
     internal_event_bus.register = Mock()
+    shares_manager = Mock()
 
     return TransferManager(
         State(),
         Settings(DEFAULT_SETTINGS),
         event_bus, # event bus
         internal_event_bus, # internal event bus
-        None, # file manager
+        shares_manager, # shares manager
         network, # network
         cache=TransferShelveCache(tmpdir)
     )

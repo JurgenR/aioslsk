@@ -1,3 +1,11 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .transfer.state import TransferState
+    from .transfer.model import Transfer
+
+
 class AioSlskException(Exception):
     pass
 
@@ -34,8 +42,25 @@ class SharedDirectoryError(AioSlskException):
     pass
 
 
-class TransferNotFoundError(AioSlskException):
+class TransferException(AioSlskException):
     pass
+
+
+class TransferNotFoundError(TransferException):
+    pass
+
+
+class InvalidStateTransition(TransferException):
+
+    def __init__(
+            self, transfer: Transfer,
+            current: TransferState.State, desired: TransferState.State,
+            message):
+        self.transfer = transfer
+        self.current: TransferState.State = current
+        self.desired: TransferState.State = desired
+
+        self.message = message
 
 
 class RequestPlaceFailedError(AioSlskException):

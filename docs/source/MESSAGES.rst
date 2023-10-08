@@ -444,7 +444,7 @@ You were kicked from the server. This message is sent when the user was logged i
 :Receive: Nothing
 
 
-.. _Kicked:
+.. _UserSearch:
 
 UserSearch (Code 42)
 --------------------
@@ -456,7 +456,7 @@ UserSearch (Code 42)
    3. **string**: query
 
 
-.. _UserSearch:
+.. _AddInterest:
 
 AddInterest (Code 51)
 ---------------------
@@ -466,7 +466,7 @@ AddInterest (Code 51)
    1. **string**: interest
 
 
-.. _AddInterest:
+.. _RemoveInterest:
 
 RemoveInterest (Code 52)
 ------------------------
@@ -476,7 +476,7 @@ RemoveInterest (Code 52)
    1. **string**: interest
 
 
-.. _RemoveInterest:
+.. _GetRecommendations:
 
 GetRecommendations (Code 54)
 ----------------------------
@@ -514,7 +514,7 @@ GetGlobalRecommendations (Code 56)
       2. **uint32**: number
 
 
-.. _GetGlobalRecommendations:
+.. _GetUserInterests:
 
 GetUserInterests (Code 57)
 --------------------------
@@ -532,7 +532,7 @@ GetUserInterests (Code 57)
       1. **string**: recommendation
 
 
-.. _GetUserInterests:
+.. _RoomList:
 
 RoomList (Code 64)
 ------------------

@@ -13,15 +13,6 @@ class State:
     rooms: Dict[str, Room] = field(default_factory=dict)
     users: Dict[str, User] = field(default_factory=dict)
 
-    # Server vars
-    parent_min_speed: int = 0
-    parent_speed_ratio: int = 0
-    min_parents_in_cache: int = 0
-    parent_inactivity_timeout: int = 0
-    search_inactivity_timeout: int = 0
-    distributed_alive_interval: int = 0
-    wishlist_interval: int = 0
-
     def get_joined_rooms(self) -> List[Room]:
         return [room for room in self.rooms.values() if room.joined]
 

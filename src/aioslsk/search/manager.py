@@ -27,6 +27,7 @@ from ..protocol.messages import (
     DistributedServerSearchRequest,
     FileSearch,
     PeerSearchReply,
+    SearchInactivityTimeout,
     ServerSearchRequest,
     UserSearch,
     WishlistInterval,
@@ -65,6 +66,10 @@ class SearchManager:
 
         self.received_searches: Deque[ReceivedSearch] = deque(list(), 500)
         self.search_requests: Dict[int, SearchRequest] = {}
+
+        # Server variables
+        self.search_inactivity_timeout: int = None
+        self.wishlist_interval: int = None
 
         self.register_listeners()
 
@@ -236,6 +241,10 @@ class SearchManager:
         if message.__class__ in self.MESSAGE_MAP:
             await self.MESSAGE_MAP[message.__class__](message, event.connection)
 
+    @on_message(SearchInactivityTimeout.Response)
+    async def _on_search_inactivity_timeout(self, message: SearchInactivityTimeout.Response, connection):
+        self.search_inactivity_timeout = message.timeout
+
     @on_message(DistributedSearchRequest.Request)
     async def _on_distributed_search_request(
             self, message: DistributedSearchRequest.Request, connection: PeerConnection):
@@ -291,6 +300,7 @@ class SearchManager:
 
     @on_message(WishlistInterval.Response)
     async def _on_wish_list_interval(self, message: WishlistInterval.Response, connection):
+        self.wishlist_interval = message.interval
         self._cancel_wishlist_task()
 
         self._wishlist_task = asyncio.create_task(

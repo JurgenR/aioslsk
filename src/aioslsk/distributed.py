@@ -24,19 +24,23 @@ from .protocol.messages import (
     AcceptChildren,
     BranchLevel,
     BranchRoot,
-    ToggleParentSearch,
-    DistributedChildDepth,
+    DistributedAliveInterval,
     DistributedBranchLevel,
     DistributedBranchRoot,
+    DistributedChildDepth,
     DistributedSearchRequest,
     DistributedServerSearchRequest,
     MessageDataclass,
+    MinParentsInCache,
+    ParentInactivityTimeout,
+    ParentMinSpeed,
+    ParentSpeedRatio,
     PotentialParents,
     ServerSearchRequest,
+    ToggleParentSearch,
 )
 from .network.network import Network
 from .settings import Settings
-from .state import State
 from .utils import task_counter, ticket_generator
 
 
@@ -71,6 +75,13 @@ class DistributedNetwork:
         self.children: List[DistributedPeer] = []
         self.potential_parents: List[str] = []
         self.distributed_peers: List[DistributedPeer] = []
+
+        # State parameters sent by the server
+        self.parent_min_speed: int = None
+        self.parent_speed_ratio: int = None
+        self.min_parents_in_cache: int = None
+        self.parent_inactivity_timeout: int = None
+        self.distributed_alive_interval: int = None
 
         self.MESSAGE_MAP = build_message_map(self)
 
@@ -242,6 +253,26 @@ class DistributedNetwork:
             self._potential_parent_tasks.remove(task)
 
     # Server messages
+
+    @on_message(ParentMinSpeed.Response)
+    async def _on_parent_min_speed(self, message: ParentMinSpeed.Response, connection: ServerConnection):
+        self.parent_min_speed = message.speed
+
+    @on_message(ParentSpeedRatio.Response)
+    async def _on_parent_speed_ratio(self, message: ParentSpeedRatio.Response, connection: ServerConnection):
+        self.parent_speed_ratio = message.ratio
+
+    @on_message(MinParentsInCache.Response)
+    async def _on_min_parents_in_cache(self, message: MinParentsInCache.Response, connection: ServerConnection):
+        self.min_parents_in_cache = message.amount
+
+    @on_message(DistributedAliveInterval.Response)
+    async def _on_ditributed_alive_interval(self, message: DistributedAliveInterval.Response, connection: ServerConnection):
+        self.distributed_alive_interval = message.interval
+
+    @on_message(ParentInactivityTimeout.Response)
+    async def _on_parent_inactivity_timeout(self, message: ParentInactivityTimeout.Response, connection: ServerConnection):
+        self.parent_inactivity_timeout = message.timeout
 
     @on_message(PotentialParents.Response)
     async def _on_potential_parents(self, message: PotentialParents.Response, connection: ServerConnection):

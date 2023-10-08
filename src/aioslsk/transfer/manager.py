@@ -14,6 +14,7 @@ from ..exceptions import (
     ConnectionWriteError,
     FileNotFoundError,
     FileNotSharedError,
+    InvalidStateTransition,
     PeerConnectionError,
     RequestPlaceFailedError,
     TransferNotFoundError,
@@ -151,13 +152,23 @@ class TransferManager:
         :param transfer: `Transfer` object to abort
         :raise TransferNotFoundError: if the transfer has not been added to the
             manager first
+        :raise InvalidStateTransition: When the transfer could not be
+            transitioned to aborted
         """
         if transfer not in self.transfers:
             raise TransferNotFoundError(
                 "cannot queue transfer: transfer was not added to the manager")
 
+        has_transitioned = await transfer.state.abort()
+        if not has_transitioned:
+            raise InvalidStateTransition(
+                transfer,
+                transfer.state.VALUE,
+                TransferState.State.ABORTED,
+                "Could not make the desired state transition"
+            )
+
         tasks = transfer.cancel_tasks()
-        await transfer.state.abort()
         await asyncio.gather(*tasks, return_exceptions=True)
 
         # Only remove file when downloading
@@ -173,11 +184,21 @@ class TransferManager:
         :param transfer: `Transfer` object to queue
         :raise TransferNotFoundError: if the transfer has not been added to the
             manager first
+        :raise InvalidStateTransition: When the transfer could not be
+            transitioned to queued
         """
         if transfer not in self.transfers:
             raise TransferNotFoundError(
                 "cannot queue transfer: transfer was not added to the manager")
-        await transfer.state.queue()
+
+        has_transitioned = await transfer.state.queue()
+        if not has_transitioned:
+            raise InvalidStateTransition(
+                transfer,
+                transfer.state.VALUE,
+                TransferState.State.ABORTED,
+                "Could not make the desired state transition"
+            )
 
     async def on_transfer_state_changed(
             self, transfer: Transfer, old: TransferState.State, new: TransferState.State):
@@ -429,8 +450,9 @@ class TransferManager:
             if upload.username in friends:
                 rank += 5
 
+            # Privileged users should have absolute priority
             if user.privileged:
-                rank += 10
+                rank += 100
 
             ranking.append((rank, upload))
 

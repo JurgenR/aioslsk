@@ -14,7 +14,11 @@ class TransferStateListener(Protocol):
 
 
 class TransferState:
-    """Represents a transfer state and its possible transitions"""
+    """Represents a transfer state and its possible transitions
+
+    Each transition method will return a boolean to indicate whether the
+    transition was done.
+    """
 
     class State(Enum):
         VIRGIN = 0
@@ -52,35 +56,36 @@ class TransferState:
 
         raise Exception(f"no state class for state : {state}")
 
-    async def fail(self, reason: str = None):
-        pass
+    async def fail(self, reason: str = None) -> bool:
+        return False
 
-    async def abort(self):
-        pass
+    async def abort(self) -> bool:
+        return False
 
-    async def queue(self):
-        pass
+    async def queue(self) -> bool:
+        return False
 
-    async def initialize(self):
-        pass
+    async def initialize(self) -> bool:
+        return False
 
-    async def complete(self):
-        pass
+    async def complete(self) -> bool:
+        return False
 
-    async def incomplete(self):
-        pass
+    async def incomplete(self) -> bool:
+        return False
 
-    async def start_transferring(self):
-        pass
+    async def start_transferring(self) -> bool:
+        return False
 
 
 class VirginState(TransferState):
     """State representing a newly added transfer"""
     VALUE = TransferState.VIRGIN
 
-    async def queue(self):
+    async def queue(self) -> bool:
         self.transfer.remotely_queued = False
         await self.transfer.transition(QueuedState(self.transfer))
+        return True
 
 
 class QueuedState(TransferState):
@@ -96,15 +101,18 @@ class QueuedState(TransferState):
     """
     VALUE = TransferState.QUEUED
 
-    async def initialize(self):
+    async def initialize(self) -> bool:
         await self.transfer.transition(InitializingState(self.transfer))
+        return True
 
-    async def fail(self, reason=None):
+    async def fail(self, reason=None) -> bool:
         self.transfer.fail_reason = reason
         await self.transfer.transition(FailedState(self.transfer))
+        return True
 
-    async def abort(self):
+    async def abort(self) -> bool:
         await self.transfer.transition(AbortedState(self.transfer))
+        return True
 
 
 class InitializingState(TransferState):
@@ -129,23 +137,27 @@ class InitializingState(TransferState):
     """
     VALUE = TransferState.INITIALIZING
 
-    async def abort(self):
+    async def abort(self) -> bool:
         await self.transfer.transition(AbortedState(self.transfer))
+        return True
 
     async def queue(self):
         await self.transfer.transition(QueuedState(self.transfer))
+        return True
 
-    async def fail(self, reason=None):
+    async def fail(self, reason=None) -> bool:
         self.transfer.fail_reason = reason
         await self.transfer.transition(FailedState(self.transfer))
+        return True
 
-    async def start_transferring(self):
+    async def start_transferring(self) -> bool:
         self.transfer.remotely_queued = False
         self.transfer.set_start_time()
         if self.transfer.is_upload():
             await self.transfer.transition(UploadingState(self.transfer))
         else:
             await self.transfer.transition(DownloadingState(self.transfer))
+        return True
 
 
 class DownloadingState(TransferState):
@@ -162,22 +174,26 @@ class DownloadingState(TransferState):
     """
     VALUE = TransferState.DOWNLOADING
 
-    async def fail(self, reason: str = None):
+    async def fail(self, reason: str = None) -> bool:
         self.transfer.fail_reason = reason
         self.transfer.set_complete_time()
         await self.transfer.transition(FailedState(self.transfer))
+        return True
 
-    async def complete(self):
+    async def complete(self) -> bool:
         self.transfer.set_complete_time()
         await self.transfer.transition(CompleteState(self.transfer))
+        return True
 
-    async def abort(self):
+    async def abort(self) -> bool:
         self.transfer.set_complete_time()
         await self.transfer.transition(AbortedState(self.transfer))
+        return True
 
-    async def incomplete(self):
+    async def incomplete(self) -> bool:
         self.transfer.set_complete_time()
         await self.transfer.transition(IncompleteState(self.transfer))
+        return True
 
 
 class UploadingState(TransferState):
@@ -192,18 +208,21 @@ class UploadingState(TransferState):
     - Aborted: We have aborted the transfer
     """
 
-    async def fail(self, reason: str = None):
+    async def fail(self, reason: str = None) -> bool:
         self.transfer.fail_reason = reason
         self.transfer.set_complete_time()
         await self.transfer.transition(FailedState(self.transfer))
+        return True
 
-    async def complete(self):
+    async def complete(self) -> bool:
         self.transfer.set_complete_time()
         await self.transfer.transition(CompleteState(self.transfer))
+        return True
 
-    async def abort(self):
+    async def abort(self) -> bool:
         self.transfer.set_complete_time()
         await self.transfer.transition(AbortedState(self.transfer))
+        return True
 
 
 class CompleteState(TransferState):
@@ -213,9 +232,10 @@ class CompleteState(TransferState):
     """
     VALUE = TransferState.COMPLETE
 
-    async def queue(self):
+    async def queue(self) -> bool:
         self.transfer.reset_times()
         await self.transfer.transition(QueuedState(self.transfer))
+        return True
 
 
 class IncompleteState(TransferState):
@@ -229,16 +249,19 @@ class IncompleteState(TransferState):
     """
     VALUE = TransferState.INCOMPLETE
 
-    async def fail(self, reason: str = None):
+    async def fail(self, reason: str = None) -> bool:
         self.transfer.fail_reason = reason
         await self.transfer.transition(FailedState(self.transfer))
+        return True
 
-    async def queue(self):
+    async def queue(self) -> bool:
         self.transfer.reset_times()
         await self.transfer.transition(QueuedState(self.transfer))
+        return True
 
-    async def abort(self):
+    async def abort(self) -> bool:
         await self.transfer.transition(AbortedState(self.transfer))
+        return True
 
 
 class FailedState(TransferState):
@@ -250,9 +273,10 @@ class FailedState(TransferState):
     """
     VALUE = TransferState.FAILED
 
-    async def queue(self):
+    async def queue(self) -> bool:
         self.transfer.reset_times()
         await self.transfer.transition(QueuedState(self.transfer))
+        return True
 
 
 class AbortedState(TransferState):
@@ -263,8 +287,9 @@ class AbortedState(TransferState):
     """
     VALUE = TransferState.ABORTED
 
-    async def queue(self):
+    async def queue(self) -> bool:
         # Reset all progress if the transfer is requeued after being aborted,
         # the file should be deleted anyway
         self.transfer.reset_progress()
         await self.transfer.transition(QueuedState(self.transfer))
+        return True
