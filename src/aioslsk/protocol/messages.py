@@ -720,7 +720,7 @@ class RemoveHatedInterest(ServerMessage):
         hated_interest: str = field(metadata={'type': string})
 
 
-class ChatRoomSearch(ServerMessage):
+class RoomSearch(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):

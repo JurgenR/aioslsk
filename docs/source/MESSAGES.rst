@@ -42,12 +42,16 @@ Array datatype consists of a ``uint32`` denoting the amount of elements followed
 Data Structures
 ===============
 
+.. _Attribute:
+
 Attribute
 ---------
 
 1. **uint32**: key
 2. **uint32**: value
 
+
+.. _FileData:
 
 FileData
 --------
@@ -61,6 +65,8 @@ FileData
    1. **Attribute**: attributes
 
 
+.. _DirectoryData:
+
 DirectoryData
 -------------
 
@@ -69,6 +75,8 @@ DirectoryData
 
    1. **FileData**: files
 
+
+.. _UserStats:
 
 UserStats
 ---------
@@ -370,7 +378,7 @@ Acknowledge we have received a private message
 FileSearch (Code 26)
 --------------------
 
-Unknown, file searches usually come from the distributed connection or ServerSearch message
+Received when a user performs a RoomSearch_ or UserSearch_
 
 :Code: 26 (0x1A)
 :Send:
@@ -402,7 +410,7 @@ Ping (Code 32)
 Send a ping to the server to let it know we are still alive (every 5 minutes)
 
 :Code: 32 (0x20)
-:Send: Nothing
+:Send: No parameters
 
 
 .. _SharedFoldersFiles:
@@ -449,6 +457,8 @@ You were kicked from the server. This message is sent when the user was logged i
 UserSearch (Code 42)
 --------------------
 
+Search for a file on a specific user, the user will receive this query in the form of a FileSearch_ message
+
 :Code: 42 (0x2A)
 :Send:
    1. **string**: username
@@ -482,7 +492,7 @@ GetRecommendations (Code 54)
 ----------------------------
 
 :Code: 54 (0x36)
-:Send: Nothing
+:Send: No parameters
 :Receive:
    1. Array of recommendations:
 
@@ -501,7 +511,7 @@ GetGlobalRecommendations (Code 56)
 ----------------------------------
 
 :Code: 56 (0x38)
-:Send: Nothing
+:Send: No parameters
 :Receive:
    1. Array of recommendations:
 
@@ -523,13 +533,14 @@ GetUserInterests (Code 57)
 :Send:
    1. **string**: username
 :Receive:
-   1. Array of interests:
+   1. **string**: username
+   2. Array of interests:
 
-      1. **string**: recommendation
+      1. **string**: interests
 
-   2. Array of non recommendations:
+   3. Array of hated interests:
 
-      1. **string**: recommendation
+      1. **string**: hated_interests
 
 
 .. _RoomList:
@@ -537,8 +548,10 @@ GetUserInterests (Code 57)
 RoomList (Code 64)
 ------------------
 
+Request or receive the list of rooms. This message will be initially sent after logging on but can also be manually requested afterwards. The initial message after logon will only return a limited number of public rooms (potentially only the rooms with 5 or more users).
+
 :Code: 42 (0x2A)
-:Send: Nothing
+:Send: No parameters
 :Receive:
    1. Array of room names:
 
@@ -574,7 +587,7 @@ RoomList (Code 64)
 PrivilegedUsers (Code 69)
 -------------------------
 
-Indicates whether we want to receive `PotentialParents` messages from the server. A message should be sent to disable if we have found a parent
+Indicates whether we want to receive :ref:`PotentialParents` messages from the server. A message should be sent to disable if we have found a parent
 
 :Code: 69 (0x45)
 :Receive:
@@ -655,7 +668,7 @@ SearchInactivityTimeout (Code 87)
 MinParentsInCache (Code 88)
 ---------------------------
 
-Amount of parents (received through PotentialParents) we should keep in cache. Message has not been seen yet being sent by the server
+Amount of parents (received through :ref:`PotentialParents`) we should keep in cache. Message has not been seen yet being sent by the server
 
 :Code: 88 (0x58)
 :Receive:
@@ -666,6 +679,8 @@ Amount of parents (received through PotentialParents) we should keep in cache. M
 
 DistributedAliveInterval (Code 90)
 ----------------------------------
+
+Interval at which a :ref:`DistributedPing` message should be sent to the children. Most clients don't adhere to this.
 
 :Code: 90 (0x5A)
 :Receive:
@@ -687,8 +702,10 @@ AddPrivilegedUser (Code 91)
 CheckPrivileges (Code 92)
 -------------------------
 
+Checks whether the requesting user has privileges, `time_left` will be `0` in case the user has no privileges, time left in seconds otherwise.
+
 :Code: 92 (0x5C)
-:Send: Nothing
+:Send: No parameters
 :Receive:
    1. **uint32**: time_left
 
@@ -711,6 +728,8 @@ ServerSearchRequest (Code 93)
 
 AcceptChildren (Code 100)
 -------------------------
+
+Tell the server we are not accepting any distributed children, the server *should* take this into account when sending :ref:`PotentialParents` messages to other peers.
 
 :Code: 100 (0x64)
 :Send:
@@ -740,7 +759,7 @@ Perform a wishlist search
 
 :Code: 103 (0x67)
 :Send:
-   1. **uint32**: username
+   1. **uint32**: ticket
    2. **string**: query
 
 
@@ -763,7 +782,7 @@ GetSimilarUsers (Code 110)
 --------------------------
 
 :Code: 110 (0x6E)
-:Send: Nothing
+:Send: No parameters
 :Receive:
    1. Array of similar users:
 
@@ -859,18 +878,17 @@ Add or update a ticker for a room (room wall)
    2. **string**: ticker
 
 
-.. _ChatRoomSearch:
-
+.. _AddHatedInterest:
 
 AddHatedInterest (Code 117)
-----------------------------
+---------------------------
 
 :Code: 117 (0x75)
 :Receive:
    1. **string**: hated_interest
 
 
-.. _AddHatedInterest:
+.. _RemoveHatedInterest:
 
 RemoveHatedInterest (Code 118)
 ------------------------------
@@ -880,10 +898,12 @@ RemoveHatedInterest (Code 118)
    1. **string**: hated_interest
 
 
-.. _RemoveHatedInterest:
+.. _RoomSearch:
 
-ChatRoomSearch (Code 120)
--------------------------
+RoomSearch (Code 120)
+---------------------
+
+Perform a search query on all users in the given room.
 
 :Code: 120 (0x78)
 :Send:
@@ -897,7 +917,9 @@ ChatRoomSearch (Code 120)
 SendUploadSpeed (Code 121)
 --------------------------
 
-Send upload speed, sent to the server right after an upload completed
+Send upload speed, sent to the server right after an upload completed. `speed` parameter should be in bytes per second. This is not the global average uploads speed but rather the upload speed for that particular transfer.
+
+In exception cases, for example if a transfer was failed midway then resumed, only the speed of the resumed part is taken into account.
 
 :Code: 121 (0x79)
 :Send:
@@ -912,7 +934,7 @@ GetUserPrivileges (Code 122)
 Retrieve whether a user has privileges
 
 :Code: 122 (0x7A)
-:Send: Nothing
+:Send: No parameters
 :Receive:
    1. **string**: username
    2. **bool**: privileged
@@ -923,10 +945,13 @@ Retrieve whether a user has privileges
 GiveUserPrivileges (Code 123)
 -----------------------------
 
+Gift a user privileges. This only works if the user sending the message has privileges and needs to be less than what the gifting user has left, part of its privileges will be taken.
+
 :Code: 123 (0x7B)
 :Send:
    1. **string**: username
    2. **uint32**: days
+
 
 .. _PrivilegesNotification:
 
@@ -1019,7 +1044,7 @@ Add another user to the private room. Only operators and the owner can add membe
 PrivateRoomRemoveUser (Code 135)
 --------------------------------
 
-Remove another user from the private room. Operators can remove regular members but not other operators or the owner. The owner can remove anyone aside from himself (see `PrivateRoomDropOwnership`).
+Remove another user from the private room. Operators can remove regular members but not other operators or the owner. The owner can remove anyone aside from himself (see :ref:`PrivateRoomDropOwnership`).
 
 :Code: 135 (0x87)
 :Send:
@@ -1082,7 +1107,7 @@ The current user was removed from the private room
 TogglePrivateRooms (Code 141)
 -----------------------------
 
-Enables or disables private room invites (through `PrivateRoomAddUser`)
+Enables or disables private room invites (through :ref:`PrivateRoomAddUser`)
 
 :Code: 141 (0x8D)
 :Usage:
@@ -1157,6 +1182,8 @@ PrivateRoomOperatorRemoved (Code 146)
 PrivateRoomOperators (Code 148)
 -------------------------------
 
+List of operators for a private room.
+
 :Code: 148 (0x94)
 :Receive:
    1. **string**: room
@@ -1165,11 +1192,12 @@ PrivateRoomOperators (Code 148)
       1. **string**: username
 
 
-
 .. _ChatMessageUsers:
 
 ChatMessageUsers (Code 149)
 ---------------------------
+
+Send a private message to a list of users
 
 :Code: 149 (0x95)
 :Send:
@@ -1185,8 +1213,10 @@ ChatMessageUsers (Code 149)
 ChatEnablePublic (Code 150)
 ---------------------------
 
+Enables public chat, see :ref:`ChatPublicMessage`
+
 :Code: 150 (0x96)
-:Send: Nothing
+:Send: No parameters
 
 
 .. _ChatDisablePublic:
@@ -1194,14 +1224,18 @@ ChatEnablePublic (Code 150)
 ChatDisablePublic (Code 151)
 ----------------------------
 
+Disables public chat, see :ref:`ChatPublicMessage`
+
 :Code: 151 (0x97)
-:Send: Nothing
+:Send: No parameters
 
 
 .. _ChatPublicMessage:
 
 ChatPublicMessage (Code 152)
 ----------------------------
+
+Chat message from all public rooms, use :ref:`ChatEnablePublic` and :ref:`ChatDisablePublic` to disable / enable receiving these messages.
 
 :Code: 152 (0x98)
 :Receive:
@@ -1214,6 +1248,13 @@ ChatPublicMessage (Code 152)
 
 FileSearchEx (Code 153)
 -----------------------
+
+Usually this is sent by the client right after the :ref:`FileSearch` message using the same `query`, the server responds with the same query and an unknown integer that is always 0.
+
+The meaning of the `unknown` parameter is not clear, could be that this is a ticket number, perhaps an empty string or list. Speculation:
+
+* Request for a list of recommendations for the query but no longer works
+* Something related to global search for privileged users (non-privileged returns just `0`)
 
 :Code: 153 (0x99)
 :Send:
@@ -1587,7 +1628,7 @@ How many children the peer has (unverified). This is sent by some clients to the
 DistributedServerSearchRequest (Code 93)
 ----------------------------------------
 
-This message exists internally only for deserialization purposes and this is actually a `ServerSearchRequest`.
+This message exists internally only for deserialization purposes and this is actually a ServerSearchRequest_ .
 
 :Code: 93 (0x5D)
 :Send/Receive:

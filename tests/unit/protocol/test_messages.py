@@ -27,7 +27,7 @@ from aioslsk.protocol.messages import (
     ChatPrivateMessage,
     ChatPublicMessage,
     ChatRoomMessage,
-    ChatRoomSearch,
+    RoomSearch,
     ChatRoomTickerAdded,
     ChatRoomTickerRemoved,
     ChatRoomTickers,
@@ -1520,10 +1520,10 @@ class TestRemoveHatedInterest:
         assert RemoveHatedInterest.Request.deserialize(data) == message
 
 
-class TestChatRoomSearch:
+class TestRoomSearch:
 
-    def test_ChatRoomSearch_Request_serialize(self):
-        message = ChatRoomSearch.Request(
+    def test_RoomSearch_Request_serialize(self):
+        message = RoomSearch.Request(
             room='room0',
             ticket=1234,
             query="Query"
@@ -1531,14 +1531,14 @@ class TestChatRoomSearch:
         data = bytes.fromhex('1a0000007800000005000000726f6f6d30d2040000050000005175657279')
         assert message.serialize() == data
 
-    def test_ChatRoomSearch_Request_deserialize(self):
-        message = ChatRoomSearch.Request(
+    def test_RoomSearch_Request_deserialize(self):
+        message = RoomSearch.Request(
             room='room0',
             ticket=1234,
             query="Query"
         )
         data = bytes.fromhex('1a0000007800000005000000726f6f6d30d2040000050000005175657279')
-        assert ChatRoomSearch.Request.deserialize(data) == message
+        assert RoomSearch.Request.deserialize(data) == message
 
 
 class TestSendUploadSpeed:

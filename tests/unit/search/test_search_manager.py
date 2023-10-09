@@ -3,7 +3,7 @@ from aioslsk.protocol.primitives import FileData
 from aioslsk.protocol.messages import (
     UserSearch,
     FileSearch,
-    ChatRoomSearch,
+    RoomSearch,
     PeerSearchReply,
 )
 from aioslsk.state import State
@@ -94,7 +94,7 @@ class TestSearchManager:
         assert request.ticket in manager.search_requests
 
         manager._network.send_server_messages.assert_awaited_once_with(
-            ChatRoomSearch.Request('room0', request.ticket, 'query')
+            RoomSearch.Request('room0', request.ticket, 'query')
         )
 
     @pytest.mark.asyncio

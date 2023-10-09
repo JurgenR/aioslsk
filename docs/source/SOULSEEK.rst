@@ -559,7 +559,7 @@ Exception cases
 
   * Server message: Could not create room. Reason: Room name <room_name> contains leading or trailing spaces.
 
-* Joing/creating: Non-ascii characters in room name
+* Joining/creating: Non-ascii characters in room name
 
   * Server message: Could not create room. Reason: Room name <room_name> contains invalid characters.
 

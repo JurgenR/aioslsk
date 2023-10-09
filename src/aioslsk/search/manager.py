@@ -22,7 +22,7 @@ from ..events import (
     SearchResultEvent,
 )
 from ..protocol.messages import (
-    ChatRoomSearch,
+    RoomSearch,
     DistributedSearchRequest,
     DistributedServerSearchRequest,
     FileSearch,
@@ -93,7 +93,7 @@ class SearchManager:
         ticket = next(self._ticket_generator)
 
         await self._network.send_server_messages(
-            ChatRoomSearch.Request(room, ticket, query)
+            RoomSearch.Request(room, ticket, query)
         )
         self.search_requests[ticket] = SearchRequest(
             ticket=ticket,

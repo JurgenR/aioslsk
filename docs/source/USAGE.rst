@@ -121,6 +121,30 @@ Retrieving the transfers:
     uploads: List[Transfer] = client.get_uploads()
 
 
+Setting Limits
+--------------
+
+There are 3 limits currently in place:
+
+- `sharing.limits.upload_slots` : Maximum amount of uploads at a time
+- `sharing.limits.upload_speed_kbps` : Maximum upload speed
+- `sharing.limits.download_speed_kbps` : Maximum download speed
+
+The initial limits will be read from the settings. When lowering for example `sharing.limits.upload_slots` the limit will be applied as soon as it changes in the settings and the amount of current uploads drops to the new limit (uploads in progress will be completed). For the speed limits a method needs to be called before they can are applied:
+
+.. code-block:: python
+
+    client: SoulSeekClient = SoulSeekClient(settings)
+
+    # Modify to upload limit to 100 kbps
+    client.network.set_upload_speed_limit(100)
+
+    # Alternatively reload both speed limits after they have changed on the settings
+    client.settings.set('sharing.limits.upload_speed_kbps', 100)
+    client.settings.set('sharing.limits.download_speed_kbps', 1000)
+    client.network.load_speed_limits()
+
+
 Rooms
 =====
 
@@ -177,18 +201,27 @@ To receive private message listen for the ``PrivateMessageEvent``:
 
     client.register(PrivateMessageEvent, private_message_listener)
 
+
 Sharing
 =======
 
+Adding / Removing Directories
+-----------------------------
+
 The client provides a mechanism for scanning and caching the files you want to share. Since it's possible to share millions of files the file information is stored in memory as well as in a cache on disk. When starting the client through `client.start()` the cache will be read and the files configured in the settings will be scanned.
+
+The
 
 It is possible to add or remove shared directories on the fly.
 
 .. code-block:: python
 
     client.shares_manager.add_shared_directory()
-
     client.shares_manager.remove_shared_directory()
+
+
+File naming
+-----------
 
 The `SharesManager` is also responsible for figuring out where downloads should be stored to and what to do with duplicate file names. By default the original filename will be used for the local file, when a file already exists a number will be added to name, for example: `my song.mp3` to `my song (1).mp3`. It is possible to implement your own naming strategies.
 
@@ -211,5 +244,38 @@ Example a strategy that places files in a directory containing the current date:
     client.shares_manager.naming_strategies = [
         DefaultNamingStrategy(),
         DatetimeDirectoryStrategy(),
-
     ]
+
+
+Protocol Messages
+=================
+
+It is possible to send messages directly to the server or a peer instead of using the shorthand methods. For this the `network` parameter of the client can be used, example for sending the `GetUserStatus` message to the server:
+
+.. code-block:: python
+
+    from aioslsk.protocol.messages import GetUserStatus
+
+    client: SoulSeekClient = SoulSeekClient(settings)
+
+    # Example, request user status for 2 users
+    await client.network.send_server_messages(
+        GetUserStatus.Request("user one"),
+        GetUserStatus.Request("user two")
+    )
+
+For peers it works the same way, except you need to provide the username as the first parameter and then the messages you want to send:
+
+.. code-block:: python
+
+    from aioslsk.protocol.messages import PeerUserInfoRequest
+
+    client: SoulSeekClient = SoulSeekClient(settings)
+
+    # Example, request peer user info for user "some user"
+    await client.network.send_peer_messages(
+        "some user",
+        PeerUserInfoRequest.Request()
+    )
+
+Keep in mind that sending a messages to peers is more unreliable than sending to the server. The `send_peer_messages` method will raise an exception if a connection to the peer failed. Both `send_peer_messages` and `send_server_messages` have an parameter called `raise_on_error`, when set to `True` an exception will be raised otherwise the methods will return a list containing tuples containing the message and the result of the message attempted to send, `None` in case of success and an `Exception` object in case of failure.

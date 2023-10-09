@@ -688,7 +688,7 @@ class TransferManager:
 
         # Send transfer speed
         self._network.queue_server_messages(
-            SendUploadSpeed.Request(int(self.get_average_upload_speed()))
+            SendUploadSpeed.Request(int(transfer.get_speed()))
         )
 
     async def _upload_file(self, transfer: Transfer, connection: PeerConnection):
