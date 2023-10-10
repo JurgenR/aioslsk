@@ -32,7 +32,7 @@ import hashlib
 import logging
 import socket
 import struct
-from typing import List
+from typing import Any, ClassVar, Dict, List, Tuple, Union
 import zlib
 
 logger = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ class uint8(int):
         return struct.pack('<B', self)
 
     @classmethod
-    def deserialize(cls, pos: int, data: bytes):
+    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, int]:
         return parse_basic(pos, data, '<B')
 
 
@@ -67,7 +67,7 @@ class uint16(int):
         return struct.pack('<H', self)
 
     @classmethod
-    def deserialize(cls, pos: int, data: bytes):
+    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, int]:
         return parse_basic(pos, data, '<H')
 
 
@@ -77,7 +77,7 @@ class uint32(int):
         return struct.pack('<I', self)
 
     @classmethod
-    def deserialize(cls, pos: int, data: bytes):
+    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, int]:
         return parse_basic(pos, data, '<I')
 
 
@@ -87,20 +87,20 @@ class uint64(int):
         return struct.pack('<Q', self)
 
     @classmethod
-    def deserialize(cls, pos: int, data: bytes):
+    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, int]:
         return parse_basic(pos, data, '<Q')
 
 
 class string(str):
 
-    def serialize(self, encoding='utf-8'):
+    def serialize(self, encoding: str = 'utf-8'):
         byte_string = self.encode(encoding)
 
         length = len(byte_string)
         return uint32(length).serialize() + byte_string
 
     @classmethod
-    def deserialize(cls, pos: int, data: bytes) -> str:
+    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, str]:
         pos_after_len, length = uint32.deserialize(pos, data)
         data_type = '<{}s'.format(length)
         value = struct.unpack(
@@ -115,7 +115,7 @@ class ipaddr(str):
         return struct.pack('<4s', bytes(reversed(ip_b)))
 
     @classmethod
-    def deserialize(cls, pos: int, data) -> str:
+    def deserialize(cls, pos: int, data) -> Tuple[int, str]:
         data_type = '<4s'
         value = struct.unpack(data_type, data[pos:pos + 4])[0]
         ip_addr = socket.inet_ntoa(bytes(reversed(value)))
@@ -128,7 +128,7 @@ class boolean(int):
         return struct.pack('<?', self)
 
     @classmethod
-    def deserialize(cls, pos: int, data: bytes):
+    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, bool]:
         return parse_basic(pos, data, '<?')
 
 
@@ -141,7 +141,7 @@ class array(list):
         return body
 
     @classmethod
-    def deserialize(cls, pos: int, data: bytes, element_type):
+    def deserialize(cls, pos: int, data: bytes, element_type) -> Tuple[int, List[Any]]:
         items = []
         pos_after_array_len, array_len = uint32.deserialize(pos, data)
         current_item_pos = pos_after_array_len
@@ -166,7 +166,7 @@ class ProtocolDataclass:
         has_privileges: bool = field(metadata={'type': boolean})
     """
 
-    def serialize(self):
+    def serialize(self) -> bytes:
         message = bytes()
         obj_fields = fields(self)
         for obj_field in obj_fields:
@@ -200,7 +200,7 @@ class ProtocolDataclass:
     @classmethod
     def deserialize(cls, pos: int, message: bytes):
         obj_fields = fields(cls)
-        field_map = {}
+        field_map: Dict[str, Any] = {}
         for obj_field in obj_fields:
             if not cls._field_needs_deserialization(obj_field, field_map, pos, message):
                 continue
@@ -225,7 +225,7 @@ class ProtocolDataclass:
         return pos, cls(**field_map)
 
     @classmethod
-    def _field_needs_deserialization(cls, field, field_map, pos: int, message: bytes):
+    def _field_needs_deserialization(cls, field, field_map: Dict[str, Any], pos: int, message: bytes):
         # For if_true and if_false we need to return only if the condition is
         # is false as we still want to check the 'optional' field
         if 'if_true' in field.metadata:
@@ -267,6 +267,7 @@ class MessageDataclass(ProtocolDataclass):
     * Prepending the message with length and MESSAGE_ID
     * Optionally the message data will (de)compressed
     """
+    MESSAGE_ID: ClassVar[Union[uint8, uint32]] = uint32(0x00)
 
     def serialize(self, compress: bool = False) -> bytes:
         """Serializes the current `MessageDataClass` object and prepends the
@@ -376,9 +377,9 @@ class DirectoryData(ProtocolDataclass):
     files: List[FileData] = field(metadata={'type': array, 'subtype': FileData})
 
 
-def has_unparsed_bytes(pos, message):
+def has_unparsed_bytes(pos: int, message: bytes) -> bool:
     return len(message[pos:]) > 0
 
 
-def calc_md5(value: bytes):
+def calc_md5(value: str) -> str:
     return hashlib.md5(value.encode('utf-8')).hexdigest()

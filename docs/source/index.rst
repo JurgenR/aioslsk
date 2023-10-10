@@ -11,8 +11,10 @@ Welcome to aioslsk's documentation!
    :caption: Contents:
 
    ./USAGE
+   ./SETTINGS
    ./MESSAGES
    ./SOULSEEK
+   ./API
 
 
 Indices and tables

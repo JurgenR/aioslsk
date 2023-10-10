@@ -8,7 +8,7 @@ import os
 import re
 import sys
 import time
-from typing import Dict, List, Set, Tuple, Union
+from typing import Optional, Dict, List, Set, Tuple, Union
 import uuid
 from weakref import WeakSet
 
@@ -47,7 +47,7 @@ _QUERY_CLEAN_PATTERN = re.compile(r"[\W_]")
 """Pattern to remove all non-word/digit characters from a string"""
 
 
-def scan_directory(shared_directory: SharedDirectory, children: List[SharedDirectory] = None) -> Set[SharedItem]:
+def scan_directory(shared_directory: SharedDirectory, children: Optional[List[SharedDirectory]] = None) -> Set[SharedItem]:
     """Scans the directory for items to share
 
     :param shared_directory: `SharedDirectory` instance
@@ -124,7 +124,7 @@ def extract_attributes(filepath: str) -> List[Tuple[int, int]]:
 class SharesManager:
     _ALIAS_LENGTH = 5
 
-    def __init__(self, settings: Settings, internal_event_bus: InternalEventBus, cache: SharesCache = None):
+    def __init__(self, settings: Settings, internal_event_bus: InternalEventBus, cache: Optional[SharesCache] = None):
         self._settings: Settings = settings
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._term_map: Dict[str, Set[SharedItem]] = {}
@@ -222,7 +222,7 @@ class SharesManager:
             self._add_item_to_term_map(item)
         logger.debug(f"term map contains {len(self._term_map)} terms")
 
-    async def get_shared_item(self, remote_path: str, username: str = None) -> SharedItem:
+    async def get_shared_item(self, remote_path: str, username: Optional[str] = None) -> SharedItem:
         """Gets a shared item from the cache based on the given file path. If
         the file does not exist in the `shared_items` or the file is present
         in the cache but does not exist on disk a `FileNotFoundError` is raised
@@ -257,7 +257,7 @@ class SharesManager:
 
     def add_shared_directory(
             self, shared_directory: str,
-            share_mode: DirectoryShareMode = DirectoryShareMode.EVERYONE, users: List[str] = None) -> SharedDirectory:
+            share_mode: DirectoryShareMode = DirectoryShareMode.EVERYONE, users: Optional[List[str]] = None) -> SharedDirectory:
         """Adds a shared directory. This method will call `generate_alias` and
         add the directory to the directory map.
 
@@ -425,7 +425,7 @@ class SharesManager:
     async def get_filesize(self, shared_item: SharedItem) -> int:
         return await asyncos.path.getsize(shared_item.get_absolute_path())
 
-    def query(self, query: Union[str, SearchQuery], username: str = None) -> Tuple[List[SharedItem], Tuple[List[SharedItem]]]:
+    def query(self, query: Union[str, SearchQuery], username: Optional[str] = None) -> Tuple[List[SharedItem], List[SharedItem]]:
         """Performs a query on the `shared_directories` returning the matching
         items. If `username` is passed this method will return a list of
         visible results and list of locked results. If `None` the second list
@@ -574,9 +574,9 @@ class SharesManager:
             is used to determine the locked results
         :return: tuple with two lists: public directories and locked directories
         """
-        def list_unique_directories(directories: List[SharedDirectory]) -> Dict[str, SharedItem]:
+        def list_unique_directories(directories: List[SharedDirectory]) -> Dict[str, List[SharedItem]]:
             # Sort files under unique directories by path
-            response_dirs: Dict[str, SharedItem] = {}
+            response_dirs: Dict[str, List[SharedItem]] = {}
             for directory in directories:
                 for item in directory.items:
                     directory = item.get_remote_directory_path()
@@ -586,7 +586,7 @@ class SharesManager:
                         response_dirs[directory] = [item, ]
             return response_dirs
 
-        def convert_to_directory_shares(directory_map: Dict[str, SharedItem]) -> List[DirectoryData]:
+        def convert_to_directory_shares(directory_map: Dict[str, List[SharedItem]]) -> List[DirectoryData]:
             public_shares = []
             for directory, files in directory_map.items():
                 public_shares.append(

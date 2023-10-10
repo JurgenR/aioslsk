@@ -3,7 +3,7 @@ import asyncio
 import enum
 from functools import partial
 import logging
-from typing import Any, Dict, List, Optional, Union, Tuple
+from typing import Any, Dict, List, Optional, Union, Tuple, TypeVar, Type
 
 from ..constants import (
     DEFAULT_LISTENING_HOST,
@@ -52,6 +52,9 @@ from ..utils import task_counter, ticket_generator
 logger = logging.getLogger(__name__)
 
 
+T = TypeVar('T', bound='MessageDataclass')
+
+
 class ListeningConnectionErrorMode(enum.Enum):
     """Error mode for listening connections. During initialization of the
     network the `connect_listening_connections` method will raise an error
@@ -71,15 +74,16 @@ class ExpectedResponse(asyncio.Future):
     """Future for an expected response message"""
 
     def __init__(
-            self, connection_class, message_class,
-            peer: str = None, fields: Dict[str, Any] = None, loop=None):
+            self, connection_class: Type[Union[PeerConnection, ServerConnection]], message_class: Type[MessageDataclass],
+            peer: Optional[str] = None, fields: Optional[Dict[str, Any]] = None,
+            loop: Optional[asyncio.AbstractEventLoop] = None):
         super().__init__(loop=loop)
-        self.connection_class = connection_class
-        self.message_class = message_class
-        self.peer: str = peer
+        self.connection_class: Type[Union[PeerConnection, ServerConnection]] = connection_class
+        self.message_class: Type[MessageDataclass] = message_class
+        self.peer: Optional[str] = peer
         self.fields: Dict[str, Any] = {} if fields is None else fields
 
-    def matches(self, connection: Union[PeerConnection, ServerConnection], response):
+    def matches(self, connection: Union[PeerConnection, ServerConnection], response: MessageDataclass) -> bool:
         if connection.__class__ != self.connection_class:
             return False
 
@@ -194,7 +198,7 @@ class Network:
                 await self.disconnect_listening_connections()
                 raise ListeningConnectionFailedError("failed to connect non-obfuscated listening port")
 
-    async def disconnect_listening_connections(self) -> asyncio.Future:
+    async def disconnect_listening_connections(self):
         await asyncio.gather(
             *[
                 listening_connection.disconnect(CloseReason.REQUESTED)
@@ -287,7 +291,7 @@ class Network:
             return obfuscated_port, True
 
     async def create_peer_connection(
-            self, username: str, typ: str, ip: str = None, port: int = None,
+            self, username: str, typ: str, ip: Optional[str] = None, port: Optional[int] = None,
             obfuscate: bool = False,
             initial_state: PeerConnectionState = PeerConnectionState.ESTABLISHED) -> PeerConnection:
         """Creates a new peer connection to the given `username` and connection
@@ -373,7 +377,7 @@ class Network:
 
         return response.ip, response.port, response.obfuscated_port
 
-    async def get_peer_connection(self, username: str, typ: PeerConnectionType = PeerConnectionType.PEER) -> PeerConnection:
+    async def get_peer_connection(self, username: str, typ: str = PeerConnectionType.PEER) -> PeerConnection:
         """Gets a peer connection for the given `username`. It will first try to
         re-use an existing connection, otherwise it will create a new connection
 
@@ -396,7 +400,7 @@ class Network:
         self._expected_connection_futures.pop(ticket)
 
     def create_server_message_future(
-            self, message_class, fields: Dict[str, Any] = None) -> ExpectedResponse:
+            self, message_class: Type[T], fields: Optional[Dict[str, Any]] = None) -> ExpectedResponse:
         """Creates a future for a server message to arrive, the message must
         match the `message_class` and fields defined in the keyword arguments.
 
@@ -416,8 +420,28 @@ class Network:
         future.add_done_callback(self._remove_response_future)
         return future
 
+    async def wait_for_server_message(
+            self, message_class: Type[T], fields: Optional[Dict[str, Any]] = None, timeout: float = 10) -> T:
+        """Waits for a message from the server
+
+        :param message_class: Class of the expected server message
+        :param fields: Optional matchers for the message fields
+        :return: The `MessageData` object corresponding to the response
+        """
+        future = self.create_server_message_future(
+            message_class=message_class,
+            fields=fields
+        )
+        try:
+            _, response = asyncio.wait_for(future, timeout=timeout)
+        except TimeoutError as exc:
+            future.set_exception(exc)
+            raise
+
+        return response
+
     def create_peer_message_future(
-            self, peer: str, message_class, fields: Dict[str, Any] = None) -> ExpectedResponse:
+            self, peer: str, message_class: Type[T], fields: Optional[Dict[str, Any]] = None) -> ExpectedResponse:
         """Creates a future for a peer message to arrive, the message must match
         the `message_class` and fields defined in the keyword arguments and
         must be coming from a connection by `peer`.
@@ -438,6 +462,21 @@ class Network:
         self._expected_response_futures.append(future)
         future.add_done_callback(self._remove_response_future)
         return future
+
+    async def wait_for_peer_message(
+            self, peer: str, message_class: Type[T], fields: Optional[Dict[str, Any]] = None, timeout: float = 60) -> T:
+        future = self.create_peer_message_future(
+            peer=peer,
+            message_class=message_class,
+            fields=fields
+        )
+        try:
+            _, response = asyncio.wait_for(future, timeout=timeout)
+        except TimeoutError as exc:
+            future.set_exception(exc)
+            raise
+
+        return response
 
     def get_peer_connections(self, username: str, typ: PeerConnectionType) -> List[PeerConnection]:
         """Returns all connections for peer with given username and peer
@@ -555,7 +594,6 @@ class Network:
         completed_future = done.pop()
 
         if completed_future == cannot_connect_future:
-            logger.debug(f"received cannot connect (ticket={ticket})")
             raise PeerConnectionError(
                 f"indirect connection failed ({username=}, {ticket=})")
 
@@ -609,7 +647,7 @@ class Network:
             PeerInitializedEvent(peer_connection, requested=False))
 
     async def send_peer_messages(
-            self, username: str, *messages: List[Union[bytes, MessageDataclass]],
+            self, username: str, *messages: Union[bytes, MessageDataclass],
             raise_on_error: bool = True):
         """Sends a list of messages to the peer with given `username`. This uses
         `get_peer_connection` and will attempt to re-use a connection or create
@@ -633,7 +671,7 @@ class Network:
         if not raise_on_error:
             return list(zip(messages, results))
 
-    def queue_server_messages(self, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
+    def queue_server_messages(self, *messages: Union[bytes, MessageDataclass]) -> List[asyncio.Task]:
         """Queues server messages
 
         :param messages: list of messages to queue
@@ -641,7 +679,7 @@ class Network:
         return self.server_connection.queue_messages(*messages)
 
     async def send_server_messages(
-            self, *messages: List[Union[bytes, MessageDataclass]],
+            self, *messages: Union[bytes, MessageDataclass],
             raise_on_error: bool = True):
         """Sends a list of messages to the server
 
@@ -664,7 +702,7 @@ class Network:
     # Methods called by connections
 
     # Connection state changes
-    async def on_state_changed(self, state: ConnectionState, connection: Connection, close_reason: CloseReason = None):
+    async def on_state_changed(self, state: ConnectionState, connection: Connection, close_reason: Optional[CloseReason] = None):
         """Called when the state of a connection changes. This method calls 3
         private method based on the type of L{connection} that was passed
 
@@ -683,7 +721,7 @@ class Network:
             ConnectionStateChangedEvent(connection, state, close_reason)
         )
 
-    async def _on_server_connection_state_changed(self, state: ConnectionState, connection: ServerConnection, close_reason: CloseReason = None):
+    async def _on_server_connection_state_changed(self, state: ConnectionState, connection: ServerConnection, close_reason: Optional[CloseReason] = None):
         if state == ConnectionState.CONNECTED:
             # For registering with UPNP we need to know our own IP first, we can
             # get this from the server connection but we first need to be
@@ -695,7 +733,7 @@ class Network:
                 )
                 self._upnp_task.add_done_callback(self._map_upnp_ports_callback)
 
-    async def _on_peer_connection_state_changed(self, state: ConnectionState, connection: PeerConnection, close_reason: CloseReason = None):
+    async def _on_peer_connection_state_changed(self, state: ConnectionState, connection: PeerConnection, close_reason: Optional[CloseReason] = None):
         if state == ConnectionState.CLOSED:
             self.remove_peer_connection(connection)
 

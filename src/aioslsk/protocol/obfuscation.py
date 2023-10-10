@@ -1,4 +1,5 @@
 import secrets
+from typing import Optional
 
 
 KEY_SIZE = 4
@@ -61,7 +62,7 @@ def decode(data: bytes) -> bytes:
     return bytes(dec_message)
 
 
-def encode(data: bytes, key: bytes = None) -> bytes:
+def encode(data: bytes, key: Optional[bytes] = None) -> bytes:
     """Obfuscate the given L{data} with the provided L{key}, if no key is given
     it will be automatically generated
     """

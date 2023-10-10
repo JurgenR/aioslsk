@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 import logging
-from typing import List, Union
+from typing import List, Optional, Union
 
 from .distributed import DistributedNetwork
 from .events import EventBus, InternalEventBus
@@ -32,13 +32,13 @@ class SoulSeekClient:
 
     def __init__(
             self, settings: Settings,
-            shares_cache: SharesCache = None, transfer_cache: TransferCache = None,
-            event_bus: EventBus = None):
+            shares_cache: Optional[SharesCache] = None, transfer_cache: Optional[TransferCache] = None,
+            event_bus: Optional[EventBus] = None):
         super().__init__()
         self.settings: Settings = settings
 
         self._ticket_generator = ticket_generator()
-        self._stop_event: asyncio.Event = None
+        self._stop_event: Optional[asyncio.Event] = None
 
         self.events: EventBus = event_bus or EventBus()
         self._internal_events: InternalEventBus = InternalEventBus()
@@ -146,6 +146,7 @@ class SoulSeekClient:
 
     async def __aenter__(self) -> SoulSeekClient:
         await self.start()
+        return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.stop()
@@ -198,7 +199,7 @@ class SoulSeekClient:
         """
         await self.server_manager.get_item_recommendations(item)
 
-    async def get_similar_users(self, item: str = None):
+    async def get_similar_users(self, item: Optional[str] = None):
         """Get a list of similar users to you or optionally an item"""
         await self.server_manager.get_similar_users(item=item)
 
@@ -460,7 +461,7 @@ class SoulSeekClient:
         username = user.name if isinstance(user, User) else user
         await self.peer_manager.get_user_shares(username)
 
-    async def get_user_directory(self, user: Union[str, User], directory: List[str]):
+    async def get_user_directory(self, user: Union[str, User], directory: str):
         username = user.name if isinstance(user, User) else user
         await self.peer_manager.get_user_directory(username, directory)
 

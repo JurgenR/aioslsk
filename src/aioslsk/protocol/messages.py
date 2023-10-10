@@ -1262,9 +1262,9 @@ class DistributedSearchRequest(DistributedMessage):
         MESSAGE_ID: ClassVar[uint8] = uint8(0x03)
         # Should always be 0x31
         unknown: int = field(metadata={'type': uint32})
-        username: int = field(metadata={'type': string})
+        username: str = field(metadata={'type': string})
         ticket: int = field(metadata={'type': uint32})
-        query: int = field(metadata={'type': string})
+        query: str = field(metadata={'type': string})
 
 
 class DistributedBranchLevel(DistributedMessage):

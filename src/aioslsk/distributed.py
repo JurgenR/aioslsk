@@ -126,7 +126,7 @@ class DistributedNetwork:
 
         return username, 0
 
-    def get_distributed_peer(self, username: str, connection: PeerConnection) -> Optional[DistributedPeer]:
+    def get_distributed_peer(self, username: str, connection: PeerConnection) -> DistributedPeer:
         for peer in self.distributed_peers:
             if peer.username == username and peer.connection == connection:
                 return peer

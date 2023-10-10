@@ -78,7 +78,7 @@ class TransferManager:
             self, state: State, settings: Settings,
             event_bus: EventBus, internal_event_bus: InternalEventBus,
             shares_manager: SharesManager, network: Network,
-            cache: TransferCache = None):
+            cache: Optional[TransferCache] = None):
         self._state = state
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
@@ -125,7 +125,7 @@ class TransferManager:
                     state = TransferState.COMPLETE
                 else:
                     state = TransferState.INCOMPLETE
-                transfer.state = TransferState.init_from_state(state)
+                transfer.state = TransferState.init_from_state(state, transfer)
                 transfer.reset_times()
 
             await self._add_transfer(transfer)
@@ -565,7 +565,7 @@ class TransferManager:
             return
 
         # Already create a future for the incoming connection
-        file_connection_future = asyncio.Future()
+        file_connection_future: asyncio.Future = asyncio.Future()
         self._file_connection_futures[request.ticket] = file_connection_future
 
         try:
@@ -868,10 +868,10 @@ class TransferManager:
                 self._file_connection_futures[ticket].set_result(connection)
             except KeyError:
                 logger.warning(f"did not find a task waiting for file connection with ticket : {ticket}")
-                connection.disconnect(CloseReason.REQUESTED)
+                await connection.disconnect(CloseReason.REQUESTED)
             except asyncio.InvalidStateError:
                 logger.warning(f"file connection for ticket {ticket} was already fulfilled")
-                connection.disconnect(CloseReason.REQUESTED)
+                await connection.disconnect(CloseReason.REQUESTED)
 
     @on_message(PeerTransferRequest.Request)
     async def _on_peer_transfer_request(self, message: PeerTransferRequest.Request, connection: PeerConnection):

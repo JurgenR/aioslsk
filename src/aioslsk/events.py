@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 # Internal functions
 
-def on_message(message_class):
+def on_message(message_class: Type[MessageDataclass]):
     """Decorator for methods listening to specific L{Message} events"""
     def register(event_func):
         event_func._registered_message = message_class
@@ -38,9 +38,9 @@ def on_message(message_class):
     return register
 
 
-def build_message_map(obj) -> Dict[Type[MessageDataclass], Callable]:
+def build_message_map(obj: object) -> Dict[Type[MessageDataclass], Callable]:
     methods = inspect.getmembers(obj, predicate=inspect.ismethod)
-    mapping = {}
+    mapping: Dict[Type[MessageDataclass], Callable] = {}
     for _, method in methods:
         registered_message = getattr(method, '_registered_message', None)
         if registered_message:

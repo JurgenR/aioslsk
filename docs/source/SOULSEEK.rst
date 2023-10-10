@@ -43,7 +43,7 @@ We also send messages to advertise we have no parent:
 * :ref:`AcceptChildren` : Accept child connections
 
 
-After connection is complete, send a :ref:`Ping` command out every 5 minutes.
+After connection is complete, send a :ref:`Ping` command to the server every 5 minutes.
 
 Exception Cases
 ---------------
@@ -52,7 +52,7 @@ Exception Cases
 * No check on password length seems currently performed (empty password allowed)
 * Logon with an empty username results in failure reason ``INVALIDUSERNAME``
 * If the user was previously logged in with and the password does not match results in failure reason ``INVALIDPASS``
-* If the credentials are valid but the user is logged in the other user will receive message :ref:`Kicked` and the connection will be terminated
+* If the credentials are valid but the user is logged in elsewhere the other user will receive message :ref:`Kicked` and the connection will be terminated
 
 
 .. _peer-connections:

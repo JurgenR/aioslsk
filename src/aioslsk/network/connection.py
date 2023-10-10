@@ -354,7 +354,7 @@ class DataConnection(Connection):
         except Exception:
             logger.exception(f"error during callback : {message!r}")
 
-    async def _read(self, reader_func, timeout: float = None) -> Optional[bytes]:
+    async def _read(self, reader_func, timeout: Optional[float] = None) -> Optional[bytes]:
         """Read data from the connection using the passed `reader_func`. When an
         error occurs during reading the connection will be CLOSED
 
@@ -393,7 +393,7 @@ class DataConnection(Connection):
         task.add_done_callback(self._queued_messages.remove)
         return task
 
-    def queue_messages(self, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
+    def queue_messages(self, *messages: Union[bytes, MessageDataclass]) -> List[asyncio.Task]:
         return [
             self.queue_message(message)
             for message in messages
@@ -413,7 +413,7 @@ class DataConnection(Connection):
         :raise ConnectionWriteError: error or timeout occured during writing
         """
         if self._is_closing():
-            logger.warning(f"{self.hostname}:{self.port} : not sending message, connection is closing : {message}")
+            logger.warning(f"{self.hostname}:{self.port} : not sending message, connection is closing : {message!r}")
             return
 
         logger.debug(f"{self.hostname}:{self.port} : send message : {message!r}")
@@ -464,7 +464,7 @@ class PeerConnection(DataConnection):
 
     def __init__(
             self, hostname: str, port: int, network: Network, obfuscated: bool = False,
-            username: str = None, connection_type: str = PeerConnectionType.PEER,
+            username: Optional[str] = None, connection_type: str = PeerConnectionType.PEER,
             incoming: bool = False):
         super().__init__(hostname, port, network, obfuscated=obfuscated)
         self.incoming: bool = incoming
@@ -526,7 +526,7 @@ class PeerConnection(DataConnection):
         _, offset = uint64.deserialize(0, data)
         return offset
 
-    async def receive_data(self, n_bytes: int, timeout: int = TRANSFER_TIMEOUT) -> Optional[bytes]:
+    async def receive_data(self, n_bytes: int, timeout: float = TRANSFER_TIMEOUT) -> Optional[bytes]:
         """Receives given amount of bytes on the connection.
 
         In case of error the socket will be disconnected. If no data is received
@@ -557,7 +557,7 @@ class PeerConnection(DataConnection):
             else:
                 return data
 
-    async def receive_file(self, file_handle: BinaryIO, filesize: int, callback: Callable[[bytes], None] = None):
+    async def receive_file(self, file_handle: BinaryIO, filesize: int, callback: Optional[Callable[[bytes], None]] = None):
         """Receives a file on the current connection and writes it to the given
         `file_handle`
 
@@ -598,7 +598,7 @@ class PeerConnection(DataConnection):
             await self.disconnect(CloseReason.WRITE_ERROR)
             raise ConnectionWriteError(f"{self.hostname}:{self.port} : write error") from exc
 
-    async def send_file(self, file_handle: BinaryIO, callback: Callable[[bytes], None] = None):
+    async def send_file(self, file_handle: BinaryIO, callback: Optional[Callable[[bytes], None]] = None):
         """Sends a file over the connection. This method makes use of the
         `upload_rate_limiter` to limit how many bytes are being sent at a time.
 

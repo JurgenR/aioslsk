@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import time
-from typing import Union
+from typing import Optional, Union
 
 from .network.connection import CloseReason, ConnectionState, ServerConnection
 from .constants import (
@@ -93,7 +93,6 @@ from .protocol.messages import (
     SetListenPort,
     SetStatus,
     SharedFoldersFiles,
-    WishlistInterval,
 )
 from .model import ChatMessage, RoomMessage, User, UserStatus, TrackingFlag
 from .network.network import Network
@@ -124,9 +123,9 @@ class ServerManager:
 
         self._ticket_generator = ticket_generator()
 
-        self._ping_task: asyncio.Task = None
-        self._post_login_task: asyncio.Task = None
-        self._connection_watchdog_task: asyncio.Task = None
+        self._ping_task: Optional[asyncio.Task] = None
+        self._post_login_task: Optional[asyncio.Task] = None
+        self._connection_watchdog_task: Optional[asyncio.Task] = None
 
         self.MESSAGE_MAP = build_message_map(self)
 
@@ -321,9 +320,9 @@ class ServerManager:
             GetGlobalRecommendations.Request()
         )
 
-    async def get_item_recommendations(self, recommendation: str):  # pragma: no cover
+    async def get_item_recommendations(self, item: str):  # pragma: no cover
         await self._network.send_server_messages(
-            GetItemRecommendations.Request(recommendation=recommendation)
+            GetItemRecommendations.Request(item=item)
         )
 
     async def get_user_interests(self, username: str):  # pragma: no cover
@@ -351,7 +350,7 @@ class ServerManager:
             RemoveInterest.Request(interest)
         )
 
-    async def get_similar_users(self, item: str = None):
+    async def get_similar_users(self, item: Optional[str] = None):
         """Get similar users for an item or globally"""
         if item:
             message = GetItemSimilarUsers.Request(item)
@@ -640,10 +639,6 @@ class ServerManager:
     async def _on_add_privileged_user(self, message: AddPrivilegedUser.Response, connection):
         user = self._state.get_or_create_user(message.username)
         user.privileged = True
-
-    @on_message(WishlistInterval.Response)
-    async def _on_wish_list_interval(self, message: WishlistInterval.Response, connection):
-        self._state.wishlist_interval = message.interval
 
     @on_message(AddUser.Response)
     async def _on_add_user(self, message: AddUser.Response, connection):

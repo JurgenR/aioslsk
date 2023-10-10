@@ -83,4 +83,4 @@ class SearchRequest:
     room: str = None
     username: str = None
     results: List[SearchResult] = field(default_factory=list)
-    started: float = field(default_factory=datetime.datetime.now)
+    started: datetime.datetime = field(default_factory=datetime.datetime.now)

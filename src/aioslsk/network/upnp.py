@@ -24,7 +24,7 @@ class UPNP:
         self._factory: UpnpFactory = UpnpFactory(AiohttpRequester())
 
     async def search_igd_devices(self, source_ip: str) -> List[IgdDevice]:
-        devices = []
+        devices: List[IgdDevice] = []
         logger.info("starting search for IGD devices")
         await async_search(
             partial(self._search_callback, devices),

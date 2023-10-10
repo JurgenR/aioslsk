@@ -1,6 +1,6 @@
 """Implementation of the state design pattern for transfers"""
 from enum import Enum
-from typing import Protocol, TYPE_CHECKING
+from typing import Optional, Protocol, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .model import Transfer
@@ -56,7 +56,7 @@ class TransferState:
 
         raise Exception(f"no state class for state : {state}")
 
-    async def fail(self, reason: str = None) -> bool:
+    async def fail(self, reason: Optional[str] = None) -> bool:
         return False
 
     async def abort(self) -> bool:
@@ -174,7 +174,7 @@ class DownloadingState(TransferState):
     """
     VALUE = TransferState.DOWNLOADING
 
-    async def fail(self, reason: str = None) -> bool:
+    async def fail(self, reason: Optional[str] = None) -> bool:
         self.transfer.fail_reason = reason
         self.transfer.set_complete_time()
         await self.transfer.transition(FailedState(self.transfer))
@@ -208,7 +208,7 @@ class UploadingState(TransferState):
     - Aborted: We have aborted the transfer
     """
 
-    async def fail(self, reason: str = None) -> bool:
+    async def fail(self, reason: Optional[str] = None) -> bool:
         self.transfer.fail_reason = reason
         self.transfer.set_complete_time()
         await self.transfer.transition(FailedState(self.transfer))
@@ -249,7 +249,7 @@ class IncompleteState(TransferState):
     """
     VALUE = TransferState.INCOMPLETE
 
-    async def fail(self, reason: str = None) -> bool:
+    async def fail(self, reason: Optional[str] = None) -> bool:
         self.transfer.fail_reason = reason
         await self.transfer.transition(FailedState(self.transfer))
         return True

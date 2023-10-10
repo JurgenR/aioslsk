@@ -1,11 +1,10 @@
-from aiofiles import os as asyncos
+from __future__ import annotations
 import asyncio
 from collections import deque
 from enum import Enum
 import logging
-import os
 import time
-from typing import List
+from typing import Deque, List, Tuple
 
 from .state import TransferState, TransferStateListener, VirginState
 
@@ -71,7 +70,7 @@ class Transfer:
         transfer entered the complete or incomplete state
         """
 
-        self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
+        self._speed_log: Deque[Tuple[float, int]] = deque(maxlen=SPEED_LOG_ENTRIES)
 
         self._remotely_queue_task: asyncio.Task = None
         self._transfer_task: asyncio.Task = None
