@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 from .cache import TransferNullCache, TransferCache
 from ..constants import TRANSFER_REPLY_TIMEOUT
 from ..exceptions import (
+    AioSlskException,
     ConnectionReadError,
     ConnectionWriteError,
     FileNotFoundError,
@@ -105,7 +106,7 @@ class TransferManager:
         self._internal_event_bus.register(
             PeerInitializedEvent, self._on_peer_initialized)
 
-    async def read_cache(self) -> List[Transfer]:
+    async def read_cache(self):
         """Reads the transfers from the caches and corrects the state of those
         transfers
         """
@@ -131,7 +132,7 @@ class TransferManager:
             await self._add_transfer(transfer)
 
     def write_cache(self):
-        """Write all current transfers back to the cache"""
+        """Write all current transfers to the cache"""
         self.cache.write(self._transfers)
 
     def stop(self) -> List[asyncio.Task]:
@@ -460,8 +461,9 @@ class TransferManager:
         return list(reversed([upload for _, upload in ranking]))
 
     async def _remove_download_path(self, transfer: Transfer):
-        if await asyncos.path.exists(transfer.local_path):
-            await asyncos.remove(transfer.local_path)
+        if transfer.local_path:
+            if await asyncos.path.exists(transfer.local_path):
+                await asyncos.remove(transfer.local_path)
 
     async def _prepare_download_path(self, transfer: Transfer):
         if transfer.local_path is None:
@@ -477,6 +479,10 @@ class TransferManager:
 
         :return: the calculated offset (in bytes)
         """
+        # Shouldn't occur but this is to keep the typing happy
+        if not transfer.local_path:
+            return 0
+
         try:
             return await asyncos.path.getsize(transfer.local_path)
         except (OSError, TypeError):
@@ -701,7 +707,11 @@ class TransferManager:
         connection.set_connection_state(PeerConnectionState.TRANSFERRING)
         await transfer.state.start_transferring()
         try:
-            async with aiofiles.open(transfer.local_path, 'rb') as handle:
+            if not transfer.local_path:
+                raise AioSlskException(
+                    f"attempted to upload a transfer that doesn't have a local path set : {transfer!r}")
+
+            async with aiofiles.open(transfer.local_path, mode='rb') as handle:
                 await handle.seek(transfer.get_offset())
                 await connection.send_file(
                     handle,
@@ -714,12 +724,13 @@ class TransferManager:
             await connection.disconnect(CloseReason.REQUESTED)
 
         except ConnectionWriteError:
-            logger.exception(f"error writing to socket : {transfer!r}")
+            logger.exception(f"error writing to socket for transfer : {transfer!r}")
             await transfer.state.fail()
             # Possible this needs to be put in a task or just queued, if the
             # peer went offline it's possible we are hogging the _current_task
             # for nothing (sending the peer message could time out)
             await self._network.send_peer_messages(
+                transfer.username,
                 PeerUploadFailed.Request(transfer.remote_path)
             )
 
@@ -727,6 +738,15 @@ class TransferManager:
             # Aborted or program shut down
             await connection.disconnect(CloseReason.REQUESTED)
             raise
+
+        except AioSlskException:
+            logger.exception(f"failed to upload transfer : {transfer!r}")
+            await transfer.state.fail(Reasons.FILE_NOT_SHARED)
+            await connection.disconnect(CloseReason.REQUESTED)
+            await self._network.send_peer_messages(
+                transfer.username,
+                PeerUploadFailed.Request(transfer.remote_path)
+            )
 
         else:
             await connection.receive_until_eof(raise_exception=False)
@@ -754,7 +774,7 @@ class TransferManager:
         await transfer.state.start_transferring()
 
         try:
-            async with aiofiles.open(transfer.local_path, 'ab') as handle:
+            async with aiofiles.open(transfer.local_path, mode='ab') as handle:
                 await connection.receive_file(
                     handle,
                     transfer.filesize - transfer._offset,
@@ -804,7 +824,10 @@ class TransferManager:
         will also check if the file actually does exist before putting it in the
         queue.
         """
-        logger.info(f"PeerTransferQueue : {message.filename}")
+        if not connection.username:
+            logger.warning(
+                "got PeerTransferRequest for a connection that wasn't properly initialized")
+            return
 
         transfer = await self.add(
             Transfer(
@@ -882,9 +905,16 @@ class TransferManager:
         We also handle situations here where the other peer sends this message
         without sending PeerTransferQueue first
         """
+        if not connection.username:
+            logger.warning(
+                "got PeerTransferRequest for a connection that wasn't properly initialized")
+            return
+
         try:
             transfer = self.get_transfer(
-                connection.username, message.filename, TransferDirection(message.direction)
+                connection.username,
+                message.filename,
+                TransferDirection(message.direction)
             )
         except LookupError:
             transfer = None
@@ -979,6 +1009,11 @@ class TransferManager:
 
     @on_message(PeerPlaceInQueueRequest.Request)
     async def _on_peer_place_in_queue_request(self, message: PeerPlaceInQueueRequest.Request, connection: PeerConnection):
+        if not connection.username:
+            logger.warning(
+                "got PeerPlaceInQueueRequest for a connection that wasn't properly initialized")
+            return
+
         filename = message.filename
         try:
             transfer = self.get_transfer(
@@ -996,6 +1031,11 @@ class TransferManager:
 
     @on_message(PeerPlaceInQueueReply.Request)
     async def _on_peer_place_in_queue_reply(self, message: PeerPlaceInQueueReply.Request, connection: PeerConnection):
+        if not connection.username:
+            logger.warning(
+                "got PeerPlaceInQueueReply for a connection that wasn't properly initialized")
+            return
+
         try:
             transfer = self.get_transfer(
                 connection.username,
@@ -1013,6 +1053,11 @@ class TransferManager:
         is actually a common message that happens when we close the connection
         before the upload is finished
         """
+        if not connection.username:
+            logger.warning(
+                "got PeerUploadFailed for a connection that wasn't properly initialized")
+            return
+
         try:
             transfer = self.get_transfer(
                 connection.username,
@@ -1026,6 +1071,11 @@ class TransferManager:
 
     @on_message(PeerTransferQueueFailed.Request)
     async def _on_peer_transfer_queue_failed(self, message: PeerTransferQueueFailed.Request, connection: PeerConnection):
+        if not connection.username:
+            logger.warning(
+                "got PeerTransferQueueFailed for a connection that wasn't properly initialized")
+            return
+
         filename = message.filename
         reason = message.reason
         try:

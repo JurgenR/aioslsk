@@ -129,7 +129,7 @@ class SharesManager:
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._term_map: Dict[str, Set[SharedItem]] = {}
         self._shared_directories: List[SharedDirectory] = list()
-        self.scan_task: asyncio.Task = None
+        self.scan_task: Optional[asyncio.Task] = None
 
         self.cache: SharesCache = cache if cache else SharesNullCache()
         self.executor = None
@@ -161,7 +161,7 @@ class SharesManager:
         path_bytes = path.encode('utf8')
         unique_id = uuid.getnode().to_bytes(6, sys.byteorder)
 
-        alias_bytes = bytearray(
+        alias_bytearr = bytearray(
             [unique_id[-1] | offset for _ in range(self._ALIAS_LENGTH)])
 
         # Chunk the path into pieces of 5
@@ -169,10 +169,10 @@ class SharesManager:
             chunk = path_bytes[c_idx:c_idx + self._ALIAS_LENGTH]
             # previous_iter_byte XOR unique_id XOR current_iter_byte
             for b_idx, byte in enumerate(chunk):
-                alias_bytes[b_idx] ^= byte ^ unique_id[b_idx]
+                alias_bytearr[b_idx] ^= byte ^ unique_id[b_idx]
 
         # To lowercase
-        alias_bytes = bytes([(byte % 26) + 0x61 for byte in alias_bytes])
+        alias_bytes = bytes([(byte % 26) + 0x61 for byte in alias_bytearr])
         alias_string = alias_bytes.decode('utf8')
 
         return alias_string
@@ -200,11 +200,15 @@ class SharesManager:
         logger.info(f"successfully wrote {len(self._shared_directories)} directories to cache")
 
     def get_download_directory(self) -> str:
-        """Gets the absolute path the to download directory"""
+        """Gets the absolute path the to download directory configured from the
+        settings
+
+        :return: Absolute path of the value of the `sharing.download` setting
+        """
         download_dir = self._settings.get('sharing.download')
         return os.path.abspath(download_dir)
 
-    async def create_directory(self, absolute_path: str) -> str:
+    async def create_directory(self, absolute_path: str):
         """Ensures the passed directory exists"""
         if not await asyncos.path.exists(absolute_path):
             logger.info(f"creating directory : {absolute_path}")
@@ -279,9 +283,9 @@ class SharesManager:
             share_mode=share_mode,
             users=users or []
         )
-        for shared_directory in self._shared_directories:
-            if shared_directory == directory_object:
-                return shared_directory
+        for shared_dir in self._shared_directories:
+            if shared_dir == directory_object:
+                return shared_dir
 
         # If the new directory is a child of an existing directory, move items
         # to the child directory and remove them from the parent directory
@@ -375,7 +379,7 @@ class SharesManager:
         loop = asyncio.get_running_loop()
 
         # Schedule the items on the executor
-        extract_futures = []
+        extract_futures: List[asyncio.Future] = []
         for item in shared_directory.items:
             if item.attributes is None:
                 future = loop.run_in_executor(

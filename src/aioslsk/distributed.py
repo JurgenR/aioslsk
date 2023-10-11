@@ -50,10 +50,10 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DistributedPeer:
     username: str
-    connection: PeerConnection
-    branch_level: int = None
-    branch_root: str = None
-    child_depth: int = None
+    connection: Optional[PeerConnection] = None
+    branch_level: Optional[int] = None
+    branch_root: Optional[str] = None
+    child_depth: Optional[int] = None
 
 
 class DistributedNetwork:
@@ -68,7 +68,7 @@ class DistributedNetwork:
 
         self._ticket_generator = ticket_generator()
 
-        self.parent: DistributedPeer = None
+        self.parent: Optional[DistributedPeer] = None
         """Distributed parent. This variable is `None` if we are looking for a
         parent
         """
@@ -77,11 +77,11 @@ class DistributedNetwork:
         self.distributed_peers: List[DistributedPeer] = []
 
         # State parameters sent by the server
-        self.parent_min_speed: int = None
-        self.parent_speed_ratio: int = None
-        self.min_parents_in_cache: int = None
-        self.parent_inactivity_timeout: int = None
-        self.distributed_alive_interval: int = None
+        self.parent_min_speed: Optional[int] = None
+        self.parent_speed_ratio: Optional[int] = None
+        self.min_parents_in_cache: Optional[int] = None
+        self.parent_inactivity_timeout: Optional[int] = None
+        self.distributed_alive_interval: Optional[int] = None
 
         self.MESSAGE_MAP = build_message_map(self)
 
@@ -141,8 +141,8 @@ class DistributedNetwork:
         # Other distributed connection from the parent that we have should also
         # be disconnected
         distributed_connections = [
-            distributed_peer.connection for distributed_peer in self.distributed_peers
-            if distributed_peer in [self.parent, ] + self.children
+            dpeer.connection for dpeer in self.distributed_peers
+            if dpeer in [self.parent, ] + self.children and dpeer.connection is not None
         ]
         for peer_connection in self._network.peer_connections:
             if peer_connection.connection_type == PeerConnectionType.DISTRIBUTED:
@@ -165,7 +165,8 @@ class DistributedNetwork:
             if not self.parent:
                 await self._set_parent(peer)
             else:
-                await peer.connection.disconnect(reason=CloseReason.REQUESTED)
+                if peer.connection:
+                    await peer.connection.disconnect(reason=CloseReason.REQUESTED)
         else:
             logger.debug(f"{self._settings.get('credentials.username')} : not enough info for parent : {peer}")
 
@@ -233,8 +234,9 @@ class DistributedNetwork:
         self.children.append(peer)
         # Let the child know where we are in the distributed tree
         root, level = self._get_advertised_branch_values()
-        await peer.connection.send_message(DistributedBranchLevel.Request(level))
-        await peer.connection.send_message(DistributedBranchRoot.Request(root))
+        if peer.connection:
+            await peer.connection.send_message(DistributedBranchLevel.Request(level))
+            await peer.connection.send_message(DistributedBranchRoot.Request(root))
 
     def _potential_parent_task_callback(self, username: str, task: asyncio.Task):
         """Callback for potential parent handling task. This callback simply
@@ -315,8 +317,7 @@ class DistributedNetwork:
             )
             await self._set_parent(parent)
 
-        for child in self.children:
-            child.connection.queue_messages(message)
+        await self.send_messages_to_children(message)
 
     # Distributed messages
 
@@ -358,7 +359,7 @@ class DistributedNetwork:
             logger.info(f"parent advertised new branch root : {message.username}")
             await self._notify_children_of_branch_values()
 
-    @on_message(DistributedChildDepth)
+    @on_message(DistributedChildDepth.Request)
     async def _on_distributed_child_depth(self, message: DistributedChildDepth.Request, connection: PeerConnection):
         peer = self.get_distributed_peer(connection.username, connection)
         peer.child_depth = message.depth
@@ -430,7 +431,8 @@ class DistributedNetwork:
 
     async def send_messages_to_children(self, *messages: Union[MessageDataclass, bytes]):
         for child in self.children:
-            child.connection.queue_messages(*messages)
+            if child.connection:
+                child.connection.queue_messages(*messages)
 
     def stop(self) -> List[asyncio.Task]:
         """Cancels all pending tasks

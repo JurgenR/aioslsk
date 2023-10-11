@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import auto, Enum, Flag
-from typing import Dict, List
+from typing import Dict, List, Optional
 from .protocol.primitives import UserStats
 
 
@@ -30,21 +30,21 @@ class TrackingFlag(Flag):
 @dataclass
 class User:
     name: str
-    country: str = None
-    description: str = None
-    picture: str = None
+    country: Optional[str] = None
+    description: Optional[str] = None
+    picture: Optional[str] = None
 
     status: UserStatus = UserStatus.UNKNOWN
     privileged: bool = False
 
-    avg_speed: int = None
-    uploads: int = None
-    shared_file_count: int = None
-    shared_folder_count: int = None
-    has_slots_free: bool = None
-    slots_free: int = None
-    upload_slots: int = None
-    queue_length: int = None
+    avg_speed: Optional[int] = None
+    uploads: Optional[int] = None
+    shared_file_count: Optional[int] = None
+    shared_folder_count: Optional[int] = None
+    has_slots_free: Optional[bool] = None
+    slots_free: Optional[int] = None
+    upload_slots: Optional[int] = None
+    queue_length: Optional[int] = None
 
     tracking_flags: TrackingFlag = TrackingFlag(0)
 
@@ -73,7 +73,7 @@ class Room:
 
     # Only for private rooms
     members: List[User] = field(default_factory=list)
-    owner: User = None
+    owner: Optional[User] = None
     operators: List[User] = field(default_factory=list)
     is_operator: bool = False
 

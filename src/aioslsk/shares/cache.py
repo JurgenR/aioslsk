@@ -34,7 +34,7 @@ class SharesShelveCache:
 
     def read(self) -> List[SharedDirectory]:
         with shelve.open(self._get_index_path(), 'c') as db:
-            directories = db.get('index', list())
+            directories: List[SharedDirectory] = db.get('index', list())
             for directory in directories:
                 new_items = set()
                 for item in directory.items:

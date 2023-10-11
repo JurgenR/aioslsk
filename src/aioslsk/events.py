@@ -3,7 +3,7 @@ import asyncio
 from dataclasses import dataclass, field
 import inspect
 import logging
-from typing import Callable, Dict, List, Type, TYPE_CHECKING
+from typing import Callable, Dict, List, Optional, Type, TYPE_CHECKING
 
 from .model import ChatMessage, Room, RoomMessage, User, TrackingFlag
 from .protocol.primitives import (
@@ -98,11 +98,11 @@ class ServerDisconnectedEvent(Event):
 
 
 @dataclass(frozen=True)
-class LoginEvent:
+class LoginEvent(Event):
     """Emitted when we got a response to a login call"""
     is_success: bool
-    greeting: str = None
-    reason: str = None
+    greeting: Optional[str] = None
+    reason: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -131,20 +131,20 @@ class RoomMessageEvent(Event):
 
 
 @dataclass(frozen=True)
-class RoomTickersEvent:
+class RoomTickersEvent(Event):
     room: Room
     tickers: Dict[str, str]
 
 
 @dataclass(frozen=True)
-class RoomTickerAddedEvent:
+class RoomTickerAddedEvent(Event):
     room: Room
     user: User
     ticker: str
 
 
 @dataclass(frozen=True)
-class RoomTickerRemovedEvent:
+class RoomTickerRemovedEvent(Event):
     room: Room
     user: User
 
@@ -211,7 +211,7 @@ class SearchRequestReceivedEvent(Event):
 @dataclass(frozen=True)
 class SimilarUsersEvent(Event):
     users: List[User]
-    item: str = None
+    item: Optional[str] = None
 
 
 @dataclass(frozen=True)

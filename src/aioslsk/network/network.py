@@ -90,7 +90,7 @@ class ExpectedResponse(asyncio.Future):
         if response.__class__ != self.message_class:
             return False
 
-        if self.peer is not None:
+        if self.peer is not None and isinstance(connection, PeerConnection):
             if connection.username != self.peer:
                 return False
 
@@ -146,9 +146,9 @@ class Network:
         self._user_ip_overrides: Dict[str, str] = self._settings.get('debug.user_ip_overrides')
 
         # Operational
-        self._log_connections_task: asyncio.Task = None
+        self._log_connections_task: Optional[asyncio.Task] = None
         self._create_peer_connection_tasks: List[asyncio.Task] = []
-        self._upnp_task: asyncio.Task = None
+        self._upnp_task: Optional[asyncio.Task] = None
 
     async def initialize(self):
         """Initializes the server and listening connections"""
@@ -234,7 +234,7 @@ class Network:
             ports. If either is not connected or not configured `0` will be
             returned for this port
         """
-        def get_port(conn: ListeningConnection):
+        def get_port(conn: Optional[ListeningConnection]):
             if conn and conn.state == ConnectionState.CONNECTED:
                 return conn.port
             return 0
@@ -391,7 +391,7 @@ class Network:
 
         return await self.create_peer_connection(username, typ)
 
-    def _remove_response_future(self, expected_response: asyncio.Future):
+    def _remove_response_future(self, expected_response: ExpectedResponse):
         if expected_response in self._expected_response_futures:
             self._expected_response_futures.remove(expected_response)
 
@@ -433,7 +433,7 @@ class Network:
             fields=fields
         )
         try:
-            _, response = asyncio.wait_for(future, timeout=timeout)
+            _, response = await asyncio.wait_for(future, timeout=timeout)
         except TimeoutError as exc:
             future.set_exception(exc)
             raise
@@ -471,7 +471,7 @@ class Network:
             fields=fields
         )
         try:
-            _, response = asyncio.wait_for(future, timeout=timeout)
+            _, response = await asyncio.wait_for(future, timeout=timeout)
         except TimeoutError as exc:
             future.set_exception(exc)
             raise
@@ -488,7 +488,7 @@ class Network:
         ]
 
     def get_active_peer_connections(
-            self, username: str, typ: PeerConnectionType) -> List[PeerConnection]:
+            self, username: str, typ: str) -> List[PeerConnection]:
         """Return a list of currently active messaging connections for given
         peer connection type.
 
@@ -522,7 +522,7 @@ class Network:
         self._create_peer_connection_tasks.append(task)
 
     async def _make_direct_connection(
-            self, ticket: int, username: str, typ: str, ip: int, port: int, obfuscate: bool) -> PeerConnection:
+            self, ticket: int, username: str, typ: str, ip: str, port: int, obfuscate: bool) -> PeerConnection:
         """Attempts to make a direct connection to the peer and send a `PeerInit`
         message. This will be the first step in case we are the one initiating
         the connection
@@ -702,7 +702,9 @@ class Network:
     # Methods called by connections
 
     # Connection state changes
-    async def on_state_changed(self, state: ConnectionState, connection: Connection, close_reason: Optional[CloseReason] = None):
+    async def on_state_changed(
+            self, state: ConnectionState, connection: Connection,
+            close_reason: CloseReason = CloseReason.UNKNOWN):
         """Called when the state of a connection changes. This method calls 3
         private method based on the type of L{connection} that was passed
 
@@ -721,7 +723,9 @@ class Network:
             ConnectionStateChangedEvent(connection, state, close_reason)
         )
 
-    async def _on_server_connection_state_changed(self, state: ConnectionState, connection: ServerConnection, close_reason: Optional[CloseReason] = None):
+    async def _on_server_connection_state_changed(
+            self, state: ConnectionState, connection: ServerConnection,
+            close_reason: CloseReason = CloseReason.UNKNOWN):
         if state == ConnectionState.CONNECTED:
             # For registering with UPNP we need to know our own IP first, we can
             # get this from the server connection but we first need to be
@@ -733,7 +737,9 @@ class Network:
                 )
                 self._upnp_task.add_done_callback(self._map_upnp_ports_callback)
 
-    async def _on_peer_connection_state_changed(self, state: ConnectionState, connection: PeerConnection, close_reason: Optional[CloseReason] = None):
+    async def _on_peer_connection_state_changed(
+            self, state: ConnectionState, connection: PeerConnection,
+            close_reason: CloseReason = CloseReason.UNKNOWN):
         if state == ConnectionState.CLOSED:
             self.remove_peer_connection(connection)
 

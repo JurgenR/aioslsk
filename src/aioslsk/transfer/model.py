@@ -4,7 +4,7 @@ from collections import deque
 from enum import Enum
 import logging
 import time
-from typing import Deque, List, Tuple
+from typing import Deque, List, Optional, Tuple
 
 from .state import TransferState, TransferStateListener, VirginState
 
@@ -35,19 +35,19 @@ class Transfer:
         self.username: str = username
         self.remote_path: str = remote_path
         """Remote path, this is the path that is shared between peers"""
-        self.local_path: str = None
+        self.local_path: Optional[str] = None
         """Absolute path to the file on disk"""
         self.direction: TransferDirection = direction
 
         self.remotely_queued: bool = False
         """Indicites whether the transfer queue message was received by the peer
         """
-        self.place_in_queue: int = None
-        self.fail_reason: str = None
+        self.place_in_queue: Optional[int] = None
+        self.fail_reason: Optional[str] = None
 
-        self.filesize: int = None
+        self.filesize: Optional[int] = None
         """Filesize in bytes"""
-        self._offset: int = None
+        self._offset: int = 0
         """Offset used for resuming downloads. This offset will be used and
         reset by the L{read} method of this object
         """
@@ -61,19 +61,19 @@ class Transfer:
         self.upload_request_attempts: int = 0
         self.last_upload_request_attempt: float = 0.0
 
-        self.start_time: float = None
+        self.start_time: Optional[float] = None
         """Time at which the transfer was started. This is the time the transfer
         entered the DOWNLOADING or UPLOADING state
         """
-        self.complete_time: float = None
+        self.complete_time: Optional[float] = None
         """Time at which the transfer was completed. This is the time the
         transfer entered the complete or incomplete state
         """
 
         self._speed_log: Deque[Tuple[float, int]] = deque(maxlen=SPEED_LOG_ENTRIES)
 
-        self._remotely_queue_task: asyncio.Task = None
-        self._transfer_task: asyncio.Task = None
+        self._remotely_queue_task: Optional[asyncio.Task] = None
+        self._transfer_task: Optional[asyncio.Task] = None
         self.state_listeners: List[TransferStateListener] = []
 
     def __setstate__(self, obj_state):
@@ -102,7 +102,7 @@ class Transfer:
     def reset_progress(self):
         self.reset_times()
         self.bytes_transfered = 0
-        self._offset = None
+        self._offset = 0
         self.local_path = None
         self.fail_reason = None
         self.remotely_queued = False

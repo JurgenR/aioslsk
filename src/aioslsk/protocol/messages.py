@@ -18,7 +18,7 @@ This file contains 2 types of messages:
 """
 from dataclasses import dataclass, field
 import logging
-from typing import ClassVar, List
+from typing import ClassVar, List, Optional
 
 from ..exceptions import UnknownMessageError
 from .primitives import (
@@ -130,11 +130,11 @@ class Login(ServerMessage):
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x01)
         success: bool = field(metadata={'type': boolean})
-        greeting: str = field(default=None, metadata={'type': string, 'if_true': 'success'})
-        ip: str = field(default=None, metadata={'type': ipaddr, 'if_true': 'success'})
-        md5hash: str = field(default=None, metadata={'type': string, 'if_true': 'success'})
+        greeting: Optional[str] = field(default=None, metadata={'type': string, 'if_true': 'success'})
+        ip: Optional[str] = field(default=None, metadata={'type': ipaddr, 'if_true': 'success'})
+        md5hash: Optional[str] = field(default=None, metadata={'type': string, 'if_true': 'success'})
         privileged: bool = field(default=None, metadata={'type': boolean, 'if_true': 'success'})
-        reason: str = field(default=None, metadata={'type': string, 'if_false': 'success'})
+        reason: Optional[str] = field(default=None, metadata={'type': string, 'if_false': 'success'})
 
 
 class SetListenPort(ServerMessage):
@@ -143,8 +143,8 @@ class SetListenPort(ServerMessage):
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x02)
         port: int = field(metadata={'type': uint32})
-        obfuscated_port_amount: int = field(default=None, metadata={'type': uint32, 'optional': True})
-        obfuscated_port: int = field(default=None, metadata={'type': uint32, 'optional': True})
+        obfuscated_port_amount: Optional[int] = field(default=None, metadata={'type': uint32, 'optional': True})
+        obfuscated_port: Optional[int] = field(default=None, metadata={'type': uint32, 'optional': True})
 
 
 class GetPeerAddress(ServerMessage):
@@ -160,8 +160,8 @@ class GetPeerAddress(ServerMessage):
         username: str = field(metadata={'type': string})
         ip: str = field(metadata={'type': ipaddr})
         port: int = field(metadata={'type': uint32})
-        obfuscated_port_amount: int = field(default=None, metadata={'type': uint32, 'optional': True})
-        obfuscated_port: int = field(default=None, metadata={'type': uint16, 'optional': True})
+        obfuscated_port_amount: Optional[int] = field(default=None, metadata={'type': uint32, 'optional': True})
+        obfuscated_port: Optional[int] = field(default=None, metadata={'type': uint16, 'optional': True})
 
 
 class AddUser(ServerMessage):
@@ -176,9 +176,9 @@ class AddUser(ServerMessage):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x05)
         username: str = field(metadata={'type': string})
         exists: bool = field(metadata={'type': boolean})
-        status: int = field(default=None, metadata={'type': uint32, 'if_true': 'exists'})
-        user_stats: UserStats = field(default=None, metadata={'type': UserStats, 'if_true': 'exists'})
-        country_code: str = field(
+        status: Optional[int] = field(default=None, metadata={'type': uint32, 'if_true': 'exists'})
+        user_stats: Optional[UserStats] = field(default=None, metadata={'type': UserStats, 'if_true': 'exists'})
+        country_code: Optional[str] = field(
             default=None,
             metadata={
                 'type': string,
@@ -243,8 +243,8 @@ class ChatJoinRoom(ServerMessage):
         users_stats: List[UserStats] = field(metadata={'type': array, 'subtype': UserStats})
         users_slots_free: List[int] = field(metadata={'type': array, 'subtype': uint32})
         users_countries: List[str] = field(metadata={'type': array, 'subtype': string})
-        owner: str = field(default=None, metadata={'type': string, 'optional': True})
-        operators: List[str] = field(
+        owner: Optional[str] = field(default=None, metadata={'type': string, 'optional': True})
+        operators: Optional[List[str]] = field(
             default=None,
             metadata={
                 'type': array,
@@ -293,7 +293,7 @@ class ConnectToPeer(ServerMessage):
     @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x12)
-        ticket: str = field(metadata={'type': uint32})
+        ticket: int = field(metadata={'type': uint32})
         username: str = field(metadata={'type': string})
         typ: str = field(metadata={'type': string})
 
@@ -304,10 +304,10 @@ class ConnectToPeer(ServerMessage):
         typ: str = field(metadata={'type': string})
         ip: str = field(metadata={'type': ipaddr})
         port: int = field(metadata={'type': uint32})
-        ticket: str = field(metadata={'type': uint32})
+        ticket: int = field(metadata={'type': uint32})
         privileged: bool = field(metadata={'type': boolean})
-        obfuscated_port_amount: int = field(default=None, metadata={'type': uint32, 'optional': True})
-        obfuscated_port: int = field(default=None, metadata={'type': uint32, 'optional': True})
+        obfuscated_port_amount: Optional[int] = field(default=None, metadata={'type': uint32, 'optional': True})
+        obfuscated_port: Optional[int] = field(default=None, metadata={'type': uint32, 'optional': True})
 
 
 class ChatPrivateMessage(ServerMessage):
@@ -325,7 +325,7 @@ class ChatPrivateMessage(ServerMessage):
         timestamp: int = field(metadata={'type': uint32})
         username: str = field(metadata={'type': string})
         message: str = field(metadata={'type': string})
-        is_admin: bool = field(default=False, metadata={'type': boolean, 'optional': True})
+        is_admin: Optional[bool] = field(default=False, metadata={'type': boolean, 'optional': True})
 
 
 class ChatAckPrivateMessage(ServerMessage):
@@ -1002,13 +1002,13 @@ class CannotConnect(ServerMessage):
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x03E9)
         ticket: int = field(metadata={'type': uint32})
-        username: str = field(default=None, metadata={'type': string, 'optional': True})
+        username: Optional[str] = field(default=None, metadata={'type': string, 'optional': True})
 
     @dataclass
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x03E9)
         ticket: int = field(metadata={'type': uint32})
-        username: str = field(default=None, metadata={'type': string, 'optional': True})
+        username: Optional[str] = field(default=None, metadata={'type': string, 'optional': True})
 
 
 class CannotCreateRoom(ServerMessage):
@@ -1065,7 +1065,7 @@ class PeerSharesRequest(PeerMessage):
         # ticket is a uint32, sending the ticket as a uint64 will be rejected.
         # Sending this ticket has no impact on the ticket in PeerSharesReply: it
         # will always be 0
-        ticket: int = field(default=None, metadata={'type': uint32, 'optional': True})
+        ticket: Optional[int] = field(default=None, metadata={'type': uint32, 'optional': True})
 
 
 class PeerSharesReply(PeerMessage):
@@ -1080,7 +1080,7 @@ class PeerSharesReply(PeerMessage):
         # * This was another list, but it always empty (not tested)
         # * This is a ticket: See explanation of ticket in PeerSharesRequest
         unknown: int = field(default=0, metadata={'type': uint32})
-        locked_directories: List[DirectoryData] = field(
+        locked_directories: Optional[List[DirectoryData]] = field(
             default=None,
             metadata={'type': array, 'subtype': DirectoryData, 'optional': True}
         )
@@ -1108,8 +1108,8 @@ class PeerSearchReply(PeerMessage):
         # uint32. The other 4 bytes are for an unknown uint32 right before the
         # locked results: the same can be seen in PeerSharesReply
         queue_size: int = field(metadata={'type': uint32})
-        unknown: int = field(default=0, metadata={'type': uint32})
-        locked_results: List[FileData] = field(
+        unknown: Optional[int] = field(default=0, metadata={'type': uint32})
+        locked_results: Optional[List[FileData]] = field(
             default=None,
             metadata={'type': array, 'subtype': FileData, 'optional': True}
         )
@@ -1136,10 +1136,10 @@ class PeerUserInfoReply(PeerMessage):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x10)
         description: str = field(metadata={'type': string})
         has_picture: bool = field(metadata={'type': boolean})
-        picture: str = field(default=None, metadata={'type': string, 'if_true': 'has_picture'})
-        upload_slots: int = field(default=0, metadata={'type': uint32})
-        queue_size: int = field(default=0, metadata={'type': uint32})
-        has_slots_free: bool = field(default=False, metadata={'type': boolean})
+        picture: Optional[str] = field(default=None, metadata={'type': string, 'if_true': 'has_picture'})
+        upload_slots: Optional[int] = field(default=0, metadata={'type': uint32})
+        queue_size: Optional[int] = field(default=0, metadata={'type': uint32})
+        has_slots_free: Optional[bool] = field(default=False, metadata={'type': boolean})
 
 
 class PeerDirectoryContentsRequest(PeerMessage):
@@ -1183,7 +1183,7 @@ class PeerTransferRequest(PeerMessage):
         direction: int = field(metadata={'type': uint32})
         ticket: int = field(metadata={'type': uint32})
         filename: str = field(metadata={'type': string})
-        filesize: int = field(default=None, metadata={'type': uint64, 'optional': True})
+        filesize: Optional[int] = field(default=None, metadata={'type': uint64, 'optional': True})
 
 
 class PeerTransferReply(PeerMessage):
@@ -1193,8 +1193,8 @@ class PeerTransferReply(PeerMessage):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x29)
         ticket: int = field(metadata={'type': uint32})
         allowed: bool = field(metadata={'type': boolean})
-        filesize: int = field(default=None, metadata={'type': uint64, 'optional': True, 'if_true': 'allowed'})
-        reason: str = field(default=None, metadata={'type': string, 'optional': True, 'if_false': 'allowed'})
+        filesize: Optional[int] = field(default=None, metadata={'type': uint64, 'optional': True, 'if_true': 'allowed'})
+        reason: Optional[str] = field(default=None, metadata={'type': string, 'optional': True, 'if_false': 'allowed'})
 
 
 class PeerTransferQueue(PeerMessage):

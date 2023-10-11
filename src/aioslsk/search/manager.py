@@ -68,15 +68,15 @@ class SearchManager:
         self.search_requests: Dict[int, SearchRequest] = {}
 
         # Server variables
-        self.search_inactivity_timeout: int = None
-        self.wishlist_interval: int = None
+        self.search_inactivity_timeout: Optional[int] = None
+        self.wishlist_interval: Optional[int] = None
 
         self.register_listeners()
 
         self.MESSAGE_MAP = build_message_map(self)
 
         self._search_reply_tasks: List[asyncio.Task] = []
-        self._wishlist_task: asyncio.Task = None
+        self._wishlist_task: Optional[asyncio.Task] = None
 
     def register_listeners(self):
         self._internal_event_bus.register(
@@ -279,7 +279,7 @@ class SearchManager:
             avg_speed=message.avg_speed,
             queue_size=message.queue_size,
             shared_items=message.results,
-            locked_results=message.locked_results
+            locked_results=message.locked_results or []
         )
         try:
             query = self.search_requests[message.ticket]

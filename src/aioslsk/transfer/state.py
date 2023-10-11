@@ -21,6 +21,7 @@ class TransferState:
     """
 
     class State(Enum):
+        UNSET = -1
         VIRGIN = 0
         QUEUED = 1
         INITIALIZING = 3
@@ -32,6 +33,7 @@ class TransferState:
         ABORTED = 9
         TRANSFERRING = 10
 
+    UNSET = State.UNSET
     VIRGIN = State.VIRGIN
     QUEUED = State.QUEUED
     INITIALIZING = State.INITIALIZING
@@ -43,7 +45,7 @@ class TransferState:
     ABORTED = State.ABORTED
     TRANSFERRING = State.TRANSFERRING
 
-    VALUE = None
+    VALUE = UNSET
 
     def __init__(self, transfer: 'Transfer'):
         self.transfer: 'Transfer' = transfer

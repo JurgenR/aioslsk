@@ -111,10 +111,10 @@ class ListeningConnection(Connection):
 
     def __init__(self, hostname: str, port: int, network: Network, obfuscated: bool = False):
         super().__init__(hostname, port, network)
-        self.obfuscated = obfuscated
+        self.obfuscated: bool = obfuscated
 
-        self._server: asyncio.AbstractServer = None
-        self.connections_accepted = 0
+        self._server: Optional[asyncio.AbstractServer] = None
+        self.connections_accepted: int = 0
 
     async def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
         logger.debug(f"{self.hostname}:{self.port} : disconnecting : {reason.name}")
@@ -179,10 +179,10 @@ class DataConnection(Connection):
         super().__init__(hostname, port, network)
         self.obfuscated = obfuscated
 
-        self._reader: asyncio.StreamReader = None
-        self._writer: asyncio.StreamWriter = None
-        self._reader_task: asyncio.Task = None
-        self.read_timeout: float = None
+        self._reader: Optional[asyncio.StreamReader] = None
+        self._writer: Optional[asyncio.StreamWriter] = None
+        self._reader_task: Optional[asyncio.Task] = None
+        self.read_timeout: Optional[float] = None
         self._queued_messages: List[asyncio.Task] = []
 
     def get_connecting_ip(self) -> str:
@@ -307,7 +307,7 @@ class DataConnection(Connection):
 
         return header + message
 
-    async def receive_message(self) -> bytes:
+    async def receive_message(self) -> Optional[bytes]:
         return await self._read(self._read_message)
 
     def decode_message_data(self, data: bytes) -> MessageDataclass:
@@ -470,12 +470,12 @@ class PeerConnection(DataConnection):
         self.incoming: bool = incoming
         self.connection_state = PeerConnectionState.AWAITING_INIT
 
-        self.username: str = username
+        self.username: Optional[str] = username
         self.connection_type: str = connection_type
         self.read_timeout = PEER_READ_TIMEOUT
 
-        self.download_rate_limiter: RateLimiter = None
-        self.upload_rate_limiter: RateLimiter = None
+        self.download_rate_limiter: Optional[RateLimiter] = None
+        self.upload_rate_limiter: Optional[RateLimiter] = None
 
     async def connect(self, timeout: float = PEER_CONNECT_TIMEOUT):
         await super().connect(timeout=timeout)
@@ -598,7 +598,7 @@ class PeerConnection(DataConnection):
             await self.disconnect(CloseReason.WRITE_ERROR)
             raise ConnectionWriteError(f"{self.hostname}:{self.port} : write error") from exc
 
-    async def send_file(self, file_handle: BinaryIO, callback: Optional[Callable[[bytes], None]] = None):
+    async def send_file(self, file_handle: AsyncBufferReader, callback: Optional[Callable[[bytes], None]] = None):
         """Sends a file over the connection. This method makes use of the
         `upload_rate_limiter` to limit how many bytes are being sent at a time.
 
