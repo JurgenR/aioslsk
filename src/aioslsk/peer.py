@@ -93,6 +93,11 @@ class PeerManager:
 
     @on_message(PeerSharesRequest.Request)
     async def _on_peer_shares_request(self, message: PeerSharesRequest.Request, connection: PeerConnection):
+        if not connection.username:
+            logger.warning(
+                "got PeerSharesRequest for a connection that wasn't properly initialized")
+            return
+
         visible, locked = self._shares_manager.create_shares_reply(connection.username)
         await connection.send_message(
             PeerSharesReply.Request(
@@ -103,6 +108,11 @@ class PeerManager:
 
     @on_message(PeerSharesReply.Request)
     async def _on_peer_shares_reply(self, message: PeerSharesReply.Request, connection: PeerConnection):
+        if not connection.username:
+            logger.warning(
+                "got PeerSharesRequest for a connection that wasn't properly initialized")
+            return
+
         logger.info(f"PeerSharesReply : from username {connection.username}, got {len(message.directories)} directories")
 
         user = self._state.get_or_create_user(connection.username)
@@ -114,6 +124,11 @@ class PeerManager:
 
     @on_message(PeerDirectoryContentsRequest.Request)
     async def _on_peer_directory_contents_req(self, message: PeerDirectoryContentsRequest.Request, connection: PeerConnection):
+        if not connection.username:
+            logger.warning(
+                "got PeerDirectoryContentsRequest for a connection that wasn't properly initialized")
+            return
+
         directories = self._shares_manager.create_directory_reply(message.directory)
         await connection.send_message(
             PeerDirectoryContentsReply.Request(
@@ -125,6 +140,11 @@ class PeerManager:
 
     @on_message(PeerDirectoryContentsReply.Request)
     async def _on_peer_directory_contents_reply(self, message: PeerDirectoryContentsReply.Request, connection: PeerConnection):
+        if not connection.username:
+            logger.warning(
+                "got PeerDirectoryContentsReply for a connection that wasn't properly initialized")
+            return
+
         user = self._state.get_or_create_user(connection.username)
         await self._event_bus.emit(
             UserDirectoryEvent(user, message.directory, message.directories)
@@ -132,6 +152,11 @@ class PeerManager:
 
     @on_message(PeerUserInfoReply.Request)
     async def _on_peer_user_info_reply(self, message: PeerUserInfoReply.Request, connection: PeerConnection):
+        if not connection.username:
+            logger.warning(
+                "got PeerUserInfoReply for a connection that wasn't properly initialized")
+            return
+
         user = self._state.get_or_create_user(connection.username)
         user.description = message.description
         user.picture = message.picture
@@ -143,6 +168,11 @@ class PeerManager:
 
     @on_message(PeerUserInfoRequest.Request)
     async def _on_peer_user_info_request(self, message: PeerUserInfoRequest.Request, connection: PeerConnection):
+        if not connection.username:
+            logger.warning(
+                "got PeerSharesRequest for a connection that wasn't properly initialized")
+            return
+
         try:
             description = self._settings.get('credentials.info.description')
         except KeyError:

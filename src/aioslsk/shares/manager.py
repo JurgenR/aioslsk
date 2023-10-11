@@ -127,7 +127,7 @@ class SharesManager:
     def __init__(self, settings: Settings, internal_event_bus: InternalEventBus, cache: Optional[SharesCache] = None):
         self._settings: Settings = settings
         self._internal_event_bus: InternalEventBus = internal_event_bus
-        self._term_map: Dict[str, Set[SharedItem]] = {}
+        self._term_map: Dict[str, WeakSet[SharedItem]] = {}
         self._shared_directories: List[SharedDirectory] = list()
         self.scan_task: Optional[asyncio.Task] = None
 
@@ -583,11 +583,11 @@ class SharesManager:
             response_dirs: Dict[str, List[SharedItem]] = {}
             for directory in directories:
                 for item in directory.items:
-                    directory = item.get_remote_directory_path()
-                    if directory in response_dirs:
-                        response_dirs[directory].append(item)
+                    dir_path = item.get_remote_directory_path()
+                    if dir_path in response_dirs:
+                        response_dirs[dir_path].append(item)
                     else:
-                        response_dirs[directory] = [item, ]
+                        response_dirs[dir_path] = [item, ]
             return response_dirs
 
         def convert_to_directory_shares(directory_map: Dict[str, List[SharedItem]]) -> List[DirectoryData]:

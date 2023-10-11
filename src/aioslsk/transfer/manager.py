@@ -856,7 +856,7 @@ class TransferManager:
             await connection.queue_message(
                 PeerTransferQueueFailed.Request(
                     filename=message.filename,
-                    reason=transfer.fail_reason
+                    reason=Reasons.FILE_NOT_SHARED
                 )
             )
 

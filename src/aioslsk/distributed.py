@@ -325,6 +325,11 @@ class DistributedNetwork:
     async def _on_distributed_branch_level(self, message: DistributedBranchLevel.Request, connection: PeerConnection):
         logger.info(f"branch level {message.level!r}: {connection!r}")
 
+        if not connection.username:
+            logger.warning(
+                "got DistributedBranchLevel for a connection that wasn't properly initialized")
+            return
+
         peer = self.get_distributed_peer(connection.username, connection)
         peer.branch_level = message.level
 
@@ -342,6 +347,11 @@ class DistributedNetwork:
     @on_message(DistributedBranchRoot.Request)
     async def _on_distributed_branch_root(self, message: DistributedBranchRoot.Request, connection: PeerConnection):
         logger.info(f"branch root {message.username!r}: {connection!r}")
+
+        if not connection.username:
+            logger.warning(
+                "got DistributedBranchRoot for a connection that wasn't properly initialized")
+            return
 
         peer = self.get_distributed_peer(connection.username, connection)
 
@@ -361,6 +371,11 @@ class DistributedNetwork:
 
     @on_message(DistributedChildDepth.Request)
     async def _on_distributed_child_depth(self, message: DistributedChildDepth.Request, connection: PeerConnection):
+        if not connection.username:
+            logger.warning(
+                "got DistributedChildDepth for a connection that wasn't properly initialized")
+            return
+
         peer = self.get_distributed_peer(connection.username, connection)
         peer.child_depth = message.depth
 
@@ -384,7 +399,7 @@ class DistributedNetwork:
 
     async def _on_peer_connection_initialized(self, event: PeerInitializedEvent):
         if event.connection.connection_type == PeerConnectionType.DISTRIBUTED:
-            peer = DistributedPeer(event.connection.username, event.connection)
+            peer = DistributedPeer(event.connection.username, event.connection) # type: ignore
             self.distributed_peers.append(peer)
 
             # Only check if the peer is a potential child if the connection

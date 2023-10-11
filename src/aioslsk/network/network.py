@@ -477,9 +477,13 @@ class Network:
 
         return response
 
-    def get_peer_connections(self, username: str, typ: PeerConnectionType) -> List[PeerConnection]:
+    def get_peer_connections(self, username: str, typ: str) -> List[PeerConnection]:
         """Returns all connections for peer with given username and peer
         connection types.
+
+        :param username: username of the peer
+        :param typ: type of the connection (from `PeerConnectionType`)
+        :return: list of connections for that matches the parameters
         """
         return [
             connection for connection in self.peer_connections
@@ -558,7 +562,7 @@ class Network:
         """
         # Wait for either a established connection with PeerPierceFirewall or a
         # CannotConnect from the server
-        expected_connection_future = asyncio.Future()
+        expected_connection_future: asyncio.Future = asyncio.Future()
         expected_connection_future.add_done_callback(
             partial(self._remove_connection_future, ticket)
         )
