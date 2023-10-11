@@ -1,4 +1,5 @@
 """Implementation of the state design pattern for transfers"""
+import asyncio
 from enum import Enum
 from typing import Optional, Protocol, TYPE_CHECKING
 
@@ -188,6 +189,7 @@ class DownloadingState(TransferState):
         return True
 
     async def abort(self) -> bool:
+        await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
         self.transfer.set_complete_time()
         await self.transfer.transition(AbortedState(self.transfer))
         return True
@@ -222,6 +224,7 @@ class UploadingState(TransferState):
         return True
 
     async def abort(self) -> bool:
+        await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
         self.transfer.set_complete_time()
         await self.transfer.transition(AbortedState(self.transfer))
         return True

@@ -160,17 +160,13 @@ class TransferManager:
             raise TransferNotFoundError(
                 "cannot queue transfer: transfer was not added to the manager")
 
-        has_transitioned = await transfer.state.abort()
-        if not has_transitioned:
+        if not await transfer.state.abort():
             raise InvalidStateTransition(
                 transfer,
                 transfer.state.VALUE,
                 TransferState.State.ABORTED,
                 "Could not make the desired state transition"
             )
-
-        tasks = transfer.cancel_tasks()
-        await asyncio.gather(*tasks, return_exceptions=True)
 
         # Only remove file when downloading
         if transfer.is_download():

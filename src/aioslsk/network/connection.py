@@ -96,7 +96,7 @@ class Connection:
         await self.network.on_state_changed(state, self, close_reason=close_reason)
 
     def _is_closing(self) -> bool:
-        return self.network._stop_event.is_set() or self.state in (ConnectionState.CLOSING, ConnectionState.CLOSED)
+        return self.state in (ConnectionState.CLOSING, ConnectionState.CLOSED)
 
     def __repr__(self) -> str:
         return (
@@ -576,6 +576,7 @@ class PeerConnection(DataConnection):
             if data is None:
                 return
 
+            logger.debug(f"writing {len(data)} bytes")
             await file_handle.write(data)
             if callback is not None:
                 callback(data)
@@ -598,7 +599,7 @@ class PeerConnection(DataConnection):
             await self.disconnect(CloseReason.WRITE_ERROR)
             raise ConnectionWriteError(f"{self.hostname}:{self.port} : write error") from exc
 
-    async def send_file(self, file_handle: AsyncBufferReader, callback: Optional[Callable[[bytes], None]] = None):
+    async def send_file(self, file_handle: BinaryIO, callback: Optional[Callable[[bytes], None]] = None):
         """Sends a file over the connection. This method makes use of the
         `upload_rate_limiter` to limit how many bytes are being sent at a time.
 

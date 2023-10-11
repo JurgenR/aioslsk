@@ -470,8 +470,7 @@ class SoulSeekClient:
     def create_network(self) -> Network:
         return Network(
             self.settings,
-            self._internal_events,
-            self._stop_event
+            self._internal_events
         )
 
     def create_shares_manager(self, cache: SharesCache) -> SharesManager:

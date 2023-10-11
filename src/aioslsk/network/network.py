@@ -103,12 +103,11 @@ class ExpectedResponse(asyncio.Future):
 
 class Network:
 
-    def __init__(self, settings: Settings, internal_event_bus: InternalEventBus, stop_event: asyncio.Event):
+    def __init__(self, settings: Settings, internal_event_bus: InternalEventBus):
         self._settings: Settings = settings
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._upnp = upnp.UPNP(self._settings)
         self._ticket_generator = ticket_generator()
-        self._stop_event = stop_event
         self._expected_response_futures: List[ExpectedResponse] = []
         self._expected_connection_futures: Dict[int, asyncio.Future] = {}
 

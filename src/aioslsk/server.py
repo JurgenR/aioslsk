@@ -627,7 +627,9 @@ class ServerManager:
             room.add_operator(me)
             room.is_operator = True
 
-        await self._event_bus.emit(RoomListEvent(rooms=self._state.rooms.values()))
+        await self._event_bus.emit(
+            RoomListEvent(rooms=list(self._state.rooms.values()))
+        )
 
     @on_message(PrivilegedUsers.Response)
     async def _on_privileged_users(self, message: PrivilegedUsers.Response, connection):
