@@ -1,4 +1,3 @@
-from asyncio import Event
 import copy
 import pytest
 from typing import Tuple
@@ -48,7 +47,7 @@ class TestNetworkManager:
 
     def _create_network(self, settings=None) -> Network:
         settings = settings or copy.deepcopy(DEFAULT_SETTINGS)
-        network = Network(Settings(settings), InternalEventBus(), Event())
+        network = Network(Settings(settings), InternalEventBus())
         network.server_connection = Mock()
 
         return network

@@ -238,6 +238,19 @@ class UserInterestsEvent(Event):
     interests: List[str]
     hated_interests: List[str]
 
+
+@dataclass(frozen=True)
+class PrivilegedUsersEvent(Event):
+    """Emitted when the list of privileged users has been received"""
+    users: List[User]
+
+
+@dataclass(frozen=True)
+class PrivilgedUserAddedEvent(Event):
+    """Emitted when a new privileged user has been added"""
+    users: List[User]
+
+
 # Peer
 
 @dataclass(frozen=True)

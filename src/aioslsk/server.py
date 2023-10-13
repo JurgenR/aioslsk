@@ -21,6 +21,8 @@ from .events import (
     LoginSuccessEvent,
     MessageReceivedEvent,
     PrivateMessageEvent,
+    PrivilegedUsersEvent,
+    PrivilgedUserAddedEvent,
     RecommendationsEvent,
     RemovedFromPrivateRoomEvent,
     RoomJoinedEvent,
@@ -523,7 +525,7 @@ class ServerManager:
         await self._event_bus.emit(RoomTickerRemovedEvent(room, user))
 
     @on_message(TogglePrivateRooms.Response)
-    async def _on_private_room_toggle(self, message, connection):
+    async def _on_private_room_toggle(self, message: TogglePrivateRooms.Response, connection):
         logger.debug(f"private rooms enabled : {message.enabled}")
 
     @on_message(PrivateRoomAdded.Response)
@@ -633,14 +635,23 @@ class ServerManager:
 
     @on_message(PrivilegedUsers.Response)
     async def _on_privileged_users(self, message: PrivilegedUsers.Response, connection):
+        priv_users = []
         for username in message.users:
             user = self._state.get_or_create_user(username)
             user.privileged = True
+            priv_users.append(user)
+
+        for unpriv in set(self._state.users.keys()) - set(message.users):
+            self._state.get_or_create_user(unpriv).privileged = False
+
+        await self._event_bus.emit(PrivilegedUsersEvent(priv_users))
 
     @on_message(AddPrivilegedUser.Response)
     async def _on_add_privileged_user(self, message: AddPrivilegedUser.Response, connection):
         user = self._state.get_or_create_user(message.username)
         user.privileged = True
+
+        await self._event_bus.emit(PrivilgedUserAddedEvent(user))
 
     @on_message(AddUser.Response)
     async def _on_add_user(self, message: AddUser.Response, connection):

@@ -418,7 +418,7 @@ class TestSharesManager:
 
         remote_path = list(manager.shared_directories[1].items)[0].get_remote_path()
 
-        item = manager.get_shared_item(remote_path, FRIEND)
+        item = await manager.get_shared_item(remote_path, FRIEND)
         assert item is not None
 
     @pytest.mark.asyncio
