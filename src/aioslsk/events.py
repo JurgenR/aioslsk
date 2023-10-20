@@ -154,61 +154,68 @@ class RoomTickerRemovedEvent(Event):
 
 
 @dataclass(frozen=True)
-class UserJoinedRoomEvent(Event):
-    """Emitted when a user joins a chat room"""
-    room: Room
-    user: User
-
-
-@dataclass(frozen=True)
-class UserLeftRoomEvent(Event):
-    """Emitted when a user leaves a chat room"""
-    room: Room
-    user: User
-
-
-@dataclass(frozen=True)
 class RoomJoinedEvent(Event):
-    """Emitted after we have joined a chat room"""
+    """Emitted after a user joined a chat room
+
+    The value of `user` will be `None` in case it is us who has left the room
+    """
     room: Room
+    user: User = None
 
 
 @dataclass(frozen=True)
 class RoomLeftEvent(Event):
-    """Emitted after we have left a chat room"""
+    """Emitted after a user left a chat room
+
+    The value of `user` will be `None` in case it is us who has left the room
+    """
     room: Room
+    user: User = None
 
 
 @dataclass(frozen=True)
-class UserAddedToPrivateRoomEvent(Event):
-    """Emitted when another user was added to a private room"""
+class RoomMembershipGrantedEvent(Event):
+    """Emitted when a member has been added to the private room
+
+    The value of `user` will be `None` in case it is us who has been added to
+    the room
+    """
     room: Room
-    user: User
+    member: User = None
 
 
 @dataclass(frozen=True)
-class UserRemovedFromPrivateRoomEvent(Event):
-    """Emitted when another user was removed from a private room"""
+class RoomMembershipRevokedEvent(Event):
+    """Emitted when a member has been removed to the private room
+
+    The value of `user` will be `None` in case it is us who has been removed
+    from the room
+    """
     room: Room
-    user: User
+    member: User = None
 
 
 @dataclass(frozen=True)
-class RemovedFromPrivateRoomEvent(Event):
-    """Emitted when we were removed from a private room"""
+class RoomOperatorGrantedEvent(Event):
+    """Emitted when a member has been granted operator privileges on a private
+    room
+
+    The value of `user` will be `None` in case it is us who has been granted
+    operator
+    """
     room: Room
+    member: User = None
 
 
 @dataclass(frozen=True)
-class AddedToPrivateRoomEvent(Event):
-    """Emitted when we are added to a private room"""
-    room: Room
+class RoomOperatorRevokedEvent(Event):
+    """Emitted when a member had operator privileges revoked on a private room
 
-
-@dataclass(frozen=True)
-class RemovedFromPrivateRoomEvent(Event):
-    """Emitted when we were removed from a private room"""
+    The value of `user` will be `None` in case it is us who has been revoked
+    operator
+    """
     room: Room
+    member: User = None
 
 
 @dataclass(frozen=True)

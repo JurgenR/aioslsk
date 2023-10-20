@@ -6,8 +6,6 @@ from aioslsk.events import (
     RoomTickersEvent,
     RoomTickerAddedEvent,
     RoomTickerRemovedEvent,
-    UserJoinedRoomEvent,
-    UserLeftRoomEvent,
 )
 from aioslsk.room.model import Room, RoomMessage
 from aioslsk.user.model import UserStatus, TrackingFlag
@@ -258,7 +256,7 @@ class TestRoomManager:
         assert UserStatus.ONLINE == user.status
         assert TrackingFlag.ROOM_USER in user.tracking_flags
 
-        callback.assert_awaited_once_with(RoomJoinedEvent(room))
+        callback.assert_awaited_once_with(RoomJoinedEvent(room, None))
 
     @pytest.mark.asyncio
     async def test_onLeaveRoom_shouldUpdateRoomAndUsers(self, manager: RoomManager):
@@ -298,12 +296,12 @@ class TestRoomManager:
         assert user1.status == UserStatus.UNKNOWN
         assert TrackingFlag.ROOM_USER not in user1.tracking_flags
 
-        callback.assert_awaited_once_with(RoomLeftEvent(room0))
+        callback.assert_awaited_once_with(RoomLeftEvent(room0, None))
 
     @pytest.mark.asyncio
     async def test_onUserJoinedRoom_shouldAddUserToRoom(self, manager: RoomManager):
         callback = AsyncMock()
-        manager._event_bus.register(UserJoinedRoomEvent, callback)
+        manager._event_bus.register(RoomJoinedEvent, callback)
 
         room = manager.get_or_create_room('room0')
         user = manager._user_manager.get_or_create_user('user0')
@@ -328,12 +326,12 @@ class TestRoomManager:
         assert 10 == user.slots_free
         assert UserStatus.ONLINE == user.status
         assert TrackingFlag.ROOM_USER in user.tracking_flags
-        callback.assert_awaited_once_with(UserJoinedRoomEvent(room, user))
+        callback.assert_awaited_once_with(RoomJoinedEvent(room, user))
 
     @pytest.mark.asyncio
     async def test_onUserLeftRoom_shouldRemoveUserFromRoom(self, manager: RoomManager):
         callback = AsyncMock()
-        manager._event_bus.register(UserLeftRoomEvent, callback)
+        manager._event_bus.register(RoomLeftEvent, callback)
 
         room = manager.get_or_create_room('room0')
         user = manager._user_manager.get_or_create_user('user0')
@@ -346,7 +344,7 @@ class TestRoomManager:
 
         assert TrackingFlag.ROOM_USER not in user.tracking_flags
         assert 0 == len(room.users)
-        callback.assert_awaited_once_with(UserLeftRoomEvent(room, user))
+        callback.assert_awaited_once_with(RoomLeftEvent(room, user))
 
     @pytest.mark.asyncio
     async def test_whenSetRoomTicker_shouldSetRoomTicker(self, manager: RoomManager):
