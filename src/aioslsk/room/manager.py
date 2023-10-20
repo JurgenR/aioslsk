@@ -340,7 +340,6 @@ class RoomManager:
     async def _on_private_room_add_user(self, message: PrivateRoomAddUser.Response, connection: ServerConnection):
         room = self.get_or_create_room(message.room, private=True)
         user = self._user_manager.get_or_create_user(message.username)
-
         room.add_member(user)
 
         await self._event_bus.emit(
@@ -360,6 +359,7 @@ class RoomManager:
         room = self.get_or_create_room(message.room, private=True)
         user = self._user_manager.get_or_create_user(message.username)
         room.remove_member(user)
+        room.remove_operator(user)
 
         await self._event_bus.emit(
             RoomMembershipRevokedEvent(room=room, member=user))
@@ -369,6 +369,7 @@ class RoomManager:
         room = self.get_or_create_room(message.room, private=True)
         user = self._user_manager.get_or_create_user(self._settings.get('credentials.username'))
         room.remove_member(user)
+        room.remove_operator(user)
 
         await self._event_bus.emit(
             RoomMembershipRevokedEvent(room=room))
