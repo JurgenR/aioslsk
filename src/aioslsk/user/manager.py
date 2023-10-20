@@ -18,17 +18,12 @@ from ..events import (
     PrivilegedUsersEvent,
     PrivilgedUserAddedEvent,
     RecommendationsEvent,
-    ScanCompleteEvent,
     SimilarUsersEvent,
     ServerDisconnectedEvent,
-    TrackUserEvent,
-    UntrackUserEvent,
     UserInfoEvent,
     UserInterestsEvent,
     UserStatusEvent,
 )
-from ..exceptions import ConnectionFailedError
-from ..protocol.primitives import calc_md5
 from ..protocol.messages import (
     AddPrivilegedUser,
     AddHatedInterest,
@@ -85,6 +80,11 @@ class UserManager:
             MessageReceivedEvent, self._on_message_received)
         self._internal_event_bus.register(
             ConnectionStateChangedEvent, self._on_state_changed)
+
+    def get_self(self) -> User:
+        return self.get_or_create_user(
+            self._settings.get('credentials.username')
+        )
 
     def get_or_create_user(self, user: Union[str, User]) -> User:
         """Retrieves the user with given name or return the existing `User`
@@ -413,9 +413,6 @@ class UserManager:
         )
 
     # Listeners
-
-    async def _on_track_user(self, event: TrackUserEvent):
-        await self.track_user(event.username, event.flag)
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message

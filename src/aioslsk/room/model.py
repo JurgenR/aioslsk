@@ -9,12 +9,14 @@ class Room:
     name: str
     private: bool = False
     users: List[User] = field(default_factory=list)
+    """Current list of joined users"""
     joined: bool = False
     user_count: int = 0
     tickers: Dict[str, str] = field(default_factory=dict)
 
     # Only for private rooms
     members: List[User] = field(default_factory=list)
+    """For private rooms, a list of members of the room"""
     owner: Optional[User] = None
     operators: List[User] = field(default_factory=list)
     is_operator: bool = False

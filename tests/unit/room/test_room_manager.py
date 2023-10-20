@@ -27,10 +27,10 @@ from aioslsk.user.manager import UserManager
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
 
-
+DEFAULT_USER = 'user0'
 DEFAULT_SETTINGS = {
     'credentials': {
-        'username': 'user0',
+        'username': DEFAULT_USER,
         'password': 'Test1234'
     }
 }
@@ -82,12 +82,63 @@ class TestRoomManager:
 
         assert user == manager.get_or_create_room(room_name)
 
+    def test_getPublicRooms(self, manager: RoomManager):
+        room0 = manager.get_or_create_room('room0')
+        room0.private = False
+        room1 = manager.get_or_create_room('room1')
+        room1.private = True
+
+        rooms = manager.public_rooms
+
+        assert rooms == [room0]
+
+    def test_getPrivateRooms(self, manager: RoomManager):
+        room0 = manager.get_or_create_room('room0')
+        room0.private = False
+        room1 = manager.get_or_create_room('room1')
+        room1.private = True
+
+        rooms = manager.private_rooms
+
+        assert rooms == [room1]
+
+    def test_getOperatedRooms(self, manager: RoomManager):
+        user0 = manager._user_manager.get_or_create_user(DEFAULT_USER)
+        user1 = manager._user_manager.get_or_create_user('user1')
+
+        room0 = manager.get_or_create_room('room0')
+        room0.private = True
+        room0.owner = user1
+        room0.add_operator(user0)
+        room1 = manager.get_or_create_room('room1')
+        room1.private = True
+        room0.owner = user1
+
+        rooms = manager.operated_rooms
+
+        assert rooms == [room0]
+
+    def test_getOwnedRooms(self, manager: RoomManager):
+        user0 = manager._user_manager.get_or_create_user(DEFAULT_USER)
+        user1 = manager._user_manager.get_or_create_user('user1')
+
+        room0 = manager.get_or_create_room('room0')
+        room0.private = True
+        room0.owner = user0
+        room1 = manager.get_or_create_room('room1')
+        room1.private = True
+        room1.owner = user1
+
+        rooms = manager.owned_rooms
+
+        assert rooms == [room0]
+
     def test_getJoinedRooms(self, manager: RoomManager):
         room0 = manager.get_or_create_room('room0')
         room0.joined = True
         manager.get_or_create_room('room1')
 
-        rooms = manager.get_joined_rooms()
+        rooms = manager.joined_rooms
 
         assert rooms == [room0]
 

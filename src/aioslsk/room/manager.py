@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import logging
 import time
 from typing import Dict, List
@@ -80,8 +81,27 @@ class RoomManager:
 
         self.register_listeners()
 
-    def get_joined_rooms(self) -> List[Room]:
+    @property
+    def joined_rooms(self) -> List[Room]:
         return [room for room in self.rooms.values() if room.joined]
+
+    @property
+    def private_rooms(self) -> List[Room]:
+        return [room for room in self.rooms.values() if room.private]
+
+    @property
+    def public_rooms(self) -> List[Room]:
+        return [room for room in self.rooms.values() if not room.private]
+
+    @property
+    def owned_rooms(self) -> List[Room]:
+        me = self._user_manager.get_self()
+        return [room for room in self.rooms.values() if room.owner == me]
+
+    @property
+    def operated_rooms(self) -> List[Room]:
+        me = self._user_manager.get_self()
+        return [room for room in self.rooms.values() if me in room.operators]
 
     def get_or_create_room(self, room_name: str, private: bool = False) -> Room:
         try:
@@ -102,12 +122,7 @@ class RoomManager:
             ConnectionStateChangedEvent, self._on_state_changed)
 
     async def auto_join_rooms(self):
-        """Automatically joins rooms stored in the settings. This method will
-        do nothing if the `chats.auto_join` setting is not enabled
-        """
-        if not self._settings.get('chats.auto_join'):
-            return
-
+        """Automatically joins rooms stored in the settings"""
         rooms = self._settings.get('chats.rooms')
         logger.info(f"automatically rejoining {len(rooms)} rooms")
         await self._network.send_server_messages(
@@ -187,6 +202,8 @@ class RoomManager:
             await self._network.send_server_messages(
                 TogglePrivateRooms.Request(self._settings.get('chats.private_room_invites'))
             )
+            if not self._settings.get('chats.auto_join'):
+                await self.auto_join_rooms()
 
     @on_message(ChatRoomMessage.Response)
     async def _on_chat_room_message(self, message: ChatRoomMessage.Response, connection: ServerConnection):
@@ -223,7 +240,7 @@ class RoomManager:
         room = self.get_or_create_room(message.room)
 
         # Remove tracking flag if there's no room left which the user is in
-        for joined_room in self.get_joined_rooms():
+        for joined_room in self.joined_rooms:
             if joined_room != room and user in joined_room.users:
                 break
         else:
@@ -266,7 +283,7 @@ class RoomManager:
 
         # Remove tracking flag from users (that are no longer in other rooms)
         for user in room.users:
-            for joined_room in self.get_joined_rooms():
+            for joined_room in self.joined_rooms:
                 if joined_room == room:
                     continue
                 if user in joined_room.users:
@@ -282,7 +299,7 @@ class RoomManager:
     @on_message(ChatRoomTickers.Response)
     async def _on_chat_room_tickers(self, message: ChatRoomTickers.Response, connection: ServerConnection):
         room = self.get_or_create_room(message.room)
-        tickers = {}
+        tickers = OrderedDict()
         for ticker in message.tickers:
             self._user_manager.get_or_create_user(ticker.username)
             tickers[ticker.username] = ticker.ticker

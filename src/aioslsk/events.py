@@ -136,12 +136,14 @@ class RoomMessageEvent(Event):
 
 @dataclass(frozen=True)
 class RoomTickersEvent(Event):
+    """Emitted when a list of tickers has been received for a room"""
     room: Room
     tickers: Dict[str, str]
 
 
 @dataclass(frozen=True)
 class RoomTickerAddedEvent(Event):
+    """Emitted when a ticker has been added to the room by a user"""
     room: Room
     user: User
     ticker: str
@@ -149,6 +151,7 @@ class RoomTickerAddedEvent(Event):
 
 @dataclass(frozen=True)
 class RoomTickerRemovedEvent(Event):
+    """Emitted when a ticker has been removed from the room by a user"""
     room: Room
     user: User
 
@@ -333,23 +336,14 @@ class MessageReceivedEvent(InternalEvent):
 
 @dataclass(frozen=True)
 class PeerInitializedEvent(InternalEvent):
-    """Emitted when a new connection has been established and the initialization
-    message has been received
+    """Emitted when a new peer connection has been established and the
+    initialization message has been received
     """
     connection: PeerConnection
     requested: bool
-
-
-@dataclass(frozen=True)
-class TrackUserEvent(InternalEvent):
-    username: str
-    flag: TrackingFlag
-
-
-@dataclass(frozen=True)
-class UntrackUserEvent(InternalEvent):
-    username: str
-    flag: TrackingFlag
+    """Indictes whether the connection was initialized by another user or opened
+    on our request
+    """
 
 
 @dataclass(frozen=True)
