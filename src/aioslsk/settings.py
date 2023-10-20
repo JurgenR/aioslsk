@@ -16,7 +16,7 @@ class Settings:
         self.listeners: Dict[str, List[Callable]] = {}
 
     @classmethod
-    def create(cls) -> Settings:
+    def create_default(cls) -> Settings:
         """Creates a new `Settings` object from the defaults"""
         with open(cls.DEFAULT_SETTINGS, 'r') as fh:
             return Settings(json.load(fh))

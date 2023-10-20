@@ -16,7 +16,6 @@ from .events import (
     build_message_map,
     InternalEventBus,
     ConnectionStateChangedEvent,
-    LoginSuccessEvent,
     PeerInitializedEvent,
     MessageReceivedEvent,
 )
@@ -30,6 +29,7 @@ from .protocol.messages import (
     DistributedChildDepth,
     DistributedSearchRequest,
     DistributedServerSearchRequest,
+    Login,
     MessageDataclass,
     MinParentsInCache,
     ParentInactivityTimeout,
@@ -96,8 +96,6 @@ class DistributedNetwork:
             ConnectionStateChangedEvent, self._on_state_changed)
         self._internal_event_bus.register(
             MessageReceivedEvent, self._on_message_received)
-        self._internal_event_bus.register(
-            LoginSuccessEvent, self._on_login_success)
 
     def _get_advertised_branch_values(self) -> Tuple[str, int]:
         """Returns the advertised branch values. These values are to be sent to
@@ -255,6 +253,11 @@ class DistributedNetwork:
             self._potential_parent_tasks.remove(task)
 
     # Server messages
+
+    @on_message(Login.Response)
+    async def _on_login(self, message: Login.Response, connection: ServerConnection):
+        if message.success:
+            await self._notify_server_of_parent()
 
     @on_message(ParentMinSpeed.Response)
     async def _on_parent_min_speed(self, message: ParentMinSpeed.Response, connection: ServerConnection):
@@ -440,9 +443,6 @@ class DistributedNetwork:
                 peer for peer in self.distributed_peers
                 if peer.connection != event.connection
             ]
-
-    async def _on_login_success(self, event: LoginSuccessEvent):
-        await self._notify_server_of_parent()
 
     async def send_messages_to_children(self, *messages: Union[MessageDataclass, bytes]):
         for child in self.children:

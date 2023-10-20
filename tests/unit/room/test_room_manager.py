@@ -1,6 +1,5 @@
 from aioslsk.events import (
     EventBus,
-    PrivateMessageEvent,
     RoomJoinedEvent,
     RoomLeftEvent,
     RoomMessageEvent,
@@ -10,26 +9,22 @@ from aioslsk.events import (
     UserJoinedRoomEvent,
     UserLeftRoomEvent,
 )
-from aioslsk.model import ChatMessage, RoomMessage, UserStatus, TrackingFlag
+from aioslsk.room.model import Room, RoomMessage
+from aioslsk.user.model import UserStatus, TrackingFlag
 from aioslsk.protocol.messages import (
-    AddUser,
     ChatJoinRoom,
     ChatLeaveRoom,
-    ChatPrivateMessage,
-    ChatAckPrivateMessage,
     ChatUserJoinedRoom,
     ChatUserLeftRoom,
     ChatRoomMessage,
     ChatRoomTickerAdded,
     ChatRoomTickers,
     ChatRoomTickerRemoved,
-    RemoveUser,
 )
 from aioslsk.protocol.primitives import RoomTicker, UserStats
-from aioslsk.search.model import SearchType
+from aioslsk.room.manager import RoomManager
 from aioslsk.settings import Settings
-from aioslsk.server import ServerManager
-from aioslsk.state import State
+from aioslsk.user.manager import UserManager
 
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
@@ -42,91 +37,80 @@ DEFAULT_SETTINGS = {
     }
 }
 
+
 @pytest.fixture
-def manager() -> ServerManager:
-    state = State()
+def user_manager() -> UserManager:
+    user_manager = UserManager(
+        Settings(DEFAULT_SETTINGS),
+        Mock(), # Event bus
+        Mock(), # Internal event bus
+        AsyncMock(), # Network
+    )
+    return user_manager
+
+
+@pytest.fixture
+def manager(user_manager: UserManager) -> RoomManager:
     event_bus = EventBus()
     internal_event_bus = Mock()
-    shares_manager = Mock()
     network = AsyncMock()
     network.server = AsyncMock()
 
-    manager = ServerManager(
-        state,
+    manager = RoomManager(
         Settings(DEFAULT_SETTINGS),
         event_bus,
         internal_event_bus,
-        shares_manager,
+        user_manager,
         network
     )
 
     return manager
 
 
-class TestServerManager:
+class TestRoomManager:
+
+    def test_whenMissingRoom_shouldCreateAndReturnRoom(self, manager: RoomManager):
+        room_name = 'myroom'
+
+        room = manager.get_or_create_room(room_name)
+        assert isinstance(room, Room)
+        assert room_name == room.name
+        assert room_name in manager.rooms
+
+    def test_whenExistingRoom_shouldReturnRoom(self, manager: RoomManager):
+        room_name = 'myuser'
+        user = Room(name=room_name)
+        manager.rooms[room_name] = user
+
+        assert user == manager.get_or_create_room(room_name)
+
+    def test_getJoinedRooms(self, manager: RoomManager):
+        room0 = manager.get_or_create_room('room0')
+        room0.joined = True
+        manager.get_or_create_room('room1')
+
+        rooms = manager.get_joined_rooms()
+
+        assert rooms == [room0]
+
+    # def test_resetUsersAndRooms(self, manager: RoomManager):
+    #     user0 = manager.get_or_create_user('user0')
+    #     user0.status = UserStatus.ONLINE
+    #     user0.tracking_flags = TrackingFlag.FRIEND
+
+    #     user1 = manager.get_or_create_user('user1')
+    #     room = manager.get_or_create_room('room0')
+    #     room.add_user(user1)
+
+    #     manager.reset_users_and_rooms()
+
+    #     assert user0.status == UserStatus.UNKNOWN
+    #     assert user0.tracking_flags == TrackingFlag(0)
+
+    #     assert len(room.users) == 0
 
     @pytest.mark.asyncio
-    async def test_trackUser_userNotTracked_shouldSendAddUser(self, manager: ServerManager):
-        user = manager._state.get_or_create_user('user0')
-
-        await manager.track_user('user0', TrackingFlag.REQUESTED)
-
-        assert user.tracking_flags == TrackingFlag.REQUESTED
-        manager._network.send_server_messages.assert_awaited_once_with(
-            AddUser.Request('user0')
-        )
-
-    @pytest.mark.asyncio
-    async def test_trackUser_userTracked_shouldNotSendAddUser(self, manager: ServerManager):
-        user = manager._state.get_or_create_user('user0')
-        user.status = UserStatus.ONLINE
-        user.tracking_flags = TrackingFlag.FRIEND
-
-        await manager.track_user('user0', TrackingFlag.REQUESTED)
-
-        assert user.tracking_flags == TrackingFlag.REQUESTED | TrackingFlag.FRIEND
-        assert 0 == manager._network.send_server_messages.await_count
-
-    @pytest.mark.asyncio
-    async def test_untrackUser_lastAddUserFlag_shouldSendRemoveUser(self, manager: ServerManager):
-        user = manager._state.get_or_create_user('user0')
-        user.status = UserStatus.ONLINE
-        user.tracking_flags = TrackingFlag.FRIEND
-
-        await manager.untrack_user('user0', TrackingFlag.FRIEND)
-
-        assert user.status == UserStatus.UNKNOWN
-        assert user.tracking_flags == TrackingFlag(0)
-        manager._network.send_server_messages.assert_awaited_once_with(
-            RemoveUser.Request('user0')
-        )
-
-    @pytest.mark.asyncio
-    async def test_untrackUser_lastAddUserFlag_shouldSendRemoveUserAndNotSetStatusUnknown(self, manager: ServerManager):
-        user = manager._state.get_or_create_user('user0')
-        user.status = UserStatus.ONLINE
-        user.tracking_flags = TrackingFlag.FRIEND | TrackingFlag.ROOM_USER
-
-        await manager.untrack_user('user0', TrackingFlag.FRIEND)
-
-        assert user.status == UserStatus.ONLINE
-        assert user.tracking_flags == TrackingFlag.ROOM_USER
-        manager._network.send_server_messages.assert_awaited_once_with(
-            RemoveUser.Request('user0')
-        )
-
-    @pytest.mark.asyncio
-    async def test_untrackUser_addUserFlagRemains_shouldNotSendRemoveUser(self, manager: ServerManager):
-        user = manager._state.get_or_create_user('user0')
-        user.tracking_flags = TrackingFlag.FRIEND | TrackingFlag.REQUESTED
-
-        await manager.untrack_user('user0', TrackingFlag.FRIEND)
-
-        assert user.tracking_flags == TrackingFlag.REQUESTED
-        assert 0 == manager._network.send_server_messages.await_count
-
-    @pytest.mark.asyncio
-    async def test_whenRoomTickersReceived_shouldUpdateModelAndEmit(self, manager: ServerManager):
+    async def test_whenRoomTickersReceived_shouldUpdateModelAndEmit(self, manager: RoomManager):
         callback = AsyncMock()
         manager._event_bus.register(RoomTickersEvent, callback)
 
@@ -146,16 +130,16 @@ class TestServerManager:
             'user1': 'world'
         }
 
-        assert manager._state.rooms['room0'].tickers == expected_tickers
+        assert manager.rooms['room0'].tickers == expected_tickers
         callback.assert_awaited_once_with(
             RoomTickersEvent(
-                manager._state.rooms['room0'],
+                manager.rooms['room0'],
                 tickers=expected_tickers
             )
         )
 
     @pytest.mark.asyncio
-    async def test_whenRoomTickerAdded_shouldUpdateModelAndEmit(self, manager: ServerManager):
+    async def test_whenRoomTickerAdded_shouldUpdateModelAndEmit(self, manager: RoomManager):
         callback = AsyncMock()
         manager._event_bus.register(RoomTickerAddedEvent, callback)
 
@@ -167,21 +151,21 @@ class TestServerManager:
         # Check model
         expected_tickers = {'user0': 'hello'}
 
-        assert manager._state.rooms['room0'].tickers == expected_tickers
+        assert manager.rooms['room0'].tickers == expected_tickers
         callback.assert_awaited_once_with(
             RoomTickerAddedEvent(
-                manager._state.rooms['room0'],
-                manager._state.users['user0'],
+                manager.rooms['room0'],
+                manager._user_manager.users['user0'],
                 'hello',
             )
         )
 
     @pytest.mark.asyncio
-    async def test_whenRoomTickerRemoved_shouldUpdateModelAndEmit(self, manager: ServerManager):
+    async def test_whenRoomTickerRemoved_shouldUpdateModelAndEmit(self, manager: RoomManager):
         callback = AsyncMock()
         manager._event_bus.register(RoomTickerRemovedEvent, callback)
 
-        room = manager._state.get_or_create_room('room0')
+        room = manager.get_or_create_room('room0')
         room.tickers['user0'] = 'hello'
 
         await manager._on_chat_room_ticker_removed(
@@ -191,20 +175,20 @@ class TestServerManager:
         # Check model
         expected_tickers = {}
 
-        assert manager._state.rooms['room0'].tickers == expected_tickers
+        assert manager.rooms['room0'].tickers == expected_tickers
         callback.assert_awaited_once_with(
             RoomTickerRemovedEvent(
-                manager._state.rooms['room0'],
-                manager._state.users['user0']
+                manager.rooms['room0'],
+                manager._user_manager.users['user0']
             )
         )
 
     @pytest.mark.asyncio
-    async def test_whenRoomTickerRemoved_noTickerForUser_shouldWarnAndEmit(self, caplog, manager: ServerManager):
+    async def test_whenRoomTickerRemoved_noTickerForUser_shouldWarnAndEmit(self, caplog, manager: RoomManager):
         callback = AsyncMock()
         manager._event_bus.register(RoomTickerRemovedEvent, callback)
 
-        manager._state.get_or_create_room('room0')
+        manager.get_or_create_room('room0')
 
         await manager._on_chat_room_ticker_removed(
             ChatRoomTickerRemoved.Response(room='room0', username='user0'),
@@ -214,18 +198,18 @@ class TestServerManager:
         assert caplog.records[-1].levelname == 'WARNING'
         callback.assert_awaited_once_with(
             RoomTickerRemovedEvent(
-                manager._state.rooms['room0'],
-                manager._state.users['user0']
+                manager.rooms['room0'],
+                manager._user_manager.users['user0']
             )
         )
 
     @pytest.mark.asyncio
-    async def test_onChatRoomMessage_shouldEmitEvent(self, manager: ServerManager):
+    async def test_onChatRoomMessage_shouldEmitEvent(self, manager: RoomManager):
         callback = AsyncMock()
         manager._event_bus.register(RoomMessageEvent, callback)
 
-        room = manager._state.get_or_create_room('room0')
-        user = manager._state.get_or_create_user('user0')
+        room = manager.get_or_create_room('room0')
+        user = manager._user_manager.get_or_create_user('user0')
 
         with patch('time.time', return_value=100.0):
             await manager._on_chat_room_message(
@@ -241,42 +225,12 @@ class TestServerManager:
         callback.assert_awaited_once_with(RoomMessageEvent(message))
 
     @pytest.mark.asyncio
-    async def test_onChatPrivateMessage_shouldSendAckAndEmitEvent(self, manager: ServerManager):
-        callback = AsyncMock()
-        manager._event_bus.register(PrivateMessageEvent, callback)
-
-        user = manager._state.get_or_create_user('user0')
-
-        await manager._on_private_message(
-            ChatPrivateMessage.Response(
-                chat_id=1,
-                username='user0',
-                message='hello',
-                timestamp=100.0,
-                is_admin=False
-            ),
-            manager._network.server
-        )
-
-        manager._network.send_server_messages.assert_awaited_once_with(
-            ChatAckPrivateMessage.Request(1)
-        )
-        message = ChatMessage(
-            id=1,
-            timestamp=100.0,
-            user=user,
-            message='hello',
-            is_admin=False
-        )
-        callback.assert_awaited_once_with(PrivateMessageEvent(message))
-
-    @pytest.mark.asyncio
-    async def test_onJoinRoom_shouldUpdateRoomAndUsers(self, manager: ServerManager):
+    async def test_onJoinRoom_shouldUpdateRoomAndUsers(self, manager: RoomManager):
         callback = AsyncMock()
         manager._event_bus.register(RoomJoinedEvent, callback)
 
-        room = manager._state.get_or_create_room('room0')
-        user = manager._state.get_or_create_user('user0')
+        room = manager.get_or_create_room('room0')
+        user = manager._user_manager.get_or_create_user('user0')
 
         user_stats = (1, 2, 3, 4)
         await manager._on_join_room(
@@ -307,26 +261,26 @@ class TestServerManager:
         callback.assert_awaited_once_with(RoomJoinedEvent(room))
 
     @pytest.mark.asyncio
-    async def test_onLeaveRoom_shouldUpdateRoomAndUsers(self, manager: ServerManager):
+    async def test_onLeaveRoom_shouldUpdateRoomAndUsers(self, manager: RoomManager):
         callback = AsyncMock()
         manager._event_bus.register(RoomLeftEvent, callback)
 
         # Create 2 rooms: first room with 2 users, second with 1 user
         # After leaving the tracking for the user we no longer share any rooms
         # with should be disabled and the status reset
-        user0 = manager._state.get_or_create_user('user0')
+        user0 = manager._user_manager.get_or_create_user('user0')
         user0.status = UserStatus.ONLINE
         user0.tracking_flags = TrackingFlag.ROOM_USER
-        user1 = manager._state.get_or_create_user('user1')
+        user1 = manager._user_manager.get_or_create_user('user1')
         user1.status = UserStatus.ONLINE
         user1.tracking_flags = TrackingFlag.ROOM_USER
 
-        room0 = manager._state.get_or_create_room('room0')
+        room0 = manager.get_or_create_room('room0')
         room0.joined = True
         room0.add_user(user0)
         room0.add_user(user1)
 
-        room1 = manager._state.get_or_create_room('room1')
+        room1 = manager.get_or_create_room('room1')
         room1.joined = True
         room1.add_user(user0)
 
@@ -347,12 +301,12 @@ class TestServerManager:
         callback.assert_awaited_once_with(RoomLeftEvent(room0))
 
     @pytest.mark.asyncio
-    async def test_onUserJoinedRoom_shouldAddUserToRoom(self, manager: ServerManager):
+    async def test_onUserJoinedRoom_shouldAddUserToRoom(self, manager: RoomManager):
         callback = AsyncMock()
         manager._event_bus.register(UserJoinedRoomEvent, callback)
 
-        room = manager._state.get_or_create_room('room0')
-        user = manager._state.get_or_create_user('user0')
+        room = manager.get_or_create_room('room0')
+        user = manager._user_manager.get_or_create_user('user0')
 
         user_stats = (1, 2, 3, 4)
         await manager._on_user_joined_room(
@@ -377,12 +331,12 @@ class TestServerManager:
         callback.assert_awaited_once_with(UserJoinedRoomEvent(room, user))
 
     @pytest.mark.asyncio
-    async def test_onUserLeftRoom_shouldRemoveUserFromRoom(self, manager: ServerManager):
+    async def test_onUserLeftRoom_shouldRemoveUserFromRoom(self, manager: RoomManager):
         callback = AsyncMock()
         manager._event_bus.register(UserLeftRoomEvent, callback)
 
-        room = manager._state.get_or_create_room('room0')
-        user = manager._state.get_or_create_user('user0')
+        room = manager.get_or_create_room('room0')
+        user = manager._user_manager.get_or_create_user('user0')
         room.add_user(user)
 
         await manager._on_user_left_room(
@@ -395,6 +349,6 @@ class TestServerManager:
         callback.assert_awaited_once_with(UserLeftRoomEvent(room, user))
 
     @pytest.mark.asyncio
-    async def test_whenSetRoomTicker_shouldSetRoomTicker(self, manager: ServerManager):
+    async def test_whenSetRoomTicker_shouldSetRoomTicker(self, manager: RoomManager):
         await manager.set_room_ticker('room0', 'hello')
         manager._network.send_server_messages.assert_awaited_once()

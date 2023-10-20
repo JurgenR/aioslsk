@@ -10,12 +10,19 @@ class AioSlskException(Exception):
     pass
 
 
+class AuthenticationError(AioSlskException):
+
+    def __init__(self, reason: str, message: str):
+        self.reason: str = reason
+        self.message: str = message
+
+
 class UnknownMessageError(AioSlskException):
 
-    def __init__(self, message_id: int, data: bytes, message):
-        self.message_id = message_id
-        self.data = data
-        self.message = message
+    def __init__(self, message_id: int, data: bytes, message: str):
+        self.message_id: int = message_id
+        self.data: bytes = data
+        self.message: str = message
 
 
 class MessageSerializationError(AioSlskException):

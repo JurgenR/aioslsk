@@ -3,21 +3,24 @@ import asyncio
 import logging
 from typing import List, Optional, Union
 
+from .commands import BaseCommand, LoginCommand
 from .distributed import DistributedNetwork
 from .events import EventBus, InternalEventBus
 from .shares.cache import SharesCache, SharesNullCache
 from .shares.manager import SharesManager
-from .model import Room, User, TrackingFlag
 from .network.network import Network
 from .peer import PeerManager
+from .room.manager import RoomManager
+from .room.model import Room
 from .server import ServerManager
 from .search.manager import SearchManager
 from .search.model import SearchRequest, SearchResult
-from .state import State
 from .settings import Settings
 from .transfer.cache import TransferCache, TransferNullCache
 from .transfer.manager import TransferManager
 from .transfer.model import Transfer, TransferDirection
+from .user.manager import UserManager
+from .user.model import User, TrackingFlag
 from .utils import ticket_generator
 
 
@@ -34,7 +37,6 @@ class SoulSeekClient:
             self, settings: Settings,
             shares_cache: Optional[SharesCache] = None, transfer_cache: Optional[TransferCache] = None,
             event_bus: Optional[EventBus] = None):
-        super().__init__()
         self.settings: Settings = settings
 
         self._ticket_generator = ticket_generator()
@@ -43,20 +45,32 @@ class SoulSeekClient:
         self.events: EventBus = event_bus or EventBus()
         self._internal_events: InternalEventBus = InternalEventBus()
 
-        self.state: State = State()
+        # self.network: Network = network
+        # self.distributed_network: DistributedNetwork = distributed_network
+
+        # self.user_manager: UserManager = user_manager
+        # self.room_manager: RoomManager = room_manager
+
+        # self.shares_manager: SharesManager = shares_manager
+        # self.transfer_manager: TransferManager = transfer_manager
+        # self.peer_manager: PeerManager = peer_manager
+        # self.search_manager: SearchManager = search_manager
+        # self.server_manager: ServerManager = server_manager
 
         self.network: Network = self.create_network()
+        self.distributed_network: DistributedNetwork = self.create_distributed_network()
+
+        self.user_manager: UserManager = self.create_user_manager()
+        self.room_manager: RoomManager = self.create_room_manager()
 
         self.shares_manager: SharesManager = self.create_shares_manager(
             shares_cache or SharesNullCache()
         )
-
         self.transfer_manager: TransferManager = self.create_transfer_manager(
             transfer_cache or TransferNullCache()
         )
         self.peer_manager: PeerManager = self.create_peer_manager()
         self.search_manager: SearchManager = self.create_search_manager()
-        self.distributed_network: DistributedNetwork = self.create_distributed_network()
         self.server_manager: ServerManager = self.create_server_manager()
 
     @property
@@ -78,7 +92,6 @@ class SoulSeekClient:
         # Allows creating client before actually calling asyncio.run(client.start())
         # see https://stackoverflow.com/questions/55918048/asyncio-semaphore-runtimeerror-task-got-future-attached-to-a-different-loop
         self._stop_event = asyncio.Event()
-        self.network._stop_event = self._stop_event
 
         await self.start_shares_manager(scan=scan_shares)
         await self.start_transfer_manager()
@@ -96,10 +109,10 @@ class SoulSeekClient:
         """Performs a logon to the server with the `credentials` defined in the
         `settings`
         """
-        await self.server_manager.login(
+        await self.execute(LoginCommand(
             self.settings.get('credentials.username'),
             self.settings.get('credentials.password')
-        )
+        ).response())
 
     async def start_shares_manager(self, scan=True):
         """Reads the shares cache and loads the shared directories from the
@@ -154,6 +167,24 @@ class SoulSeekClient:
     @property
     def transfers(self):
         return self.transfer_manager._transfers
+
+    async def execute(self, command: BaseCommand):
+        if command.response_future:
+            self.network.register_response_future(
+                command.response_future
+            )
+
+        try:
+            await command.send(self)
+        except Exception:
+            if command.response_future:
+                command.response_future.cancel()
+            raise
+
+        if command.response_future:
+            _, response = await asyncio.wait_for(
+                command.response_future, timeout=10)
+            return command.process_response(self, response)
 
     async def download(self, user: Union[str, User], filename: str) -> Transfer:
         """Requests to start a downloading the file from the given user
@@ -473,6 +504,23 @@ class SoulSeekClient:
             self._internal_events
         )
 
+    def create_user_manager(self) -> UserManager:
+        return UserManager(
+            self.settings,
+            self.events,
+            self._internal_events,
+            self.network
+        )
+
+    def create_room_manager(self) -> RoomManager:
+        return RoomManager(
+            self.settings,
+            self.events,
+            self._internal_events,
+            self.user_manager,
+            self.network
+        )
+
     def create_shares_manager(self, cache: SharesCache) -> SharesManager:
         return SharesManager(
             self.settings,
@@ -482,10 +530,10 @@ class SoulSeekClient:
 
     def create_transfer_manager(self, cache: TransferCache) -> TransferManager:
         return TransferManager(
-            self.state,
             self.settings,
             self.events,
             self._internal_events,
+            self.user_manager,
             self.shares_manager,
             self.network,
             cache=cache
@@ -493,10 +541,10 @@ class SoulSeekClient:
 
     def create_search_manager(self) -> SearchManager:
         return SearchManager(
-            self.state,
             self.settings,
             self.events,
             self._internal_events,
+            self.user_manager,
             self.shares_manager,
             self.transfer_manager,
             self.network
@@ -504,7 +552,6 @@ class SoulSeekClient:
 
     def create_server_manager(self) -> ServerManager:
         return ServerManager(
-            self.state,
             self.settings,
             self.events,
             self._internal_events,
@@ -514,10 +561,10 @@ class SoulSeekClient:
 
     def create_peer_manager(self) -> PeerManager:
         return PeerManager(
-            self.state,
             self.settings,
             self.events,
             self._internal_events,
+            self.user_manager,
             self.shares_manager,
             self.transfer_manager,
             self.network

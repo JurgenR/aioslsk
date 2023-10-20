@@ -1,5 +1,5 @@
 from aioslsk.events import build_message_map, on_message, EventBus, UserInfoEvent
-from aioslsk.model import User
+from aioslsk.user.model import User
 from aioslsk.protocol.messages import Login, AddUser
 
 import pytest
@@ -53,17 +53,20 @@ class TestEventBus:
     def test_whenRegisterNonExistingEvent_shouldAddListener(self):
         bus = EventBus()
 
-        bus.register(UserInfoEvent, listener1)
+        bus.register(UserInfoEvent, listener1, priority=5)
 
-        assert bus._events[UserInfoEvent] == [listener1, ]
+        assert bus._events[UserInfoEvent] == [(5, listener1), ]
 
     def test_whenRegisterExistingEvent_shouldAddListener(self):
         bus = EventBus()
 
-        bus.register(UserInfoEvent, listener1)
-        bus.register(UserInfoEvent, listener2)
+        bus.register(UserInfoEvent, listener1, priority=5)
+        bus.register(UserInfoEvent, listener2, priority=4)
 
-        assert bus._events[UserInfoEvent] == [listener1, listener2, ]
+        assert bus._events[UserInfoEvent] == [
+            (4, listener2),
+            (5, listener1),
+        ]
 
     @pytest.mark.asyncio
     async def test_whenEmitNoListenersRegister_shouldNotRaise(self):

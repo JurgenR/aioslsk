@@ -87,6 +87,59 @@ UserStats
 4. **uint32**: shared_folder_count
 
 
+.. _value-tables:
+
+Value Tables
+============
+
+Transfer Direction
+------------------
+
++-------+----------+
+| Value | Meaning  |
++=======+==========+
+| 0     | upload   |
++-------+----------+
+| 1     | download |
++-------+----------+
+
+
+User Status
+-----------
+
+Possible statuses:
+
++-------+---------+
+| Value | Status  |
++=======+=========+
+| 0     | offline |
++-------+---------+
+| 1     | away    |
++-------+---------+
+| 2     | online  |
++-------+---------+
+
+Attributes
+----------
+
+* Lossless: FLAC, WAV
+* Compressed: MP3, M4A, AAC, OGG
+
++-------+-------------------+----------------------+
+| Index |      Meaning      |        Usage         |
++=======+===================+======================+
+| 0     | bitrate           | compressed           |
++-------+-------------------+----------------------+
+| 1     | length in seconds | compressed, lossless |
++-------+-------------------+----------------------+
+| 2     | VBR               | compressed           |
++-------+-------------------+----------------------+
+| 4     | sample rate       | lossless             |
++-------+-------------------+----------------------+
+| 5     | bitness           | lossless             |
++-------+-------------------+----------------------+
+
+
 .. _server-messages:
 
 Server Messages
@@ -276,7 +329,7 @@ Used when we want to join a chat room
 ChatLeaveRoom (Code 15)
 -----------------------
 
-Used when we want to leave a chat room. The receive is for confirmation
+Used when we want to leave a chat room. The receive is confirmation
 
 :Code: 15 (0x0F)
 :Send:

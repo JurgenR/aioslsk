@@ -3,9 +3,10 @@ import asyncio
 from dataclasses import dataclass, field
 import inspect
 import logging
-from typing import Callable, Dict, List, Optional, Type, TYPE_CHECKING
+from typing import Callable, Dict, List, Optional, Tuple, Type, TYPE_CHECKING
 
-from .model import ChatMessage, Room, RoomMessage, User, TrackingFlag
+from .room.model import Room, RoomMessage
+from .user.model import ChatMessage, User, TrackingFlag
 from .protocol.primitives import (
     DirectoryData,
     MessageDataclass,
@@ -53,13 +54,16 @@ def build_message_map(obj: object) -> Dict[Type[MessageDataclass], Callable]:
 class EventBus:
 
     def __init__(self):
-        self._events: Dict[Type[Event], List[Callable[[Event], None]]] = dict()
+        self._events: Dict[Type[Event], List[Tuple[int, Callable[[Event], None]]]] = {}
 
-    def register(self, event_class: Type[Event], listener: Callable[[Event], None]):
+    def register(self, event_class: Type[Event], listener: Callable[[Event], None], priority: int = 100):
+        entry = (priority, listener)
         try:
-            self._events[event_class].append(listener)
+            self._events[event_class].append(entry)
         except KeyError:
-            self._events[event_class] = [listener, ]
+            self._events[event_class] = [entry, ]
+
+        self._events[event_class].sort(key=lambda e: e[0])
 
     async def emit(self, event: Event):
         try:
@@ -67,7 +71,7 @@ class EventBus:
         except KeyError:
             pass
         else:
-            for listener in listeners:
+            for _, listener in listeners:
                 try:
                     if asyncio.iscoroutinefunction(listener):
                         await listener(event)
@@ -172,6 +176,26 @@ class RoomJoinedEvent(Event):
 @dataclass(frozen=True)
 class RoomLeftEvent(Event):
     """Emitted after we have left a chat room"""
+    room: Room
+
+
+@dataclass(frozen=True)
+class UserAddedToPrivateRoomEvent(Event):
+    """Emitted when another user was added to a private room"""
+    room: Room
+    user: User
+
+
+@dataclass(frozen=True)
+class UserRemovedFromPrivateRoomEvent(Event):
+    """Emitted when another user was removed from a private room"""
+    room: Room
+    user: User
+
+
+@dataclass(frozen=True)
+class RemovedFromPrivateRoomEvent(Event):
+    """Emitted when we were removed from a private room"""
     room: Room
 
 
@@ -319,11 +343,6 @@ class TrackUserEvent(InternalEvent):
 class UntrackUserEvent(InternalEvent):
     username: str
     flag: TrackingFlag
-
-
-@dataclass(frozen=True)
-class LoginSuccessEvent(InternalEvent):
-    """Emitted when logon was successfully performed"""
 
 
 @dataclass(frozen=True)

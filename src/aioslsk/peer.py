@@ -22,8 +22,8 @@ from .protocol.messages import (
 from .network.network import Network
 from .settings import Settings
 from .shares.manager import SharesManager
-from .state import State
-from .transfer.manager import TransferManager
+from .transfer.interface import UploadInfoProvider
+from .user.manager import UserManager
 from .utils import ticket_generator
 
 
@@ -34,17 +34,18 @@ class PeerManager:
     """Peer manager is responsible for handling peer messages"""
 
     def __init__(
-            self, state: State, settings: Settings,
+            self, settings: Settings,
             event_bus: EventBus, internal_event_bus: InternalEventBus,
-            shares_manager: SharesManager, transfer_manager: TransferManager,
+            user_manager: UserManager,
+            shares_manager: SharesManager, upload_info_provider: UploadInfoProvider,
             network: Network):
-        self._state: State = state
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._network: Network = network
+        self._user_manager: UserManager = user_manager
         self._shares_manager: SharesManager = shares_manager
-        self._transfer_manager: TransferManager = transfer_manager
+        self._upload_info_provider: UploadInfoProvider = upload_info_provider
 
         self._ticket_generator = ticket_generator()
 
@@ -115,7 +116,7 @@ class PeerManager:
 
         logger.info(f"PeerSharesReply : from username {connection.username}, got {len(message.directories)} directories")
 
-        user = self._state.get_or_create_user(connection.username)
+        user = self._user_manager.get_or_create_user(connection.username)
         locked_directories = message.locked_directories or []
 
         await self._event_bus.emit(
@@ -145,7 +146,7 @@ class PeerManager:
                 "got PeerDirectoryContentsReply for a connection that wasn't properly initialized")
             return
 
-        user = self._state.get_or_create_user(connection.username)
+        user = self._user_manager.get_or_create_user(connection.username)
         await self._event_bus.emit(
             UserDirectoryEvent(user, message.directory, message.directories)
         )
@@ -157,7 +158,7 @@ class PeerManager:
                 "got PeerUserInfoReply for a connection that wasn't properly initialized")
             return
 
-        user = self._state.get_or_create_user(connection.username)
+        user = self._user_manager.get_or_create_user(connection.username)
         user.description = message.description
         user.picture = message.picture
         user.upload_slots = message.upload_slots
@@ -188,9 +189,9 @@ class PeerManager:
                 description=description,
                 has_picture=bool(picture),
                 picture=picture,
-                upload_slots=self._transfer_manager.get_upload_slots(),
-                queue_size=self._transfer_manager.get_queue_size(),
-                has_slots_free=self._transfer_manager.has_slots_free()
+                upload_slots=self._upload_info_provider.get_upload_slots(),
+                queue_size=self._upload_info_provider.get_queue_size(),
+                has_slots_free=self._upload_info_provider.has_slots_free()
             )
         )
 

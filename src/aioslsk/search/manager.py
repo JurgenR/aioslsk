@@ -37,8 +37,8 @@ from ..network.network import Network
 from ..settings import Settings
 from ..shares.manager import SharesManager
 from ..shares.utils import convert_items_to_file_data
-from ..state import State
-from ..transfer.manager import TransferManager
+from ..transfer.interface import UploadInfoProvider
+from ..user.manager import UserManager
 from ..utils import task_counter, ticket_generator
 from .model import ReceivedSearch, SearchResult, SearchRequest, SearchType
 
@@ -50,17 +50,18 @@ class SearchManager:
     """Handler for searches requests"""
 
     def __init__(
-            self, state: State, settings: Settings,
+            self, settings: Settings,
             event_bus: EventBus, internal_event_bus: InternalEventBus,
-            shares_manager: SharesManager, transfer_manager: TransferManager,
+            user_manager: UserManager, shares_manager: SharesManager,
+            upload_info_provider: UploadInfoProvider,
             network: Network):
-        self._state: State = state
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._network: Network = network
+        self._user_manager: UserManager = user_manager
         self._shares_manager: SharesManager = shares_manager
-        self._transfer_manager: TransferManager = transfer_manager
+        self._upload_info_provider: UploadInfoProvider = upload_info_provider
 
         self._ticket_generator = ticket_generator()
 
@@ -173,9 +174,9 @@ class SearchManager:
                     username=self._settings.get('credentials.username'),
                     ticket=ticket,
                     results=convert_items_to_file_data(visible, use_full_path=True),
-                    has_slots_free=self._transfer_manager.has_slots_free(),
-                    avg_speed=int(self._transfer_manager.get_average_upload_speed()),
-                    queue_size=self._transfer_manager.get_queue_size(),
+                    has_slots_free=self._upload_info_provider.has_slots_free(),
+                    avg_speed=int(self._upload_info_provider.get_average_upload_speed()),
+                    queue_size=self._upload_info_provider.get_queue_size(),
                     locked_results=convert_items_to_file_data(locked, use_full_path=True)
                 )
             ),
@@ -292,7 +293,7 @@ class SearchManager:
         await connection.disconnect(reason=CloseReason.REQUESTED)
 
         # Update the user info
-        user = self._state.get_or_create_user(message.username)
+        user = self._user_manager.get_or_create_user(message.username)
         user.avg_speed = message.avg_speed
         user.queue_length = message.queue_size
         user.has_slots_free = message.has_slots_free

@@ -33,9 +33,7 @@ from ..events import (
     InternalEventBus,
     MessageReceivedEvent,
     PeerInitializedEvent,
-    TrackUserEvent,
     TransferAddedEvent,
-    UntrackUserEvent,
 )
 from ..protocol.primitives import uint32, uint64
 from ..protocol.messages import (
@@ -52,10 +50,10 @@ from ..protocol.messages import (
 )
 from .model import Transfer, TransferDirection
 from .state import TransferState
-from ..model import UserStatus, TrackingFlag
+from ..user.model import UserStatus, TrackingFlag
 from ..settings import Settings
 from ..shares.manager import SharesManager
-from ..state import State
+from ..user.manager import UserManager
 from ..utils import task_counter, ticket_generator
 
 if TYPE_CHECKING:
@@ -76,14 +74,15 @@ class Reasons:
 class TransferManager:
 
     def __init__(
-            self, state: State, settings: Settings,
+            self, settings: Settings,
             event_bus: EventBus, internal_event_bus: InternalEventBus,
+            user_manager: UserManager,
             shares_manager: SharesManager, network: Network,
             cache: Optional[TransferCache] = None):
-        self._state = state
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._internal_event_bus: InternalEventBus = internal_event_bus
+        self._user_manager: UserManager = user_manager
         self._shares_manager: SharesManager = shares_manager
         self._network: Network = network
         self.cache: TransferCache = cache if cache else TransferNullCache()
@@ -359,13 +358,9 @@ class TransferManager:
         )
 
         for username in unfinished_users:
-            await self._internal_event_bus.emit(
-                TrackUserEvent(username, TrackingFlag.TRANSFER)
-            )
+            await self._user_manager.track_user(username, TrackingFlag.TRANSFER)
         for username in finished_users - unfinished_users:
-            await self._internal_event_bus.emit(
-                UntrackUserEvent(username, TrackingFlag.TRANSFER)
-            )
+            await self._user_manager.untrack_user(username, TrackingFlag.TRANSFER)
 
     async def manage_transfers(self):
         """Manages the transfers. This method analyzes the state of the current
@@ -410,7 +405,7 @@ class TransferManager:
         queued_downloads = []
         queued_uploads = []
         for transfer in self._transfers:
-            user = self._state.get_or_create_user(transfer.username)
+            user = self._user_manager.get_or_create_user(transfer.username)
             if user.status == UserStatus.OFFLINE:
                 continue
 
@@ -437,7 +432,7 @@ class TransferManager:
 
         ranking = []
         for upload in uploads:
-            user = self._state.get_or_create_user(upload.username)
+            user = self._user_manager.get_or_create_user(upload.username)
 
             rank = 0
             # Rank UNKNOWN status lower, OFFLINE should be blocked
@@ -523,7 +518,7 @@ class TransferManager:
 
         try:
             _, response = await asyncio.wait_for(
-                self._network.create_peer_message_future(
+                self._network.create_peer_response_future(
                     peer=transfer.username,
                     message_class=PeerPlaceInQueueReply.Request,
                     fields={
@@ -633,7 +628,7 @@ class TransferManager:
 
         try:
             connection, response = await asyncio.wait_for(
-                self._network.create_peer_message_future(
+                self._network.create_peer_response_future(
                     transfer.username,
                     PeerTransferReply.Request,
                     fields={

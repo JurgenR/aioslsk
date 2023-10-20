@@ -362,6 +362,8 @@ The added user:
    * :ref:`PrivateRoomAddUser` : with room name and user name
    * :ref:`PrivateRoomAdded` : with room name
    * :ref:`RoomList`
+   * :ref:`PrivateRoomUsers` : users of the room (excluding the owner?)
+   * :ref:`PrivateRoomOperators`
 
 The owner of the room:
 
@@ -369,6 +371,14 @@ The owner of the room:
 
    * :ref:`PrivateRoomAddUser` : with room name and user name
    * Server message: User [<user_name>] was added as a member of room [<room_name>] by operator [<operator_name>]
+
+Other members in room:
+
+TODO
+
+Other members not in room:
+
+TODO
 
 
 Removing User from Private Room
@@ -399,6 +409,14 @@ The owner of the room:
    * :ref:`PrivateRoomRemoveUser` : with room name and user name
    * Server message: User <user_name> is no longer a member of room <room_name>
 
+Other members in room:
+
+TODO
+
+Other members not in room:
+
+TODO
+
 
 Granting Operator to Private Room
 ---------------------------------
@@ -410,6 +428,18 @@ User granting operator:
 
    * :ref:`PrivateRoomAddOperator` : with room name and user name (got this twice for some reason, perhaps a bug in the server? Should probably be PrivateRoomOperatorAdded)
    * Server message: User <user_name> is now an operator of room <room_name>
+
+User receiving operator:
+
+TODO
+
+Other members in the room:
+
+TODO
+
+Other members not in the room:
+
+TODO
 
 
 Revoking Operator from Private Room

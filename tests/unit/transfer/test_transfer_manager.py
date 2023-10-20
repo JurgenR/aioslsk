@@ -4,23 +4,22 @@ from unittest.mock import AsyncMock, Mock, MagicMock, patch
 
 import pytest
 
-from aioslsk.events import TrackUserEvent, UntrackUserEvent
 from aioslsk.exceptions import ConnectionWriteError, RequestPlaceFailedError
-from aioslsk.model import UserStatus, TrackingFlag
+from aioslsk.user.model import UserStatus, TrackingFlag
 from aioslsk.protocol.messages import PeerPlaceInQueueRequest, PeerPlaceInQueueReply
 from aioslsk.transfer.cache import TransferShelveCache
 from aioslsk.transfer.model import Transfer, TransferDirection
 from aioslsk.transfer.manager import TransferManager
 from aioslsk.transfer.state import (
     AbortedState,
-    TransferState,
-    DownloadingState,
-    UploadingState,
     CompleteState,
+    DownloadingState,
     InitializingState,
+    TransferState,
+    UploadingState,
 )
 from aioslsk.settings import Settings
-from aioslsk.state import State
+from aioslsk.user.manager import UserManager
 
 
 FRIEND = 'friend0'
@@ -44,7 +43,20 @@ RESOURCES = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'resources
 
 
 @pytest.fixture
-def manager(tmpdir):
+def user_manager() -> UserManager:
+    user_manager = UserManager(
+        Settings(DEFAULT_SETTINGS),
+        Mock(), # Event bus
+        Mock(), # Internal event bus
+        AsyncMock(), # Network
+    )
+    user_manager.track_user = AsyncMock()
+    user_manager.untrack_user = AsyncMock()
+    return user_manager
+
+
+@pytest.fixture
+def manager(tmpdir, user_manager: UserManager) -> TransferManager:
     network = AsyncMock()
     network.upload_rate_limiter = MagicMock()
     network.download_rate_limiter = MagicMock()
@@ -57,10 +69,10 @@ def manager(tmpdir):
     shares_manager = Mock()
 
     return TransferManager(
-        State(),
         Settings(DEFAULT_SETTINGS),
         event_bus, # event bus
         internal_event_bus, # internal event bus
+        user_manager,
         shares_manager, # shares manager
         network, # network
         cache=TransferShelveCache(tmpdir)
@@ -76,8 +88,8 @@ class TestTransferManager:
 
         assert transfer.state.VALUE == TransferState.VIRGIN
         assert transfer in manager.transfers
-        manager._internal_event_bus.emit.assert_awaited_once_with(
-            TrackUserEvent(DEFAULT_USERNAME, TrackingFlag.TRANSFER)
+        manager._user_manager.track_user.assert_awaited_once_with(
+            DEFAULT_USERNAME, TrackingFlag.TRANSFER
         )
 
     @pytest.mark.asyncio
@@ -264,9 +276,9 @@ class TestTransferManager:
         USER = 'user0'
         USER2 = 'user1'
 
-        user = manager._state.get_or_create_user(USER)
+        user = manager._user_manager.get_or_create_user(USER)
         user.status = UserStatus.UNKNOWN
-        user2 = manager._state.get_or_create_user(USER2)
+        user2 = manager._user_manager.get_or_create_user(USER2)
         user2.status = UserStatus.ONLINE
 
         transfer = Transfer(USER, 'C:\\dir0', TransferDirection.UPLOAD)
@@ -278,9 +290,9 @@ class TestTransferManager:
         USER = 'user0'
         USER2 = 'user1'
 
-        user = manager._state.get_or_create_user(USER)
+        user = manager._user_manager.get_or_create_user(USER)
         user.privileged = False
-        user2 = manager._state.get_or_create_user(USER2)
+        user2 = manager._user_manager.get_or_create_user(USER2)
         user2.privileged = True
 
         transfer = Transfer(USER, 'C:\\dir0', TransferDirection.UPLOAD)
@@ -292,8 +304,8 @@ class TestTransferManager:
         USER = 'user0'
         USER2 = FRIEND
 
-        manager._state.get_or_create_user(USER)
-        manager._state.get_or_create_user(USER2)
+        manager._user_manager.get_or_create_user(USER)
+        manager._user_manager.get_or_create_user(USER2)
 
         transfer = Transfer(USER, 'C:\\dir0', TransferDirection.UPLOAD)
         transfer2 = Transfer(USER2, 'C:\\dir0', TransferDirection.UPLOAD)
@@ -310,8 +322,8 @@ class TestTransferManager:
 
         await manager.manage_user_tracking()
 
-        manager._internal_event_bus.emit.assert_awaited_once_with(
-            TrackUserEvent('user0', TrackingFlag.TRANSFER)
+        manager._user_manager.track_user.assert_awaited_once_with(
+            'user0', TrackingFlag.TRANSFER
         )
 
     @pytest.mark.asyncio
@@ -324,8 +336,8 @@ class TestTransferManager:
 
         await manager.manage_user_tracking()
 
-        manager._internal_event_bus.emit.assert_awaited_once_with(
-            UntrackUserEvent('user0', TrackingFlag.TRANSFER)
+        manager._user_manager.untrack_user.assert_awaited_once_with(
+            'user0', TrackingFlag.TRANSFER
         )
 
     @pytest.mark.asyncio
@@ -334,7 +346,7 @@ class TestTransferManager:
         expected_place = 10
 
         response = PeerPlaceInQueueReply.Request(DEFAULT_FILENAME, expected_place)
-        manager._network.create_peer_message_future = AsyncMock(
+        manager._network.create_peer_response_future = AsyncMock(
             return_value=(None, response))
 
         place = await manager.request_place_in_queue(transfer)

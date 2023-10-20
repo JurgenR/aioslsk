@@ -6,10 +6,11 @@ from aioslsk.protocol.messages import (
     RoomSearch,
     PeerSearchReply,
 )
-from aioslsk.state import State
 from aioslsk.search.manager import SearchManager
 from aioslsk.search.model import SearchType, SearchRequest
 from aioslsk.settings import Settings
+from aioslsk.user.manager import UserManager
+
 import pytest
 from unittest.mock import AsyncMock, Mock, call
 
@@ -23,7 +24,18 @@ DEFAULT_SETTINGS = {
 
 
 @pytest.fixture
-def manager() -> SearchManager:
+def user_manager() -> UserManager:
+    user_manager = UserManager(
+        Settings(DEFAULT_SETTINGS),
+        Mock(), # Event bus
+        Mock(), # Internal event bus
+        AsyncMock(), # Network
+    )
+    return user_manager
+
+
+@pytest.fixture
+def manager(user_manager: UserManager) -> SearchManager:
     network = Mock()
     network.send_server_messages = AsyncMock()
     event_bus = Mock()
@@ -36,10 +48,10 @@ def manager() -> SearchManager:
     transfer_manager = Mock()
 
     return SearchManager(
-        State(),
         Settings(DEFAULT_SETTINGS),
         event_bus,
         internal_event_bus,
+        user_manager,
         shares_manager,
         transfer_manager,
         network
@@ -126,6 +138,6 @@ class TestSearchManager:
                         manager.search_requests[TICKET].results[0]
                     )
                 ),
-                call(UserInfoEvent(manager._state.get_or_create_user('user0')))
+                call(UserInfoEvent(manager._user_manager.get_or_create_user('user0')))
             ]
         )
