@@ -26,8 +26,6 @@ from ..events import (
 )
 from ..protocol.messages import (
     AddPrivilegedUser,
-    AddHatedInterest,
-    AddInterest,
     AddUser,
     ChatPrivateMessage,
     ChatAckPrivateMessage,
@@ -35,7 +33,6 @@ from ..protocol.messages import (
     GetGlobalRecommendations,
     GetItemRecommendations,
     GetItemSimilarUsers,
-    GetPeerAddress,
     GetRecommendations,
     GetSimilarUsers,
     GetUserInterests,
@@ -44,8 +41,6 @@ from ..protocol.messages import (
     Kicked,
     Login,
     PrivilegedUsers,
-    RemoveHatedInterest,
-    RemoveInterest,
     RemoveUser,
     SetStatus,
 )
@@ -151,110 +146,6 @@ class UserManager:
         # If there's no more tracking done reset the user status
         if user.tracking_flags == TrackingFlag(0):
             user.status = UserStatus.UNKNOWN
-
-    async def get_user_stats(self, username: str):  # pragma: no cover
-        await self._network.send_server_messages(GetUserStats.Request(username))
-
-    async def get_user_status(self, username: str):  # pragma: no cover
-        await self._network.send_server_messages(GetUserStatus.Request(username))
-
-    async def get_peer_address(self, username: str):  # pragma: no cover
-        """Requests the IP address/port of the peer from the server
-
-        :param username: username of the peer
-        """
-        await self._network.send_server_messages(
-            GetPeerAddress.Request(username)
-        )
-
-    # Recommendations / interests
-    async def get_recommendations(self):  # pragma: no cover
-        await self._network.send_server_messages(
-            GetRecommendations.Request()
-        )
-
-    async def get_global_recommendations(self):  # pragma: no cover
-        await self._network.send_server_messages(
-            GetGlobalRecommendations.Request()
-        )
-
-    async def get_item_recommendations(self, item: str):  # pragma: no cover
-        await self._network.send_server_messages(
-            GetItemRecommendations.Request(item=item)
-        )
-
-    async def get_user_interests(self, username: str):  # pragma: no cover
-        await self._network.send_server_messages(
-            GetUserInterests.Request(username)
-        )
-
-    async def add_hated_interest(self, hated_interest: str):  # pragma: no cover
-        await self._network.send_server_messages(
-            AddHatedInterest.Request(hated_interest)
-        )
-
-    async def remove_hated_interest(self, hated_interest: str):  # pragma: no cover
-        await self._network.send_server_messages(
-            RemoveHatedInterest.Request(hated_interest)
-        )
-
-    async def add_interest(self, interest: str):  # pragma: no cover
-        await self._network.send_server_messages(
-            AddInterest.Request(interest)
-        )
-
-    async def remove_interest(self, interest: str):  # pragma: no cover
-        await self._network.send_server_messages(
-            RemoveInterest.Request(interest)
-        )
-
-    async def get_similar_users(self):
-        """Get similar users"""
-        await self._network.send_server_messages(GetSimilarUsers.Request())
-
-    async def get_similar_users_for_item(self, item: str):
-        """Get similar users for an item"""
-        await self._network.send_server_messages(
-            GetItemSimilarUsers.Request(item)
-        )
-
-    async def get_similar_users(self, response=True):
-        if response:
-            response_future = self._network.create_server_response_future(
-                GetSimilarUsers.Response
-            )
-
-            try:
-                await self._network.send_server_messages(GetSimilarUsers.Request())
-            except Exception:
-                response_future.cancel()
-                raise
-
-            _, response = await asyncio.wait_for(response_future, timeout=10)
-            return list(map(self.get_or_create_user, response.usernames))
-            return UserStatus(response.status)
-        else:
-            await self._network.send_server_messages(GetSimilarUsers.Request())
-
-    async def get_user_status(self, username: str, response=True):
-        if response:
-            response_future = self._network.create_server_response_future(
-                GetUserStatus.Response,
-                fields={
-                    'username': username
-                }
-            )
-
-            try:
-                await self._network.send_server_messages(GetUserStatus.Request(username))
-            except Exception:
-                response_future.cancel()
-                raise
-
-            _, response = await asyncio.wait_for(response_future, timeout=10)
-            return UserStatus(response.status)
-        else:
-            await self._network.send_server_messages(GetUserStatus.Request(username))
 
     @on_message(Login.Response)
     async def _on_login(self, message: Login.Response, connection: ServerConnection):

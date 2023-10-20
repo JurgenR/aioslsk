@@ -15,5 +15,5 @@ class UploadInfoProvider(Protocol):
     def has_slots_free(self) -> bool:
         ...
 
-    def get_average_upload_speed(self) -> int:
+    def get_average_upload_speed(self) -> float:
         ...

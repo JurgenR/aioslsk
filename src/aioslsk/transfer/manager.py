@@ -5,7 +5,7 @@ import asyncio
 import logging
 from operator import itemgetter
 import os
-from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Dict, List, Optional, Tuple, TYPE_CHECKING, Union
 
 from .cache import TransferNullCache, TransferCache
 from ..constants import TRANSFER_REPLY_TIMEOUT
@@ -50,7 +50,7 @@ from ..protocol.messages import (
 )
 from .model import Transfer, TransferDirection
 from .state import TransferState
-from ..user.model import UserStatus, TrackingFlag
+from ..user.model import User, UserStatus, TrackingFlag
 from ..settings import Settings
 from ..shares.manager import SharesManager
 from ..user.manager import UserManager
@@ -145,6 +145,27 @@ class TransferManager:
             cancelled_tasks.extend(transfer.cancel_tasks())
         return cancelled_tasks
 
+    async def download(self, user: Union[str, User], filename: str) -> Transfer:
+        """Requests to start a downloading the file from the given user
+
+        :param user: User from which to download the file
+        :param filename: Name of the file to download. This should be the full
+            path to the file as returned in the search results
+        :return: a `Transfer` object from which the status of the transfer can
+            be requested. If the transfer already exists in the client then this
+            transfer will be returned
+        """
+        username = user.name if isinstance(user, User) else user
+        transfer = await self.add(
+            Transfer(
+                username,
+                filename,
+                TransferDirection.DOWNLOAD
+            )
+        )
+        await self.queue(transfer)
+        return transfer
+
     async def abort(self, transfer: Transfer):
         """Aborts the given transfer. This will cancel all pending transfers
         and remove the file (in case of download)
@@ -218,6 +239,10 @@ class TransferManager:
         the already existing transfer. This method will emit a
         `TransferAddedEvent` only if the transfer did not exist
 
+        This method only adds a transfer and does not automatically start it. To
+        do call `.queue` on the manager
+
+        :param transfer: Transfer to be added
         :return: either the transfer we have passed or the already existing
             transfer
         """

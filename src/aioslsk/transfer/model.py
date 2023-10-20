@@ -100,6 +100,7 @@ class Transfer:
         return obj_state
 
     def reset_progress(self):
+        """Resets progress of the entire transfer"""
         self.reset_times()
         self.bytes_transfered = 0
         self._offset = 0

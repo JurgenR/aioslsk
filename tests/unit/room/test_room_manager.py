@@ -396,8 +396,3 @@ class TestRoomManager:
         assert TrackingFlag.ROOM_USER not in user.tracking_flags
         assert 0 == len(room.users)
         callback.assert_awaited_once_with(RoomLeftEvent(room, user))
-
-    @pytest.mark.asyncio
-    async def test_whenSetRoomTicker_shouldSetRoomTicker(self, manager: RoomManager):
-        await manager.set_room_ticker('room0', 'hello')
-        manager._network.send_server_messages.assert_awaited_once()

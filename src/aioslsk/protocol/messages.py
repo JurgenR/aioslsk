@@ -490,6 +490,14 @@ class RoomList(ServerMessage):
         rooms_private_operated: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
+class AdminMessage(ServerMessage):
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x42)
+        message: str = field(metadata={'type': string})
+
+
 class PrivilegedUsers(ServerMessage):
 
     @dataclass(order=True)

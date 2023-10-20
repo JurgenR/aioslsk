@@ -135,7 +135,7 @@ class GetRoomListCommand(BaseCommand[RoomList.Response, List[Room]]):
 
     def process_response(self, client: SoulSeekClient, response: RoomList.Response) -> List[Room]:
         return [
-            room for name, room in client.room_manager.rooms.items()
+            room for name, room in client.rooms.rooms.items()
             if name in response.rooms
         ]
 
@@ -163,7 +163,7 @@ class JoinRoomCommand(BaseCommand[ChatJoinRoom.Response, Room]):
         return self
 
     def process_response(self, client: SoulSeekClient, response: ChatJoinRoom.Response) -> Room:
-        return client.room_manager.get_or_create_room(response.room)
+        return client.rooms.get_or_create_room(response.room)
 
 
 class LeaveRoomCommand(BaseCommand[ChatLeaveRoom.Response, Room]):
@@ -188,10 +188,10 @@ class LeaveRoomCommand(BaseCommand[ChatLeaveRoom.Response, Room]):
         return self
 
     def process_response(self, client: SoulSeekClient, response: ChatLeaveRoom.Response) -> Room:
-        return client.room_manager.get_or_create_room(response.room)
+        return client.rooms.get_or_create_room(response.room)
 
 
-class AddUserToRoomCommand(BaseCommand[PrivateRoomAddUser.Response, Tuple[Room, User]]):
+class GrantRoomMembershipCommand(BaseCommand[PrivateRoomAddUser.Response, Tuple[Room, User]]):
 
     def __init__(self, room: str, username: str):
         super().__init__()
@@ -203,7 +203,7 @@ class AddUserToRoomCommand(BaseCommand[PrivateRoomAddUser.Response, Tuple[Room, 
             PrivateRoomAddUser.Request(self.room, self.username)
         )
 
-    def response(self) -> 'AddUserToRoomCommand':
+    def response(self) -> 'GrantRoomMembershipCommand':
         self.response_future = ExpectedResponse(
             ServerConnection,
             PrivateRoomAddUser.Response,
@@ -216,12 +216,12 @@ class AddUserToRoomCommand(BaseCommand[PrivateRoomAddUser.Response, Tuple[Room, 
 
     def process_response(self, client: SoulSeekClient, response: PrivateRoomAddUser.Response) -> Tuple[Room, User]:
         return (
-            client.room_manager.get_or_create_room(response.room),
-            client.user_manager.get_or_create_user(response.username)
+            client.rooms.get_or_create_room(response.room),
+            client.users.get_or_create_user(response.username)
         )
 
 
-class RemoveUserFromRoomCommand(BaseCommand[PrivateRoomRemoveUser.Response, Tuple[Room, User]]):
+class RevokeRoomMembershipCommand(BaseCommand[PrivateRoomRemoveUser.Response, Tuple[Room, User]]):
 
     def __init__(self, room: str, username: str):
         super().__init__()
@@ -233,7 +233,7 @@ class RemoveUserFromRoomCommand(BaseCommand[PrivateRoomRemoveUser.Response, Tupl
             PrivateRoomRemoveUser.Request(self.room, self.username)
         )
 
-    def response(self) -> 'RemoveUserFromRoomCommand':
+    def response(self) -> 'RevokeRoomMembershipCommand':
         self.response_future = ExpectedResponse(
             ServerConnection,
             PrivateRoomRemoveUser.Response,
@@ -246,12 +246,12 @@ class RemoveUserFromRoomCommand(BaseCommand[PrivateRoomRemoveUser.Response, Tupl
 
     def process_response(self, client: SoulSeekClient, response: PrivateRoomRemoveUser.Response) -> Tuple[Room, User]:
         return (
-            client.room_manager.get_or_create_room(response.room),
-            client.user_manager.get_or_create_user(response.username)
+            client.rooms.get_or_create_room(response.room),
+            client.users.get_or_create_user(response.username)
         )
 
 
-class DropMembershipCommand(BaseCommand[PrivateRoomRemoved.Response, Room]):
+class DropRoomMembershipCommand(BaseCommand[PrivateRoomRemoved.Response, Room]):
 
     def __init__(self, room: str):
         super().__init__()
@@ -264,7 +264,7 @@ class DropMembershipCommand(BaseCommand[PrivateRoomRemoved.Response, Room]):
             PrivateRoomDropMembership.Request(self.room)
         )
 
-    def response(self) -> 'DropMembershipCommand':
+    def response(self) -> 'DropRoomMembershipCommand':
         self.response_future = ExpectedResponse(
             ServerConnection,
             PrivateRoomRemoved.Response,
@@ -276,7 +276,7 @@ class DropMembershipCommand(BaseCommand[PrivateRoomRemoved.Response, Room]):
         return self
 
     def process_response(self, client: SoulSeekClient, response: PrivateRoomRemoved.Response) -> Room:
-        return client.room_manager.get_or_create_room(response.room)
+        return client.rooms.get_or_create_room(response.room)
 
 
 class GetItemRecommendationsCommand(BaseCommand[GetItemRecommendations.Response, List[ItemRecommendation]]):
@@ -366,7 +366,7 @@ class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, Tuple[str, int,
 
 
 
-class GrantOperatorCommand(BaseCommand[PrivateRoomAddOperator.Response, None]):
+class GrantRoomOperatorCommand(BaseCommand[PrivateRoomAddOperator.Response, None]):
 
     def __init__(self, room: str, username: str):
         super().__init__()
@@ -378,7 +378,7 @@ class GrantOperatorCommand(BaseCommand[PrivateRoomAddOperator.Response, None]):
             PrivateRoomAddOperator.Request(self.room, self.username)
         )
 
-    def response(self) -> 'GrantOperatorCommand':
+    def response(self) -> 'GrantRoomOperatorCommand':
         self.response_future = ExpectedResponse(
             ServerConnection,
             PrivateRoomAddOperator.Response,
@@ -393,7 +393,7 @@ class GrantOperatorCommand(BaseCommand[PrivateRoomAddOperator.Response, None]):
         return None
 
 
-class RevokeOperatorCommand(BaseCommand[PrivateRoomRemoveOperator.Response, None]):
+class RevokeRoomOperatorCommand(BaseCommand[PrivateRoomRemoveOperator.Response, None]):
 
     def __init__(self, room: str, username: str):
         super().__init__()
@@ -405,7 +405,7 @@ class RevokeOperatorCommand(BaseCommand[PrivateRoomRemoveOperator.Response, None
             PrivateRoomRemoveOperator.Request(self.room, self.username)
         )
 
-    def response(self) -> 'RevokeOperatorCommand':
+    def response(self) -> 'RevokeRoomOperatorCommand':
         self.response_future = ExpectedResponse(
             ServerConnection,
             PrivateRoomRemoveOperator.Response,
@@ -527,8 +527,8 @@ class RoomMessageCommand(BaseCommand[ChatRoomMessage.Response, RoomMessage]):
     def process_response(self, client: SoulSeekClient, response: ChatRoomMessage.Response) -> RoomMessage:
         return RoomMessage(
             timestamp=int(time.time()),
-            user=client.user_manager.get_or_create_user(self._username),
-            room=client.room_manager.get_or_create_room(self.room),
+            user=client.users.get_or_create_user(self._username),
+            room=client.rooms.get_or_create_room(self.room),
             message=self.message
         )
 

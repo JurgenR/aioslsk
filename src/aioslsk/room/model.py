@@ -47,18 +47,6 @@ class Room:
 
 
 @dataclass
-class ChatMessage:
-    id: int
-    timestamp: int
-    user: User
-    message: str
-    is_admin: bool
-
-    def is_server_message(self) -> bool:
-        return self.is_admin and self.user.name == 'server'
-
-
-@dataclass
 class RoomMessage:
     timestamp: int
     user: User

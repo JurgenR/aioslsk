@@ -71,7 +71,7 @@ class TestSearchManager:
         assert request.username is None
         assert request.room is None
 
-        assert request.ticket in manager.search_requests
+        assert request.ticket in manager.requests
 
         manager._network.send_server_messages.assert_awaited_once_with(
             FileSearch.Request(request.ticket, 'query')
@@ -87,7 +87,7 @@ class TestSearchManager:
         assert request.username == 'user0'
         assert request.room is None
 
-        assert request.ticket in manager.search_requests
+        assert request.ticket in manager.requests
 
         manager._network.send_server_messages.assert_awaited_once_with(
             UserSearch.Request('user0', request.ticket, 'query')
@@ -103,7 +103,7 @@ class TestSearchManager:
         assert request.username is None
         assert request.room == 'room0'
 
-        assert request.ticket in manager.search_requests
+        assert request.ticket in manager.requests
 
         manager._network.send_server_messages.assert_awaited_once_with(
             RoomSearch.Request('room0', request.ticket, 'query')
@@ -114,7 +114,7 @@ class TestSearchManager:
         TICKET = 1234
         connection = AsyncMock()
 
-        manager.search_requests[TICKET] = SearchRequest(
+        manager.requests[TICKET] = SearchRequest(
             TICKET, 'search', SearchType.NETWORK)
 
         reply_message = PeerSearchReply.Request(
@@ -128,14 +128,14 @@ class TestSearchManager:
         )
         await manager._on_peer_search_reply(reply_message, connection)
 
-        assert 1 == len(manager.search_requests[TICKET].results)
+        assert 1 == len(manager.requests[TICKET].results)
 
         manager._event_bus.emit.assert_has_awaits(
             [
                 call(
                     SearchResultEvent(
-                        manager.search_requests[TICKET],
-                        manager.search_requests[TICKET].results[0]
+                        manager.requests[TICKET],
+                        manager.requests[TICKET].results[0]
                     )
                 ),
                 call(UserInfoEvent(manager._user_manager.get_or_create_user('user0')))

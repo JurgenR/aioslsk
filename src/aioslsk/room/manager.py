@@ -32,11 +32,8 @@ from ..protocol.messages import (
     ChatRoomTickers,
     ChatRoomTickerAdded,
     ChatRoomTickerRemoved,
-    ChatRoomTickerSet,
     ChatUserJoinedRoom,
     ChatUserLeftRoom,
-    GetUserStatus,
-    GetUserStats,
     Login,
     PrivateRoomAddUser,
     PrivateRoomRemoveUser,
@@ -49,8 +46,6 @@ from ..protocol.messages import (
     PrivateRoomRemoveOperator,
     PrivateRoomRemoved,
     TogglePrivateRooms,
-    PrivateRoomDropMembership,
-    PrivateRoomDropOwnership,
     RoomList,
 )
 from .model import Room, RoomMessage
@@ -127,73 +122,6 @@ class RoomManager:
         logger.info(f"automatically rejoining {len(rooms)} rooms")
         await self._network.send_server_messages(
             *[ChatJoinRoom.Request(room) for room in rooms]
-        )
-
-    async def get_user_stats(self, username: str):  # pragma: no cover
-        await self._network.send_server_messages(GetUserStats.Request(username))
-
-    async def get_user_status(self, username: str):  # pragma: no cover
-        await self._network.send_server_messages(GetUserStatus.Request(username))
-
-    async def get_room_list(self):  # pragma: no cover
-        """Request the list of chat rooms from the server"""
-        await self._network.send_server_messages(RoomList.Request())
-
-    async def join_room(self, room: str, private: bool = False):  # pragma: no cover
-        await self._network.send_server_messages(
-            ChatJoinRoom.Request(room, is_private=private)
-        )
-
-    async def leave_room(self, room: str):  # pragma: no cover
-        await self._network.send_server_messages(ChatLeaveRoom.Request(room))
-
-    async def add_user_to_room(self, room: str, username: str):  # pragma: no cover
-        """Adds a user to a private room"""
-        await self._network.send_server_messages(
-            PrivateRoomAddUser.Request(room=room, username=username)
-        )
-
-    async def remove_user_from_room(self, room: str, username: str):  # pragma: no cover
-        """Removes a user from a private room"""
-        await self._network.send_server_messages(
-            PrivateRoomRemoveUser.Request(room=room, username=username)
-        )
-
-    async def grant_operator(self, room: str, username: str):  # pragma: no cover
-        """Grant operator privileges to the given `username` in `room`. This is
-        only applicable to private rooms
-        """
-        await self._network.send_server_messages(
-            PrivateRoomAddOperator.Request(room=room, username=username)
-        )
-
-    async def revoke_operator(self, room: str, username: str):  # pragma: no cover
-        await self._network.send_server_messages(
-            PrivateRoomRemoveOperator.Request(room=room, username=username)
-        )
-
-    async def set_room_ticker(self, room: str, ticker: str):  # pragma: no cover
-        # No need to update the ticker in the model, a ChatRoomTickerAdded will
-        # be sent back to us
-        await self._network.send_server_messages(
-            ChatRoomTickerSet.Request(room=room, ticker=ticker)
-        )
-
-    async def send_room_message(self, room: str, message: str):  # pragma: no cover
-        await self._network.send_server_messages(
-            ChatRoomMessage.Request(room, message)
-        )
-
-    async def drop_room_ownership(self, room: str):  # pragma: no cover
-        """Drop ownership of the private room"""
-        await self._network.send_server_messages(
-            PrivateRoomDropOwnership.Request(room)
-        )
-
-    async def drop_room_membership(self, room: str):  # pragma: no cover
-        """Drop membership of the private room"""
-        await self._network.send_server_messages(
-            PrivateRoomDropMembership.Request(room)
         )
 
     @on_message(Login.Response)
