@@ -11,7 +11,7 @@ Server Connection and Logon
 ===========================
 
 * SoulSeekQt: server.slsknet.org:2416
-* SoulSeek: 208.76.170.59:2242
+* SoulSeek 157: server.slsknet.org:2242
 
 Establishing a connection and logging on:
 
@@ -64,13 +64,13 @@ All peer connections use the TCP protocol. The SoulSeek protocol defines 3 types
 
 * Peer (``P``) : Peer to peer connection for messaging
 * Distributed (``D``) : Distributed network connections
-* File (``P``) : Peer to peer connection for file transfer
+* File (``F``) : Peer to peer connection for file transfer
 
 To accept connections from incoming peers there should be at least one listening port opened. However newer clients will open two ports: a non-obfuscated and an obfuscated port.
 
 The obfuscated port is not mandatory and is usually just the obfuscated port + 1. Normally any port can be picked, both ports can be made known to the server using the :ref:`SetListenPort` message.
 
-When a peer connection is accepted on the obfuscated port all messaging should be obfuscated, this only applies to peer connection though (``P``). Distributed (``D``) and file (``F``) connections are not obfuscated aside from the :ref:`peer-init-messages`.
+When a peer connection is accepted on the obfuscated port all messaging should be obfuscated with each their own key, this only applies to peer connection though (``P``). Distributed (``D``) and file (``F``) connections are not obfuscated aside from the :ref:`peer-init-messages`.
 
 
 .. _connecting-to-peer:
@@ -109,12 +109,110 @@ We cannot connect to them, they cannot connect to us:
 .. note::
    Question 1: Why do we need a ticket number for :ref:`PeerInit` ? -> most clients seem to just send ``0``
 
-.. note::
-   Question 2: Some clients appear to send a :ref:`PeerInit` instead of :ref:`PeerPierceFirewall` ?
+
+Obfuscation
+-----------
+
+Obfuscation is possible only through the peer connection type (``P``) and the peer initialization messages (:ref:`PeerInit` and :ref:`PeerPierceFirewall`). If a distributed or file connection is made only the initialization messages can be obfuscated, after that the client should switch to sending/received messages non-obfuscated.
+
+When messages are obfuscated the first 4 bytes are the key which is randomly generated for each message. To decode the first 4 bytes of the actual message the following steps should be taken:
+
+1. Convert the key to an integer (from little-endian)
+2. Perform a circular shift of 31 bits to the right
+3. Convert back to bytes (to little-endian)
+4. XOR the first 4 bytes with the 4 bytes of the rotated key
+
+For the next 4 bytes, perform the same operation but rotate the resulting key again.
+
+Example
+~~~~~~~
+
+* Original message :   ``08000000 79000000 e8030000``
+* Obfuscated message : ``1494ee4a 2028dd95 2850ba2b 4aa37457``
+
+**First 4 bytes**
+
+Convert to big-endian: ``14 94 ee 4a`` -> ``4a ee 94 14``
+
+Original key:
+
+Hex: ``4a ee 94 14``
+Bin: ``0100 1010 1110 1110 1001 0100 0001 0100``
+
+Key shifted 31 bits to the right:
+
+Hex: ``95 dd 28 28``
+Bin: ``1001 0101 1101 1101 0010 1000 0010 1000``
+
+Convert to little-endian: ``95 dd 28 28`` -> ``28 28 dd 95``
+
+XOR the first 4 bytes (``20 28 dd 95``) with the rotated key:
+
++-----+----+----+----+----+
+|     | b3 | b2 | b1 | b0 |
++=====+====+====+====+====+
+|     | 28 | 28 | dd | 95 |
+| XOR | 20 | 28 | dd | 95 |
+|     | 08 | 00 | 00 | 00 |
++-----+----+----+----+----+
 
 
-Distributed Connections
-=======================
+**Second 4 bytes**
+
+Convert to big-endian: ``28 28 dd 95`` -> ``95 dd 28 28``
+
+Original key:
+
+Hex: ``95 dd 28 28``
+Bin: ``1001 0101 1101 1101 0010 1000 0010 1000``
+
+Key shifted 31 bits to the right:
+
+Hex: ``2b ba 50 51``
+Bin: ``0010 1011 1011 1010 0101 0000 0101 0001``
+
+Convert to little-endian: ``2b ba 50 51`` -> ``51 50 ba 2b``
+
+XOR the second 4 bytes (``28 50 ba 2b``) with the rotated key:
+
++-----+----+----+----+----+
+|     | b3 | b2 | b1 | b0 |
++=====+====+====+====+====+
+|     | 51 | 50 | ba | 2b |
+| XOR | 28 | 50 | ba | 2b |
+|     | 79 | 00 | 00 | 00 |
++-----+----+----+----+----+
+
+
+**Third 4 bytes**
+
+Convert to big-endian: ``51 50 ba 2b`` -> ``2b ba 50 51``
+
+Original key:
+
+Hex: ``2b ba 50 51``
+Bin: ``0010 1011 1011 1010 0101 0000 0101 0001``
+
+Key shifted 31 bits to the right:
+
+Hex: ``57 74 a0 a2``
+Bin: ``0101 0111 0111 0100 1010 0000 1010 0010``
+
+Convert to little-endian: ``57 74 a0 a2`` -> ``a2 a0 74 57``
+
+XOR the third 4 bytes (``4a a3 74 57``) with the rotated key:
+
++-----+----+----+----+----+
+|     | b3 | b2 | b1 | b0 |
++=====+====+====+====+====+
+|     | a2 | a0 | 74 | 57 |
+| XOR | 4a | a3 | 74 | 57 |
+|     | e8 | 03 | 00 | 00 |
++-----+----+----+----+----+
+
+
+Distributed Network
+===================
 
 Obtaining a parent
 ------------------
@@ -170,9 +268,9 @@ For downloading we need only the ``username`` and ``filename`` returned by a :re
 Request a file download (peer has free upload slots):
 
 1. Initiate a connection a peer connection (``P``)
-2. Send: :ref:`PeerTransferQueue` message containing the ``filename``
-3. Receive: :ref:`PeerTransferRequest` message. Store the ``ticket`` and the ``filesize``
-4. Send: :ref:`PeerTransferReply` message containing the ``ticket``. If the ``allowed`` flag is set the other peer will now attempt to establish a connection for uploading, if it is not set the transfer should be aborted.
+2. Send: :ref:`PeerTransferQueue` : ``filename``
+3. Receive: :ref:`PeerTransferRequest` : ``direction=1``. Store the ``ticket`` and the ``filesize``
+4. Send: :ref:`PeerTransferReply` : containing the ``ticket``. If the ``allowed`` flag is set the other peer will now attempt to establish a connection for uploading, if it is not set the transfer should be aborted.
 
 
 When the peer is ready for uploading it will create a new file connection (``F``) :
@@ -206,7 +304,7 @@ Successful upload
 Uploader opens a new peer connection (``P``):
 
 1. Uploader send: :ref:`PeerUploadQueueNotification`
-2. Uploader send: :ref:`PeerTransferRequest` : direction=1, filename=<local path>, filesize=<set>
+2. Uploader send: :ref:`PeerTransferRequest` : ``direction=1``, ``filename=<local path>``, ``filesize=<set>``
 3. Receiver send: :ref:`PeerTransferReply`: allowed=true
 
 Uploader opens a new file connection (``F``) and proceeds with uploading

@@ -95,6 +95,8 @@ Value Tables
 Transfer Direction
 ------------------
 
+This is only used in the :ref:`PeerTransferRequest` message and indicates the direction in which the file should be sent.
+
 +-------+----------+
 | Value | Meaning  |
 +=======+==========+
@@ -102,7 +104,6 @@ Transfer Direction
 +-------+----------+
 | 1     | download |
 +-------+----------+
-
 
 User Status
 -----------
@@ -603,6 +604,10 @@ RoomList (Code 64)
 
 Request or receive the list of rooms. This message will be initially sent after logging on but can also be manually requested afterwards. The initial message after logon will only return a limited number of public rooms (potentially only the rooms with 5 or more users).
 
+Parameter ``rooms_private`` excludes private rooms of which we are owner
+
+Parameter ``rooms_private_owned_user_count`` / ``rooms_private_user_count`` should be the amount of users who have joined the private room, not the amount of members
+
 :Code: 42 (0x2A)
 :Send: No parameters
 :Receive:
@@ -1066,7 +1071,7 @@ ChildDepth (Code 129)
 PrivateRoomUsers (Code 133)
 ---------------------------
 
-List of all users that are part of the private room
+List of all members that are part of the private room (excludes owner)
 
 :Code: 133 (0x85)
 :Receive:
@@ -1081,7 +1086,9 @@ List of all users that are part of the private room
 PrivateRoomAddUser (Code 134)
 -----------------------------
 
-Add another user to the private room. Only operators and the owner can add members to a private room
+Add another user to the private room. Only operators and the owner can add members to a private room.
+
+This message is also received by all other members in the private room
 
 :Code: 134 (0x86)
 :Send:
@@ -1099,6 +1106,8 @@ PrivateRoomRemoveUser (Code 135)
 
 Remove another user from the private room. Operators can remove regular members but not other operators or the owner. The owner can remove anyone aside from himself (see :ref:`PrivateRoomDropOwnership`).
 
+This message is also received by all other members in the private room
+
 :Code: 135 (0x87)
 :Send:
    1. **string**: room
@@ -1112,6 +1121,8 @@ Remove another user from the private room. Operators can remove regular members 
 
 PrivateRoomDropMembership (Code 136)
 ------------------------------------
+
+Drops membership of a private room, this will not do anything for the owner of the room. See :ref:`PrivateRoomDropOwnership` for owners
 
 :Code: 136 (0x88)
 :Send:
@@ -1135,7 +1146,7 @@ Drops ownership of a private room, this disbands the entire room.
 PrivateRoomAdded (Code 139)
 ---------------------------
 
-The current user was added to the private room
+Received when the current user was added to the private room
 
 :Code: 139 (0x8B)
 :Receive:
@@ -1147,7 +1158,7 @@ The current user was added to the private room
 PrivateRoomRemoved (Code 140)
 -----------------------------
 
-The current user was removed from the private room
+Received when the current user was removed from the private room
 
 :Code: 140 (0x8C)
 :Usage:
@@ -1185,6 +1196,8 @@ NewPassword (Code 142)
 PrivateRoomAddOperator (Code 143)
 ---------------------------------
 
+Grant operator privileges to a member in a private room. This message will also be received by all other members in the room (irrelevant of if they are online or not).
+
 :Code: 143 (0x8F)
 :Send:
    1. **string**: room
@@ -1199,6 +1212,8 @@ PrivateRoomAddOperator (Code 143)
 
 PrivateRoomRemoveOperator (Code 144)
 ------------------------------------
+
+Revoke operator privileges from a member in a private room. This message will also be received by all other members in the room (irrelevant of if they are online or not).
 
 :Code: 144 (0x90)
 :Send:
@@ -1215,6 +1230,8 @@ PrivateRoomRemoveOperator (Code 144)
 PrivateRoomOperatorAdded (Code 145)
 -----------------------------------
 
+Received when granted operator privileges in a private room
+
 :Code: 145 (0x91)
 :Receive:
    1. **string**: room
@@ -1224,6 +1241,8 @@ PrivateRoomOperatorAdded (Code 145)
 
 PrivateRoomOperatorRemoved (Code 146)
 -------------------------------------
+
+Received when operator privileges in a private room were revoked
 
 :Code: 146 (0x92)
 :Receive:
