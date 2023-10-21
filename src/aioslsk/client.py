@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 import logging
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from .commands import BaseCommand, LoginCommand
 from .distributed import DistributedNetwork
@@ -14,13 +14,11 @@ from .room.manager import RoomManager
 from .room.model import Room
 from .server import ServerManager
 from .search.manager import SearchManager
-from .search.model import SearchRequest, SearchResult
 from .settings import Settings
 from .transfer.cache import TransferCache, TransferNullCache
 from .transfer.manager import TransferManager
-from .transfer.model import Transfer, TransferDirection
 from .user.manager import UserManager
-from .user.model import User, TrackingFlag
+from .user.model import User
 from .utils import ticket_generator
 
 

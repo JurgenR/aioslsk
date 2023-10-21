@@ -198,7 +198,32 @@ Queue a file download (peer does not have any free upload slots):
 Uploads
 -------
 
-The original Windows SoulSeek client also has the ability to send files.
+The original Windows SoulSeek client also has the ability to upload files to another user.
+
+Successful upload
+~~~~~~~~~~~~~~~~~
+
+Uploader opens a new peer connection (``P``):
+
+1. Uploader send: :ref:`PeerUploadQueueNotification`
+2. Uploader send: :ref:`PeerTransferRequest` : direction=1, filename=<local path>, filesize=<set>
+3. Receiver send: :ref:`PeerTransferReply`: allowed=true
+
+Uploader opens a new file connection (``F``) and proceeds with uploading
+
+.. note::
+   It seems like the :ref:`PeerUploadQueueNotification` is stored as subsequent uploads do not require this message to be sent
+
+
+Upload not allowed
+~~~~~~~~~~~~~~~~~~
+
+Uploader opens a new peer connection (``P``):
+
+1. Uploader send: :ref:`PeerUploadQueueNotification`
+2. Uploader send: :ref:`PeerTransferRequest` : direction=1, filename=<local path>, filesize=<set>
+3. Receiver send: :ref:`PeerTransferReply`: allowed=false, reason='Cancelled'
+3. Uploader send: :ref:`PeerUploadFailed`: filename=<local path>
 
 
 Searching
