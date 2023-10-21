@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Dict, Union
+from typing import Dict, List, Union
 
 from ..network.connection import ConnectionState, ServerConnection
 from ..events import (
@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 
 class UserManager:
-    """Class handling server messages. users"""
+    """Class handling users"""
 
     def __init__(
             self, settings: Settings,
@@ -80,6 +80,9 @@ class UserManager:
         return self.get_or_create_user(
             self._settings.get('credentials.username')
         )
+
+    def get_tracked_user(self) -> List[User]:
+        return list(filter(lambda u: u.has_add_user_flag(), self.users.values()))
 
     def get_or_create_user(self, user: Union[str, User]) -> User:
         """Retrieves the user with given name or return the existing `User`
