@@ -13,8 +13,10 @@ from .protocol.messages import (
     ChatRoomMessage,
     GetGlobalRecommendations,
     GetItemRecommendations,
+    GetItemSimilarUsers,
     GetPeerAddress,
     GetRecommendations,
+    GetSimilarUsers,
     GetUserStats,
     GetUserStatus,
     Login,
@@ -338,6 +340,51 @@ class GetGlobalRecommendationsCommand(BaseCommand[GetGlobalRecommendations.Respo
 
     def process_response(self, client: SoulSeekClient, response: GetGlobalRecommendations.Response) -> Recommendations:
         return response.recommendations, response.unrecommendations
+
+
+class GetItemSimilarUsersCommand(BaseCommand[GetItemSimilarUsers.Response, List[User]]):
+
+    def __init__(self, item: str):
+        self.item: str = item
+
+    async def send(self, client: SoulSeekClient):
+        await client.network.send_server_messages(
+            GetItemSimilarUsers.Request(self.item)
+        )
+
+    def response(self) -> 'GetItemSimilarUsersCommand':
+        self.response_future = ExpectedResponse(
+            ServerConnection,
+            GetItemSimilarUsers.Response,
+            fields={
+                'item': self.item
+            }
+        )
+        return self
+
+    def process_response(self, client: SoulSeekClient, response: GetItemSimilarUsers.Response) -> List[User]:
+        return list(map(client.users.get_or_create_user, response.users))
+
+
+class GetSimilarUsersCommand(BaseCommand[GetSimilarUsers.Response, List[User]]):
+
+    async def send(self, client: SoulSeekClient):
+        await client.network.send_server_messages(
+            GetSimilarUsers.Request()
+        )
+
+    def response(self) -> 'GetSimilarUsersCommand':
+        self.response_future = ExpectedResponse(
+            ServerConnection,
+            GetSimilarUsers.Response
+        )
+        return self
+
+    def process_response(self, client: SoulSeekClient, response: GetSimilarUsers.Response) -> List[User]:
+        return [
+            client.users.get_or_create_user(user.username)
+            for user in response.users
+        ]
 
 
 class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, Tuple[str, int, int]]):
