@@ -217,10 +217,6 @@ class TransferManager:
                 "Could not make the desired state transition"
             )
 
-    async def on_transfer_state_changed(
-            self, transfer: Transfer, old: TransferState.State, new: TransferState.State):
-        await self.manage_transfers()
-
     async def _add_transfer(self, transfer: Transfer) -> Transfer:
         for queued_transfer in self._transfers:
             if queued_transfer == transfer:
@@ -824,6 +820,10 @@ class TransferManager:
                 await transfer.state.complete()
             else:
                 await transfer.state.incomplete()
+
+    async def on_transfer_state_changed(
+            self, transfer: Transfer, old: TransferState.State, new: TransferState.State):
+        await self.manage_transfers()
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message

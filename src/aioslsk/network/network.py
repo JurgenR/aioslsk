@@ -753,8 +753,6 @@ class Network:
         if not raise_on_error:
             return list(zip(messages, results))
 
-    # Methods called by connections
-
     # Connection state changes
     async def on_state_changed(
             self, state: ConnectionState, connection: Connection,

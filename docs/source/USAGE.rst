@@ -19,7 +19,7 @@ Before starting the client, ensure you create a settings object where you have c
 It's also recommended to configure a listening port and a downloads directory. For the full list of configuration options see:
 
 
-Next create and start the client. Calling `.start()` will connect the network, listening ports, and peform a login using the configured:
+Next create and start the client. Calling `.start()` will connect the network, listening ports, and peform a login using the configured credentials:
 
 .. code-block:: python
 
@@ -39,7 +39,7 @@ Next create and start the client. Calling `.start()` will connect the network, l
     asyncio.run(main())
 
 
-The client can also use the a context manager to automatically start and stop:
+The client can also use the a context manager to automatically start and stop the client:
 
 .. code-block:: python
 
@@ -245,6 +245,12 @@ Example a strategy that places files in a directory containing the current date:
         DefaultNamingStrategy(),
         DatetimeDirectoryStrategy(),
     ]
+
+
+Connecting, Disconnecting and Authentication
+============================================
+
+
 
 
 Protocol Messages

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from ..network.connection import ConnectionState, ServerConnection
@@ -22,6 +23,8 @@ from ..protocol.messages import (
     GetRecommendations,
     GetSimilarUsers,
     GetUserInterests,
+    AddHatedInterest,
+    AddInterest,
 )
 from ..network.network import Network
 from ..settings import Settings
@@ -55,7 +58,22 @@ class InterestManager:
             ConnectionStateChangedEvent, self._on_state_changed)
 
     async def advertise_interests(self):
-        pass
+        messages = []
+        for interest in self._settings.get('interests.liked'):
+            messages.append(
+                self._network.send_server_messages(
+                    AddInterest.Request(interest)
+                )
+            )
+
+        for hated_interest in self._settings.get('interests.hated'):
+            messages.append(
+                self._network.send_server_messages(
+                    AddHatedInterest.Request(hated_interest)
+                )
+            )
+
+        await asyncio.gather(*messages, return_exceptions=True)
 
     @on_message(Login.Response)
     async def _on_login(self, message: Login.Response, connection: ServerConnection):
@@ -94,7 +112,7 @@ class InterestManager:
     async def _on_get_user_interests(self, message: GetUserInterests.Response, connection: ServerConnection):
         await self._event_bus.emit(
             UserInterestsEvent(
-                user=self.get_or_create_user(message.username),
+                user=self._user_manager.get_or_create_user(message.username),
                 interests=message.interests,
                 hated_interests=message.hated_interests
             )
@@ -105,7 +123,7 @@ class InterestManager:
         await self._event_bus.emit(
             SimilarUsersEvent(
                 users=[
-                    self.get_or_create_user(user.username)
+                    self._user_manager.get_or_create_user(user.username)
                     for user in message.users
                 ]
             )
@@ -117,7 +135,7 @@ class InterestManager:
             SimilarUsersEvent(
                 item=message.item,
                 users=[
-                    self.get_or_create_user(user.username)
+                    self._user_manager.get_or_create_user(user.username)
                     for user in message.users
                 ]
             )

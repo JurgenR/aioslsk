@@ -545,6 +545,8 @@ RemoveInterest (Code 52)
 GetRecommendations (Code 54)
 ----------------------------
 
+Request the server to send a list of recommendations and unrecommendations. A maximum of 100 each will be returned
+
 :Code: 54 (0x36)
 :Send: No parameters
 :Receive:
@@ -555,7 +557,7 @@ GetRecommendations (Code 54)
 
    2. Array of non recommendations:
 
-      1. **string**: recommendation
+      1. **string**: unrecommendation
       2. **uint32**: number
 
 
