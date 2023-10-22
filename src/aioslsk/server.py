@@ -24,9 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class ServerManager:
-    """Class handling server messages. This class is mostly responsible for
-    messages received from the server regarding rooms, users and state variables
-    """
+    """Class handling server state changes"""
 
     def __init__(
             self, settings: Settings,

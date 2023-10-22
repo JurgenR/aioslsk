@@ -223,13 +223,13 @@ class TestTransferManager:
         transfer = Transfer("myuser", "myfile", TransferDirection.UPLOAD)
         manager._transfers = [transfer, ]
 
-        with pytest.raises(LookupError):
+        with pytest.raises(ValueError):
             manager.get_transfer("myuser", "myfile", TransferDirection.DOWNLOAD)
 
-        with pytest.raises(LookupError):
+        with pytest.raises(ValueError):
             manager.get_transfer("myuser", "mynonfile", TransferDirection.UPLOAD)
 
-        with pytest.raises(LookupError):
+        with pytest.raises(ValueError):
             manager.get_transfer("mynonuser", "myfile", TransferDirection.UPLOAD)
 
     # Retrieval of multiple transfers

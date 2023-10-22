@@ -6,12 +6,12 @@ from typing import Optional, Union
 from .commands import BaseCommand, LoginCommand
 from .distributed import DistributedNetwork
 from .events import EventBus, InternalEventBus
+from .interest.manager import InterestManager
 from .shares.cache import SharesCache, SharesNullCache
 from .shares.manager import SharesManager
 from .network.network import Network
 from .peer import PeerManager
 from .room.manager import RoomManager
-from .room.model import Room
 from .server import ServerManager
 from .search.manager import SearchManager
 from .settings import Settings
@@ -48,6 +48,7 @@ class SoulSeekClient:
 
         self.users: UserManager = self.create_user_manager()
         self.rooms: RoomManager = self.create_room_manager()
+        self.interests: InterestManager = self.create_interest_manager()
 
         self.shares: SharesManager = self.create_shares_manager(
             shares_cache or SharesNullCache()
@@ -221,6 +222,15 @@ class SoulSeekClient:
 
     def create_room_manager(self) -> RoomManager:
         return RoomManager(
+            self.settings,
+            self.events,
+            self._internal_events,
+            self.users,
+            self.network
+        )
+
+    def create_interest_manager(self) -> InterestManager:
+        return InterestManager(
             self.settings,
             self.events,
             self._internal_events,

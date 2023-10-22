@@ -51,7 +51,6 @@ def decode(data: bytes) -> bytes:
     for idx, byt in enumerate(enc_message):
         if idx % KEY_SIZE == 0:
             key = rotate_key(key, rot_bits=31)
-        import pdb; pdb.set_trace()
         dec_message.append(key[idx % KEY_SIZE] ^ byt)
     return bytes(dec_message)
 

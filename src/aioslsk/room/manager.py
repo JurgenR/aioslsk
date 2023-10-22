@@ -22,7 +22,6 @@ from ..events import (
     RoomOperatorRevokedEvent,
     RoomMembershipGrantedEvent,
     RoomMembershipRevokedEvent,
-    ServerDisconnectedEvent,
     UserInfoEvent,
 )
 from ..protocol.messages import (
@@ -118,7 +117,7 @@ class RoomManager:
 
     async def auto_join_rooms(self):
         """Automatically joins rooms stored in the settings"""
-        rooms = self._settings.get('chats.rooms')
+        rooms = self._settings.get('rooms.favorites')
         logger.info(f"automatically rejoining {len(rooms)} rooms")
         await self._network.send_server_messages(
             *[ChatJoinRoom.Request(room) for room in rooms]
@@ -128,9 +127,9 @@ class RoomManager:
     async def _on_login(self, message: Login.Response, connection: ServerConnection):
         if message.success:
             await self._network.send_server_messages(
-                TogglePrivateRooms.Request(self._settings.get('chats.private_room_invites'))
+                TogglePrivateRooms.Request(self._settings.get('rooms.private_room_invites'))
             )
-            if not self._settings.get('chats.auto_join'):
+            if not self._settings.get('rooms.auto_join'):
                 await self.auto_join_rooms()
 
     @on_message(ChatRoomMessage.Response)
@@ -388,5 +387,3 @@ class RoomManager:
 
         if event.state == ConnectionState.CLOSED:
             self.reset_rooms()
-
-            await self._event_bus.emit(ServerDisconnectedEvent())

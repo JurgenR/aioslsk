@@ -33,7 +33,7 @@ Starting the client and sending a private message:
         client: SoulSeekClient = SoulSeekClient(settings)
 
         # Create default settings and configure credentials
-        settings: Settings = Settings.create()
+        settings: Settings = Settings.create_default()
         settings.set('credentials.username', 'my_user')
         settings.set('credentials.password', 'Secret123')
 

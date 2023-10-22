@@ -78,17 +78,17 @@ The `sharing.directories` list contains objects which have the following paramet
 +------------+---------------+-----------------------------------------------------+-----------+
 
 
-Chats / Users
+Users / Rooms
 -------------
 
 +----------------------------+---------------+-----------------------------------------------------+---------+
 |         Parameter          |     Type      |                     Description                     | Default |
 +============================+===============+=====================================================+=========+
-| chats.auto_join            | boolean       | Automatically rejoin rooms when logon is successful | true    |
+| rooms.auto_join            | boolean       | Automatically rejoin rooms when logon is successful | true    |
 +----------------------------+---------------+-----------------------------------------------------+---------+
-| chats.private_room_invites | boolean       | Enable or disable private rooms invitations         | true    |
+| rooms.private_room_invites | boolean       | Enable or disable private rooms invitations         | true    |
 +----------------------------+---------------+-----------------------------------------------------+---------+
-| chats.rooms                | array[string] | List of rooms that will automatically be joined     | <empty> |
+| rooms.favorites            | array[string] | List of rooms that will automatically be joined     | <empty> |
 +----------------------------+---------------+-----------------------------------------------------+---------+
 | users.friends              | array[string] | List users considered friends                       | <empty> |
 +----------------------------+---------------+-----------------------------------------------------+---------+

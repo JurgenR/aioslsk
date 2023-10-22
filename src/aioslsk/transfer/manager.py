@@ -359,12 +359,19 @@ class TransferManager:
             return 0
 
     def get_transfer(self, username: str, remote_path: str, direction: TransferDirection) -> Transfer:
-        """Lookup transfer by username, remote_path and transfer direction"""
+        """Lookup transfer by `username`, `remote_path` and `transfer` direction
+
+        :param username: Username of the transfer
+        :param remote_path: Full remote path of the transfer
+        :param direction: Direction of the transfer (upload / download)
+        :return: The matching transfer object
+        :raise ValueError: If the transfer is not found
+        """
         req_transfer = Transfer(username, remote_path, direction)
         for transfer in self._transfers:
             if transfer == req_transfer:
                 return transfer
-        raise LookupError(
+        raise ValueError(
             f"transfer for user {username} and remote_path {remote_path} (direction={direction}) not found")
 
     async def manage_user_tracking(self):
@@ -842,7 +849,7 @@ class TransferManager:
         """
         if not connection.username:
             logger.warning(
-                "got PeerTransferRequest for a connection that wasn't properly initialized")
+                "got PeerTransferQueue for a connection that wasn't properly initialized")
             return
 
         transfer = await self.add(
@@ -932,7 +939,7 @@ class TransferManager:
                 message.filename,
                 TransferDirection(message.direction)
             )
-        except LookupError:
+        except ValueError:
             transfer = None
 
         # Make a decision based on what was requested and what we currently have
@@ -1037,7 +1044,7 @@ class TransferManager:
                 filename,
                 TransferDirection.UPLOAD
             )
-        except LookupError:
+        except ValueError:
             logger.error(f"PeerPlaceInQueueRequest : could not find transfer (upload) for {filename} from {connection.username}")
         else:
             place = self.get_place_in_queue(transfer)
@@ -1058,7 +1065,7 @@ class TransferManager:
                 message.filename,
                 TransferDirection.DOWNLOAD
             )
-        except LookupError:
+        except ValueError:
             logger.error(f"PeerPlaceInQueueReply : could not find transfer (download) for {message.filename} from {connection.username}")
         else:
             transfer.place_in_queue = message.place
@@ -1080,7 +1087,7 @@ class TransferManager:
                 message.filename,
                 TransferDirection.DOWNLOAD
             )
-        except LookupError:
+        except ValueError:
             logger.error(f"PeerUploadFailed : could not find transfer (download) for {message.filename} from {connection.username}")
         else:
             await transfer.state.fail()
@@ -1097,7 +1104,7 @@ class TransferManager:
         try:
             transfer = self.get_transfer(
                 connection.username, filename, TransferDirection.DOWNLOAD)
-        except LookupError:
+        except ValueError:
             logger.error(f"PeerTransferQueueFailed : could not find transfer for {filename} from {connection.username}")
         else:
             await transfer.state.fail(reason=reason)

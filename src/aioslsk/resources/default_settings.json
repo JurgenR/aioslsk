@@ -32,6 +32,10 @@
   "search": {
     "wishlist": []
   },
+  "interests": {
+    "liked": [],
+    "hated": []
+  },
   "sharing": {
     "limits": {
       "upload_slots": 2,
@@ -41,7 +45,7 @@
     "download": null,
     "directories": []
   },
-  "chats": {
+  "rooms": {
     "auto_join": true,
     "private_room_invites": true,
     "rooms": []

@@ -8,20 +8,14 @@ from ..events import (
     on_message,
     ConnectionStateChangedEvent,
     EventBus,
-    GlobalRecommendationsEvent,
     InternalEventBus,
-    ItemRecommendationsEvent,
     KickedEvent,
     LoginEvent,
     MessageReceivedEvent,
     PrivateMessageEvent,
     PrivilegedUsersEvent,
     PrivilgedUserAddedEvent,
-    RecommendationsEvent,
-    SimilarUsersEvent,
-    ServerDisconnectedEvent,
     UserInfoEvent,
-    UserInterestsEvent,
     UserStatusEvent,
 )
 from ..protocol.messages import (
@@ -30,12 +24,6 @@ from ..protocol.messages import (
     ChatPrivateMessage,
     ChatAckPrivateMessage,
     CheckPrivileges,
-    GetGlobalRecommendations,
-    GetItemRecommendations,
-    GetItemSimilarUsers,
-    GetRecommendations,
-    GetSimilarUsers,
-    GetUserInterests,
     GetUserStatus,
     GetUserStats,
     Kicked,
@@ -245,67 +233,6 @@ class UserManager:
 
         await self._event_bus.emit(UserInfoEvent(user))
 
-    # Recommendations / interests
-    @on_message(GetRecommendations.Response)
-    async def _on_get_recommendations(self, message: GetRecommendations.Response, connection: ServerConnection):
-        await self._event_bus.emit(
-            RecommendationsEvent(
-                recommendations=message.recommendations,
-                unrecommendations=message.unrecommendations
-            )
-        )
-
-    @on_message(GetGlobalRecommendations.Response)
-    async def _on_get_global_recommendations(self, message: GetGlobalRecommendations.Response, connection: ServerConnection):
-        await self._event_bus.emit(
-            GlobalRecommendationsEvent(
-                recommendations=message.recommendations,
-                unrecommendations=message.unrecommendations
-            )
-        )
-
-    @on_message(GetItemRecommendations.Response)
-    async def _on_get_item_recommendations(self, message: GetItemRecommendations.Response, connection: ServerConnection):
-        await self._event_bus.emit(
-            ItemRecommendationsEvent(
-                item=message.item,
-                recommendations=message.recommendations
-            )
-        )
-
-    @on_message(GetUserInterests.Response)
-    async def _on_get_user_interests(self, message: GetUserInterests.Response, connection: ServerConnection):
-        await self._event_bus.emit(
-            UserInterestsEvent(
-                user=self.get_or_create_user(message.username),
-                interests=message.interests,
-                hated_interests=message.hated_interests
-            )
-        )
-
-    @on_message(GetSimilarUsers.Response)
-    async def _on_get_similar_users(self, message: GetSimilarUsers.Response, connection: ServerConnection):
-        await self._event_bus.emit(
-            SimilarUsersEvent(
-                users=[
-                    self.get_or_create_user(user.username)
-                    for user in message.users
-                ]
-            )
-        )
-
-    @on_message(GetItemSimilarUsers.Response)
-    async def _on_get_item_similar_users(self, message: GetItemSimilarUsers.Response, connection: ServerConnection):
-        await self._event_bus.emit(
-            SimilarUsersEvent(
-                item=message.item,
-                users=[
-                    self.get_or_create_user(user.username)
-                    for user in message.users
-                ]
-            )
-        )
-
     # Listeners
 
     async def _on_message_received(self, event: MessageReceivedEvent):
@@ -317,10 +244,5 @@ class UserManager:
         if not isinstance(event.connection, ServerConnection):
             return
 
-        if event.state == ConnectionState.CONNECTED:
-            pass
-
-        elif event.state == ConnectionState.CLOSED:
+        if event.state == ConnectionState.CLOSED:
             self.reset_users()
-
-            await self._event_bus.emit(ServerDisconnectedEvent())
