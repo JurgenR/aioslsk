@@ -109,10 +109,3 @@ class Settings(BaseSettings, validate_assignment=True):
     rooms: RoomsSettings = Field(default_factory=RoomsSettings)
     interests: InterestsSettings = Field(default_factory=InterestsSettings)
     debug: DebugSettings = Field(default_factory=DebugSettings)
-
-
-if __name__ == '__main__':
-    import json
-    with open(r"C:\Users\jurgen\Desktop\my_settings.json", 'r') as fh:
-        mysettings = json.load(fh)
-    import pdb; pdb.set_trace()
