@@ -3,7 +3,17 @@ import asyncio
 import enum
 from functools import partial
 import logging
-from typing import Any, Dict, List, Optional, Union, Tuple, TypeVar, Type
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Union,
+    Tuple,
+    TypeVar,
+    Type,
+    TYPE_CHECKING
+)
 
 from ..constants import (
     DEFAULT_LISTENING_HOST,
@@ -47,8 +57,10 @@ from ..protocol.messages import (
 )
 from . import upnp
 from .rate_limiter import RateLimiter
-from ..settings import Settings
 from ..utils import task_counter, ticket_generator
+
+if TYPE_CHECKING:
+    from ..settings import Settings
 
 
 logger = logging.getLogger(__name__)
@@ -123,12 +135,12 @@ class Network:
 
         # Rate limiters
         self._upload_rate_limiter: RateLimiter = RateLimiter.create_limiter(
-            self._settings.get('sharing.limits.upload_speed_kbps'))
+            self._settings.shares.limits.upload_speed_kbps)
         self._download_rate_limiter: RateLimiter = RateLimiter.create_limiter(
-            self._settings.get('sharing.limits.download_speed_kbps'))
+            self._settings.shares.limits.download_speed_kbps)
 
         # Debugging
-        self._user_ip_overrides: Dict[str, str] = self._settings.get('debug.user_ip_overrides')
+        self._ip_overrides: Dict[str, str] = self._settings.debug.ip_overrides
 
         # Operational
         self._log_connections_task: Optional[asyncio.Task] = None
@@ -138,8 +150,8 @@ class Network:
 
     def create_server_connection(self) -> ServerConnection:
         return ServerConnection(
-            self._settings.get('network.server.hostname'),
-            self._settings.get('network.server.port'),
+            self._settings.network.server.hostname,
+            self._settings.network.server.port,
             self
         )
 
@@ -147,16 +159,16 @@ class Network:
         return (
             ListeningConnection(
                 DEFAULT_LISTENING_HOST,
-                self._settings.get('network.listening.port'),
+                self._settings.network.listening.port,
                 self,
                 obfuscated=False
-            ) if self._settings.get('network.listening.port') else None,
+            ) if self._settings.network.listening.port else None,
             ListeningConnection(
                 DEFAULT_LISTENING_HOST,
-                self._settings.get('network.listening.obfuscated_port'),
+                self._settings.network.listening.obfuscated_port,
                 self,
                 obfuscated=True
-            ) if self._settings.get('network.listening.obfuscated_port') else None
+            ) if self._settings.network.listening.obfuscated_port else None
         )
 
     async def initialize(self):
@@ -166,7 +178,7 @@ class Network:
         await self.connect_listening_ports()
         await self.connect_server()
 
-        log_connections = self._settings.get('debug.log_connection_count')
+        log_connections = self._settings.debug.log_connection_count
         if log_connections and self._log_connections_task is None:
             self._log_connections_task = asyncio.create_task(
                 self._log_connections_job(),
@@ -182,7 +194,7 @@ class Network:
         :raise ListeningConnectionFailedError: if an error occurred connecting
             the listening ports
         """
-        error_mode = ListeningConnectionErrorMode(self._settings.get('network.listening.error_mode'))
+        error_mode = self._settings.network.listening.error_mode
         results = await asyncio.gather(
             *[
                 listening_connection.connect()
@@ -256,7 +268,7 @@ class Network:
         """Reconnects to the server if it is closed. This should be started as a
         task and should be cancelled upon request.
         """
-        timeout = self._settings.get('network.reconnect.timeout')
+        timeout = self._settings.network.server.reconnect.timeout
         logger.info("starting server connection watchdog")
         while True:
             await asyncio.sleep(0.5)
@@ -310,7 +322,7 @@ class Network:
         :param obfuscated_port: available obfuscated port
         :return: a tuple with the port number and whether the port is obfuscated
         """
-        prefer_obfuscated = self._settings.get('network.peer.obfuscate')
+        prefer_obfuscated = self._settings.network.peer.obfuscate
         if port and obfuscated_port:
             if prefer_obfuscated:
                 return obfuscated_port, True
@@ -351,7 +363,7 @@ class Network:
             port, obfuscate = self.select_port(clear_port, obfuscated_port)
 
         # Override IP address if requested
-        ip = self._user_ip_overrides.get(username, ip)
+        ip = self._ip_overrides.get(username, ip)
 
         # Make direct connection
         try:
@@ -593,7 +605,7 @@ class Network:
         await connection.connect()
         await connection.send_message(
             PeerInit.Request(
-                self._settings.get('credentials.username'),
+                self._settings.credentials.username,
                 typ,
                 ticket
             )
@@ -664,7 +676,7 @@ class Network:
         A task is created for this coroutine when a `ConnectToPeer` message is
         received
         """
-        ip = self._user_ip_overrides.get(message.username, message.ip)
+        ip = self._ip_overrides.get(message.username, message.ip)
         port, obfuscate = self.select_port(message.port, message.obfuscated_port)
 
         peer_connection = PeerConnection(
@@ -782,7 +794,7 @@ class Network:
             # For registering with UPNP we need to know our own IP first, we can
             # get this from the server connection but we first need to be
             # fully connected to it before we can request a valid IP
-            if self._settings.get('network.upnp.enabled'):
+            if self._settings.network.upnp.enabled:
                 self._upnp_task = asyncio.create_task(
                     self.map_upnp_ports(),
                     name=f'enable-upnp-{task_counter()}'
@@ -790,7 +802,7 @@ class Network:
                 self._upnp_task.add_done_callback(self._map_upnp_ports_callback)
 
             # Register server connection watchdog
-            if self._settings.get('network.reconnect.auto'):
+            if self._settings.network.server.reconnect.auto:
                 if self._connection_watchdog_task is None:
                     self._connection_watchdog_task = asyncio.create_task(
                         self._connection_watchdog_job(),
@@ -914,9 +926,9 @@ class Network:
     def load_speed_limits(self):
         """(Re)loads the speed limits from the settings"""
         self.set_download_speed_limit(
-            self._settings.get('sharing.limits.download_speed_kbps'))
+            self._settings.shares.limits.download_speed_kbps)
         self.set_upload_speed_limit(
-            self._settings.get('sharing.limits.upload_speed_kbps'))
+            self._settings.shares.limits.upload_speed_kbps)
 
     def set_upload_speed_limit(self, limit_kbps: int):
         """Modifies the upload speed limit. Passing 0 will set the upload speed

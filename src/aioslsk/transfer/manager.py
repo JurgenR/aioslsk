@@ -267,7 +267,7 @@ class TransferManager:
 
     def get_upload_slots(self) -> int:
         """Returns the total amount of upload slots"""
-        return self._settings.get('sharing.limits.upload_slots')
+        return self._settings.shares.limits.upload_slots
 
     def has_slots_free(self) -> bool:
         return self.get_free_upload_slots() > 0
@@ -456,7 +456,7 @@ class TransferManager:
 
         :return: sorted list of provided by uploads by priority
         """
-        friends = self._settings.get('users.friends')
+        friends = self._settings.users.friends
 
         ranking = []
         for upload in uploads:

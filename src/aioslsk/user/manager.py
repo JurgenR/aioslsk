@@ -65,9 +65,7 @@ class UserManager:
             ConnectionStateChangedEvent, self._on_state_changed)
 
     def get_self(self) -> User:
-        return self.get_or_create_user(
-            self._settings.get('credentials.username')
-        )
+        return self.get_or_create_user(self._settings.credentials.username)
 
     def get_tracked_user(self) -> List[User]:
         return list(filter(lambda u: u.has_add_user_flag(), self.users.values()))
@@ -113,7 +111,7 @@ class UserManager:
     async def track_friends(self):
         """Starts tracking the users defined defined in the friends list"""
         tasks = []
-        for friend in self._settings.get('users.friends'):
+        for friend in self._settings.users.friends:
             tasks.append(self.track_user(friend, TrackingFlag.FRIEND))
 
         asyncio.gather(*tasks, return_exceptions=True)
@@ -154,7 +152,7 @@ class UserManager:
         )
 
         await self.track_user(
-            self._settings.get('credentials.username'), TrackingFlag.FRIEND)
+            self._settings.credentials.username, TrackingFlag.FRIEND)
 
         # Perform AddUser for all in the friendlist
         await self.track_friends()

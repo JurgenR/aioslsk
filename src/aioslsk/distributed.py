@@ -114,7 +114,7 @@ class DistributedNetwork:
             * level = level parent advertised + 1
             * root = whatever our parent sent us initially
         """
-        username = self._settings.get('credentials.username')
+        username = self._settings.credentials.username
         if self.parent:
             # We are the branch root
             if self.parent.branch_root == username:
@@ -165,15 +165,13 @@ class DistributedNetwork:
             else:
                 if peer.connection:
                     await peer.connection.disconnect(reason=CloseReason.REQUESTED)
-        else:
-            logger.debug(f"{self._settings.get('credentials.username')} : not enough info for parent : {peer}")
 
     async def _unset_parent(self):
         logger.debug(f"unset parent {self.parent!r}")
 
         self.parent = None
 
-        username = self._settings.get('credentials.username')
+        username = self._settings.credentials.username
         await self._notify_server_of_parent()
 
         # TODO: What happens to the children when we lose our parent is still
@@ -281,7 +279,7 @@ class DistributedNetwork:
 
     @on_message(PotentialParents.Response)
     async def _on_potential_parents(self, message: PotentialParents.Response, connection: ServerConnection):
-        if not self._settings.get('debug.search_for_parent'):
+        if not self._settings.debug.search_for_parent:
             logger.debug("ignoring PotentialParents message : searching for parent is disabled")
             return
 
@@ -306,7 +304,7 @@ class DistributedNetwork:
 
     @on_message(ServerSearchRequest.Response)
     async def _on_server_search_request(self, message: ServerSearchRequest.Response, connection):
-        username = self._settings.get('credentials.username')
+        username = self._settings.credentials.username
         if message.username == username:
             return
 
@@ -362,7 +360,6 @@ class DistributedNetwork:
         # peer who sent the sender
         # Don't do anything if the branch root is what we expected it to be
         if peer.branch_root == message.username:
-            logger.debug(f"{self._settings.get('credentials.username')} : skipping parent check")
             return
 
         peer.branch_root = message.username

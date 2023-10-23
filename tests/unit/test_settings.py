@@ -18,7 +18,7 @@ def settings() -> Settings:
     })
 
 
-class TestSettings:
+class _TestSettings:
 
     def test_whenSetSetting_shouldSetSetting(self, settings: Settings):
         settings.set('first_setting', 2)

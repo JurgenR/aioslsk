@@ -117,7 +117,7 @@ class RoomManager:
 
     async def auto_join_rooms(self):
         """Automatically joins rooms stored in the settings"""
-        rooms = self._settings.get('rooms.favorites')
+        rooms = self._settings.rooms.favorites
         logger.info(f"automatically rejoining {len(rooms)} rooms")
         await self._network.send_server_messages(
             *[ChatJoinRoom.Request(room) for room in rooms]
@@ -127,9 +127,9 @@ class RoomManager:
     async def _on_login(self, message: Login.Response, connection: ServerConnection):
         if message.success:
             await self._network.send_server_messages(
-                TogglePrivateRooms.Request(self._settings.get('rooms.private_room_invites'))
+                TogglePrivateRooms.Request(self._settings.rooms.private_room_invites)
             )
-            if not self._settings.get('rooms.auto_join'):
+            if not self._settings.rooms.auto_join:
                 await self.auto_join_rooms()
 
     @on_message(ChatRoomMessage.Response)
@@ -275,7 +275,7 @@ class RoomManager:
     @on_message(PrivateRoomAdded.Response)
     async def _on_private_room_added(self, message: PrivateRoomAdded.Response, connection: ServerConnection):
         room = self.get_or_create_room(message.room, private=True)
-        user = self._user_manager.get_or_create_user(self._settings.get('credentials.username'))
+        user = self._user_manager.get_or_create_user(self._settings.credentials.username)
         room.add_member(user)
 
         await self._event_bus.emit(
@@ -294,7 +294,7 @@ class RoomManager:
     @on_message(PrivateRoomRemoved.Response)
     async def _on_private_room_removed(self, message: PrivateRoomRemoved.Response, connection: ServerConnection):
         room = self.get_or_create_room(message.room, private=True)
-        user = self._user_manager.get_or_create_user(self._settings.get('credentials.username'))
+        user = self._user_manager.get_or_create_user(self._settings.credentials.username)
         room.remove_member(user)
         room.remove_operator(user)
 
@@ -349,7 +349,7 @@ class RoomManager:
 
     @on_message(RoomList.Response)
     async def _on_room_list(self, message: RoomList.Response, connection):
-        me = self._user_manager.get_or_create_user(self._settings.get('credentials.username'))
+        me = self._user_manager.get_or_create_user(self._settings.credentials.username)
         for idx, room_name in enumerate(message.rooms):
             room = self.get_or_create_room(room_name, private=False)
             room.user_count = message.rooms_user_count[idx]

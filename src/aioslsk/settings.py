@@ -1,73 +1,118 @@
-from __future__ import annotations
-import json
-import os
-from typing import Any, Callable, Dict, List
+from typing import Dict, List, Optional, Set
+
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings
+
+from .network.network import ListeningConnectionErrorMode
+from .shares.model import DirectoryShareMode
 
 
-RESOURCES_DIRECTORY: str = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), 'resources')
+class SharedDirectorySettingEntry(BaseModel, validate_assignment=True):
+    path: str
+    share_mode: DirectoryShareMode = DirectoryShareMode.EVERYONE
+    users: List[str] = Field(default_factory=list)
 
 
-class Settings:
-    DEFAULT_SETTINGS: str = os.path.join(RESOURCES_DIRECTORY, 'default_settings.json')
+class WishlistSettingEntry(BaseModel, validate_assignment=True):
+    query: str
+    enabled: bool = True
 
-    def __init__(self, settings: dict):
-        self._settings: dict = settings
-        self.listeners: Dict[str, List[Callable]] = {}
 
-    @classmethod
-    def create_default(cls) -> Settings:
-        """Creates a new `Settings` object from the defaults"""
-        with open(cls.DEFAULT_SETTINGS, 'r') as fh:
-            return Settings(json.load(fh))
+class UpnpSettings(BaseModel, validate_assignment=True):
+    enabled: bool = True
+    lease_duration: int = 0
 
-    def add_listener(self, key, callback):
-        if key in self.listeners:
-            self.listeners[key].append(callback)
-        else:
-            self.listeners[key] = [callback, ]
 
-    def call_listeners(self, key, value):
-        for listener in self.listeners.get(key, []):
-            listener(value)
+class ReconnectSettings(BaseModel, validate_assignment=True):
+    auto: bool = True
+    timeout: int = 10
 
-    def set(self, key: str, value: Any):
-        parts = key.split('.')
 
-        old_value = self._settings
-        for idx, part in enumerate(parts):
-            if idx == len(parts) - 1:
-                old_value[part] = value
-            else:
-                old_value = old_value[part]
+class ServerSettings(BaseModel, validate_assignment=True):
+    hostname: str = 'server.slsknet.org'
+    port: int = 2416
+    reconnect: ReconnectSettings = ReconnectSettings()
 
-        self.call_listeners(key, value)
 
-    def get(self, key: str):
-        parts = key.split('.')
-        value = self._settings
+class ListeningSettings(BaseModel, validate_assignment=True):
+    error_mode: ListeningConnectionErrorMode = ListeningConnectionErrorMode.CLEAR
+    port: int = 60000
+    obfuscated_port: int = 60001
 
-        for part in parts:
-            value = value[part]
 
-        return value
+class PeerSettings(BaseModel, validate_assignment=True):
+    obfuscate: bool = False
 
-    def append(self, key: str, value: Any):
-        parts = key.split('.')
 
-        old_value = self._settings
-        for idx, part in enumerate(parts):
-            if idx == len(parts) - 1:
-                old_value[part].append(value)
-            else:
-                old_value = old_value[part]
+class NetworkSettings(BaseModel, validate_assignment=True):
+    server: ServerSettings = Field(default_factory=ServerSettings)
+    listening: ListeningSettings = Field(default_factory=ListeningSettings)
+    peer: PeerSettings = Field(default_factory=PeerSettings)
+    upnp: UpnpSettings = Field(default_factory=UpnpSettings)
 
-    def remove(self, key: str, value: Any):
-        parts = key.split('.')
 
-        old_value = self._settings
-        for idx, part in enumerate(parts):
-            if idx == len(parts) - 1:
-                old_value[part].remove(value)
-            else:
-                old_value = old_value[part]
+class UserInfoSettings(BaseModel, validate_assignment=True):
+    description: Optional[str] = None
+    picture: Optional[str] = None
+
+
+class CredentialsSettings(BaseModel, validate_assignment=True):
+    username: str
+    password: str
+    info: UserInfoSettings = Field(default_factory=UserInfoSettings)
+
+
+class SearchSettings(BaseModel, validate_assignment=True):
+    wishlist: List[WishlistSettingEntry] = Field(default_factory=list)
+
+
+class SharingLimitSettings(BaseModel, validate_assignment=True):
+    upload_slots: int = 2
+    upload_speed_kbps: int = 0
+    download_speed_kbps: int = 0
+
+
+class SharesSettings(BaseModel, validate_assignment=True):
+    download: str = None
+    directories: List[SharedDirectorySettingEntry] = Field(default_factory=list)
+    limits: SharingLimitSettings = Field(default_factory=SharingLimitSettings)
+
+
+class RoomsSettings(BaseModel, validate_assignment=True):
+    auto_join: bool = True
+    private_room_invites: bool = True
+    favorites: Set[str] = Field(default_factory=set)
+
+
+class UsersSettings(BaseModel, validate_assignment=True):
+    friends: Set[str] = Field(default_factory=set)
+    blocked: Set[str] = Field(default_factory=set)
+
+
+class InterestsSettings(BaseModel, validate_assignment=True):
+    liked: Set[str] = Field(default_factory=set)
+    hated: Set[str] = Field(default_factory=set)
+
+
+class DebugSettings(BaseModel, validate_assignment=True):
+    search_for_parent: bool = True
+    ip_overrides: Dict[str, str] = Field(default_factory=dict)
+    log_connection_count: bool = False
+
+
+class Settings(BaseSettings, validate_assignment=True):
+    network: NetworkSettings = Field(default_factory=NetworkSettings)
+    credentials: CredentialsSettings = Field(default_factory=CredentialsSettings)
+    searches: SearchSettings = Field(default_factory=SearchSettings)
+    shares: SharesSettings = Field(default_factory=SharesSettings)
+    users: UsersSettings = Field(default_factory=UsersSettings)
+    rooms: RoomsSettings = Field(default_factory=RoomsSettings)
+    interests: InterestsSettings = Field(default_factory=InterestsSettings)
+    debug: DebugSettings = Field(default_factory=DebugSettings)
+
+
+if __name__ == '__main__':
+    import json
+    with open(r"C:\Users\jurgen\Desktop\my_settings.json", 'r') as fh:
+        mysettings = json.load(fh)
+    import pdb; pdb.set_trace()

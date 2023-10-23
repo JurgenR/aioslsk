@@ -193,7 +193,7 @@ class SearchManager:
             self._network.send_peer_messages(
                 username,
                 PeerSearchReply.Request(
-                    username=self._settings.get('credentials.username'),
+                    username=self._settings.credentials.username,
                     ticket=ticket,
                     results=convert_items_to_file_data(visible, use_full_path=True),
                     has_slots_free=self._upload_info_provider.has_slots_free(),
@@ -233,7 +233,7 @@ class SearchManager:
         server on start up).
         """
         while True:
-            items = self._settings.get('search.wishlist')
+            items = self._settings.searches.wishlist
 
             # Remove all current wishlist searches
             self.requests = {
@@ -243,18 +243,15 @@ class SearchManager:
 
             logger.info(f"starting wishlist search of {len(items)} items")
             # Recreate
-            for item in items:
-                if not item['enabled']:
-                    continue
-
+            for item in filter(lambda item: item.enabled, items):
                 ticket = next(self._ticket_generator)
                 self.requests[ticket] = SearchRequest(
                     ticket,
-                    item['query'],
+                    item.query,
                     search_type=SearchType.WISHLIST
                 )
                 self._network.queue_server_messages(
-                    WishlistSearch.Request(ticket, item['query'])
+                    WishlistSearch.Request(ticket, item.query)
                 )
 
             await asyncio.sleep(interval)
@@ -286,7 +283,7 @@ class SearchManager:
 
     @on_message(ServerSearchRequest.Response)
     async def _on_server_search_request(self, message: ServerSearchRequest.Response, connection):
-        username = self._settings.get('credentials.username')
+        username = self._settings.credentials.username
         if message.username == username:
             return
 

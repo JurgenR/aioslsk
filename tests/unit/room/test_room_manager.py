@@ -31,7 +31,7 @@ DEFAULT_USER = 'user0'
 DEFAULT_SETTINGS = {
     'credentials': {
         'username': DEFAULT_USER,
-        'password': 'Test1234'
+        'password': 'password0'
     }
 }
 
@@ -39,7 +39,7 @@ DEFAULT_SETTINGS = {
 @pytest.fixture
 def user_manager() -> UserManager:
     user_manager = UserManager(
-        Settings(DEFAULT_SETTINGS),
+        Settings(**DEFAULT_SETTINGS),
         Mock(), # Event bus
         Mock(), # Internal event bus
         AsyncMock(), # Network
@@ -55,7 +55,7 @@ def manager(user_manager: UserManager) -> RoomManager:
     network.server = AsyncMock()
 
     manager = RoomManager(
-        Settings(DEFAULT_SETTINGS),
+        Settings(**DEFAULT_SETTINGS),
         event_bus,
         internal_event_bus,
         user_manager,

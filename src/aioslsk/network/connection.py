@@ -576,7 +576,6 @@ class PeerConnection(DataConnection):
             if data is None:
                 return
 
-            logger.debug(f"writing {len(data)} bytes")
             await file_handle.write(data)
             if callback is not None:
                 callback(data)

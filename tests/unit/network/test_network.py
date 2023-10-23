@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, Mock
 
 from aioslsk.events import InternalEventBus
 from aioslsk.exceptions import ConnectionFailedError, ListeningConnectionFailedError
-from aioslsk.network.network import Network
+from aioslsk.network.network import Network, ListeningConnectionErrorMode
 from aioslsk.settings import Settings
 
 
@@ -14,7 +14,7 @@ DEFAULT_SETTINGS = {
         'username': 'user0',
         'password': 'pw'
     },
-    'sharing': {
+    'shares': {
         'limits': {
             'upload_speed_kbps': 0,
             'download_speed_kbps': 0
@@ -38,7 +38,7 @@ DEFAULT_SETTINGS = {
         }
     },
     'debug': {
-        'user_ip_overrides': {}
+        'ip_overrides': {}
     }
 }
 
@@ -46,8 +46,8 @@ DEFAULT_SETTINGS = {
 class TestNetworkManager:
 
     def _create_network(self, settings=None) -> Network:
-        settings = settings or copy.deepcopy(DEFAULT_SETTINGS)
-        network = Network(Settings(settings), InternalEventBus())
+        sett = settings or Settings(**DEFAULT_SETTINGS)
+        network = Network(sett, InternalEventBus())
         network.server_connection = Mock()
 
         return network
@@ -66,7 +66,7 @@ class TestNetworkManager:
     )
     def test_selectPort(self, clear_port: int, obfuscated_port: int, prefer_obfuscated: bool, expected: Tuple[int, bool]):
         network = self._create_network()
-        network._settings.set('network.peer.obfuscate', prefer_obfuscated)
+        network._settings.network.peer.obfuscate = prefer_obfuscated
         actual = network.select_port(clear_port, obfuscated_port)
         assert expected == actual
 
@@ -82,8 +82,8 @@ class TestNetworkManager:
 
     @pytest.mark.asyncio
     async def test_connectListeningPorts_onePort(self):
-        settings = copy.deepcopy(DEFAULT_SETTINGS)
-        settings['network']['listening']['obfuscated_port'] = 0
+        settings = Settings(**DEFAULT_SETTINGS)
+        settings.network.listening.obfuscated_port = 0
         network = self._create_network(settings)
 
         network.listening_connections[0].connect = AsyncMock()
@@ -94,8 +94,8 @@ class TestNetworkManager:
 
     @pytest.mark.asyncio
     async def test_connectListeningPorts_errorModeAll(self):
-        settings = copy.deepcopy(DEFAULT_SETTINGS)
-        settings['network']['listening']['error_mode'] = 'all'
+        settings = Settings(**DEFAULT_SETTINGS)
+        settings.network.listening.error_mode = ListeningConnectionErrorMode.ALL
         network = self._create_network(settings)
         network.listening_connections[0].disconnect = AsyncMock()
         network.listening_connections[1].disconnect = AsyncMock()
@@ -107,8 +107,8 @@ class TestNetworkManager:
 
     @pytest.mark.asyncio
     async def test_connectListeningPorts_errorModeAny(self):
-        settings = copy.deepcopy(DEFAULT_SETTINGS)
-        settings['network']['listening']['error_mode'] = 'any'
+        settings = Settings(**DEFAULT_SETTINGS)
+        settings.network.listening.error_mode = ListeningConnectionErrorMode.ANY
         network = self._create_network(settings)
 
         network.listening_connections[0].connect = AsyncMock()
@@ -120,8 +120,8 @@ class TestNetworkManager:
 
     @pytest.mark.asyncio
     async def test_connectListeningPorts_errorModeClear(self):
-        settings = copy.deepcopy(DEFAULT_SETTINGS)
-        settings['network']['listening']['error_mode'] = 'clear'
+        settings = Settings(**DEFAULT_SETTINGS)
+        settings.network.listening.error_mode = ListeningConnectionErrorMode.CLEAR
         network = self._create_network(settings)
 
         network.listening_connections[0].connect = AsyncMock(side_effect=ConnectionFailedError)

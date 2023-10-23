@@ -19,3 +19,4 @@ SERVER_RESPONSE_TIMEOUT: float = 30
 DISCONNECT_TIMEOUT: float = 10
 PATH_SEPERATOR_PATTERN = re.compile(r"[\\/]+")
 """Pattern for splitting/normalizing remote paths"""
+UPNP_SEARCH_TIMEOUT = 10

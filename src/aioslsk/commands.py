@@ -261,7 +261,7 @@ class DropRoomMembershipCommand(BaseCommand[PrivateRoomRemoved.Response, Room]):
         self._username: Optional[str] = None
 
     async def send(self, client: SoulSeekClient):
-        self._username = client.settings.get('credentials.username')
+        self._username = client.settings.credentials.username
         await client.network.send_server_messages(
             PrivateRoomDropMembership.Request(self.room)
         )
@@ -345,6 +345,7 @@ class GetGlobalRecommendationsCommand(BaseCommand[GetGlobalRecommendations.Respo
 class GetItemSimilarUsersCommand(BaseCommand[GetItemSimilarUsers.Response, List[User]]):
 
     def __init__(self, item: str):
+        super().__init__()
         self.item: str = item
 
     async def send(self, client: SoulSeekClient):
@@ -551,7 +552,7 @@ class RoomMessageCommand(BaseCommand[ChatRoomMessage.Response, RoomMessage]):
         self._username: Optional[str] = None
 
     async def send(self, client: SoulSeekClient):
-        self._username = client.settings.get('credentials.username')
+        self._username = client.settings.credentials.username
         await client.network.send_server_messages(
             ChatRoomMessage.Request(
                 self.room,
@@ -590,6 +591,7 @@ class AddInterestCommand(BaseCommand[None, None]):
         await client.network.send_server_messages(
             AddInterest.Request(self.interest)
         )
+
 
 class AddHatedInterestCommand(BaseCommand[None, None]):
 

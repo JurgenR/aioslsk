@@ -18,7 +18,8 @@ from unittest.mock import AsyncMock, Mock, call
 DEFAULT_USER = 'testuser0'
 DEFAULT_SETTINGS = {
     'credentials': {
-        'username': DEFAULT_USER
+        'username': DEFAULT_USER,
+        'password': 'password0'
     }
 }
 
@@ -26,7 +27,7 @@ DEFAULT_SETTINGS = {
 @pytest.fixture
 def user_manager() -> UserManager:
     user_manager = UserManager(
-        Settings(DEFAULT_SETTINGS),
+        Settings(**DEFAULT_SETTINGS),
         Mock(), # Event bus
         Mock(), # Internal event bus
         AsyncMock(), # Network
@@ -48,7 +49,7 @@ def manager(user_manager: UserManager) -> SearchManager:
     transfer_manager = Mock()
 
     return SearchManager(
-        Settings(DEFAULT_SETTINGS),
+        Settings(**DEFAULT_SETTINGS),
         event_bus,
         internal_event_bus,
         user_manager,

@@ -97,8 +97,8 @@ class SoulSeekClient:
         `settings`
         """
         await self.execute(LoginCommand(
-            self.settings.get('credentials.username'),
-            self.settings.get('credentials.password')
+            self.settings.credentials.username,
+            self.settings.credentials.password
         ).response())
 
     async def start_shares_manager(self, scan=True):

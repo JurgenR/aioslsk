@@ -179,11 +179,11 @@ class SharesManager:
 
     def load_from_settings(self):
         """Loads the directories from the settings"""
-        for shared_directory in self._settings.get('sharing.directories'):
+        for shared_directory in self._settings.shares.directories:
             self.add_shared_directory(
-                shared_directory['path'],
-                share_mode=DirectoryShareMode(shared_directory['share_mode']),
-                users=shared_directory.get('users', None)
+                shared_directory.path,
+                share_mode=shared_directory.share_mode,
+                users=shared_directory.users
             )
 
     def read_cache(self):
@@ -203,9 +203,9 @@ class SharesManager:
         """Gets the absolute path the to download directory configured from the
         settings
 
-        :return: Absolute path of the value of the `sharing.download` setting
+        :return: Absolute path of the value of the `shares.download` setting
         """
-        download_dir = self._settings.get('sharing.download')
+        download_dir = self._settings.shares.download
         return os.path.abspath(download_dir)
 
     async def create_directory(self, absolute_path: str):
@@ -677,7 +677,7 @@ class SharesManager:
     def is_directory_locked(self, directory: SharedDirectory, username: str) -> bool:
         """Checks if the shared directory is locked for the given `username`"""
         if directory.share_mode == DirectoryShareMode.FRIENDS:
-            return username not in self._settings.get('users.friends')
+            return username not in self._settings.users.friends
         elif directory.share_mode == DirectoryShareMode.USERS:
             return username not in directory.users
         return False

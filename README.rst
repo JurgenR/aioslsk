@@ -65,6 +65,7 @@ The package uses several dependencies:
 * mutagen_ : library used for extracting audio metadata
 * aiofiles_ : asyncio library for filesystem management
 * async-upnp-client_ : library for managing UPnP configuration
+* pydantic-settings_ : library for managing settings
 
 
 Building the documentation
@@ -96,3 +97,4 @@ Running all tests with code coverage report:
 .. _mutagen: https://github.com/quodlibet/mutagen
 .. _aiofiles: https://github.com/Tinche/aiofiles
 .. _async-upnp-client: https://github.com/StevenLooman/async_upnp_client
+.. _pydantic-settings: https://docs.pydantic.dev/latest/concepts/pydantic_settings/

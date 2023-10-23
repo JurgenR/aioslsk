@@ -1,11 +1,10 @@
 import asyncio
 import logging
 
-from ..network.connection import ConnectionState, ServerConnection
+from ..network.connection import ServerConnection
 from ..events import (
     build_message_map,
     on_message,
-    ConnectionStateChangedEvent,
     EventBus,
     GlobalRecommendationsEvent,
     InternalEventBus,
@@ -54,19 +53,20 @@ class InterestManager:
     def register_listeners(self):
         self._internal_event_bus.register(
             MessageReceivedEvent, self._on_message_received)
-        self._internal_event_bus.register(
-            ConnectionStateChangedEvent, self._on_state_changed)
 
     async def advertise_interests(self):
+        """Advertises all interests and hated interests defined in the settings
+        to the server
+        """
         messages = []
-        for interest in self._settings.get('interests.liked'):
+        for interest in self._settings.interests.liked:
             messages.append(
                 self._network.send_server_messages(
                     AddInterest.Request(interest)
                 )
             )
 
-        for hated_interest in self._settings.get('interests.hated'):
+        for hated_interest in self._settings.interests.hated:
             messages.append(
                 self._network.send_server_messages(
                     AddHatedInterest.Request(hated_interest)
@@ -147,10 +147,3 @@ class InterestManager:
         message = event.message
         if message.__class__ in self.MESSAGE_MAP:
             await self.MESSAGE_MAP[message.__class__](message, event.connection)
-
-    async def _on_state_changed(self, event: ConnectionStateChangedEvent):
-        if not isinstance(event.connection, ServerConnection):
-            return
-
-        if event.state == ConnectionState.CLOSED:
-            self.reset_users()

@@ -34,7 +34,7 @@ SETTINGS_WITH_INFO = {
             'picture': USER_PICTURE
         }
     },
-    'sharing': {
+    'shares': {
         'limits': {
             'upload_slots': UPLOAD_SLOTS
         }
@@ -44,7 +44,7 @@ SETTINGS_WITH_INFO = {
 
 class TestPeer:
 
-    def _create_user_manager(self, settings: dict = DEFAULT_SETTINGS) -> UserManager:
+    def _create_user_manager(self, settings: Settings) -> UserManager:
         return UserManager(
             settings,
             Mock(), # Event bus
@@ -53,7 +53,7 @@ class TestPeer:
         )
 
     def _create_peer_manager(self, settings: dict = DEFAULT_SETTINGS) -> PeerManager:
-        settings_obj = Settings(settings)
+        settings_obj = Settings(**settings)
         user_manager = self._create_user_manager(settings_obj)
 
         event_bus = AsyncMock()

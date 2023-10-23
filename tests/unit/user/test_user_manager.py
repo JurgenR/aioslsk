@@ -28,7 +28,7 @@ def manager() -> UserManager:
     network.server = AsyncMock()
 
     manager = UserManager(
-        Settings(DEFAULT_SETTINGS),
+        Settings(**DEFAULT_SETTINGS),
         event_bus,
         internal_event_bus,
         network

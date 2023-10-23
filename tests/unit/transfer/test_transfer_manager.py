@@ -24,14 +24,12 @@ from aioslsk.user.manager import UserManager
 
 FRIEND = 'friend0'
 DEFAULT_SETTINGS = {
-    'sharing': {
+    'credentials': {'username': 'user0', 'password': 'pass0'},
+    'shares': {
         'limits': {
             'download_slots': 2,
             'upload_slots': 2
         }
-    },
-    'database': {
-        'name': 'unittest.db'
     },
     'users': {
         'friends': [FRIEND]
@@ -45,7 +43,7 @@ RESOURCES = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'resources
 @pytest.fixture
 def user_manager() -> UserManager:
     user_manager = UserManager(
-        Settings(DEFAULT_SETTINGS),
+        Settings(**DEFAULT_SETTINGS),
         Mock(), # Event bus
         Mock(), # Internal event bus
         AsyncMock(), # Network
@@ -69,7 +67,7 @@ def manager(tmpdir, user_manager: UserManager) -> TransferManager:
     shares_manager = Mock()
 
     return TransferManager(
-        Settings(DEFAULT_SETTINGS),
+        Settings(**DEFAULT_SETTINGS),
         event_bus, # event bus
         internal_event_bus, # internal event bus
         user_manager,

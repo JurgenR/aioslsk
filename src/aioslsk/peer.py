@@ -174,15 +174,8 @@ class PeerManager:
                 "got PeerSharesRequest for a connection that wasn't properly initialized")
             return
 
-        try:
-            description = self._settings.get('credentials.info.description')
-        except KeyError:
-            description = ""
-
-        try:
-            picture = self._settings.get('credentials.info.picture')
-        except KeyError:
-            picture = None
+        description = self._settings.credentials.info.description or ""
+        picture = self._settings.credentials.info.picture
 
         await connection.send_message(
             PeerUserInfoReply.Request(
