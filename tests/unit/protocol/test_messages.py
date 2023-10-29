@@ -37,6 +37,7 @@ from aioslsk.protocol.messages import (
     CheckPrivileges,
     ChildDepth,
     ConnectToPeer,
+    DownloadSpeed,
     DistributedAliveInterval,
     DistributedBranchLevel,
     DistributedBranchRoot,
@@ -797,6 +798,19 @@ class TestPing:
         message = Ping.Request()
         data = bytes.fromhex('0400000020000000')
         assert Ping.Request.deserialize(data) == message
+
+
+class TestDownloadSpeed:
+
+    def test_DownloadSpeed_Request_serialize(self):
+        message = DownloadSpeed.Request('user0', 123)
+        data = bytes.fromhex('11000000220000000500000075736572307b000000')
+        assert message.serialize() == data
+
+    def test_DownloadSpeed_Request_deserialize(self):
+        message = DownloadSpeed.Request('user0', 123)
+        data = bytes.fromhex('11000000220000000500000075736572307b000000')
+        assert DownloadSpeed.Request.deserialize(data) == message
 
 
 class TestSharedFoldersFiles:

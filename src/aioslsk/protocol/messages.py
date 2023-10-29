@@ -367,6 +367,15 @@ class Ping(ServerMessage):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x20)
 
 
+class DownloadSpeed(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x22)
+        username: str = field(metadata={'type': string})
+        speed: int = field(metadata={'type': uint32})
+
+
 class SharedFoldersFiles(ServerMessage):
 
     @dataclass(order=True)

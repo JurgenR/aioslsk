@@ -467,6 +467,17 @@ Send a ping to the server to let it know we are still alive (every 5 minutes)
 :Send: No parameters
 
 
+DownloadSpeed (Code 34)
+-----------------------
+
+Sent by old client after download has completed. No longer used.
+
+:Code: 26 (0x1A)
+:Send:
+   1. **string**: ticket
+   2. **uint32**: speed
+
+
 .. _SharedFoldersFiles:
 
 SharedFoldersFiles (Code 35)
