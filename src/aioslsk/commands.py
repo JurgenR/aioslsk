@@ -32,6 +32,7 @@ from .protocol.messages import (
     PrivateRoomRemoveUser,
     PrivateRoomRemoved,
     PrivateRoomDropMembership,
+    PrivateRoomDropOwnership,
     RemoveHatedInterest,
     RemoveInterest,
     RoomList,
@@ -288,6 +289,18 @@ class DropRoomMembershipCommand(BaseCommand[PrivateRoomRemoved.Response, Room]):
 
     def process_response(self, client: SoulSeekClient, response: PrivateRoomRemoved.Response) -> Room:
         return client.rooms.get_or_create_room(response.room)
+
+
+class DropRoomOwnershipCommand(BaseCommand[None, None]):
+
+    def __init__(self, room: str):
+        super().__init__()
+        self.room: str = room
+
+    async def send(self, client: SoulSeekClient):
+        await client.network.send_server_messages(
+            PrivateRoomDropOwnership.Request(self.room)
+        )
 
 
 class GetItemRecommendationsCommand(BaseCommand[GetItemRecommendations.Response, List[ItemRecommendation]]):

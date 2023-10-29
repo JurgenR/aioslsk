@@ -111,8 +111,16 @@ class ExpectedResponse(asyncio.Future):
             if connection.username != self.peer:
                 return False
 
-        for fname, fvalue in self.fields.items():
-            if getattr(response, fname, None) != fvalue:
+        for fname, expected_value in self.fields.items():
+            if callable(expected_value):
+                try:
+                    actual_value = getattr(response, fname)
+                except AttributeError:
+                    return False
+                else:
+                    return expected_value(actual_value)
+
+            if getattr(response, fname, None) != expected_value:
                 return False
 
         return True
