@@ -252,10 +252,10 @@ class DataConnection(Connection):
             self._reader = None
             self._writer = None
 
-    def _start_reader_task(self):
+    def start_reader_task(self):
         self._reader_task = asyncio.create_task(self._message_reader_loop())
 
-    def _stop_reader_task(self):
+    def stop_reader_task(self):
         if self._reader_task is not None:
             self._reader_task.cancel()
             self._reader_task = None
@@ -454,7 +454,7 @@ class ServerConnection(DataConnection):
 
     async def connect(self, timeout: float = SERVER_CONNECT_TIMEOUT):
         await super().connect(timeout=timeout)
-        self._start_reader_task()
+        self.start_reader_task()
 
     def deserialize_message(self, message_data: bytes) -> MessageDataclass:
         return ServerMessage.deserialize_response(message_data)
@@ -499,11 +499,11 @@ class PeerConnection(DataConnection):
                 self.obfuscated = False
 
         if state == PeerConnectionState.ESTABLISHED:
-            self._start_reader_task()
+            self.start_reader_task()
         else:
             # This shouldn't occur, during all other states we call the
             # receive_* methods directly. But it can do no harm
-            self._stop_reader_task()
+            self.stop_reader_task()
 
         logger.debug(f"{self.hostname}:{self.port} setting state to {state} : {self!r}")
         self.connection_state = state

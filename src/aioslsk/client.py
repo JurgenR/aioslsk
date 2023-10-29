@@ -1,19 +1,31 @@
 from __future__ import annotations
 import asyncio
 import logging
-from typing import Optional, Union
+from typing import List, Optional, Union
 
+from .base_manager import BaseManager
 from .commands import BaseCommand, LoginCommand
 from .distributed import DistributedNetwork
-from .events import EventBus, InternalEventBus
+from .events import (
+    build_message_map,
+    ConnectionStateChangedEvent,
+    EventBus,
+    InternalEventBus,
+    MessageReceivedEvent,
+    SessionDestroyedEvent,
+    SessionInitializedEvent,
+)
+from .exceptions import InvalidSessionError
 from .interest.manager import InterestManager
 from .shares.cache import SharesCache, SharesNullCache
 from .shares.manager import SharesManager
+from .network.connection import ConnectionState, ServerConnection
 from .network.network import Network
 from .peer import PeerManager
 from .room.manager import RoomManager
-from .server import ServerManager
 from .search.manager import SearchManager
+from .server import ServerManager
+from .session import Session
 from .settings import Settings
 from .transfer.cache import TransferCache, TransferNullCache
 from .transfer.manager import TransferManager
@@ -23,6 +35,7 @@ from .utils import ticket_generator
 
 
 CLIENT_VERSION = 157
+MINOR_VERSION = 100
 
 
 logger = logging.getLogger(__name__)
@@ -42,6 +55,7 @@ class SoulSeekClient:
 
         self.events: EventBus = event_bus or EventBus()
         self._internal_events: InternalEventBus = InternalEventBus()
+        self.session: Optional[Session] = None
 
         self.network: Network = self.create_network()
         self.distributed_network: DistributedNetwork = self.create_distributed_network()
@@ -60,17 +74,38 @@ class SoulSeekClient:
         self.searches: SearchManager = self.create_search_manager()
         self.server_manager: ServerManager = self.create_server_manager()
 
+        self.services: List[BaseManager] = [
+            self.users,
+            self.rooms,
+            self.interests,
+            self.shares,
+            self.transfers,
+            self.peers,
+            self.searches,
+            self.server_manager
+        ]
+
+        self._MESSAGE_MAP = build_message_map(self)
+        self.register_listeners()
+
     @property
     def event_loop(self):
         return asyncio.get_running_loop()
 
-    async def start(self, scan_shares=True):
+    def register_listeners(self):
+        self._internal_events.register(
+            MessageReceivedEvent, self._on_message_received)
+        self._internal_events.register(
+            ConnectionStateChangedEvent, self._on_connection_state_changed)
+
+    async def start(self, scan_shares: bool = True):
         """Performs a full start up of the client consisting of:
-        * Connecting to the server
-        * Opening listening ports
+
+        * Calling `load_data` on all defined services
+        * Connecting to the server and opening listening ports
         * Performs a login with the user credentials defined in the settings
-        * Reading transfer and shares caches
-        * Optionally performs an initial scan of the shares
+        * Calling `start` on all defined services
+        * Optionally starts a scan of the defined shares
 
         :param scan_shares: start a shares scan as soon as the client starts
         """
@@ -80,11 +115,13 @@ class SoulSeekClient:
         # see https://stackoverflow.com/questions/55918048/asyncio-semaphore-runtimeerror-task-got-future-attached-to-a-different-loop
         self._stop_event = asyncio.Event()
 
-        await self.start_shares_manager(scan=scan_shares)
-        await self.start_transfer_manager()
+        await asyncio.gather(*[svc.load_data() for svc in self.services])
+
         await self.connect()
         await self.login()
-        await self.transfers.manage_transfers()
+
+        if scan_shares:
+            asyncio.create_task(self.shares.scan)
 
     async def connect(self):
         """Initializes the network by connecting to the server and opening the
@@ -92,34 +129,36 @@ class SoulSeekClient:
         """
         await self.network.initialize()
 
-    async def login(self):
+    async def login(
+            self, client_version: int = CLIENT_VERSION, minor_version: int = MINOR_VERSION):
         """Performs a logon to the server with the `credentials` defined in the
         `settings`
+
+        :raise AuthenticationError: When authentication failed
         """
-        await self.execute(LoginCommand(
-            self.settings.credentials.username,
-            self.settings.credentials.password
+        username = self.settings.credentials.username
+        greeting, ip, _ = await self.execute(LoginCommand(
+            username,
+            self.settings.credentials.password,
+            client_version=client_version,
+            minor_version=minor_version
         ).response())
 
-    async def start_shares_manager(self, scan=True):
-        """Reads the shares cache and loads the shared directories from the
-        settings
-
-        :param scan: Boolean to indicate whether to start and initial scan or not
-        """
-        self.shares.read_cache()
-        self.shares.load_from_settings()
-        if scan:
-            asyncio.create_task(self.shares.scan())
-
-    async def start_transfer_manager(self):
-        await self.transfers.read_cache()
+        self.session = Session(
+            user=self.users.get_or_create_user(username),
+            ip_address=ip,
+            greeting=greeting,
+            client_version=client_version,
+            minor_version=minor_version
+        )
+        logger.debug("setting session from client")
+        await self._internal_events.emit(SessionInitializedEvent(self.session))
 
     async def run_until_stopped(self):
         await self._stop_event.wait()
 
     async def stop(self):
-        """Stops the client this method consists of:
+        """Stops the client, this method consists of:
 
         * Disconnecting the network and waiting for all connections to close
         * Cancel all pending tasks and waiting for them to complete
@@ -130,15 +169,12 @@ class SoulSeekClient:
 
         await self.network.disconnect()
 
-        cancelled_tasks = (
-            self.transfers.stop() +
-            self.searches.stop() +
-            self.distributed_network.stop()
-        )
-        await asyncio.gather(*cancelled_tasks, return_exceptions=True)
+        cancelled_tasks = []
+        for service in self.services:
+            cancelled_tasks.extend(await service.stop())
 
-        self.shares.write_cache()
-        self.transfers.write_cache()
+        await asyncio.gather(*cancelled_tasks, return_exceptions=True)
+        await asyncio.gather(*[svc.store_data() for svc in self.services])
 
     def _exception_handler(self, loop, context):
         message = f"unhandled exception on loop {loop!r} : context : {context!r}"
@@ -151,13 +187,16 @@ class SoulSeekClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.stop()
 
+    async def __call__(self, command: BaseCommand):
+        await self.execute(command)
+
     async def execute(self, command: BaseCommand):
         """Execute a `BaseCommand`, see the `commands.py` module for a list of
         possible commands.
 
         Waiting for a response is optional; the protocol does not always send
         error messages in case of failure. In these cases this method will
-        timeout.
+        timeout if the command is configured to wait for a response.
 
         Example waiting for response:
 
@@ -174,8 +213,12 @@ class SoulSeekClient:
             await client.execute(JoinRoomCommand('cool room'))
 
         :param command: Command class to execute
+        :raise InvalidSessionError: When no logon has been performed
         :return: Optional response depending on how the command was configured
         """
+        if self.session is None:
+            raise InvalidSessionError("client is not logged in")
+
         if command.response_future:
             self.network.register_response_future(command.response_future)
 
@@ -293,3 +336,15 @@ class SoulSeekClient:
             self._internal_events,
             self.network
         )
+
+    async def _on_message_received(self, event: MessageReceivedEvent):
+        message = event.message
+        if message.__class__ in self._MESSAGE_MAP:
+            await self._MESSAGE_MAP[message.__class__](message, event.connection)
+
+    async def _on_connection_state_changed(self, event: ConnectionStateChangedEvent):
+        if isinstance(event.connection, ServerConnection) and event.state == ConnectionState.CLOSED:
+            if (session := self.session):
+                event = SessionDestroyedEvent(session)
+                self.session = None
+                await self._internal_events.emit(event)

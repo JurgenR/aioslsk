@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from ..network.connection import ServerConnection
+from ..base_manager import BaseManager
 from ..events import (
     build_message_map,
     on_message,
@@ -11,20 +11,21 @@ from ..events import (
     ItemRecommendationsEvent,
     MessageReceivedEvent,
     RecommendationsEvent,
+    SessionInitializedEvent,
     SimilarUsersEvent,
     UserInterestsEvent,
 )
 from ..protocol.messages import (
-    Login,
+    AddHatedInterest,
+    AddInterest,
     GetGlobalRecommendations,
     GetItemRecommendations,
     GetItemSimilarUsers,
     GetRecommendations,
     GetSimilarUsers,
     GetUserInterests,
-    AddHatedInterest,
-    AddInterest,
 )
+from ..network.connection import ServerConnection
 from ..network.network import Network
 from ..settings import Settings
 from ..user.manager import UserManager
@@ -33,7 +34,7 @@ from ..user.manager import UserManager
 logger = logging.getLogger(__name__)
 
 
-class InterestManager:
+class InterestManager(BaseManager):
     """Class handling interests and recommendations"""
 
     def __init__(
@@ -46,13 +47,15 @@ class InterestManager:
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._network: Network = network
 
-        self.MESSAGE_MAP = build_message_map(self)
+        self._MESSAGE_MAP = build_message_map(self)
 
         self.register_listeners()
 
     def register_listeners(self):
         self._internal_event_bus.register(
             MessageReceivedEvent, self._on_message_received)
+        self._internal_event_bus.register(
+            SessionInitializedEvent, self._on_session_initialized)
 
     async def advertise_interests(self):
         """Advertises all interests and hated interests defined in the settings
@@ -74,11 +77,6 @@ class InterestManager:
             )
 
         await asyncio.gather(*messages, return_exceptions=True)
-
-    @on_message(Login.Response)
-    async def _on_login(self, message: Login.Response, connection: ServerConnection):
-        if message.success:
-            await self.advertise_interests()
 
     # Recommendations / interests
     @on_message(GetRecommendations.Response)
@@ -145,5 +143,9 @@ class InterestManager:
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message
-        if message.__class__ in self.MESSAGE_MAP:
-            await self.MESSAGE_MAP[message.__class__](message, event.connection)
+        if message.__class__ in self._MESSAGE_MAP:
+            await self._MESSAGE_MAP[message.__class__](message, event.connection)
+
+    async def _on_session_initialized(self, event: SessionInitializedEvent):
+        logger.debug(f"interests : session initialized : {event.session}")
+        await self.advertise_interests()

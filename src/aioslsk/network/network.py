@@ -23,6 +23,7 @@ from .connection import (
     Connection,
     ConnectionState,
     CloseReason,
+    DataConnection,
     PeerConnectionState,
     ListeningConnection,
     PeerConnection,
@@ -44,6 +45,7 @@ from ..events import (
     InternalEventBus,
     PeerInitializedEvent,
     MessageReceivedEvent,
+    SessionInitializedEvent,
 )
 from ..protocol.messages import (
     CannotConnect,
@@ -131,7 +133,7 @@ class Network:
         self.listening_connections: ListeningConnections = self.create_listening_connections()
         self.peer_connections: List[PeerConnection] = []
 
-        self.MESSAGE_MAP = build_message_map(self)
+        self._MESSAGE_MAP = build_message_map(self)
 
         # Rate limiters
         self._upload_rate_limiter: RateLimiter = RateLimiter.create_limiter(
@@ -147,6 +149,12 @@ class Network:
         self._create_peer_connection_tasks: List[asyncio.Task] = []
         self._upnp_task: Optional[asyncio.Task] = None
         self._connection_watchdog_task: Optional[asyncio.Task] = None
+
+        self.register_listeners()
+
+    def register_listeners(self):
+        self._internal_event_bus.register(
+            SessionInitializedEvent, self._on_session_initialized)
 
     def create_server_connection(self) -> ServerConnection:
         return ServerConnection(
@@ -236,7 +244,9 @@ class Network:
         await self.server_connection.disconnect(CloseReason.REQUESTED)
 
     async def disconnect(self):
-        """Disconnects all current connections"""
+        """Cancels all connection creation tasks and disconnects all current
+        open connections
+        """
         self._cancel_all_tasks()
 
         connections = [self.server_connection, ] + self.peer_connections
@@ -264,6 +274,42 @@ class Network:
         obf_port = get_port(self.listening_connections[1])
         return nonobf_port, obf_port
 
+    # Settings listeners
+    def load_speed_limits(self):
+        """(Re)loads the speed limits from the settings"""
+        self.set_download_speed_limit(
+            self._settings.shares.limits.download_speed_kbps)
+        self.set_upload_speed_limit(
+            self._settings.shares.limits.upload_speed_kbps)
+
+    def set_upload_speed_limit(self, limit_kbps: int):
+        """Modifies the upload speed limit. Passing 0 will set the upload speed
+        to unlimited
+
+        :param limit_kbps: the new upload limit
+        """
+        new_limiter = RateLimiter.create_limiter(limit_kbps)
+        if self._upload_rate_limiter is not None:
+            new_limiter.copy_tokens(self._upload_rate_limiter)
+        self._upload_rate_limiter = new_limiter
+
+        for conn in self.peer_connections:
+            conn.upload_rate_limiter = self._upload_rate_limiter
+
+    def set_download_speed_limit(self, limit_kbps: int):
+        """Modifies the download speed limit. Passing 0 will set the download
+        speed to unlimited
+
+        :param limit_kbps: the new download limit
+        """
+        new_limiter = RateLimiter.create_limiter(limit_kbps)
+        if self._download_rate_limiter is not None:
+            new_limiter.copy_tokens(self._download_rate_limiter)
+        self._download_rate_limiter = new_limiter
+
+        for conn in self.peer_connections:
+            conn.download_rate_limiter = self._download_rate_limiter
+
     async def _connection_watchdog_job(self):
         """Reconnects to the server if it is closed. This should be started as a
         task and should be cancelled upon request.
@@ -281,7 +327,16 @@ class Network:
                 except ConnectionFailedError:
                     logger.warning("failed to reconnect to server")
 
-    def cancel_connection_watchdog_task(self):
+    async def start_connection_watchdog(self):
+        """Starts the server connection watchdog if it is not already running"""
+        if self._connection_watchdog_task is None:
+            self._connection_watchdog_task = asyncio.create_task(
+                self._connection_watchdog_job(),
+                name=f'watchdog-task-{task_counter()}'
+            )
+
+    def stop_connection_watchdog(self):
+        """Stops the server connection watchdog if it is running"""
         if self._connection_watchdog_task is not None:
             self._connection_watchdog_task.cancel()
             self._connection_watchdog_task = None
@@ -464,6 +519,7 @@ class Network:
         return future
 
     def register_response_future(self, expected_response: ExpectedResponse):
+        """Registers an expected response future"""
         self._expected_response_futures.append(expected_response)
         expected_response.add_done_callback(self._remove_response_future)
 
@@ -559,21 +615,6 @@ class Network:
             self.peer_connections.remove(connection)
 
     # Server related
-
-    @on_message(Login.Response)
-    async def _on_login(self, message: Login.Response, connection: ServerConnection):
-        if not message.success:
-            return
-
-        port, obfuscated_port = self.get_listening_ports()
-
-        await self.send_server_messages(
-            SetListenPort.Request(
-                port,
-                obfuscated_port_amount=1 if obfuscated_port else 0,
-                obfuscated_port=obfuscated_port
-            )
-        )
 
     @on_message(ConnectToPeer.Response)
     async def _on_connect_to_peer(self, message: ConnectToPeer.Response, connection: ServerConnection):
@@ -674,7 +715,12 @@ class Network:
         """Handles an indirect connection request received from the server.
 
         A task is created for this coroutine when a `ConnectToPeer` message is
-        received
+        received.
+
+        A `PeerInitializedEvent` will be emitted if the connection has been
+        successfully established
+
+        :param message: received `ConnectToPeer` message
         """
         ip = self._ip_overrides.get(message.username, message.ip)
         port, obfuscate = self.select_port(message.port, message.obfuscated_port)
@@ -803,11 +849,7 @@ class Network:
 
             # Register server connection watchdog
             if self._settings.network.server.reconnect.auto:
-                if self._connection_watchdog_task is None:
-                    self._connection_watchdog_task = asyncio.create_task(
-                        self._connection_watchdog_job(),
-                        name=f'watchdog-task-{task_counter()}'
-                    )
+                await self.start_connection_watchdog()
 
         elif state == ConnectionState.CLOSING:
 
@@ -823,13 +865,15 @@ class Network:
             # connections will only extend your ban period. Possibly the server
             # will also EOF when the login message is not sent after a certain
             # period of time
+            # An EOF will also be sent in case you are kicked due to the same
+            # login being used in another location
             if close_reason == CloseReason.REQUESTED:
-                self.cancel_connection_watchdog_task()
+                self.stop_connection_watchdog()
 
             elif close_reason == CloseReason.EOF:
                 logger.warning(
                     "server closed connection, will not attempt to reconnect")
-                self.cancel_connection_watchdog_task()
+                self.stop_connection_watchdog()
 
     async def _on_peer_connection_state_changed(
             self, state: ConnectionState, connection: PeerConnection,
@@ -906,12 +950,15 @@ class Network:
                 f"{connection.hostname}:{connection.port} : unknown peer init message : {peer_init_message}")
             await connection.disconnect(CloseReason.REQUESTED)
 
-    async def on_message_received(self, message: MessageDataclass, connection: Connection):
+    async def on_message_received(self, message: MessageDataclass, connection: DataConnection):
         """Method called by `connection` instances when a message is received
+
+        :param message: Received message instance
+        :param connection: Connection on which the message was received
         """
         # Call the message callbacks for this object
-        if message.__class__ in self.MESSAGE_MAP:
-            await self.MESSAGE_MAP[message.__class__](message, connection)
+        if message.__class__ in self._MESSAGE_MAP:
+            await self._MESSAGE_MAP[message.__class__](message, connection)
 
         # Emit on the internal message bus. Internal handling has priority over
         # completing the future responses
@@ -922,41 +969,16 @@ class Network:
             if expected_response.matches(connection, message):
                 expected_response.set_result((connection, message, ))
 
-    # Settings listeners
-    def load_speed_limits(self):
-        """(Re)loads the speed limits from the settings"""
-        self.set_download_speed_limit(
-            self._settings.shares.limits.download_speed_kbps)
-        self.set_upload_speed_limit(
-            self._settings.shares.limits.upload_speed_kbps)
+    async def _on_session_initialized(self, event: SessionInitializedEvent):
+        port, obfuscated_port = self.get_listening_ports()
 
-    def set_upload_speed_limit(self, limit_kbps: int):
-        """Modifies the upload speed limit. Passing 0 will set the upload speed
-        to unlimited
-
-        :param limit_kbps: the new upload limit
-        """
-        new_limiter = RateLimiter.create_limiter(limit_kbps)
-        if self._upload_rate_limiter is not None:
-            new_limiter.copy_tokens(self._upload_rate_limiter)
-        self._upload_rate_limiter = new_limiter
-
-        for conn in self.peer_connections:
-            conn.upload_rate_limiter = self._upload_rate_limiter
-
-    def set_download_speed_limit(self, limit_kbps: int):
-        """Modifies the download speed limit. Passing 0 will set the download
-        speed to unlimited
-
-        :param limit_kbps: the new download limit
-        """
-        new_limiter = RateLimiter.create_limiter(limit_kbps)
-        if self._download_rate_limiter is not None:
-            new_limiter.copy_tokens(self._download_rate_limiter)
-        self._download_rate_limiter = new_limiter
-
-        for conn in self.peer_connections:
-            conn.download_rate_limiter = self._download_rate_limiter
+        await self.send_server_messages(
+            SetListenPort.Request(
+                port,
+                obfuscated_port_amount=1 if obfuscated_port else 0,
+                obfuscated_port=obfuscated_port
+            )
+        )
 
     # Task callbacks
     def _handle_connect_to_peer_callback(self, message: ConnectToPeer.Response, task: asyncio.Task):

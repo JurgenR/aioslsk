@@ -1,6 +1,6 @@
 import logging
 
-from .network.connection import PeerConnection
+from .base_manager import BaseManager
 from .events import (
     on_message,
     build_message_map,
@@ -19,6 +19,7 @@ from .protocol.messages import (
     PeerUserInfoReply,
     PeerUserInfoRequest,
 )
+from .network.connection import PeerConnection
 from .network.network import Network
 from .settings import Settings
 from .shares.manager import SharesManager
@@ -30,7 +31,7 @@ from .utils import ticket_generator
 logger = logging.getLogger(__name__)
 
 
-class PeerManager:
+class PeerManager(BaseManager):
     """Peer manager is responsible for handling peer messages"""
 
     def __init__(
@@ -49,7 +50,7 @@ class PeerManager:
 
         self._ticket_generator = ticket_generator()
 
-        self.MESSAGE_MAP = build_message_map(self)
+        self._MESSAGE_MAP = build_message_map(self)
 
         self.register_listeners()
 
@@ -190,5 +191,5 @@ class PeerManager:
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message
-        if message.__class__ in self.MESSAGE_MAP:
-            await self.MESSAGE_MAP[message.__class__](message, event.connection)
+        if message.__class__ in self._MESSAGE_MAP:
+            await self._MESSAGE_MAP[message.__class__](message, event.connection)

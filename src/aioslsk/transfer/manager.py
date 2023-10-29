@@ -7,6 +7,7 @@ from operator import itemgetter
 import os
 from typing import Dict, List, Optional, Tuple, TYPE_CHECKING, Union
 
+from ..base_manager import BaseManager
 from .cache import TransferNullCache, TransferCache
 from ..constants import TRANSFER_REPLY_TIMEOUT
 from ..exceptions import (
@@ -33,6 +34,7 @@ from ..events import (
     InternalEventBus,
     MessageReceivedEvent,
     PeerInitializedEvent,
+    SessionInitializedEvent,
     TransferAddedEvent,
 )
 from ..protocol.primitives import uint32, uint64
@@ -45,8 +47,8 @@ from ..protocol.messages import (
     PeerTransferQueueFailed,
     PeerTransferReply,
     PeerTransferRequest,
-    SendUploadSpeed,
     PeerUploadFailed,
+    SendUploadSpeed,
 )
 from .model import Transfer, TransferDirection
 from .state import TransferState
@@ -71,7 +73,7 @@ class Reasons:
     FILE_READ_ERROR = 'File read error.'
 
 
-class TransferManager:
+class TransferManager(BaseManager):
 
     def __init__(
             self, settings: Settings,
@@ -91,7 +93,7 @@ class TransferManager:
         self._transfers: List[Transfer] = []
         self._file_connection_futures: Dict[int, asyncio.Future] = {}
 
-        self.MESSAGE_MAP = build_message_map(self)
+        self._MESSAGE_MAP = build_message_map(self)
 
         self.register_listeners()
 
@@ -104,6 +106,8 @@ class TransferManager:
             MessageReceivedEvent, self._on_message_received)
         self._internal_event_bus.register(
             PeerInitializedEvent, self._on_peer_initialized)
+        self._internal_event_bus.register(
+            SessionInitializedEvent, self._on_session_initialized)
 
     async def read_cache(self):
         """Reads the transfers from the caches and corrects the state of those
@@ -111,7 +115,7 @@ class TransferManager:
         """
         transfers: List[Transfer] = self.cache.read()
         for transfer in transfers:
-            # Analyze the current state of the stored transfers and set them to
+        # Analyze the current state of the stored transfers and set them to
             # the correct state
             # This needs to happen first: when calling _add_transfer the manager
             # will be registering itself as listener. `manage_transfers` should
@@ -134,8 +138,14 @@ class TransferManager:
         """Write all current transfers to the cache"""
         self.cache.write(self._transfers)
 
-    def stop(self) -> List[asyncio.Task]:
-        """Cancel all current transfer actions
+    async def load_data(self):
+        await self.read_cache()
+
+    async def store_data(self):
+        self.write_cache()
+
+    async def stop(self) -> List[asyncio.Task]:
+        """Cancel all current transfer tasks
 
         :return: a list of tasks that have been cancelled so that they can be
             awaited
@@ -248,14 +258,24 @@ class TransferManager:
 
     async def remove(self, transfer: Transfer):
         """Remove a transfer from the list of transfers. This will attempt to
-        abort the transfer.
+        abort the transfer before removing it
+
+        :param transfer: Transfer object to remove
+        :raise TransferNotFoundError: Raised when the transfer was not added to
+            the manager
         """
+        if transfer not in self.transfers:
+            raise TransferNotFoundError(
+                "cannot remove transfer: transfer was not added to the manager")
+
         try:
-            self._transfers.remove(transfer)
-        except ValueError:
-            return
-        else:
             await self.abort(transfer)
+        except InvalidStateTransition:
+            pass
+        except Exception:
+            logger.exception("error aborting transfer before removal")
+        finally:
+            self._transfers.remove(transfer)
 
         await self.manage_transfers()
 
@@ -391,9 +411,8 @@ class TransferManager:
             await self._user_manager.untrack_user(username, TrackingFlag.TRANSFER)
 
     async def manage_transfers(self):
-        """Manages the transfers. This method analyzes the state of the current
-        downloads/uploads and starts them up in case there are free slots
-        available
+        """This method analyzes the state of the current downloads/uploads and
+        starts them up in case there are free slots available
         """
         await self.manage_user_tracking()
 
@@ -534,6 +553,8 @@ class TransferManager:
         return the value in case of success and return the value
 
         :return: place in queue or `None` in case of error
+        :raise RequestPlaceFailedError: when the request failed to send to the
+            peer or waiting for a response timed out
         """
         try:
             await self._network.send_peer_messages(
@@ -827,8 +848,8 @@ class TransferManager:
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message
-        if message.__class__ in self.MESSAGE_MAP:
-            await self.MESSAGE_MAP[message.__class__](message, event.connection)
+        if message.__class__ in self._MESSAGE_MAP:
+            await self._MESSAGE_MAP[message.__class__](message, event.connection)
 
     @on_message(AddUser.Response)
     async def _on_add_user(self, message: AddUser.Response, connection: PeerConnection):
@@ -918,6 +939,10 @@ class TransferManager:
             except asyncio.InvalidStateError:
                 logger.warning(f"file connection for ticket {ticket} was already fulfilled")
                 await connection.disconnect(CloseReason.REQUESTED)
+
+    async def _on_session_initialized(self, event: SessionInitializedEvent):
+        logger.debug(f"transfers : session initialized : {event.session}")
+        await self.manage_transfers()
 
     @on_message(PeerTransferRequest.Request)
     async def _on_peer_transfer_request(self, message: PeerTransferRequest.Request, connection: PeerConnection):

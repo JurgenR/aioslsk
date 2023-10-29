@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import Optional
 
-from .network.connection import ConnectionState, ServerConnection
+from .base_manager import BaseManager
 from .constants import (
     SERVER_PING_INTERVAL,
 )
@@ -14,6 +14,7 @@ from .events import (
     ServerDisconnectedEvent,
 )
 from .protocol.messages import Ping, SharedFoldersFiles
+from .network.connection import ConnectionState, ServerConnection
 from .network.network import Network
 from .shares.manager import SharesManager
 from .settings import Settings
@@ -23,7 +24,7 @@ from .utils import task_counter
 logger = logging.getLogger(__name__)
 
 
-class ServerManager:
+class ServerManager(BaseManager):
     """Class handling server state changes"""
 
     def __init__(

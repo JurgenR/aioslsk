@@ -3,7 +3,7 @@ import logging
 import time
 from typing import Dict, List
 
-from ..network.connection import ConnectionState, ServerConnection
+from ..base_manager import BaseManager
 from ..events import (
     build_message_map,
     ConnectionStateChangedEvent,
@@ -22,6 +22,7 @@ from ..events import (
     RoomOperatorRevokedEvent,
     RoomMembershipGrantedEvent,
     RoomMembershipRevokedEvent,
+    SessionInitializedEvent,
     UserInfoEvent,
 )
 from ..protocol.messages import (
@@ -33,7 +34,6 @@ from ..protocol.messages import (
     ChatRoomTickerRemoved,
     ChatUserJoinedRoom,
     ChatUserLeftRoom,
-    Login,
     PrivateRoomAddUser,
     PrivateRoomRemoveUser,
     PrivateRoomUsers,
@@ -48,6 +48,7 @@ from ..protocol.messages import (
     RoomList,
 )
 from .model import Room, RoomMessage
+from ..network.connection import ConnectionState, ServerConnection
 from ..network.network import Network
 from ..settings import Settings
 from ..user.manager import UserManager
@@ -56,7 +57,7 @@ from ..user.model import UserStatus, TrackingFlag
 logger = logging.getLogger(__name__)
 
 
-class RoomManager:
+class RoomManager(BaseManager):
     """Class handling rooms"""
 
     def __init__(
@@ -71,7 +72,7 @@ class RoomManager:
 
         self.rooms: Dict[str, Room] = {}
 
-        self.MESSAGE_MAP = build_message_map(self)
+        self._MESSAGE_MAP = build_message_map(self)
 
         self.register_listeners()
 
@@ -114,6 +115,8 @@ class RoomManager:
             MessageReceivedEvent, self._on_message_received)
         self._internal_event_bus.register(
             ConnectionStateChangedEvent, self._on_state_changed)
+        self._internal_event_bus.register(
+            SessionInitializedEvent, self._on_session_initialized)
 
     async def auto_join_rooms(self):
         """Automatically joins rooms stored in the settings"""
@@ -122,15 +125,6 @@ class RoomManager:
         await self._network.send_server_messages(
             *[ChatJoinRoom.Request(room) for room in rooms]
         )
-
-    @on_message(Login.Response)
-    async def _on_login(self, message: Login.Response, connection: ServerConnection):
-        if message.success:
-            await self._network.send_server_messages(
-                TogglePrivateRooms.Request(self._settings.rooms.private_room_invites)
-            )
-            if not self._settings.rooms.auto_join:
-                await self.auto_join_rooms()
 
     @on_message(ChatRoomMessage.Response)
     async def _on_chat_room_message(self, message: ChatRoomMessage.Response, connection: ServerConnection):
@@ -275,7 +269,7 @@ class RoomManager:
     @on_message(PrivateRoomAdded.Response)
     async def _on_private_room_added(self, message: PrivateRoomAdded.Response, connection: ServerConnection):
         room = self.get_or_create_room(message.room, private=True)
-        user = self._user_manager.get_or_create_user(self._settings.credentials.username)
+        user = self._user_manager.get_self()
         room.add_member(user)
 
         await self._event_bus.emit(
@@ -294,7 +288,7 @@ class RoomManager:
     @on_message(PrivateRoomRemoved.Response)
     async def _on_private_room_removed(self, message: PrivateRoomRemoved.Response, connection: ServerConnection):
         room = self.get_or_create_room(message.room, private=True)
-        user = self._user_manager.get_or_create_user(self._settings.credentials.username)
+        user = self._user_manager.get_self()
         room.remove_member(user)
         room.remove_operator(user)
 
@@ -349,7 +343,7 @@ class RoomManager:
 
     @on_message(RoomList.Response)
     async def _on_room_list(self, message: RoomList.Response, connection):
-        me = self._user_manager.get_or_create_user(self._settings.credentials.username)
+        me = self._user_manager.get_self()
         for idx, room_name in enumerate(message.rooms):
             room = self.get_or_create_room(room_name, private=False)
             room.user_count = message.rooms_user_count[idx]
@@ -378,8 +372,8 @@ class RoomManager:
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message
-        if message.__class__ in self.MESSAGE_MAP:
-            await self.MESSAGE_MAP[message.__class__](message, event.connection)
+        if message.__class__ in self._MESSAGE_MAP:
+            await self._MESSAGE_MAP[message.__class__](message, event.connection)
 
     async def _on_state_changed(self, event: ConnectionStateChangedEvent):
         if not isinstance(event.connection, ServerConnection):
@@ -387,3 +381,11 @@ class RoomManager:
 
         if event.state == ConnectionState.CLOSED:
             self.reset_rooms()
+
+    async def _on_session_initialized(self, event: SessionInitializedEvent):
+        logger.debug(f"rooms : session initialized : {event.session}")
+        await self._network.send_server_messages(
+            TogglePrivateRooms.Request(self._settings.rooms.private_room_invites)
+        )
+        if not self._settings.rooms.auto_join:
+            await self.auto_join_rooms()

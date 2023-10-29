@@ -13,6 +13,7 @@ from .protocol.primitives import (
     ItemRecommendation,
 )
 from .search.model import SearchRequest, SearchResult
+from .session import Session
 
 if TYPE_CHECKING:
     from .network.connection import (
@@ -102,11 +103,17 @@ class ServerDisconnectedEvent(Event):
 
 
 @dataclass(frozen=True)
-class LoginEvent(Event):
-    """Emitted when we got a response to a login call"""
-    is_success: bool
-    greeting: Optional[str] = None
-    reason: Optional[str] = None
+class SessionInitializedEvent(Event):
+    """Emitted after successful login"""
+    session: Session
+
+
+@dataclass(frozen=True)
+class SessionDestroyedEvent(Event):
+    """Emitted after the login session has been destroyed (this is always after
+    disconnect)
+    """
+    session: Session
 
 
 @dataclass(frozen=True)
@@ -280,7 +287,7 @@ class PrivilegedUsersEvent(Event):
 
 
 @dataclass(frozen=True)
-class PrivilgedUserAddedEvent(Event):
+class PrivilegedUserAddedEvent(Event):
     """Emitted when a new privileged user has been added"""
     users: List[User]
 

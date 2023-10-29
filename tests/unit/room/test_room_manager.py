@@ -21,8 +21,10 @@ from aioslsk.protocol.messages import (
 )
 from aioslsk.protocol.primitives import RoomTicker, UserStats
 from aioslsk.room.manager import RoomManager
+from aioslsk.session import Session
 from aioslsk.settings import Settings
 from aioslsk.user.manager import UserManager
+from aioslsk.user.model import User
 
 import pytest
 from unittest.mock import AsyncMock, Mock, patch
@@ -37,13 +39,27 @@ DEFAULT_SETTINGS = {
 
 
 @pytest.fixture
-def user_manager() -> UserManager:
+def session() -> Session:
+    return Session(
+        User(DEFAULT_USER),
+        ip_address='1.2.3.4',
+        greeting='',
+        client_version=157,
+        minor_version=100
+    )
+
+
+@pytest.fixture
+def user_manager(session: Session) -> UserManager:
     user_manager = UserManager(
         Settings(**DEFAULT_SETTINGS),
         Mock(), # Event bus
         Mock(), # Internal event bus
         AsyncMock(), # Network
     )
+    user_manager._session = session
+    user_manager.get_or_create_user(session.user)
+
     return user_manager
 
 

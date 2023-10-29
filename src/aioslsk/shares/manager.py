@@ -12,6 +12,7 @@ from typing import Optional, Dict, List, Set, Tuple, Union
 import uuid
 from weakref import WeakSet
 
+from ..base_manager import BaseManager
 from .cache import SharesNullCache, SharesCache
 from ..events import InternalEventBus, ScanCompleteEvent
 from ..exceptions import (
@@ -121,7 +122,7 @@ def extract_attributes(filepath: str) -> List[Tuple[int, int]]:
     return attributes
 
 
-class SharesManager:
+class SharesManager(BaseManager):
     _ALIAS_LENGTH = 5
 
     def __init__(self, settings: Settings, internal_event_bus: InternalEventBus, cache: Optional[SharesCache] = None):
@@ -176,6 +177,13 @@ class SharesManager:
         alias_string = alias_bytes.decode('utf8')
 
         return alias_string
+
+    async def load_data(self):
+        self.read_cache()
+        self.load_from_settings()
+
+    async def store_data(self):
+        self.write_cache()
 
     def load_from_settings(self):
         """Loads the directories from the settings"""

@@ -3,10 +3,11 @@ from abc import ABC, abstractmethod
 import time
 from typing import Generic, List, Optional, TypeVar, Union, Tuple, TYPE_CHECKING
 
-from .exceptions import AuthenticationError
+from .exceptions import AuthenticationError, NoSuchUserError
 from .protocol.messages import (
     AddHatedInterest,
     AddInterest,
+    AddUser,
     ChatJoinRoom,
     ChatLeaveRoom,
     ChatPrivateMessage,
@@ -51,7 +52,7 @@ RT = TypeVar('RT')
 
 Recommendations = Tuple[List[ItemRecommendation], List[ItemRecommendation]]
 LoginValues = Tuple[str, str, bool]
-"""Values returned on successful login: greeting, IP address, privileged, """
+"""Values returned on successful login: greeting, IP address, privileged"""
 
 
 class BaseCommand(ABC, Generic[RC, RT]):
@@ -60,8 +61,8 @@ class BaseCommand(ABC, Generic[RC, RT]):
         self.response_future: Optional[ExpectedResponse] = None
 
     @abstractmethod
-    def send(self, client: SoulSeekClient):
-        pass
+    async def send(self, client: SoulSeekClient):
+        ...
 
     def response(self) -> 'BaseCommand':
         return self
@@ -261,7 +262,7 @@ class DropRoomMembershipCommand(BaseCommand[PrivateRoomRemoved.Response, Room]):
         self._username: Optional[str] = None
 
     async def send(self, client: SoulSeekClient):
-        self._username = client.settings.credentials.username
+        self._username = client.session.user.name
         await client.network.send_server_messages(
             PrivateRoomDropMembership.Request(self.room)
         )
@@ -413,7 +414,6 @@ class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, Tuple[str, int,
         return (response.ip, response.port, response.obfuscated_port)
 
 
-
 class GrantRoomOperatorCommand(BaseCommand[PrivateRoomAddOperator.Response, None]):
 
     def __init__(self, room: str, username: str):
@@ -552,7 +552,7 @@ class RoomMessageCommand(BaseCommand[ChatRoomMessage.Response, RoomMessage]):
         self._username: Optional[str] = None
 
     async def send(self, client: SoulSeekClient):
-        self._username = client.settings.credentials.username
+        self._username = client.session.user.name
         await client.network.send_server_messages(
             ChatRoomMessage.Request(
                 self.room,
@@ -639,6 +639,35 @@ class SetStatusCommand(BaseCommand[None, None]):
         await client.network.send_server_messages(
             SetStatus.Request(self.status.value)
         )
+
+
+class AddUserCommand(BaseCommand[AddUser.Response, User]):
+
+    def __init__(self, username: str):
+        super().__init__()
+        self.username: str = username
+
+    async def send(self, client: SoulSeekClient):
+        await client.network.send_server_messages(
+            AddUser.Request(username=self.username)
+        )
+
+    def response(self) -> 'AddUserCommand':
+        self.response_future = ExpectedResponse(
+            ServerConnection,
+            AddUser.Response,
+            fields={
+                'username': self.username
+            }
+        )
+        return self
+
+    def process_response(self, client: SoulSeekClient, response: AddUser.Response) -> User:
+        if response.exists:
+            return client.users.get_or_create_user(response.username)
+        else:
+            raise NoSuchUserError(
+                f"user {self.username!r} does not exist on the server")
 
 
 class LoginCommand(BaseCommand[Login.Response, LoginValues]):

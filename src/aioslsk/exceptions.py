@@ -17,6 +17,14 @@ class AuthenticationError(AioSlskException):
         self.message: str = message
 
 
+class InvalidSessionError(AioSlskException):
+    """Raised when trying to execute a command but the user is not logged in"""
+
+
+class NoSuchUserError(AioSlskException):
+    pass
+
+
 class UnknownMessageError(AioSlskException):
 
     def __init__(self, message_id: int, data: bytes, message: str):

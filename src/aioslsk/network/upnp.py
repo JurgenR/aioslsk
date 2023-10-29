@@ -127,3 +127,10 @@ class UPNP:
             )
         except UpnpActionResponseError as exc:
             logger.warning(f"failed to map port {port} device : {device.name!r}", exc_info=exc)
+
+    async def unmap_port(self, device: IgdDevice, source_ip: str, port: int):
+        await device.async_delete_port_mapping(
+            remote_host=source_ip,
+            external_port=port,
+            protocol='TCP'
+        )

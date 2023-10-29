@@ -4,13 +4,7 @@ from functools import partial
 import logging
 from typing import List, Optional, Union, Tuple
 
-from .network.connection import (
-    CloseReason,
-    ConnectionState,
-    PeerConnection,
-    PeerConnectionType,
-    ServerConnection,
-)
+from .base_manager import BaseManager
 from .events import (
     on_message,
     build_message_map,
@@ -18,6 +12,8 @@ from .events import (
     ConnectionStateChangedEvent,
     PeerInitializedEvent,
     MessageReceivedEvent,
+    SessionDestroyedEvent,
+    SessionInitializedEvent,
 )
 from .protocol.messages import (
     AcceptChildren,
@@ -29,7 +25,6 @@ from .protocol.messages import (
     DistributedChildDepth,
     DistributedSearchRequest,
     DistributedServerSearchRequest,
-    Login,
     MessageDataclass,
     MinParentsInCache,
     ParentInactivityTimeout,
@@ -39,7 +34,15 @@ from .protocol.messages import (
     ServerSearchRequest,
     ToggleParentSearch,
 )
+from .network.connection import (
+    CloseReason,
+    ConnectionState,
+    PeerConnection,
+    PeerConnectionType,
+    ServerConnection,
+)
 from .network.network import Network
+from .session import Session
 from .settings import Settings
 from .utils import task_counter, ticket_generator
 
@@ -56,7 +59,7 @@ class DistributedPeer:
     child_depth: Optional[int] = None
 
 
-class DistributedNetwork:
+class DistributedNetwork(BaseManager):
     """Class responsible for handling the distributed network"""
 
     def __init__(
@@ -67,6 +70,7 @@ class DistributedNetwork:
         self._network: Network = network
 
         self._ticket_generator = ticket_generator()
+        self._session: Optional[Session] = None
 
         self.parent: Optional[DistributedPeer] = None
         """Distributed parent. This variable is `None` if we are looking for a
@@ -83,7 +87,7 @@ class DistributedNetwork:
         self.parent_inactivity_timeout: Optional[int] = None
         self.distributed_alive_interval: Optional[int] = None
 
-        self.MESSAGE_MAP = build_message_map(self)
+        self._MESSAGE_MAP = build_message_map(self)
 
         self.register_listeners()
 
@@ -96,6 +100,10 @@ class DistributedNetwork:
             ConnectionStateChangedEvent, self._on_state_changed)
         self._internal_event_bus.register(
             MessageReceivedEvent, self._on_message_received)
+        self._internal_event_bus.register(
+            SessionInitializedEvent, self._on_session_initialized)
+        self._internal_event_bus.register(
+            SessionDestroyedEvent, self._on_session_destroyed)
 
     def _get_advertised_branch_values(self) -> Tuple[str, int]:
         """Returns the advertised branch values. These values are to be sent to
@@ -114,7 +122,7 @@ class DistributedNetwork:
             * level = level parent advertised + 1
             * root = whatever our parent sent us initially
         """
-        username = self._settings.credentials.username
+        username = self._session.user.name
         if self.parent:
             # We are the branch root
             if self.parent.branch_root == username:
@@ -171,7 +179,7 @@ class DistributedNetwork:
 
         self.parent = None
 
-        username = self._settings.credentials.username
+        username = self._session.user.name
         await self._notify_server_of_parent()
 
         # TODO: What happens to the children when we lose our parent is still
@@ -252,11 +260,6 @@ class DistributedNetwork:
 
     # Server messages
 
-    @on_message(Login.Response)
-    async def _on_login(self, message: Login.Response, connection: ServerConnection):
-        if message.success:
-            await self._notify_server_of_parent()
-
     @on_message(ParentMinSpeed.Response)
     async def _on_parent_min_speed(self, message: ParentMinSpeed.Response, connection: ServerConnection):
         self.parent_min_speed = message.speed
@@ -304,7 +307,7 @@ class DistributedNetwork:
 
     @on_message(ServerSearchRequest.Response)
     async def _on_server_search_request(self, message: ServerSearchRequest.Response, connection):
-        username = self._settings.credentials.username
+        username = self._session.user.name
         if message.username == username:
             return
 
@@ -409,8 +412,16 @@ class DistributedNetwork:
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message
-        if message.__class__ in self.MESSAGE_MAP:
-            await self.MESSAGE_MAP[message.__class__](message, event.connection)
+        if message.__class__ in self._MESSAGE_MAP:
+            await self._MESSAGE_MAP[message.__class__](message, event.connection)
+
+    async def _on_session_initialized(self, event: SessionInitializedEvent):
+        logger.debug(f"distributed : session initialized : {event.session}")
+        self._session = event.session
+        await self._notify_server_of_parent()
+
+    async def _on_session_destroyed(self, event: SessionDestroyedEvent):
+        self._session = None
 
     async def _on_state_changed(self, event: ConnectionStateChangedEvent):
         if not isinstance(event.connection, PeerConnection):
@@ -446,7 +457,7 @@ class DistributedNetwork:
             if child.connection:
                 child.connection.queue_messages(*messages)
 
-    def stop(self) -> List[asyncio.Task]:
+    async def stop(self) -> List[asyncio.Task]:
         """Cancels all pending tasks
 
         :return: a list of tasks that have been cancelled so that they can be

@@ -4,12 +4,7 @@ from functools import partial
 import logging
 from typing import Deque, Dict, List, Optional, Union
 
-from ..network.connection import (
-    CloseReason,
-    ConnectionState,
-    PeerConnection,
-    ServerConnection,
-)
+from ..base_manager import BaseManager
 from ..events import (
     on_message,
     build_message_map,
@@ -20,6 +15,8 @@ from ..events import (
     UserInfoEvent,
     SearchRequestReceivedEvent,
     SearchResultEvent,
+    SessionDestroyedEvent,
+    SessionInitializedEvent,
 )
 from ..protocol.messages import (
     RoomSearch,
@@ -33,11 +30,18 @@ from ..protocol.messages import (
     WishlistInterval,
     WishlistSearch,
 )
+from ..network.connection import (
+    CloseReason,
+    ConnectionState,
+    PeerConnection,
+    ServerConnection,
+)
 from ..network.network import Network
 from ..room.model import Room
 from ..settings import Settings
 from ..shares.manager import SharesManager
 from ..shares.utils import convert_items_to_file_data
+from ..session import Session
 from ..transfer.interface import UploadInfoProvider
 from ..user.manager import UserManager
 from ..user.model import User
@@ -48,7 +52,7 @@ from .model import ReceivedSearch, SearchResult, SearchRequest, SearchType
 logger = logging.getLogger(__name__)
 
 
-class SearchManager:
+class SearchManager(BaseManager):
     """Handler for searches requests"""
 
     def __init__(
@@ -66,6 +70,7 @@ class SearchManager:
         self._upload_info_provider: UploadInfoProvider = upload_info_provider
 
         self._ticket_generator = ticket_generator()
+        self._session: Optional[Session] = None
 
         self.received_searches: Deque[ReceivedSearch] = deque(list(), 500)
         self.requests: Dict[int, SearchRequest] = {}
@@ -76,7 +81,7 @@ class SearchManager:
 
         self.register_listeners()
 
-        self.MESSAGE_MAP = build_message_map(self)
+        self._MESSAGE_MAP = build_message_map(self)
 
         self._search_reply_tasks: List[asyncio.Task] = []
         self._wishlist_task: Optional[asyncio.Task] = None
@@ -86,6 +91,10 @@ class SearchManager:
             ConnectionStateChangedEvent, self._on_state_changed)
         self._internal_event_bus.register(
             MessageReceivedEvent, self._on_message_received)
+        self._internal_event_bus.register(
+            SessionInitializedEvent, self._on_session_initialized)
+        self._internal_event_bus.register(
+            SessionDestroyedEvent, self._on_session_destroyed)
 
     def remove_request(self, request: Union[SearchRequest, int]):
         """Removes the search request from the client. Incoming results after
@@ -193,7 +202,7 @@ class SearchManager:
             self._network.send_peer_messages(
                 username,
                 PeerSearchReply.Request(
-                    username=self._settings.credentials.username,
+                    username=self._session.user.name,
                     ticket=ticket,
                     results=convert_items_to_file_data(visible, use_full_path=True),
                     has_slots_free=self._upload_info_provider.has_slots_free(),
@@ -258,8 +267,8 @@ class SearchManager:
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message
-        if message.__class__ in self.MESSAGE_MAP:
-            await self.MESSAGE_MAP[message.__class__](message, event.connection)
+        if message.__class__ in self._MESSAGE_MAP:
+            await self._MESSAGE_MAP[message.__class__](message, event.connection)
 
     @on_message(SearchInactivityTimeout.Response)
     async def _on_search_inactivity_timeout(self, message: SearchInactivityTimeout.Response, connection):
@@ -283,7 +292,7 @@ class SearchManager:
 
     @on_message(ServerSearchRequest.Response)
     async def _on_server_search_request(self, message: ServerSearchRequest.Response, connection):
-        username = self._settings.credentials.username
+        username = self._session.user.name
         if message.username == username:
             return
 
@@ -335,6 +344,13 @@ class SearchManager:
         if event.state == ConnectionState.CLOSING:
             self._cancel_wishlist_task()
 
+    async def _on_session_initialized(self, event: SessionInitializedEvent):
+        logger.debug(f"search : session initialized : {event.session}")
+        self._session = event.session
+
+    async def _on_session_destroyed(self, event: SessionDestroyedEvent):
+        self._session = None
+
     def _cancel_wishlist_task(self) -> Optional[asyncio.Task]:
         task = self._wishlist_task
         if self._wishlist_task is not None:
@@ -343,7 +359,7 @@ class SearchManager:
             return task
         return None
 
-    def stop(self) -> List[asyncio.Task]:
+    async def stop(self) -> List[asyncio.Task]:
         """Cancels all pending tasks
 
         :return: a list of tasks that have been cancelled so that they can be

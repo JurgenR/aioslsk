@@ -1,7 +1,8 @@
 import asyncio
 import logging
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
+from ..base_manager import BaseManager
 from ..network.connection import ConnectionState, ServerConnection
 from ..events import (
     build_message_map,
@@ -10,13 +11,14 @@ from ..events import (
     EventBus,
     InternalEventBus,
     KickedEvent,
-    LoginEvent,
     MessageReceivedEvent,
     PrivateMessageEvent,
     PrivilegedUsersEvent,
-    PrivilgedUserAddedEvent,
+    PrivilegedUserAddedEvent,
     UserInfoEvent,
     UserStatusEvent,
+    SessionInitializedEvent,
+    SessionDestroyedEvent,
 )
 from ..protocol.messages import (
     AddPrivilegedUser,
@@ -35,12 +37,13 @@ from ..protocol.messages import (
 from .model import ChatMessage, User, UserStatus, TrackingFlag
 from ..network.network import Network
 from ..settings import Settings
+from ..session import Session
 
 
 logger = logging.getLogger(__name__)
 
 
-class UserManager:
+class UserManager(BaseManager):
     """Class handling users"""
 
     def __init__(
@@ -52,7 +55,9 @@ class UserManager:
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._network: Network = network
 
-        self.MESSAGE_MAP = build_message_map(self)
+        self._session: Optional[Session] = None
+
+        self._MESSAGE_MAP = build_message_map(self)
 
         self.users: Dict[str, User] = {}
 
@@ -63,11 +68,15 @@ class UserManager:
             MessageReceivedEvent, self._on_message_received)
         self._internal_event_bus.register(
             ConnectionStateChangedEvent, self._on_state_changed)
+        self._internal_event_bus.register(
+            SessionInitializedEvent, self._on_session_initialized)
+        self._internal_event_bus.register(
+            SessionDestroyedEvent, self._on_session_destroyed)
 
     def get_self(self) -> User:
-        return self.get_or_create_user(self._settings.credentials.username)
+        return self.get_or_create_user(self._session.user.name)
 
-    def get_tracked_user(self) -> List[User]:
+    def get_tracked_users(self) -> List[User]:
         return list(filter(lambda u: u.has_add_user_flag(), self.users.values()))
 
     def get_or_create_user(self, user: Union[str, User]) -> User:
@@ -109,7 +118,7 @@ class UserManager:
             await self._network.send_server_messages(AddUser.Request(username))
 
     async def track_friends(self):
-        """Starts tracking the users defined defined in the friends list"""
+        """Starts tracking the users defined in the friends list"""
         tasks = []
         for friend in self._settings.users.friends:
             tasks.append(self.track_user(friend, TrackingFlag.FRIEND))
@@ -135,30 +144,6 @@ class UserManager:
         # If there's no more tracking done reset the user status
         if user.tracking_flags == TrackingFlag(0):
             user.status = UserStatus.UNKNOWN
-
-    @on_message(Login.Response)
-    async def _on_login(self, message: Login.Response, connection: ServerConnection):
-        if not message.success:
-            logger.error(f"failed to login, reason: {message.reason!r}")
-            await self._event_bus.emit(
-                LoginEvent(is_success=False, reason=message.reason))
-            return
-
-        logger.info(f"successfully logged on, greeting : {message.greeting!r}")
-
-        await self._network.send_server_messages(
-            CheckPrivileges.Request(),
-            SetStatus.Request(UserStatus.ONLINE.value),
-        )
-
-        await self.track_user(
-            self._settings.credentials.username, TrackingFlag.FRIEND)
-
-        # Perform AddUser for all in the friendlist
-        await self.track_friends()
-
-        await self._event_bus.emit(
-            LoginEvent(is_success=True, greeting=message.greeting))
 
     @on_message(Kicked.Response)
     async def _on_kicked(self, message: Kicked.Response, connection: ServerConnection):
@@ -203,7 +188,7 @@ class UserManager:
         user = self.get_or_create_user(message.username)
         user.privileged = True
 
-        await self._event_bus.emit(PrivilgedUserAddedEvent(user))
+        await self._event_bus.emit(PrivilegedUserAddedEvent(user))
 
     @on_message(AddUser.Response)
     async def _on_add_user(self, message: AddUser.Response, connection: ServerConnection):
@@ -235,8 +220,8 @@ class UserManager:
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message
-        if message.__class__ in self.MESSAGE_MAP:
-            await self.MESSAGE_MAP[message.__class__](message, event.connection)
+        if message.__class__ in self._MESSAGE_MAP:
+            await self._MESSAGE_MAP[message.__class__](message, event.connection)
 
     async def _on_state_changed(self, event: ConnectionStateChangedEvent):
         if not isinstance(event.connection, ServerConnection):
@@ -244,3 +229,19 @@ class UserManager:
 
         if event.state == ConnectionState.CLOSED:
             self.reset_users()
+
+    async def _on_session_initialized(self, event: SessionInitializedEvent):
+        logger.debug(f"user : session initialized : {event.session}")
+        self._session = event.session
+        await self._network.send_server_messages(
+            CheckPrivileges.Request(),
+            SetStatus.Request(UserStatus.ONLINE.value),
+        )
+
+        await self.track_user(self._session.user.name, TrackingFlag.FRIEND)
+
+        # Perform AddUser for all in the friendlist
+        await self.track_friends()
+
+    async def _on_session_destroyed(self, event: SessionDestroyedEvent):
+        self._session = None
