@@ -2,14 +2,9 @@ import asyncio
 from collections import deque
 from functools import partial
 import logging
-from typing import Deque, Dict, List, Optional
+from typing import Deque, Dict, List, Optional, Union
 
-from ..network.connection import (
-    CloseReason,
-    ConnectionState,
-    PeerConnection,
-    ServerConnection,
-)
+from ..base_manager import BaseManager
 from ..events import (
     on_message,
     build_message_map,
@@ -20,24 +15,36 @@ from ..events import (
     UserInfoEvent,
     SearchRequestReceivedEvent,
     SearchResultEvent,
+    SessionDestroyedEvent,
+    SessionInitializedEvent,
 )
 from ..protocol.messages import (
-    ChatRoomSearch,
+    RoomSearch,
     DistributedSearchRequest,
     DistributedServerSearchRequest,
     FileSearch,
     PeerSearchReply,
+    SearchInactivityTimeout,
     ServerSearchRequest,
     UserSearch,
     WishlistInterval,
     WishlistSearch,
 )
+from ..network.connection import (
+    CloseReason,
+    ConnectionState,
+    PeerConnection,
+    ServerConnection,
+)
 from ..network.network import Network
+from ..room.model import Room
 from ..settings import Settings
 from ..shares.manager import SharesManager
 from ..shares.utils import convert_items_to_file_data
-from ..state import State
-from ..transfer.manager import TransferManager
+from ..session import Session
+from ..transfer.interface import UploadInfoProvider
+from ..user.manager import UserManager
+from ..user.model import User
 from ..utils import task_counter, ticket_generator
 from .model import ReceivedSearch, SearchResult, SearchRequest, SearchType
 
@@ -45,91 +52,124 @@ from .model import ReceivedSearch, SearchResult, SearchRequest, SearchType
 logger = logging.getLogger(__name__)
 
 
-class SearchManager:
+class SearchManager(BaseManager):
     """Handler for searches requests"""
 
     def __init__(
-            self, state: State, settings: Settings,
+            self, settings: Settings,
             event_bus: EventBus, internal_event_bus: InternalEventBus,
-            shares_manager: SharesManager, transfer_manager: TransferManager,
+            user_manager: UserManager, shares_manager: SharesManager,
+            upload_info_provider: UploadInfoProvider,
             network: Network):
-        self._state: State = state
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._network: Network = network
+        self._user_manager: UserManager = user_manager
         self._shares_manager: SharesManager = shares_manager
-        self._transfer_manager: TransferManager = transfer_manager
+        self._upload_info_provider: UploadInfoProvider = upload_info_provider
 
         self._ticket_generator = ticket_generator()
+        self._session: Optional[Session] = None
 
         self.received_searches: Deque[ReceivedSearch] = deque(list(), 500)
-        self.search_requests: Dict[int, SearchRequest] = {}
+        self.requests: Dict[int, SearchRequest] = {}
 
+        # Server variables
+        self.search_inactivity_timeout: Optional[int] = None
+        self.wishlist_interval: Optional[int] = None
+
+        self.register_listeners()
+
+        self._MESSAGE_MAP = build_message_map(self)
+
+        self._search_reply_tasks: List[asyncio.Task] = []
+        self._wishlist_task: Optional[asyncio.Task] = None
+
+    def register_listeners(self):
         self._internal_event_bus.register(
             ConnectionStateChangedEvent, self._on_state_changed)
         self._internal_event_bus.register(
             MessageReceivedEvent, self._on_message_received)
+        self._internal_event_bus.register(
+            SessionInitializedEvent, self._on_session_initialized)
+        self._internal_event_bus.register(
+            SessionDestroyedEvent, self._on_session_destroyed)
 
-        self.MESSAGE_MAP = build_message_map(self)
+    def remove_request(self, request: Union[SearchRequest, int]):
+        """Removes the search request from the client. Incoming results after
+        the request has been removed will be ignored
 
-        self._search_reply_tasks: List[asyncio.Task] = []
-        self._wishlist_task: asyncio.Task = None
-
-    async def search_room(self, room: str, query: str) -> SearchRequest:
-        """Performs a search query on all users in a room
-
-        :param room: name of the room to query
-        :param query: search query
+        :param request: `SearchRequest` object or ticket number to remove
         """
-        ticket = next(self._ticket_generator)
-
-        await self._network.send_server_messages(
-            ChatRoomSearch.Request(room, ticket, query)
-        )
-        self.search_requests[ticket] = SearchRequest(
-            ticket=ticket,
-            query=query,
-            search_type=SearchType.ROOM,
-            room=room
-        )
-        return self.search_requests[ticket]
-
-    async def search_user(self, username: str, query: str) -> SearchRequest:
-        """Performs a search query on a user
-
-        :param username: username of the user to query
-        :param query: search query
-        """
-        ticket = next(self._ticket_generator)
-
-        await self._network.send_server_messages(
-            UserSearch.Request(username, ticket, query)
-        )
-        self.search_requests[ticket] = SearchRequest(
-            ticket=ticket,
-            query=query,
-            search_type=SearchType.USER,
-            username=username
-        )
-        return self.search_requests[ticket]
+        ticket = request if isinstance(request, int) else request.ticket
+        self.requests.pop(ticket)
 
     async def search(self, query: str) -> SearchRequest:
-        """Performs a global search query
+        """Performs a global search. The results generated by this query will
+        stored in the returned object or can be listened to through the
+        `SearchResultEvent` event
 
-        :param query: search query
+        :param query: The search query
+        :return: An object containing the search request details and results
         """
         ticket = next(self._ticket_generator)
 
         await self._network.send_server_messages(
             FileSearch.Request(ticket, query)
         )
-        self.search_requests[ticket] = SearchRequest(
+        self.requests[ticket] = SearchRequest(
             ticket=ticket,
             query=query,
             search_type=SearchType.NETWORK
         )
-        return self.search_requests[ticket]
+        return self.requests[ticket]
+
+    async def search_room(self, room: Union[str, Room], query: str) -> SearchRequest:
+        """Performs a search request on the specific user. The results generated
+        by this query will stored in the returned object or can be listened to
+        through the `SearchResultEvent` event
+
+        :param room: Room object or name to query
+        :param query: The search query
+        :return: An object containing the search request details and results
+        """
+        room_name = room.name if isinstance(room, Room) else room
+        ticket = next(self._ticket_generator)
+
+        await self._network.send_server_messages(
+            RoomSearch.Request(room_name, ticket, query)
+        )
+        self.requests[ticket] = SearchRequest(
+            ticket=ticket,
+            query=query,
+            search_type=SearchType.ROOM,
+            room=room_name
+        )
+        return self.requests[ticket]
+
+    async def search_user(self, user: Union[str, User], query: str) -> SearchRequest:
+        """Performs a search request on the specific user. The results generated
+        by this query will stored in the returned object or can be listened to
+        through the `SearchResultEvent` event
+
+        :param user: User object or name to query
+        :param query: The search query
+        :return: An object containing the search request details and results
+        """
+        username = user.name if isinstance(user, User) else user
+        ticket = next(self._ticket_generator)
+
+        await self._network.send_server_messages(
+            UserSearch.Request(username, ticket, query)
+        )
+        self.requests[ticket] = SearchRequest(
+            ticket=ticket,
+            query=query,
+            search_type=SearchType.USER,
+            username=username
+        )
+        return self.requests[ticket]
 
     async def _query_shares_and_reply(self, ticket: int, username: str, query: str):
         """Performs a query on the shares manager and reports the results to the
@@ -162,12 +202,12 @@ class SearchManager:
             self._network.send_peer_messages(
                 username,
                 PeerSearchReply.Request(
-                    username=self._settings.get('credentials.username'),
+                    username=self._session.user.name,
                     ticket=ticket,
                     results=convert_items_to_file_data(visible, use_full_path=True),
-                    has_slots_free=self._transfer_manager.has_slots_free(),
-                    avg_speed=int(self._transfer_manager.get_average_upload_speed()),
-                    queue_size=self._transfer_manager.get_queue_size(),
+                    has_slots_free=self._upload_info_provider.has_slots_free(),
+                    avg_speed=int(self._upload_info_provider.get_average_upload_speed()),
+                    queue_size=self._upload_info_provider.get_queue_size(),
                     locked_results=convert_items_to_file_data(locked, use_full_path=True)
                 )
             ),
@@ -202,36 +242,37 @@ class SearchManager:
         server on start up).
         """
         while True:
-            items = self._settings.get('search.wishlist')
+            items = self._settings.searches.wishlist
 
             # Remove all current wishlist searches
-            self.search_requests = {
-                ticket: qry for ticket, qry in self.search_requests.items()
+            self.requests = {
+                ticket: qry for ticket, qry in self.requests.items()
                 if qry.search_type != SearchType.WISHLIST
             }
 
             logger.info(f"starting wishlist search of {len(items)} items")
             # Recreate
-            for item in items:
-                if not item['enabled']:
-                    continue
-
+            for item in filter(lambda item: item.enabled, items):
                 ticket = next(self._ticket_generator)
-                self.search_requests[ticket] = SearchRequest(
+                self.requests[ticket] = SearchRequest(
                     ticket,
-                    item['query'],
+                    item.query,
                     search_type=SearchType.WISHLIST
                 )
                 self._network.queue_server_messages(
-                    WishlistSearch.Request(ticket, item['query'])
+                    WishlistSearch.Request(ticket, item.query)
                 )
 
             await asyncio.sleep(interval)
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message
-        if message.__class__ in self.MESSAGE_MAP:
-            await self.MESSAGE_MAP[message.__class__](message, event.connection)
+        if message.__class__ in self._MESSAGE_MAP:
+            await self._MESSAGE_MAP[message.__class__](message, event.connection)
+
+    @on_message(SearchInactivityTimeout.Response)
+    async def _on_search_inactivity_timeout(self, message: SearchInactivityTimeout.Response, connection):
+        self.search_inactivity_timeout = message.timeout
 
     @on_message(DistributedSearchRequest.Request)
     async def _on_distributed_search_request(
@@ -251,7 +292,7 @@ class SearchManager:
 
     @on_message(ServerSearchRequest.Response)
     async def _on_server_search_request(self, message: ServerSearchRequest.Response, connection):
-        username = self._settings.get('credentials.username')
+        username = self._session.user.name
         if message.username == username:
             return
 
@@ -267,10 +308,10 @@ class SearchManager:
             avg_speed=message.avg_speed,
             queue_size=message.queue_size,
             shared_items=message.results,
-            locked_results=message.locked_results
+            locked_results=message.locked_results or []
         )
         try:
-            query = self.search_requests[message.ticket]
+            query = self.requests[message.ticket]
         except KeyError:
             logger.warning(f"search reply ticket does not match any search query : {message.ticket}")
         else:
@@ -280,7 +321,7 @@ class SearchManager:
         await connection.disconnect(reason=CloseReason.REQUESTED)
 
         # Update the user info
-        user = self._state.get_or_create_user(message.username)
+        user = self._user_manager.get_or_create_user(message.username)
         user.avg_speed = message.avg_speed
         user.queue_length = message.queue_size
         user.has_slots_free = message.has_slots_free
@@ -288,6 +329,7 @@ class SearchManager:
 
     @on_message(WishlistInterval.Response)
     async def _on_wish_list_interval(self, message: WishlistInterval.Response, connection):
+        self.wishlist_interval = message.interval
         self._cancel_wishlist_task()
 
         self._wishlist_task = asyncio.create_task(
@@ -302,6 +344,13 @@ class SearchManager:
         if event.state == ConnectionState.CLOSING:
             self._cancel_wishlist_task()
 
+    async def _on_session_initialized(self, event: SessionInitializedEvent):
+        logger.debug(f"search : session initialized : {event.session}")
+        self._session = event.session
+
+    async def _on_session_destroyed(self, event: SessionDestroyedEvent):
+        self._session = None
+
     def _cancel_wishlist_task(self) -> Optional[asyncio.Task]:
         task = self._wishlist_task
         if self._wishlist_task is not None:
@@ -310,7 +359,7 @@ class SearchManager:
             return task
         return None
 
-    def stop(self) -> List[asyncio.Task]:
+    async def stop(self) -> List[asyncio.Task]:
         """Cancels all pending tasks
 
         :return: a list of tasks that have been cancelled so that they can be

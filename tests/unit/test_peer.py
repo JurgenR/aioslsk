@@ -8,7 +8,7 @@ from aioslsk.protocol.messages import (
 )
 from aioslsk.peer import PeerManager
 from aioslsk.settings import Settings
-from aioslsk.state import State
+from aioslsk.user.manager import UserManager
 
 import pytest
 from unittest.mock import ANY, AsyncMock, Mock
@@ -34,7 +34,7 @@ SETTINGS_WITH_INFO = {
             'picture': USER_PICTURE
         }
     },
-    'sharing': {
+    'transfers': {
         'limits': {
             'upload_slots': UPLOAD_SLOTS
         }
@@ -44,8 +44,18 @@ SETTINGS_WITH_INFO = {
 
 class TestPeer:
 
+    def _create_user_manager(self, settings: Settings) -> UserManager:
+        return UserManager(
+            settings,
+            Mock(), # Event bus
+            Mock(), # Internal event bs
+            AsyncMock() # Network
+        )
+
     def _create_peer_manager(self, settings: dict = DEFAULT_SETTINGS) -> PeerManager:
-        state = State()
+        settings_obj = Settings(**settings)
+        user_manager = self._create_user_manager(settings_obj)
+
         event_bus = AsyncMock()
         internal_event_bus = Mock()
         shares_manager = Mock()
@@ -54,10 +64,10 @@ class TestPeer:
         network.server = AsyncMock()
 
         manager = PeerManager(
-            state,
-            Settings(settings),
+            settings_obj,
             event_bus,
             internal_event_bus,
+            user_manager,
             shares_manager,
             transfer_manager,
             network
@@ -69,9 +79,9 @@ class TestPeer:
     async def test_onPeerInfoRequest_withInfo_shouldSendPeerInfoReply(self):
         manager = self._create_peer_manager(SETTINGS_WITH_INFO)
         connection = AsyncMock()
-        manager._transfer_manager.get_upload_slots = Mock(return_value=UPLOAD_SLOTS)
-        manager._transfer_manager.get_queue_size = Mock(return_value=QUEUE_SIZE)
-        manager._transfer_manager.has_slots_free = Mock(return_value=HAS_SLOTS_FREE)
+        manager._upload_info_provider.get_upload_slots = Mock(return_value=UPLOAD_SLOTS)
+        manager._upload_info_provider.get_queue_size = Mock(return_value=QUEUE_SIZE)
+        manager._upload_info_provider.has_slots_free = Mock(return_value=HAS_SLOTS_FREE)
 
         await manager._on_peer_user_info_request(PeerUserInfoRequest.Request(), connection)
 
@@ -89,9 +99,9 @@ class TestPeer:
     async def test_onPeerInfoRequest_withoutInfo_shouldSendPeerInfoReply(self):
         manager = self._create_peer_manager(DEFAULT_SETTINGS)
         connection = AsyncMock()
-        manager._transfer_manager.get_upload_slots = Mock(return_value=UPLOAD_SLOTS)
-        manager._transfer_manager.get_queue_size = Mock(return_value=QUEUE_SIZE)
-        manager._transfer_manager.has_slots_free = Mock(return_value=HAS_SLOTS_FREE)
+        manager._upload_info_provider.get_upload_slots = Mock(return_value=UPLOAD_SLOTS)
+        manager._upload_info_provider.get_queue_size = Mock(return_value=QUEUE_SIZE)
+        manager._upload_info_provider.has_slots_free = Mock(return_value=HAS_SLOTS_FREE)
 
         await manager._on_peer_user_info_request(PeerUserInfoRequest.Request(), connection)
 
@@ -104,15 +114,6 @@ class TestPeer:
                 queue_size=QUEUE_SIZE,
                 has_slots_free=HAS_SLOTS_FREE
             ))
-
-    @pytest.mark.asyncio
-    async def test_whenGetUserDirectory_shouldSendRequest(self):
-        manager = self._create_peer_manager()
-
-        ticket = await manager.get_user_directory('user0', 'C:\\dir0')
-        manager._network.send_peer_messages.assert_awaited_once_with('user0', ANY)
-
-        assert isinstance(ticket, int)
 
     @pytest.mark.asyncio
     async def test_whenDirectoryRequestReceived_shouldRespond(self):
@@ -143,7 +144,7 @@ class TestPeer:
         DIRECTORIES = [DirectoryData(DIRECTORY, files=[])]
 
         manager = self._create_peer_manager()
-        user = manager._state.get_or_create_user(USER)
+        user = manager._user_manager.get_or_create_user(USER)
 
         connection = AsyncMock()
         connection.username = USER

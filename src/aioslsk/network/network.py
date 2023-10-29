@@ -3,7 +3,17 @@ import asyncio
 import enum
 from functools import partial
 import logging
-from typing import Any, Dict, List, Union, Tuple
+from typing import (
+    Any,
+    Dict,
+    List,
+    Optional,
+    Union,
+    Tuple,
+    TypeVar,
+    Type,
+    TYPE_CHECKING
+)
 
 from ..constants import (
     DEFAULT_LISTENING_HOST,
@@ -13,6 +23,7 @@ from .connection import (
     Connection,
     ConnectionState,
     CloseReason,
+    DataConnection,
     PeerConnectionState,
     ListeningConnection,
     PeerConnection,
@@ -34,6 +45,7 @@ from ..events import (
     InternalEventBus,
     PeerInitializedEvent,
     MessageReceivedEvent,
+    SessionInitializedEvent,
 )
 from ..protocol.messages import (
     CannotConnect,
@@ -42,15 +54,22 @@ from ..protocol.messages import (
     MessageDataclass,
     PeerInit,
     PeerPierceFirewall,
+    Login,
+    SetListenPort,
 )
 from . import upnp
 from .rate_limiter import RateLimiter
-from ..state import State
-from ..settings import Settings
 from ..utils import task_counter, ticket_generator
+
+if TYPE_CHECKING:
+    from ..settings import Settings
 
 
 logger = logging.getLogger(__name__)
+
+
+T = TypeVar('T', bound='MessageDataclass')
+ListeningConnections = Tuple[Optional[ListeningConnection], Optional[ListeningConnection]]
 
 
 class ListeningConnectionErrorMode(enum.Enum):
@@ -72,27 +91,36 @@ class ExpectedResponse(asyncio.Future):
     """Future for an expected response message"""
 
     def __init__(
-            self, connection_class, message_class,
-            peer: str = None, fields: Dict[str, Any] = None, loop=None):
+            self, connection_class: Type[Union[PeerConnection, ServerConnection]], message_class: Type[MessageDataclass],
+            peer: Optional[str] = None, fields: Optional[Dict[str, Any]] = None,
+            loop: Optional[asyncio.AbstractEventLoop] = None):
         super().__init__(loop=loop)
-        self.connection_class = connection_class
-        self.message_class = message_class
-        self.peer: str = peer
+        self.connection_class: Type[Union[PeerConnection, ServerConnection]] = connection_class
+        self.message_class: Type[MessageDataclass] = message_class
+        self.peer: Optional[str] = peer
         self.fields: Dict[str, Any] = {} if fields is None else fields
 
-    def matches(self, connection: Union[PeerConnection, ServerConnection], response):
+    def matches(self, connection: Union[PeerConnection, ServerConnection], response: MessageDataclass) -> bool:
         if connection.__class__ != self.connection_class:
             return False
 
         if response.__class__ != self.message_class:
             return False
 
-        if self.peer is not None:
+        if self.peer is not None and isinstance(connection, PeerConnection):
             if connection.username != self.peer:
                 return False
 
-        for fname, fvalue in self.fields.items():
-            if getattr(response, fname, None) != fvalue:
+        for fname, expected_value in self.fields.items():
+            if callable(expected_value):
+                try:
+                    actual_value = getattr(response, fname)
+                except AttributeError:
+                    return False
+                else:
+                    return expected_value(actual_value)
+
+            if getattr(response, fname, None) != expected_value:
                 return False
 
         return True
@@ -100,58 +128,64 @@ class ExpectedResponse(asyncio.Future):
 
 class Network:
 
-    def __init__(self, state: State, settings: Settings, internal_event_bus: InternalEventBus, stop_event: asyncio.Event):
-        self._state = state
+    def __init__(self, settings: Settings, internal_event_bus: InternalEventBus):
         self._settings: Settings = settings
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._upnp = upnp.UPNP(self._settings)
         self._ticket_generator = ticket_generator()
-        self._stop_event = stop_event
         self._expected_response_futures: List[ExpectedResponse] = []
         self._expected_connection_futures: Dict[int, asyncio.Future] = {}
 
         # List of connections
-        self.server_connection: ServerConnection = ServerConnection(
-            self._settings.get('network.server.hostname'),
-            self._settings.get('network.server.port'),
-            self
-        )
-        self.listening_connections: Tuple[ListeningConnection] = (
-            ListeningConnection(
-                DEFAULT_LISTENING_HOST,
-                self._settings.get('network.listening.port'),
-                self,
-                obfuscated=False
-            ) if self._settings.get('network.listening.port') else None,
-            ListeningConnection(
-                DEFAULT_LISTENING_HOST,
-                self._settings.get('network.listening.obfuscated_port'),
-                self,
-                obfuscated=True
-            ) if self._settings.get('network.listening.obfuscated_port') else None
-        )
+        self.server_connection: ServerConnection = self.create_server_connection()
+        self.listening_connections: ListeningConnections = self.create_listening_connections()
         self.peer_connections: List[PeerConnection] = []
 
-        self.MESSAGE_MAP = build_message_map(self)
+        self._MESSAGE_MAP = build_message_map(self)
 
         # Rate limiters
         self._upload_rate_limiter: RateLimiter = RateLimiter.create_limiter(
-            self._settings.get('sharing.limits.upload_speed_kbps'))
+            self._settings.network.limits.upload_speed_kbps)
         self._download_rate_limiter: RateLimiter = RateLimiter.create_limiter(
-            self._settings.get('sharing.limits.download_speed_kbps'))
-
-        self._settings.add_listener(
-            'sharing.limits.upload_speed_kbps', self._on_upload_speed_changed)
-        self._settings.add_listener(
-            'sharing.limits.download_speed_kbps', self._on_download_speed_changed)
+            self._settings.network.limits.download_speed_kbps)
 
         # Debugging
-        self._user_ip_overrides: Dict[str, str] = self._settings.get('debug.user_ip_overrides')
+        self._ip_overrides: Dict[str, str] = self._settings.debug.ip_overrides
 
         # Operational
-        self._log_connections_task: asyncio.Task = None
+        self._log_connections_task: Optional[asyncio.Task] = None
         self._create_peer_connection_tasks: List[asyncio.Task] = []
-        self._upnp_task: asyncio.Task = None
+        self._upnp_task: Optional[asyncio.Task] = None
+        self._connection_watchdog_task: Optional[asyncio.Task] = None
+
+        self.register_listeners()
+
+    def register_listeners(self):
+        self._internal_event_bus.register(
+            SessionInitializedEvent, self._on_session_initialized)
+
+    def create_server_connection(self) -> ServerConnection:
+        return ServerConnection(
+            self._settings.network.server.hostname,
+            self._settings.network.server.port,
+            self
+        )
+
+    def create_listening_connections(self) -> ListeningConnections:
+        return (
+            ListeningConnection(
+                DEFAULT_LISTENING_HOST,
+                self._settings.network.listening.port,
+                self,
+                obfuscated=False
+            ) if self._settings.network.listening.port else None,
+            ListeningConnection(
+                DEFAULT_LISTENING_HOST,
+                self._settings.network.listening.obfuscated_port,
+                self,
+                obfuscated=True
+            ) if self._settings.network.listening.obfuscated_port else None
+        )
 
     async def initialize(self):
         """Initializes the server and listening connections"""
@@ -160,7 +194,8 @@ class Network:
         await self.connect_listening_ports()
         await self.connect_server()
 
-        if self._log_connections_task is None:
+        log_connections = self._settings.debug.log_connection_count
+        if log_connections and self._log_connections_task is None:
             self._log_connections_task = asyncio.create_task(
                 self._log_connections_job(),
                 name=f'log-connections-{task_counter()}'
@@ -175,7 +210,7 @@ class Network:
         :raise ListeningConnectionFailedError: if an error occurred connecting
             the listening ports
         """
-        error_mode = ListeningConnectionErrorMode(self._settings.get('network.listening.error_mode'))
+        error_mode = self._settings.network.listening.error_mode
         results = await asyncio.gather(
             *[
                 listening_connection.connect()
@@ -200,7 +235,7 @@ class Network:
                 await self.disconnect_listening_connections()
                 raise ListeningConnectionFailedError("failed to connect non-obfuscated listening port")
 
-    async def disconnect_listening_connections(self) -> asyncio.Future:
+    async def disconnect_listening_connections(self):
         await asyncio.gather(
             *[
                 listening_connection.disconnect(CloseReason.REQUESTED)
@@ -217,7 +252,9 @@ class Network:
         await self.server_connection.disconnect(CloseReason.REQUESTED)
 
     async def disconnect(self):
-        """Disconnects all current connections"""
+        """Cancels all connection creation tasks and disconnects all current
+        open connections
+        """
         self._cancel_all_tasks()
 
         connections = [self.server_connection, ] + self.peer_connections
@@ -236,7 +273,7 @@ class Network:
             ports. If either is not connected or not configured `0` will be
             returned for this port
         """
-        def get_port(conn: ListeningConnection):
+        def get_port(conn: Optional[ListeningConnection]):
             if conn and conn.state == ConnectionState.CONNECTED:
                 return conn.port
             return 0
@@ -245,9 +282,76 @@ class Network:
         obf_port = get_port(self.listening_connections[1])
         return nonobf_port, obf_port
 
+    # Settings listeners
+    def load_speed_limits(self):
+        """(Re)loads the speed limits from the settings"""
+        self.set_download_speed_limit(
+            self._settings.network.limits.download_speed_kbps)
+        self.set_upload_speed_limit(
+            self._settings.network.limits.upload_speed_kbps)
+
+    def set_upload_speed_limit(self, limit_kbps: int):
+        """Modifies the upload speed limit. Passing 0 will set the upload speed
+        to unlimited
+
+        :param limit_kbps: the new upload limit
+        """
+        new_limiter = RateLimiter.create_limiter(limit_kbps)
+        if self._upload_rate_limiter is not None:
+            new_limiter.copy_tokens(self._upload_rate_limiter)
+        self._upload_rate_limiter = new_limiter
+
+        for conn in self.peer_connections:
+            conn.upload_rate_limiter = self._upload_rate_limiter
+
+    def set_download_speed_limit(self, limit_kbps: int):
+        """Modifies the download speed limit. Passing 0 will set the download
+        speed to unlimited
+
+        :param limit_kbps: the new download limit
+        """
+        new_limiter = RateLimiter.create_limiter(limit_kbps)
+        if self._download_rate_limiter is not None:
+            new_limiter.copy_tokens(self._download_rate_limiter)
+        self._download_rate_limiter = new_limiter
+
+        for conn in self.peer_connections:
+            conn.download_rate_limiter = self._download_rate_limiter
+
+    async def _connection_watchdog_job(self):
+        """Reconnects to the server if it is closed. This should be started as a
+        task and should be cancelled upon request.
+        """
+        timeout = self._settings.network.server.reconnect.timeout
+        logger.info("starting server connection watchdog")
+        while True:
+            await asyncio.sleep(0.5)
+
+            if self.server_connection.state == ConnectionState.CLOSED:
+                logger.info(f"will attempt to reconnect to server in {timeout} seconds")
+                await asyncio.sleep(timeout)
+                try:
+                    await self.connect_server()
+                except ConnectionFailedError:
+                    logger.warning("failed to reconnect to server")
+
+    async def start_connection_watchdog(self):
+        """Starts the server connection watchdog if it is not already running"""
+        if self._connection_watchdog_task is None:
+            self._connection_watchdog_task = asyncio.create_task(
+                self._connection_watchdog_job(),
+                name=f'watchdog-task-{task_counter()}'
+            )
+
+    def stop_connection_watchdog(self):
+        """Stops the server connection watchdog if it is running"""
+        if self._connection_watchdog_task is not None:
+            self._connection_watchdog_task.cancel()
+            self._connection_watchdog_task = None
+
     async def _log_connections_job(self):
         while True:
-            await asyncio.sleep(1)
+            await asyncio.sleep(10)
             count = len(self.peer_connections)
             logger.info(
                 f"currently {count} peer connections ({len(self._create_peer_connection_tasks)} tasks)")
@@ -281,7 +385,7 @@ class Network:
         :param obfuscated_port: available obfuscated port
         :return: a tuple with the port number and whether the port is obfuscated
         """
-        prefer_obfuscated = self._settings.get('network.peer.obfuscate')
+        prefer_obfuscated = self._settings.network.peer.obfuscate
         if port and obfuscated_port:
             if prefer_obfuscated:
                 return obfuscated_port, True
@@ -293,7 +397,7 @@ class Network:
             return obfuscated_port, True
 
     async def create_peer_connection(
-            self, username: str, typ: str, ip: str = None, port: int = None,
+            self, username: str, typ: str, ip: Optional[str] = None, port: Optional[int] = None,
             obfuscate: bool = False,
             initial_state: PeerConnectionState = PeerConnectionState.ESTABLISHED) -> PeerConnection:
         """Creates a new peer connection to the given `username` and connection
@@ -322,7 +426,7 @@ class Network:
             port, obfuscate = self.select_port(clear_port, obfuscated_port)
 
         # Override IP address if requested
-        ip = self._user_ip_overrides.get(username, ip)
+        ip = self._ip_overrides.get(username, ip)
 
         # Make direct connection
         try:
@@ -362,8 +466,12 @@ class Network:
             returned
         """
         await self.server_connection.send_message(GetPeerAddress.Request(username))
-        _, response = await self.wait_for_server_message(
-            GetPeerAddress.Response, username=username)
+        _, response = await self.create_server_response_future(
+            GetPeerAddress.Response,
+            fields={
+                'username': username
+            }
+        )
 
         if response.ip == '0.0.0.0':
             logger.warning(f"GetPeerAddress : no address returned for username : {username}")
@@ -375,7 +483,7 @@ class Network:
 
         return response.ip, response.port, response.obfuscated_port
 
-    async def get_peer_connection(self, username: str, typ: PeerConnectionType = PeerConnectionType.PEER) -> PeerConnection:
+    async def get_peer_connection(self, username: str, typ: str = PeerConnectionType.PEER) -> PeerConnection:
         """Gets a peer connection for the given `username`. It will first try to
         re-use an existing connection, otherwise it will create a new connection
 
@@ -389,7 +497,7 @@ class Network:
 
         return await self.create_peer_connection(username, typ)
 
-    def _remove_response_future(self, expected_response: asyncio.Future):
+    def _remove_response_future(self, expected_response: ExpectedResponse):
         if expected_response in self._expected_response_futures:
             self._expected_response_futures.remove(expected_response)
 
@@ -397,42 +505,97 @@ class Network:
         logger.debug(f"removing expected incoming connection with {ticket=}")
         self._expected_connection_futures.pop(ticket)
 
-    def wait_for_server_message(self, message_class, **kwargs) -> ExpectedResponse:
-        """Waits for a server message to arrive, the message must match the
-        `message_class` and fields defined in the keyword arguments.
+    def create_server_response_future(
+            self, message_class: Type[T], fields: Optional[Dict[str, Any]] = None) -> ExpectedResponse:
+        """Creates a future for a server message to arrive, the message must
+        match the `message_class` and fields defined in the keyword arguments.
 
+        The future will be stored by the current class and will be removed once
+        the future is complete or cancelled.
+
+        :param message_class: The expected `MessageDataClass`
         :return: `ExpectedResponse` object
         """
+        fields = fields or {}
         future = ExpectedResponse(
             ServerConnection,
             message_class=message_class,
-            fields=kwargs
+            fields=fields
         )
         self._expected_response_futures.append(future)
         future.add_done_callback(self._remove_response_future)
         return future
 
-    def wait_for_peer_message(self, peer: str, message_class, **kwargs) -> ExpectedResponse:
-        """Waits for a peer message to arrive, the message must match the
-        `message_class` and fields defined in the keyword arguments and must be
-        coming from a connection by `peer`.
+    def register_response_future(self, expected_response: ExpectedResponse):
+        """Registers an expected response future"""
+        self._expected_response_futures.append(expected_response)
+        expected_response.add_done_callback(self._remove_response_future)
+
+    async def wait_for_server_message(
+            self, message_class: Type[T], fields: Optional[Dict[str, Any]] = None, timeout: float = 10) -> T:
+        """Waits for a message from the server
+
+        :param message_class: Class of the expected server message
+        :param fields: Optional matchers for the message fields
+        :return: The `MessageData` object corresponding to the response
+        """
+        future = self.create_server_response_future(
+            message_class=message_class,
+            fields=fields
+        )
+        try:
+            _, response = await asyncio.wait_for(future, timeout=timeout)
+        except TimeoutError as exc:
+            future.set_exception(exc)
+            raise
+
+        return response
+
+    def create_peer_response_future(
+            self, peer: str, message_class: Type[T], fields: Optional[Dict[str, Any]] = None) -> ExpectedResponse:
+        """Creates a future for a peer message to arrive, the message must match
+        the `message_class` and fields defined in the keyword arguments and
+        must be coming from a connection by `peer`.
+
+        The future will be stored by the current class and will be removed once
+        the future is complete or cancelled.
 
         :param peer: name of the peer for which the message should be received
         :return: `ExpectedResponse` object
         """
+        fields = fields or {}
         future = ExpectedResponse(
             PeerConnection,
             message_class=message_class,
             peer=peer,
-            fields=kwargs
+            fields=fields
         )
         self._expected_response_futures.append(future)
         future.add_done_callback(self._remove_response_future)
         return future
 
-    def get_peer_connections(self, username: str, typ: PeerConnectionType) -> List[PeerConnection]:
+    async def wait_for_peer_message(
+            self, peer: str, message_class: Type[T], fields: Optional[Dict[str, Any]] = None, timeout: float = 60) -> T:
+        future = self.create_peer_response_future(
+            peer=peer,
+            message_class=message_class,
+            fields=fields
+        )
+        try:
+            _, response = await asyncio.wait_for(future, timeout=timeout)
+        except TimeoutError as exc:
+            future.set_exception(exc)
+            raise
+
+        return response
+
+    def get_peer_connections(self, username: str, typ: str) -> List[PeerConnection]:
         """Returns all connections for peer with given username and peer
         connection types.
+
+        :param username: username of the peer
+        :param typ: type of the connection (from `PeerConnectionType`)
+        :return: list of connections for that matches the parameters
         """
         return [
             connection for connection in self.peer_connections
@@ -440,7 +603,7 @@ class Network:
         ]
 
     def get_active_peer_connections(
-            self, username: str, typ: PeerConnectionType) -> List[PeerConnection]:
+            self, username: str, typ: str) -> List[PeerConnection]:
         """Return a list of currently active messaging connections for given
         peer connection type.
 
@@ -474,7 +637,7 @@ class Network:
         self._create_peer_connection_tasks.append(task)
 
     async def _make_direct_connection(
-            self, ticket: int, username: str, typ: str, ip: int, port: int, obfuscate: bool) -> PeerConnection:
+            self, ticket: int, username: str, typ: str, ip: str, port: int, obfuscate: bool) -> PeerConnection:
         """Attempts to make a direct connection to the peer and send a `PeerInit`
         message. This will be the first step in case we are the one initiating
         the connection
@@ -491,7 +654,7 @@ class Network:
         await connection.connect()
         await connection.send_message(
             PeerInit.Request(
-                self._settings.get('credentials.username'),
+                self._settings.credentials.username,
                 typ,
                 ticket
             )
@@ -511,14 +674,18 @@ class Network:
         """
         # Wait for either a established connection with PeerPierceFirewall or a
         # CannotConnect from the server
-        expected_connection_future = asyncio.Future()
+        expected_connection_future: asyncio.Future = asyncio.Future()
         expected_connection_future.add_done_callback(
             partial(self._remove_connection_future, ticket)
         )
         self._expected_connection_futures[ticket] = expected_connection_future
 
-        cannot_connect_future = self.wait_for_server_message(
-            CannotConnect.Response, ticket=ticket)
+        cannot_connect_future = self.create_server_response_future(
+            CannotConnect.Response,
+            fields={
+                'ticket': ticket
+            }
+        )
 
         # Send the connect to peer message
         await self.server_connection.send_message(
@@ -542,7 +709,6 @@ class Network:
         completed_future = done.pop()
 
         if completed_future == cannot_connect_future:
-            logger.debug(f"received cannot connect (ticket={ticket})")
             raise PeerConnectionError(
                 f"indirect connection failed ({username=}, {ticket=})")
 
@@ -557,9 +723,14 @@ class Network:
         """Handles an indirect connection request received from the server.
 
         A task is created for this coroutine when a `ConnectToPeer` message is
-        received
+        received.
+
+        A `PeerInitializedEvent` will be emitted if the connection has been
+        successfully established
+
+        :param message: received `ConnectToPeer` message
         """
-        ip = self._user_ip_overrides.get(message.username, message.ip)
+        ip = self._ip_overrides.get(message.username, message.ip)
         port, obfuscate = self.select_port(message.port, message.obfuscated_port)
 
         peer_connection = PeerConnection(
@@ -595,40 +766,63 @@ class Network:
         await self._internal_event_bus.emit(
             PeerInitializedEvent(peer_connection, requested=False))
 
-    async def send_peer_messages(self, username: str, *messages: List[Union[bytes, MessageDataclass]]):
+    async def send_peer_messages(
+            self, username: str, *messages: Union[bytes, MessageDataclass],
+            raise_on_error: bool = True):
         """Sends a list of messages to the peer with given `username`. This uses
         `get_peer_connection` and will attempt to re-use a connection or create
-        a new one
+        a new peer (P) connection
 
+        :param username: Peer username to send the messages to
+        :param messages: List of messages to send
+        :param raise_on_error: When `True` an exception is raised when a message
+            failed to send, if `False` a list of tuples with the result for each
+            message will be returned
         :return: a list of tuples containing the sent messages and the result
             of the sent messages. If `None` is returned for a message it was
-            successfully sent, otherwise the result will contain the exception
+            successfully sent, otherwise the result will contain the exception.
+            `None` if the `raise_on_error` is `True`
         """
         connection = await self.get_peer_connection(username)
         results = await asyncio.gather(
             *[connection.send_message(message) for message in messages],
-            return_exceptions=True
+            return_exceptions=not raise_on_error
         )
-        return list(zip(messages, results))
+        if not raise_on_error:
+            return list(zip(messages, results))
 
-    def queue_server_messages(self, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
+    def queue_server_messages(self, *messages: Union[bytes, MessageDataclass]) -> List[asyncio.Task]:
         """Queues server messages
 
         :param messages: list of messages to queue
         """
         return self.server_connection.queue_messages(*messages)
 
-    async def send_server_messages(self, *messages: List[Union[bytes, MessageDataclass]]):
+    async def send_server_messages(
+            self, *messages: Union[bytes, MessageDataclass],
+            raise_on_error: bool = True):
+        """Sends a list of messages to the server
+
+        :param messages: List of messages to send
+        :param raise_on_error: When `True` an exception is raised when a message
+            failed to send, if `False` a list of tuples with the result for each
+            message will be returned
+        :return: a list of tuples containing the sent messages and the result
+            of the sent messages. If `None` is returned for a message it was
+            successfully sent, otherwise the result will contain the exception.
+            `None` if the `raise_on_error` is `True`
+        """
         results = await asyncio.gather(
             *[self.server_connection.send_message(message) for message in messages],
-            return_exceptions=True
+            return_exceptions=not raise_on_error
         )
-        return list(zip(messages, results))
-
-    # Methods called by connections
+        if not raise_on_error:
+            return list(zip(messages, results))
 
     # Connection state changes
-    async def on_state_changed(self, state: ConnectionState, connection: Connection, close_reason: CloseReason = None):
+    async def on_state_changed(
+            self, state: ConnectionState, connection: Connection,
+            close_reason: CloseReason = CloseReason.UNKNOWN):
         """Called when the state of a connection changes. This method calls 3
         private method based on the type of L{connection} that was passed
 
@@ -647,19 +841,52 @@ class Network:
             ConnectionStateChangedEvent(connection, state, close_reason)
         )
 
-    async def _on_server_connection_state_changed(self, state: ConnectionState, connection: ServerConnection, close_reason: CloseReason = None):
+    async def _on_server_connection_state_changed(
+            self, state: ConnectionState, connection: ServerConnection,
+            close_reason: CloseReason = CloseReason.UNKNOWN):
         if state == ConnectionState.CONNECTED:
             # For registering with UPNP we need to know our own IP first, we can
             # get this from the server connection but we first need to be
             # fully connected to it before we can request a valid IP
-            if self._settings.get('network.upnp.enabled'):
+            if self._settings.network.upnp.enabled:
                 self._upnp_task = asyncio.create_task(
                     self.map_upnp_ports(),
                     name=f'enable-upnp-{task_counter()}'
                 )
                 self._upnp_task.add_done_callback(self._map_upnp_ports_callback)
 
-    async def _on_peer_connection_state_changed(self, state: ConnectionState, connection: PeerConnection, close_reason: CloseReason = None):
+            # Register server connection watchdog
+            if self._settings.network.server.reconnect.auto:
+                await self.start_connection_watchdog()
+
+        elif state == ConnectionState.CLOSING:
+
+            # When `disconnect` is called on the connection it will always first
+            # go into the CLOSING state. The watchdog will only attempt to
+            # reconnect if the server is in CLOSED state. So the code needs to
+            # make a decision here whether we want to reconnect or not before it
+            # goes into CLOSED state.
+            # Cancel the watchdog only if we are closing up on request or the
+            # server sends an EOF. The server sends an EOF as soon as you are
+            # connected if your IP address is banned, this happens when you make
+            # too many connections in a short period of time. Making any more
+            # connections will only extend your ban period. Possibly the server
+            # will also EOF when the login message is not sent after a certain
+            # period of time
+            # An EOF will also be sent in case you are kicked due to the same
+            # login being used in another location
+            if close_reason == CloseReason.REQUESTED:
+                self.stop_connection_watchdog()
+
+            elif close_reason == CloseReason.EOF:
+                logger.warning(
+                    "server closed connection, will not attempt to reconnect")
+                self.stop_connection_watchdog()
+
+    async def _on_peer_connection_state_changed(
+            self, state: ConnectionState, connection: PeerConnection,
+            close_reason: CloseReason = CloseReason.UNKNOWN):
+
         if state == ConnectionState.CLOSED:
             self.remove_peer_connection(connection)
 
@@ -731,12 +958,15 @@ class Network:
                 f"{connection.hostname}:{connection.port} : unknown peer init message : {peer_init_message}")
             await connection.disconnect(CloseReason.REQUESTED)
 
-    async def on_message_received(self, message: MessageDataclass, connection: Connection):
+    async def on_message_received(self, message: MessageDataclass, connection: DataConnection):
         """Method called by `connection` instances when a message is received
+
+        :param message: Received message instance
+        :param connection: Connection on which the message was received
         """
         # Call the message callbacks for this object
-        if message.__class__ in self.MESSAGE_MAP:
-            await self.MESSAGE_MAP[message.__class__](message, connection)
+        if message.__class__ in self._MESSAGE_MAP:
+            await self._MESSAGE_MAP[message.__class__](message, connection)
 
         # Emit on the internal message bus. Internal handling has priority over
         # completing the future responses
@@ -747,49 +977,16 @@ class Network:
             if expected_response.matches(connection, message):
                 expected_response.set_result((connection, message, ))
 
-    # Settings listeners
-    def load_speed_limits(self):
-        """Loads the speed limits from the settings"""
-        self.set_download_speed_limit(
-            self._settings.get('sharing.limits.download_speed_kbps'))
-        self.set_upload_speed_limit(
-            self._settings.get('sharing.limits.upload_speed_kbps'))
+    async def _on_session_initialized(self, event: SessionInitializedEvent):
+        port, obfuscated_port = self.get_listening_ports()
 
-    def set_upload_speed_limit(self, limit_kbps: int):
-        """Modifies the upload speed limit. Passing 0 will set the upload speed
-        to unlimited
-
-        :param limit_kbps: the new upload limit
-        """
-        new_limiter = RateLimiter.create_limiter(limit_kbps)
-        if self._upload_rate_limiter is not None:
-            new_limiter.copy_tokens(self._upload_rate_limiter)
-        self._upload_rate_limiter = new_limiter
-
-        for conn in self.peer_connections:
-            conn.upload_rate_limiter = self._upload_rate_limiter
-
-    def set_download_speed_limit(self, limit_kbps: int):
-        """Modifies the download speed limit. Passing 0 will set the download
-        speed to unlimited
-
-        :param limit_kbps: the new download limit
-        """
-        new_limiter = RateLimiter.create_limiter(limit_kbps)
-        if self._download_rate_limiter is not None:
-            new_limiter.copy_tokens(self._download_rate_limiter)
-        self._download_rate_limiter = new_limiter
-
-        for conn in self.peer_connections:
-            conn.download_rate_limiter = self._download_rate_limiter
-
-    def _on_upload_speed_changed(self, limit_kbps: int):
-        """Called when upload speed is changed in the settings"""
-        self.set_upload_speed_limit(limit_kbps=limit_kbps)
-
-    def _on_download_speed_changed(self, limit_kbps: int):
-        """Called when download speed is changed in the settings"""
-        self.set_download_speed_limit(limit_kbps=limit_kbps)
+        await self.send_server_messages(
+            SetListenPort.Request(
+                port,
+                obfuscated_port_amount=1 if obfuscated_port else 0,
+                obfuscated_port=obfuscated_port
+            )
+        )
 
     # Task callbacks
     def _handle_connect_to_peer_callback(self, message: ConnectToPeer.Response, task: asyncio.Task):

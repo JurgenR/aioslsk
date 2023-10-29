@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 import enum
 import os
-from typing import List, Set, Union
+from typing import List, Optional, Set, Tuple, Union
 
 from ..exceptions import FileNotFoundError
 from .utils import normalize_remote_path
@@ -73,7 +73,12 @@ class SharedItem:
     subdir: str
     filename: str
     modified: float
-    attributes: bytes = field(default=None, init=False, compare=False, hash=False)
+    attributes: Optional[List[Tuple[int, int]]] = field(
+        default=None,
+        init=False,
+        compare=False,
+        hash=False
+    )
 
     def get_absolute_path(self) -> str:
         """Returns the absolute path of the shared item"""

@@ -3,13 +3,14 @@ from aioslsk.protocol.primitives import FileData
 from aioslsk.protocol.messages import (
     UserSearch,
     FileSearch,
-    ChatRoomSearch,
+    RoomSearch,
     PeerSearchReply,
 )
-from aioslsk.state import State
 from aioslsk.search.manager import SearchManager
 from aioslsk.search.model import SearchType, SearchRequest
 from aioslsk.settings import Settings
+from aioslsk.user.manager import UserManager
+
 import pytest
 from unittest.mock import AsyncMock, Mock, call
 
@@ -17,13 +18,25 @@ from unittest.mock import AsyncMock, Mock, call
 DEFAULT_USER = 'testuser0'
 DEFAULT_SETTINGS = {
     'credentials': {
-        'username': DEFAULT_USER
+        'username': DEFAULT_USER,
+        'password': 'password0'
     }
 }
 
 
 @pytest.fixture
-def manager() -> SearchManager:
+def user_manager() -> UserManager:
+    user_manager = UserManager(
+        Settings(**DEFAULT_SETTINGS),
+        Mock(), # Event bus
+        Mock(), # Internal event bus
+        AsyncMock(), # Network
+    )
+    return user_manager
+
+
+@pytest.fixture
+def manager(user_manager: UserManager) -> SearchManager:
     network = Mock()
     network.send_server_messages = AsyncMock()
     event_bus = Mock()
@@ -36,10 +49,10 @@ def manager() -> SearchManager:
     transfer_manager = Mock()
 
     return SearchManager(
-        State(),
-        Settings(DEFAULT_SETTINGS),
+        Settings(**DEFAULT_SETTINGS),
         event_bus,
         internal_event_bus,
+        user_manager,
         shares_manager,
         transfer_manager,
         network
@@ -59,7 +72,7 @@ class TestSearchManager:
         assert request.username is None
         assert request.room is None
 
-        assert request.ticket in manager.search_requests
+        assert request.ticket in manager.requests
 
         manager._network.send_server_messages.assert_awaited_once_with(
             FileSearch.Request(request.ticket, 'query')
@@ -75,7 +88,7 @@ class TestSearchManager:
         assert request.username == 'user0'
         assert request.room is None
 
-        assert request.ticket in manager.search_requests
+        assert request.ticket in manager.requests
 
         manager._network.send_server_messages.assert_awaited_once_with(
             UserSearch.Request('user0', request.ticket, 'query')
@@ -91,10 +104,10 @@ class TestSearchManager:
         assert request.username is None
         assert request.room == 'room0'
 
-        assert request.ticket in manager.search_requests
+        assert request.ticket in manager.requests
 
         manager._network.send_server_messages.assert_awaited_once_with(
-            ChatRoomSearch.Request('room0', request.ticket, 'query')
+            RoomSearch.Request('room0', request.ticket, 'query')
         )
 
     @pytest.mark.asyncio
@@ -102,7 +115,7 @@ class TestSearchManager:
         TICKET = 1234
         connection = AsyncMock()
 
-        manager.search_requests[TICKET] = SearchRequest(
+        manager.requests[TICKET] = SearchRequest(
             TICKET, 'search', SearchType.NETWORK)
 
         reply_message = PeerSearchReply.Request(
@@ -116,16 +129,16 @@ class TestSearchManager:
         )
         await manager._on_peer_search_reply(reply_message, connection)
 
-        assert 1 == len(manager.search_requests[TICKET].results)
+        assert 1 == len(manager.requests[TICKET].results)
 
         manager._event_bus.emit.assert_has_awaits(
             [
                 call(
                     SearchResultEvent(
-                        manager.search_requests[TICKET],
-                        manager.search_requests[TICKET].results[0]
+                        manager.requests[TICKET],
+                        manager.requests[TICKET].results[0]
                     )
                 ),
-                call(UserInfoEvent(manager._state.get_or_create_user('user0')))
+                call(UserInfoEvent(manager._user_manager.get_or_create_user('user0')))
             ]
         )

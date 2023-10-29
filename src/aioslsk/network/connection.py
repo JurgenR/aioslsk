@@ -96,7 +96,7 @@ class Connection:
         await self.network.on_state_changed(state, self, close_reason=close_reason)
 
     def _is_closing(self) -> bool:
-        return self.network._stop_event.is_set() or self.state in (ConnectionState.CLOSING, ConnectionState.CLOSED)
+        return self.state in (ConnectionState.CLOSING, ConnectionState.CLOSED)
 
     def __repr__(self) -> str:
         return (
@@ -111,10 +111,10 @@ class ListeningConnection(Connection):
 
     def __init__(self, hostname: str, port: int, network: Network, obfuscated: bool = False):
         super().__init__(hostname, port, network)
-        self.obfuscated = obfuscated
+        self.obfuscated: bool = obfuscated
 
-        self._server: asyncio.AbstractServer = None
-        self.connections_accepted = 0
+        self._server: Optional[asyncio.AbstractServer] = None
+        self.connections_accepted: int = 0
 
     async def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
         logger.debug(f"{self.hostname}:{self.port} : disconnecting : {reason.name}")
@@ -179,10 +179,10 @@ class DataConnection(Connection):
         super().__init__(hostname, port, network)
         self.obfuscated = obfuscated
 
-        self._reader: asyncio.StreamReader = None
-        self._writer: asyncio.StreamWriter = None
-        self._reader_task: asyncio.Task = None
-        self.read_timeout: float = None
+        self._reader: Optional[asyncio.StreamReader] = None
+        self._writer: Optional[asyncio.StreamWriter] = None
+        self._reader_task: Optional[asyncio.Task] = None
+        self.read_timeout: Optional[float] = None
         self._queued_messages: List[asyncio.Task] = []
 
     def get_connecting_ip(self) -> str:
@@ -252,10 +252,10 @@ class DataConnection(Connection):
             self._reader = None
             self._writer = None
 
-    def _start_reader_task(self):
+    def start_reader_task(self):
         self._reader_task = asyncio.create_task(self._message_reader_loop())
 
-    def _stop_reader_task(self):
+    def stop_reader_task(self):
         if self._reader_task is not None:
             self._reader_task.cancel()
             self._reader_task = None
@@ -307,7 +307,15 @@ class DataConnection(Connection):
 
         return header + message
 
-    async def receive_message(self) -> bytes:
+    async def receive_message_object(self) -> Optional[MessageDataclass]:
+        message_data = await self.receive_message()
+        if message_data:
+            return self.decode_message_data(message_data)
+        else:
+            return None
+
+    async def receive_message(self) -> Optional[bytes]:
+        """Receives a single raw message"""
         return await self._read(self._read_message)
 
     def decode_message_data(self, data: bytes) -> MessageDataclass:
@@ -354,7 +362,7 @@ class DataConnection(Connection):
         except Exception:
             logger.exception(f"error during callback : {message!r}")
 
-    async def _read(self, reader_func, timeout: float = None) -> Optional[bytes]:
+    async def _read(self, reader_func, timeout: Optional[float] = None) -> Optional[bytes]:
         """Read data from the connection using the passed `reader_func`. When an
         error occurs during reading the connection will be CLOSED
 
@@ -393,7 +401,7 @@ class DataConnection(Connection):
         task.add_done_callback(self._queued_messages.remove)
         return task
 
-    def queue_messages(self, *messages: List[Union[bytes, MessageDataclass]]) -> List[asyncio.Task]:
+    def queue_messages(self, *messages: Union[bytes, MessageDataclass]) -> List[asyncio.Task]:
         return [
             self.queue_message(message)
             for message in messages
@@ -413,7 +421,8 @@ class DataConnection(Connection):
         :raise ConnectionWriteError: error or timeout occured during writing
         """
         if self._is_closing():
-            logger.warning(f"{self.hostname}:{self.port} : not sending message, connection is closing : {message}")
+            logger.warning(
+                f"{self.hostname}:{self.port} : not sending message, connection is closing / closed : {message!r}")
             return
 
         logger.debug(f"{self.hostname}:{self.port} : send message : {message!r}")
@@ -454,7 +463,7 @@ class ServerConnection(DataConnection):
 
     async def connect(self, timeout: float = SERVER_CONNECT_TIMEOUT):
         await super().connect(timeout=timeout)
-        self._start_reader_task()
+        # self.start_reader_task()
 
     def deserialize_message(self, message_data: bytes) -> MessageDataclass:
         return ServerMessage.deserialize_response(message_data)
@@ -464,18 +473,18 @@ class PeerConnection(DataConnection):
 
     def __init__(
             self, hostname: str, port: int, network: Network, obfuscated: bool = False,
-            username: str = None, connection_type: str = PeerConnectionType.PEER,
+            username: Optional[str] = None, connection_type: str = PeerConnectionType.PEER,
             incoming: bool = False):
         super().__init__(hostname, port, network, obfuscated=obfuscated)
         self.incoming: bool = incoming
         self.connection_state = PeerConnectionState.AWAITING_INIT
 
-        self.username: str = username
+        self.username: Optional[str] = username
         self.connection_type: str = connection_type
         self.read_timeout = PEER_READ_TIMEOUT
 
-        self.download_rate_limiter: RateLimiter = None
-        self.upload_rate_limiter: RateLimiter = None
+        self.download_rate_limiter: Optional[RateLimiter] = None
+        self.upload_rate_limiter: Optional[RateLimiter] = None
 
     async def connect(self, timeout: float = PEER_CONNECT_TIMEOUT):
         await super().connect(timeout=timeout)
@@ -499,11 +508,11 @@ class PeerConnection(DataConnection):
                 self.obfuscated = False
 
         if state == PeerConnectionState.ESTABLISHED:
-            self._start_reader_task()
+            self.start_reader_task()
         else:
             # This shouldn't occur, during all other states we call the
             # receive_* methods directly. But it can do no harm
-            self._stop_reader_task()
+            self.stop_reader_task()
 
         logger.debug(f"{self.hostname}:{self.port} setting state to {state} : {self!r}")
         self.connection_state = state
@@ -526,7 +535,7 @@ class PeerConnection(DataConnection):
         _, offset = uint64.deserialize(0, data)
         return offset
 
-    async def receive_data(self, n_bytes: int, timeout: int = TRANSFER_TIMEOUT) -> Optional[bytes]:
+    async def receive_data(self, n_bytes: int, timeout: float = TRANSFER_TIMEOUT) -> Optional[bytes]:
         """Receives given amount of bytes on the connection.
 
         In case of error the socket will be disconnected. If no data is received
@@ -557,7 +566,7 @@ class PeerConnection(DataConnection):
             else:
                 return data
 
-    async def receive_file(self, file_handle: BinaryIO, filesize: int, callback: Callable[[bytes], None] = None):
+    async def receive_file(self, file_handle: BinaryIO, filesize: int, callback: Optional[Callable[[bytes], None]] = None):
         """Receives a file on the current connection and writes it to the given
         `file_handle`
 
@@ -598,7 +607,7 @@ class PeerConnection(DataConnection):
             await self.disconnect(CloseReason.WRITE_ERROR)
             raise ConnectionWriteError(f"{self.hostname}:{self.port} : write error") from exc
 
-    async def send_file(self, file_handle: BinaryIO, callback: Callable[[bytes], None] = None):
+    async def send_file(self, file_handle: BinaryIO, callback: Optional[Callable[[bytes], None]] = None):
         """Sends a file over the connection. This method makes use of the
         `upload_rate_limiter` to limit how many bytes are being sent at a time.
 

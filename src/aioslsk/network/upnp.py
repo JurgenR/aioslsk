@@ -1,6 +1,7 @@
+from __future__ import annotations
 from functools import partial
 from ipaddress import IPv4Address
-from typing import List
+from typing import List, TYPE_CHECKING
 import logging
 from async_upnp_client.aiohttp import AiohttpRequester
 from async_upnp_client.client_factory import UpnpFactory
@@ -9,12 +10,12 @@ from async_upnp_client.profiles.igd import IgdDevice
 from async_upnp_client.search import async_search
 from async_upnp_client.ssdp import SSDP_IP_V4, SSDP_PORT
 
-from ..settings import Settings
+from ..constants import UPNP_SEARCH_TIMEOUT
+
+if TYPE_CHECKING:
+    from ..settings import Settings
 
 logger = logging.getLogger(__name__)
-
-
-SEARCH_TIMEOUT = 10
 
 
 class UPNP:
@@ -23,14 +24,14 @@ class UPNP:
         self._settings: Settings = settings
         self._factory: UpnpFactory = UpnpFactory(AiohttpRequester())
 
-    async def search_igd_devices(self, source_ip: str) -> List[IgdDevice]:
-        devices = []
+    async def search_igd_devices(self, source_ip: str, timeout: int = UPNP_SEARCH_TIMEOUT) -> List[IgdDevice]:
+        devices: List[IgdDevice] = []
         logger.info("starting search for IGD devices")
         await async_search(
             partial(self._search_callback, devices),
             source=(source_ip, 0),
             target=(SSDP_IP_V4, SSDP_PORT),
-            timeout=SEARCH_TIMEOUT
+            timeout=timeout
         )
         logger.debug(f"found {len(devices)} IGD devices")
         return devices
@@ -122,7 +123,14 @@ class UPNP:
                 internal_port=port,
                 enabled=True,
                 description='AioSlsk',
-                lease_duration=self._settings.get('network.upnp.lease_duration')
+                lease_duration=self._settings.network.upnp.lease_duration
             )
         except UpnpActionResponseError as exc:
             logger.warning(f"failed to map port {port} device : {device.name!r}", exc_info=exc)
+
+    async def unmap_port(self, device: IgdDevice, source_ip: str, port: int):
+        await device.async_delete_port_mapping(
+            remote_host=source_ip,
+            external_port=port,
+            protocol='TCP'
+        )

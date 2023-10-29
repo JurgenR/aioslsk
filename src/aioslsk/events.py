@@ -3,15 +3,17 @@ import asyncio
 from dataclasses import dataclass, field
 import inspect
 import logging
-from typing import Callable, Dict, List, Type, TYPE_CHECKING
+from typing import Callable, Dict, List, Optional, Tuple, Type, TYPE_CHECKING
 
-from .model import ChatMessage, Room, RoomMessage, User, TrackingFlag
+from .room.model import Room, RoomMessage
+from .user.model import ChatMessage, User, TrackingFlag
 from .protocol.primitives import (
     DirectoryData,
     MessageDataclass,
     ItemRecommendation,
 )
 from .search.model import SearchRequest, SearchResult
+from .session import Session
 
 if TYPE_CHECKING:
     from .network.connection import (
@@ -29,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 # Internal functions
 
-def on_message(message_class):
+def on_message(message_class: Type[MessageDataclass]):
     """Decorator for methods listening to specific L{Message} events"""
     def register(event_func):
         event_func._registered_message = message_class
@@ -38,9 +40,9 @@ def on_message(message_class):
     return register
 
 
-def build_message_map(obj) -> Dict[Type[MessageDataclass], Callable]:
+def build_message_map(obj: object) -> Dict[Type[MessageDataclass], Callable]:
     methods = inspect.getmembers(obj, predicate=inspect.ismethod)
-    mapping = {}
+    mapping: Dict[Type[MessageDataclass], Callable] = {}
     for _, method in methods:
         registered_message = getattr(method, '_registered_message', None)
         if registered_message:
@@ -53,13 +55,16 @@ def build_message_map(obj) -> Dict[Type[MessageDataclass], Callable]:
 class EventBus:
 
     def __init__(self):
-        self._events: Dict[Type[Event], List[Callable[[Event], None]]] = dict()
+        self._events: Dict[Type[Event], List[Tuple[int, Callable[[Event], None]]]] = {}
 
-    def register(self, event_class: Type[Event], listener: Callable[[Event], None]):
+    def register(self, event_class: Type[Event], listener: Callable[[Event], None], priority: int = 100):
+        entry = (priority, listener)
         try:
-            self._events[event_class].append(listener)
+            self._events[event_class].append(entry)
         except KeyError:
-            self._events[event_class] = [listener, ]
+            self._events[event_class] = [entry, ]
+
+        self._events[event_class].sort(key=lambda e: e[0])
 
     async def emit(self, event: Event):
         try:
@@ -67,7 +72,7 @@ class EventBus:
         except KeyError:
             pass
         else:
-            for listener in listeners:
+            for _, listener in listeners:
                 try:
                     if asyncio.iscoroutinefunction(listener):
                         await listener(event)
@@ -98,11 +103,17 @@ class ServerDisconnectedEvent(Event):
 
 
 @dataclass(frozen=True)
-class LoginEvent:
-    """Emitted when we got a response to a login call"""
-    is_success: bool
-    greeting: str = None
-    reason: str = None
+class SessionInitializedEvent(Event):
+    """Emitted after successful login"""
+    session: Session
+
+
+@dataclass(frozen=True)
+class SessionDestroyedEvent(Event):
+    """Emitted after the login session has been destroyed (this is always after
+    disconnect)
+    """
+    session: Session
 
 
 @dataclass(frozen=True)
@@ -131,60 +142,90 @@ class RoomMessageEvent(Event):
 
 
 @dataclass(frozen=True)
-class RoomTickersEvent:
+class RoomTickersEvent(Event):
+    """Emitted when a list of tickers has been received for a room"""
     room: Room
     tickers: Dict[str, str]
 
 
 @dataclass(frozen=True)
-class RoomTickerAddedEvent:
+class RoomTickerAddedEvent(Event):
+    """Emitted when a ticker has been added to the room by a user"""
     room: Room
     user: User
     ticker: str
 
 
 @dataclass(frozen=True)
-class RoomTickerRemovedEvent:
-    room: Room
-    user: User
-
-
-@dataclass(frozen=True)
-class UserJoinedRoomEvent(Event):
-    """Emitted when a user joins a chat room"""
-    room: Room
-    user: User
-
-
-@dataclass(frozen=True)
-class UserLeftRoomEvent(Event):
-    """Emitted when a user leaves a chat room"""
+class RoomTickerRemovedEvent(Event):
+    """Emitted when a ticker has been removed from the room by a user"""
     room: Room
     user: User
 
 
 @dataclass(frozen=True)
 class RoomJoinedEvent(Event):
-    """Emitted after we have joined a chat room"""
+    """Emitted after a user joined a chat room
+
+    The value of `user` will be `None` in case it is us who has left the room
+    """
     room: Room
+    user: Optional[User] = None
 
 
 @dataclass(frozen=True)
 class RoomLeftEvent(Event):
-    """Emitted after we have left a chat room"""
+    """Emitted after a user left a chat room
+
+    The value of `user` will be `None` in case it is us who has left the room
+    """
     room: Room
+    user: Optional[User] = None
 
 
 @dataclass(frozen=True)
-class AddedToPrivateRoomEvent(Event):
-    """Emitted when we are added to a private room"""
+class RoomMembershipGrantedEvent(Event):
+    """Emitted when a member has been added to the private room
+
+    The value of `user` will be `None` in case it is us who has been added to
+    the room
+    """
     room: Room
+    member: Optional[User] = None
 
 
 @dataclass(frozen=True)
-class RemovedFromPrivateRoomEvent(Event):
-    """Emitted when we were removed from a private room"""
+class RoomMembershipRevokedEvent(Event):
+    """Emitted when a member has been removed to the private room
+
+    The value of `user` will be `None` in case it is us who has been removed
+    from the room
+    """
     room: Room
+    member: Optional[User] = None
+
+
+@dataclass(frozen=True)
+class RoomOperatorGrantedEvent(Event):
+    """Emitted when a member has been granted operator privileges on a private
+    room
+
+    The value of `user` will be `None` in case it is us who has been granted
+    operator
+    """
+    room: Room
+    member: Optional[User] = None
+
+
+@dataclass(frozen=True)
+class RoomOperatorRevokedEvent(Event):
+    """Emitted when a member had operator privileges revoked on a private room
+
+    The value of `user` will be `None` in case it is us who has been revoked
+    operator
+    """
+    room: Room
+    member: Optional[User] = None
 
 
 @dataclass(frozen=True)
@@ -211,7 +252,7 @@ class SearchRequestReceivedEvent(Event):
 @dataclass(frozen=True)
 class SimilarUsersEvent(Event):
     users: List[User]
-    item: str = None
+    item: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -237,6 +278,19 @@ class UserInterestsEvent(Event):
     user: User
     interests: List[str]
     hated_interests: List[str]
+
+
+@dataclass(frozen=True)
+class PrivilegedUsersEvent(Event):
+    """Emitted when the list of privileged users has been received"""
+    users: List[User]
+
+
+@dataclass(frozen=True)
+class PrivilegedUserAddedEvent(Event):
+    """Emitted when a new privileged user has been added"""
+    users: List[User]
+
 
 # Peer
 
@@ -289,28 +343,14 @@ class MessageReceivedEvent(InternalEvent):
 
 @dataclass(frozen=True)
 class PeerInitializedEvent(InternalEvent):
-    """Emitted when a new connection has been established and the initialization
-    message has been received
+    """Emitted when a new peer connection has been established and the
+    initialization message has been received
     """
     connection: PeerConnection
     requested: bool
-
-
-@dataclass(frozen=True)
-class TrackUserEvent(InternalEvent):
-    username: str
-    flag: TrackingFlag
-
-
-@dataclass(frozen=True)
-class UntrackUserEvent(InternalEvent):
-    username: str
-    flag: TrackingFlag
-
-
-@dataclass(frozen=True)
-class LoginSuccessEvent(InternalEvent):
-    """Emitted when logon was successfully performed"""
+    """Indictes whether the connection was initialized by another user or opened
+    on our request
+    """
 
 
 @dataclass(frozen=True)

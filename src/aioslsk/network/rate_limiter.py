@@ -1,7 +1,6 @@
 from __future__ import annotations
 import asyncio
 import time
-from typing import Type
 
 
 INTERVAL = 0.01
@@ -15,7 +14,7 @@ class RateLimiter:
         self.last_refill: float = 0.0
 
     @classmethod
-    def create_limiter(cls, limit_kbps: int) -> Type[RateLimiter]:
+    def create_limiter(cls, limit_kbps: int) -> RateLimiter:
         """Creates a new `RateLimiter` instance based on the provided
         `limit_kbps`
         """
@@ -32,7 +31,7 @@ class RateLimiter:
         """Refill the bucket"""
         raise NotImplementedError("method 'refill' should be overridden in a subclass")
 
-    def take_tokens(self) -> int:
+    async def take_tokens(self) -> int:
         """Takes tokens from the bucket"""
         raise NotImplementedError("method 'take_tokens' should be overridden in a subclass")
 
@@ -79,7 +78,7 @@ class LimitedRateLimiter(RateLimiter):
 
     def refill(self) -> bool:
         if self.limit_bps == self.bucket:
-            return
+            return False
 
         current_time = time.monotonic()
         if self.bucket < self.limit_bps:

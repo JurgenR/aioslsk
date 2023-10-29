@@ -1,7 +1,7 @@
 import itertools
 import logging
 import re
-from typing import List
+from typing import Generator, List
 
 from .constants import PATH_SEPERATOR_PATTERN
 from .protocol.primitives import Attribute
@@ -29,7 +29,7 @@ def split_remote_path(path: str) -> List[str]:
     return [part for part in re.split(PATH_SEPERATOR_PATTERN, path) if part]
 
 
-def get_duration(attributes: List[Attribute]):
+def get_duration(attributes: List[Attribute]) -> str:
     duration = ''
     for attr in attributes:
         if attr.key == 1:
@@ -40,7 +40,7 @@ def get_duration(attributes: List[Attribute]):
     return duration
 
 
-def get_attribute_string(attributes: List[Attribute]):
+def get_attribute_string(attributes: List[Attribute]) -> str:
     attr_str = []
     for attr in attributes:
         if attr.key == 0:
@@ -55,7 +55,7 @@ def get_attribute_string(attributes: List[Attribute]):
     return ' '.join(attr_str)
 
 
-def ticket_generator(initial: int = 1234) -> int:
+def ticket_generator(initial: int = 1234) -> Generator[int, None, None]:
     idx = initial
     while True:
         idx += 1

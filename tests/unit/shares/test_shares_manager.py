@@ -3,7 +3,7 @@ from aioslsk.exceptions import FileNotFoundError, FileNotSharedError
 from aioslsk.shares.manager import SharesManager, extract_attributes
 from aioslsk.shares.model import DirectoryShareMode, SharedDirectory, SharedItem
 from aioslsk.naming import DefaultNamingStrategy, KeepDirectoryStrategy
-from aioslsk.settings import Settings
+from aioslsk.settings import Settings, SharedDirectorySettingEntry
 
 import mutagen
 import pytest
@@ -29,15 +29,18 @@ ROOT_FILE_2_PATH = os.path.join(SHARED_DIR_PATH, FLAC_FILENAME)
 SUBDIR_FILE_1_PATH = os.path.join(SHARED_DIR_PATH, SUBDIR_FILENAME)
 
 DEFAULT_SETTINGS = {
-    'sharing': {
+    'credentials': {'username': 'user0', 'password': 'pass0'},
+    'shares': {
         'directories': [
-            {'path': SHARED_DIR_PATH,'share_mode': 'everyone'}
+            {'path': SHARED_DIR_PATH, 'share_mode': 'everyone'}
         ]
     },
     'users': {'friends': []}
 }
-SETTINGS_SUBDIR_FRIENDS = Settings({
-    'sharing': {
+
+SETTINGS_SUBDIR_FRIENDS = Settings(**{
+    'credentials': {'username': 'user0', 'password': 'pass0'},
+    'shares': {
         'directories': [
             {'path': SHARED_DIR_PATH, 'share_mode': 'everyone'},
             {'path': SUBDIR_PATH, 'share_mode': 'friends'}
@@ -45,8 +48,9 @@ SETTINGS_SUBDIR_FRIENDS = Settings({
     },
     'users': {'friends': [FRIEND]}
 })
-SETTINGS_SUBDIR_USERS = Settings({
-    'sharing': {
+SETTINGS_SUBDIR_USERS = Settings(**{
+    'credentials': {'username': 'user0', 'password': 'pass0'},
+    'shares': {
         'directories': [
             {'path': SHARED_DIR_PATH, 'share_mode': 'everyone'},
             {'path': SUBDIR_PATH, 'share_mode': 'users', 'users': [USER]}
@@ -71,12 +75,12 @@ async def _load_and_scan(manager: SharesManager):
 
 @pytest.fixture
 def manager(tmp_path):
-    return SharesManager(Settings(DEFAULT_SETTINGS), InternalEventBus())
+    return SharesManager(Settings(**DEFAULT_SETTINGS), InternalEventBus())
 
 
 @pytest.fixture
 def manager_query(tmp_path):
-    manager = SharesManager(Settings(DEFAULT_SETTINGS), InternalEventBus())
+    manager = SharesManager(Settings(**DEFAULT_SETTINGS), InternalEventBus())
     manager._shared_directories = [SHARED_DIRECTORY]
     manager._build_term_map(SHARED_DIRECTORY)
 
@@ -277,14 +281,14 @@ class TestSharesManagerSharedDirectoryManagement:
 
     @pytest.mark.asyncio
     async def test_scan_nestedDirectories(self, manager: SharesManager):
-        manager._settings = Settings({
-            'sharing': {
-                'directories': [
-                    {'path': SHARED_DIR_PATH, 'share_mode': 'everyone'},
-                    {'path': SUBDIR_PATH, 'share_mode': 'friends'}
-                ]
-            }
-        })
+        manager._settings.shares.directories = [
+            SharedDirectorySettingEntry(
+                path=SHARED_DIR_PATH, share_mode=DirectoryShareMode.EVERYONE
+            ),
+            SharedDirectorySettingEntry(
+                path=SUBDIR_PATH, share_mode=DirectoryShareMode.FRIENDS
+            )
+        ]
         manager.load_from_settings()
         assert 2 == len(manager.shared_directories)
 
@@ -304,14 +308,14 @@ class TestSharesManagerSharedDirectoryManagement:
 
     @pytest.mark.asyncio
     async def test_removeSharedDirectory_withSubdir(self, manager: SharesManager):
-        manager._settings = Settings({
-            'sharing': {
-                'directories': [
-                    {'path': SHARED_DIR_PATH, 'share_mode': 'everyone'},
-                    {'path': SUBDIR_PATH, 'share_mode': 'friends'}
-                ]
-            }
-        })
+        manager._settings.shares.directories = [
+            SharedDirectorySettingEntry(
+                path=SHARED_DIR_PATH, share_mode=DirectoryShareMode.EVERYONE
+            ),
+            SharedDirectorySettingEntry(
+                path=SUBDIR_PATH, share_mode=DirectoryShareMode.FRIENDS
+            )
+        ]
         manager.load_from_settings()
         await manager.scan()
         assert 2 == len(manager.shared_directories[0].items)
@@ -418,7 +422,7 @@ class TestSharesManager:
 
         remote_path = list(manager.shared_directories[1].items)[0].get_remote_path()
 
-        item = manager.get_shared_item(remote_path, FRIEND)
+        item = await manager.get_shared_item(remote_path, FRIEND)
         assert item is not None
 
     @pytest.mark.asyncio
@@ -437,11 +441,8 @@ class TestSharesManager:
             download_path = 'C:\\download'
         else:
             download_path = '/home/download'
-        manager._settings = Settings({
-            'sharing': {
-                'download': download_path
-            }
-        })
+        manager._settings.shares.download = download_path
+
         manager.naming_strategies = [
             DefaultNamingStrategy(),
             KeepDirectoryStrategy()

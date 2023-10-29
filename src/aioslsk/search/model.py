@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 import datetime
 from enum import auto, Enum
 import re
-from typing import List
+from typing import List, Optional
 
 from ..protocol.primitives import FileData
 
@@ -80,7 +80,7 @@ class SearchRequest:
     query: str
     search_type: SearchType = SearchType.NETWORK
 
-    room: str = None
-    username: str = None
+    room: Optional[str] = None
+    username: Optional[str] = None
     results: List[SearchResult] = field(default_factory=list)
-    started: float = field(default_factory=datetime.datetime.now)
+    started: datetime.datetime = field(default_factory=datetime.datetime.now)
