@@ -467,12 +467,14 @@ Send a ping to the server to let it know we are still alive (every 5 minutes)
 :Send: No parameters
 
 
+.. _DownloadSpeed:
+
 DownloadSpeed (Code 34)
 -----------------------
 
 Sent by old client after download has completed. No longer used.
 
-:Code: 26 (0x1A)
+:Code: 34 (0x22)
 :Send:
    1. **string**: ticket
    2. **uint32**: speed
@@ -651,6 +653,35 @@ Parameter ``rooms_private_owned_user_count`` / ``rooms_private_user_count`` shou
    7. Array of rooms in which we are operator:
 
       1. **string**: rooms_private_operated
+
+
+.. _ExactFileSearch:
+
+ExactFileSearch (Code 65)
+-------------------------
+
+Used by older clients but doesn't return anything. The ``pathname`` is optional but is still required to be sent.
+
+For the message sending: The first 4 parameters are definitely correct, the client will send 5 bytes however they are always 0.
+
+For the message receiving: message is never seen and is based
+
+:Code: 65 (0x41)
+:Send:
+   1. **uint32**: ticket
+   2. **string**: filename
+   3. **string**: pathname
+   4. **uint64**: filesize
+   5. **uint32**: checksum
+   6. **uint8**: unknown
+:Receive:
+   1. **string**: username
+   2. **uint32**: ticket
+   3. **string**: filename
+   4. **string**: pathname
+   5. **uint64**: filesize
+   6. **uint32**: checksum
+   7. **uint8**: unknown
 
 
 .. _PrivilegedUsers:

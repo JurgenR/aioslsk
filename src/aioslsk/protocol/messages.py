@@ -499,6 +499,30 @@ class RoomList(ServerMessage):
         rooms_private_operated: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
+class ExactFileSearch(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x41)
+        ticket: int = field(metadata={'type': uint32})
+        filename: str = field(metadata={'type': string})
+        pathname: str = field(metadata={'type': string})
+        filesize: int = field(metadata={'type': uint64})
+        checksum: int = field(metadata={'type': uint32})
+        unknown: int = field(metadata={'type': uint8})
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x41)
+        username: str = field(metadata={'type': string})
+        ticket: int = field(metadata={'type': uint32})
+        filename: str = field(metadata={'type': string})
+        pathname: str = field(metadata={'type': string})
+        filesize: int = field(metadata={'type': uint64})
+        checksum: int = field(metadata={'type': uint32})
+        unknown: int = field(metadata={'type': uint8})
+
+
 class AdminMessage(ServerMessage):
 
     @dataclass(order=True)
