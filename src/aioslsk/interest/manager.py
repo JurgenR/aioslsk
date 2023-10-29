@@ -133,8 +133,8 @@ class InterestManager(BaseManager):
             SimilarUsersEvent(
                 item=message.item,
                 users=[
-                    self._user_manager.get_or_create_user(user.username)
-                    for user in message.users
+                    self._user_manager.get_or_create_user(username)
+                    for username in message.usernames
                 ]
             )
         )

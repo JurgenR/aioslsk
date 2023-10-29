@@ -386,7 +386,7 @@ class GetItemSimilarUsersCommand(BaseCommand[GetItemSimilarUsers.Response, List[
         return self
 
     def process_response(self, client: SoulSeekClient, response: GetItemSimilarUsers.Response) -> List[User]:
-        return list(map(client.users.get_or_create_user, response.users))
+        return list(map(client.users.get_or_create_user, response.usernames))
 
 
 class GetSimilarUsersCommand(BaseCommand[GetSimilarUsers.Response, List[User]]):
