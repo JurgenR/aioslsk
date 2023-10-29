@@ -850,7 +850,7 @@ GetSimilarUsers (Code 110)
       2. **uint32**: status
 
 
-.. _GetSimilarUsers:
+.. _GetItemRecommendations:
 
 GetItemRecommendations (Code 111)
 ---------------------------------
@@ -866,7 +866,7 @@ GetItemRecommendations (Code 111)
       2. **uint32**: number
 
 
-.. _ChatRoomTickers:
+.. _GetItemSimilarUsers:
 
 GetItemSimilarUsers (Code 112)
 ------------------------------
@@ -881,7 +881,7 @@ GetItemSimilarUsers (Code 112)
       1. **string**: username
 
 
-.. _GetItemSimilarUsers:
+.. _ChatRoomTickers:
 
 ChatRoomTickers (Code 113)
 --------------------------
