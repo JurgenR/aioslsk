@@ -672,7 +672,7 @@ class GetItemSimilarUsers(ServerMessage):
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x70)
         item: str = field(metadata={'type': string})
-        users: List[SimilarUser] = field(metadata={'type': array, 'subtype': SimilarUser})
+        usernames: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
 class ChatRoomTickers(ServerMessage):

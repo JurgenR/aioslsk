@@ -1390,23 +1390,17 @@ class TestGetItemSimilarUsers:
     def test_GetItemSimilarUsers_Response_serialize(self):
         message = GetItemSimilarUsers.Response(
             item='item0',
-            users=[
-                SimilarUser('user0', 1),
-                SimilarUser('user1', 2)
-            ]
+            usernames=['user0', 'user1']
         )
-        data = bytes.fromhex('2b00000070000000050000006974656d30020000000500000075736572300100000005000000757365723102000000')
+        data = bytes.fromhex('2300000070000000050000006974656d3002000000050000007573657230050000007573657231')
         assert message.serialize() == data
 
     def test_GetItemSimilarUsers_Response_deserialize(self):
         message = GetItemSimilarUsers.Response(
             item='item0',
-            users=[
-                SimilarUser('user0', 1),
-                SimilarUser('user1', 2)
-            ]
+            usernames=['user0', 'user1']
         )
-        data = bytes.fromhex('2b00000070000000050000006974656d30020000000500000075736572300100000005000000757365723102000000')
+        data = bytes.fromhex('2300000070000000050000006974656d3002000000050000007573657230050000007573657231')
         assert GetItemSimilarUsers.Response.deserialize(data) == message
 
 

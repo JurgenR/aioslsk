@@ -879,7 +879,6 @@ GetItemSimilarUsers (Code 112)
    2. Array of similar users:
 
       1. **string**: username
-      2. **uint32**: status
 
 
 .. _GetItemSimilarUsers:
