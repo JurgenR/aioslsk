@@ -5,24 +5,24 @@ import inspect
 import logging
 from typing import Callable, Dict, List, Optional, Tuple, Type, TYPE_CHECKING
 
-from .room.model import Room, RoomMessage
-from .user.model import ChatMessage, User, TrackingFlag
+from .room import Room, RoomMessage
+from .user import ChatMessage, User
 from .protocol.primitives import (
     DirectoryData,
     MessageDataclass,
     ItemRecommendation,
 )
-from .search.model import SearchRequest, SearchResult
+from .search import SearchRequest, SearchResult
 from .session import Session
 
 if TYPE_CHECKING:
-    from .network.connection import (
+    from .network import (
         Connection,
         ConnectionState,
         CloseReason,
         PeerConnection,
     )
-    from .transfer.model import Transfer
+    from .transfer import Transfer
     from .transfer.state import TransferState
 
 

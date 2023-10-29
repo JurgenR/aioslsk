@@ -3,7 +3,7 @@ import logging
 from typing import Dict, List, Optional, Union
 
 from ..base_manager import BaseManager
-from ..network.connection import ConnectionState, ServerConnection
+from ..network import ConnectionState, ServerConnection
 from ..events import (
     build_message_map,
     on_message,
@@ -34,8 +34,8 @@ from ..protocol.messages import (
     RemoveUser,
     SetStatus,
 )
-from .model import ChatMessage, User, UserStatus, TrackingFlag
-from ..network.network import Network
+from . import ChatMessage, User, UserStatus, TrackingFlag
+from ..network import Network
 from ..settings import Settings
 from ..session import Session
 
