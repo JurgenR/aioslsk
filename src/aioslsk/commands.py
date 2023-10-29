@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import time
 from typing import Generic, List, Optional, TypeVar, Union, Tuple, TYPE_CHECKING
 
-from .exceptions import AuthenticationError, NoSuchUserError
+from .exceptions import NoSuchUserError
 from .protocol.messages import (
     AddHatedInterest,
     AddInterest,
@@ -20,7 +20,6 @@ from .protocol.messages import (
     GetSimilarUsers,
     GetUserStats,
     GetUserStatus,
-    Login,
     PrivateRoomAddOperator,
     PrivateRoomRemoveOperator,
     PrivateRoomAddUser,
@@ -35,7 +34,7 @@ from .protocol.messages import (
     TogglePrivateRooms,
     UserSearch,
 )
-from .protocol.primitives import calc_md5, ItemRecommendation, MessageDataclass, UserStats
+from .protocol.primitives import ItemRecommendation, MessageDataclass, UserStats
 from .network.network import ExpectedResponse
 from .network.connection import ServerConnection
 from .user.model import User, UserStatus
@@ -51,8 +50,6 @@ RT = TypeVar('RT')
 """Response value type"""
 
 Recommendations = Tuple[List[ItemRecommendation], List[ItemRecommendation]]
-LoginValues = Tuple[str, str, bool]
-"""Values returned on successful login: greeting, IP address, privileged"""
 
 
 class BaseCommand(ABC, Generic[RC, RT]):
@@ -668,38 +665,3 @@ class AddUserCommand(BaseCommand[AddUser.Response, User]):
         else:
             raise NoSuchUserError(
                 f"user {self.username!r} does not exist on the server")
-
-
-class LoginCommand(BaseCommand[Login.Response, LoginValues]):
-
-    def __init__(self, username: str, password: str, client_version: int = 157, minor_version: int = 100):
-        super().__init__()
-        self.username: str = username
-        self.password: str = password
-        self.client_version: int = client_version
-        self.minor_version: int = minor_version
-
-    async def send(self, client: SoulSeekClient):
-        await client.network.send_server_messages(
-            Login.Request(
-                username=self.username,
-                password=self.password,
-                client_version=self.client_version,
-                md5hash=calc_md5(self.username + self.password),
-                minor_version=self.minor_version
-            )
-        )
-
-    def response(self) -> 'LoginCommand':
-        self.response_future = ExpectedResponse(
-            ServerConnection,
-            Login.Response
-        )
-        return self
-
-    def process_response(self, client: SoulSeekClient, response: Login.Response) -> LoginValues:
-        if response.success:
-            return (response.greeting, response.ip, response.privileged)
-        else:
-            raise AuthenticationError(
-                response.reason, f"failed to login with username {self.username!r}")

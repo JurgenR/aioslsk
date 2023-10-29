@@ -307,7 +307,15 @@ class DataConnection(Connection):
 
         return header + message
 
+    async def receive_message_object(self) -> Optional[MessageDataclass]:
+        message_data = await self.receive_message()
+        if message_data:
+            return self.decode_message_data(message_data)
+        else:
+            return None
+
     async def receive_message(self) -> Optional[bytes]:
+        """Receives a single raw message"""
         return await self._read(self._read_message)
 
     def decode_message_data(self, data: bytes) -> MessageDataclass:
@@ -413,7 +421,8 @@ class DataConnection(Connection):
         :raise ConnectionWriteError: error or timeout occured during writing
         """
         if self._is_closing():
-            logger.warning(f"{self.hostname}:{self.port} : not sending message, connection is closing : {message!r}")
+            logger.warning(
+                f"{self.hostname}:{self.port} : not sending message, connection is closing / closed : {message!r}")
             return
 
         logger.debug(f"{self.hostname}:{self.port} : send message : {message!r}")
@@ -454,7 +463,7 @@ class ServerConnection(DataConnection):
 
     async def connect(self, timeout: float = SERVER_CONNECT_TIMEOUT):
         await super().connect(timeout=timeout)
-        self.start_reader_task()
+        # self.start_reader_task()
 
     def deserialize_message(self, message_data: bytes) -> MessageDataclass:
         return ServerMessage.deserialize_response(message_data)

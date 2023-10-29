@@ -4,7 +4,7 @@ import logging
 from typing import List, Optional, Union
 
 from .base_manager import BaseManager
-from .commands import BaseCommand, LoginCommand
+from .commands import BaseCommand
 from .distributed import DistributedNetwork
 from .events import (
     build_message_map,
@@ -15,13 +15,15 @@ from .events import (
     SessionDestroyedEvent,
     SessionInitializedEvent,
 )
-from .exceptions import InvalidSessionError
+from .exceptions import AioSlskException, AuthenticationError, InvalidSessionError
 from .interest.manager import InterestManager
 from .shares.cache import SharesCache, SharesNullCache
 from .shares.manager import SharesManager
 from .network.connection import ConnectionState, ServerConnection
 from .network.network import Network
 from .peer import PeerManager
+from .protocol.messages import Login
+from .protocol.primitives import calc_md5
 from .room.manager import RoomManager
 from .search.manager import SearchManager
 from .server import ServerManager
@@ -137,22 +139,37 @@ class SoulSeekClient:
         :raise AuthenticationError: When authentication failed
         """
         username = self.settings.credentials.username
-        greeting, ip, _ = await self.execute(LoginCommand(
-            username,
-            self.settings.credentials.password,
-            client_version=client_version,
-            minor_version=minor_version
-        ).response())
+        password = self.settings.credentials.password
+
+        # Send the response and wait for a single
+        await self.network.send_server_messages(
+            Login.Request(
+                username=username,
+                password=password,
+                client_version=client_version,
+                md5hash=calc_md5(username + password),
+                minor_version=minor_version
+            )
+        )
+
+        response = await self.network.server_connection.receive_message_object()
+        if not isinstance(response, Login.Response):
+            raise AioSlskException(
+                f"expected login response from server but got : {response}")
+
+        if not response.success:
+            raise AuthenticationError(f"authentication failed for user : {username}")
 
         self.session = Session(
             user=self.users.get_or_create_user(username),
-            ip_address=ip,
-            greeting=greeting,
+            ip_address=response.ip,
+            greeting=response.greeting,
             client_version=client_version,
             minor_version=minor_version
         )
-        logger.debug("setting session from client")
         await self._internal_events.emit(SessionInitializedEvent(self.session))
+
+        self.network.server_connection.start_reader_task()
 
     async def run_until_stopped(self):
         await self._stop_event.wait()
