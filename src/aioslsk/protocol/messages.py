@@ -1145,9 +1145,9 @@ class PeerUserInfoReply(PeerMessage):
         description: str = field(metadata={'type': string})
         has_picture: bool = field(metadata={'type': boolean})
         picture: Optional[str] = field(default=None, metadata={'type': string, 'if_true': 'has_picture'})
-        upload_slots: Optional[int] = field(default=0, metadata={'type': uint32})
-        queue_size: Optional[int] = field(default=0, metadata={'type': uint32})
-        has_slots_free: Optional[bool] = field(default=False, metadata={'type': boolean})
+        upload_slots: int = field(default=0, metadata={'type': uint32})
+        queue_size: int = field(default=0, metadata={'type': uint32})
+        has_slots_free: bool = field(default=False, metadata={'type': boolean})
 
 
 class PeerDirectoryContentsRequest(PeerMessage):

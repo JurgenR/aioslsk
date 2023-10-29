@@ -18,6 +18,12 @@ from .protocol.messages import (
     GetPeerAddress,
     GetRecommendations,
     GetSimilarUsers,
+    PeerSharesReply,
+    PeerSharesRequest,
+    PeerDirectoryContentsReply,
+    PeerDirectoryContentsRequest,
+    PeerUserInfoRequest,
+    PeerUserInfoReply,
     GetUserStats,
     GetUserStatus,
     PrivateRoomAddOperator,
@@ -34,9 +40,14 @@ from .protocol.messages import (
     TogglePrivateRooms,
     UserSearch,
 )
-from .protocol.primitives import ItemRecommendation, MessageDataclass, UserStats
+from .protocol.primitives import (
+    DirectoryData,
+    ItemRecommendation,
+    MessageDataclass,
+    UserStats
+)
 from .network.network import ExpectedResponse
-from .network.connection import ServerConnection
+from .network.connection import PeerConnection, ServerConnection
 from .user.model import User, UserStatus
 from .room.model import Room, RoomMessage
 
@@ -665,3 +676,81 @@ class AddUserCommand(BaseCommand[AddUser.Response, User]):
         else:
             raise NoSuchUserError(
                 f"user {self.username!r} does not exist on the server")
+
+
+class PeerGetUserInfoCommand(BaseCommand[PeerUserInfoReply.Request, User]):
+
+    def __init__(self, username: str):
+        super().__init__()
+        self.username: str = username
+
+    async def send(self, client: SoulSeekClient):
+        await client.network.send_peer_messages(
+            self.username, PeerUserInfoRequest.Request()
+        )
+
+    def response(self) -> 'PeerGetUserInfoCommand':
+        self.response_future = ExpectedResponse(
+            PeerConnection,
+            PeerUserInfoReply.Request,
+            peer=self.username,
+        )
+        return self
+
+    def process_response(self, client: SoulSeekClient, response: PeerUserInfoReply.Request) -> User:
+        return client.users.get_or_create_user(self.username)
+
+
+class PeerGetSharesCommand(BaseCommand[PeerSharesReply.Request, Tuple[List[DirectoryData], List[DirectoryData]]]):
+
+    def __init__(self, username: str):
+        super().__init__()
+        self.username: str = username
+
+    async def send(self, client: SoulSeekClient):
+        await client.network.send_peer_messages(
+            self.username, PeerSharesRequest.Request()
+        )
+
+    def response(self) -> 'PeerGetSharesCommand':
+        self.response_future = ExpectedResponse(
+            PeerConnection,
+            PeerSharesReply.Request,
+            peer=self.username
+        )
+        return self
+
+    def process_response(
+            self, client: SoulSeekClient, response: PeerSharesReply.Request) -> Tuple[List[DirectoryData], List[DirectoryData]]:
+        locked_dirs = response.locked_directories or []
+        return response.directories, locked_dirs
+
+
+class PeerGetDirectoryContentCommand(BaseCommand[PeerDirectoryContentsReply.Request, List[DirectoryData]]):
+
+    def __init__(self, username: str, directory: str):
+        super().__init__()
+        self.username: str = username
+        self.directory: str = directory
+        self._ticket: Optional[int] = None
+
+    async def send(self, client: SoulSeekClient):
+        self._ticket = next(client._ticket_generator)
+        await client.network.send_peer_messages(
+            self.username, PeerDirectoryContentsRequest.Request(self._ticket, self.directory)
+        )
+
+    def response(self) -> 'PeerGetDirectoryContentCommand':
+        self.response_future = ExpectedResponse(
+            PeerConnection,
+            PeerDirectoryContentsReply.Request,
+            peer=self.username,
+            fields={
+                'ticket': self._ticket,
+                'directory': self.directory
+            }
+        )
+        return self
+
+    def process_response(self, client: SoulSeekClient, response: PeerDirectoryContentsReply.Request) -> List[DirectoryData]:
+        return response.directories

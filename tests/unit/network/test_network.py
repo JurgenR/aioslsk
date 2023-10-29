@@ -14,12 +14,6 @@ DEFAULT_SETTINGS = {
         'username': 'user0',
         'password': 'pw'
     },
-    'shares': {
-        'limits': {
-            'upload_speed_kbps': 0,
-            'download_speed_kbps': 0
-        }
-    },
     'network': {
         'server': {
             'hostname': 'server.slsk.org',
@@ -35,6 +29,10 @@ DEFAULT_SETTINGS = {
         },
         'peer': {
             'obfuscate': False
+        },
+        'limits': {
+            'upload_speed_kbps': 0,
+            'download_speed_kbps': 0
         }
     },
     'debug': {

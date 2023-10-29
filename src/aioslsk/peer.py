@@ -58,39 +58,6 @@ class PeerManager(BaseManager):
         self._internal_event_bus.register(
             MessageReceivedEvent, self._on_message_received)
 
-    # External methods
-    async def get_user_info(self, username: str):
-        """Requests user info from the peer itself
-
-        :param username: name of the peer
-        """
-        await self._network.send_peer_messages(
-            username, PeerUserInfoRequest.Request())
-
-    async def get_user_shares(self, username: str):
-        """Requests the shares of the peer
-
-        :param username: name of the peer
-        """
-        await self._network.send_peer_messages(
-            username, PeerSharesRequest.Request())
-
-    async def get_user_directory(self, username: str, directory: str) -> int:
-        """Requests details for a single directory from a peer
-
-        :param username: name of the peer
-        :param directory: directory to request details for
-        """
-        ticket = next(self._ticket_generator)
-        await self._network.send_peer_messages(
-            username,
-            PeerDirectoryContentsRequest.Request(
-                ticket=ticket,
-                directory=directory
-            )
-        )
-        return ticket
-
     # Peer messages
 
     @on_message(PeerSharesRequest.Request)

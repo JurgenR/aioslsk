@@ -125,7 +125,9 @@ def extract_attributes(filepath: str) -> List[Tuple[int, int]]:
 class SharesManager(BaseManager):
     _ALIAS_LENGTH = 5
 
-    def __init__(self, settings: Settings, internal_event_bus: InternalEventBus, cache: Optional[SharesCache] = None):
+    def __init__(
+            self, settings: Settings, internal_event_bus: InternalEventBus,
+            cache: Optional[SharesCache] = None):
         self._settings: Settings = settings
         self._internal_event_bus: InternalEventBus = internal_event_bus
         self._term_map: Dict[str, WeakSet[SharedItem]] = {}

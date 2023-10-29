@@ -34,7 +34,7 @@ SETTINGS_WITH_INFO = {
             'picture': USER_PICTURE
         }
     },
-    'shares': {
+    'transfers': {
         'limits': {
             'upload_slots': UPLOAD_SLOTS
         }
@@ -114,15 +114,6 @@ class TestPeer:
                 queue_size=QUEUE_SIZE,
                 has_slots_free=HAS_SLOTS_FREE
             ))
-
-    @pytest.mark.asyncio
-    async def test_whenGetUserDirectory_shouldSendRequest(self):
-        manager = self._create_peer_manager()
-
-        ticket = await manager.get_user_directory('user0', 'C:\\dir0')
-        manager._network.send_peer_messages.assert_awaited_once_with('user0', ANY)
-
-        assert isinstance(ticket, int)
 
     @pytest.mark.asyncio
     async def test_whenDirectoryRequestReceived_shouldRespond(self):

@@ -44,11 +44,17 @@ class PeerSettings(BaseModel, validate_assignment=True):
     obfuscate: bool = False
 
 
+class NetworkLimitSettings(BaseModel, validate_assignment=True):
+    upload_speed_kbps: int = 0
+    download_speed_kbps: int = 0
+
+
 class NetworkSettings(BaseModel, validate_assignment=True):
     server: ServerSettings = Field(default_factory=ServerSettings)
     listening: ListeningSettings = Field(default_factory=ListeningSettings)
     peer: PeerSettings = Field(default_factory=PeerSettings)
     upnp: UpnpSettings = Field(default_factory=UpnpSettings)
+    limits: NetworkLimitSettings = Field(default_factory=NetworkLimitSettings)
 
 
 class UserInfoSettings(BaseModel, validate_assignment=True):
@@ -66,16 +72,18 @@ class SearchSettings(BaseModel, validate_assignment=True):
     wishlist: List[WishlistSettingEntry] = Field(default_factory=list)
 
 
-class SharingLimitSettings(BaseModel, validate_assignment=True):
+class TransferLimitSettings(BaseModel, validate_assignment=True):
     upload_slots: int = 2
-    upload_speed_kbps: int = 0
-    download_speed_kbps: int = 0
+
+
+class TransfersSettings(BaseModel, validate_assignment=True):
+    limits: TransferLimitSettings = Field(default_factory=TransferLimitSettings)
 
 
 class SharesSettings(BaseModel, validate_assignment=True):
-    download: str = None
+    scan_on_start: bool = True
+    download: Optional[str] = None
     directories: List[SharedDirectorySettingEntry] = Field(default_factory=list)
-    limits: SharingLimitSettings = Field(default_factory=SharingLimitSettings)
 
 
 class RoomsSettings(BaseModel, validate_assignment=True):
@@ -108,4 +116,5 @@ class Settings(BaseSettings, validate_assignment=True):
     users: UsersSettings = Field(default_factory=UsersSettings)
     rooms: RoomsSettings = Field(default_factory=RoomsSettings)
     interests: InterestsSettings = Field(default_factory=InterestsSettings)
+    transfers: TransfersSettings = Field(default_factory=TransfersSettings)
     debug: DebugSettings = Field(default_factory=DebugSettings)

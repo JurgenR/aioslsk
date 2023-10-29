@@ -137,9 +137,9 @@ class Network:
 
         # Rate limiters
         self._upload_rate_limiter: RateLimiter = RateLimiter.create_limiter(
-            self._settings.shares.limits.upload_speed_kbps)
+            self._settings.network.limits.upload_speed_kbps)
         self._download_rate_limiter: RateLimiter = RateLimiter.create_limiter(
-            self._settings.shares.limits.download_speed_kbps)
+            self._settings.network.limits.download_speed_kbps)
 
         # Debugging
         self._ip_overrides: Dict[str, str] = self._settings.debug.ip_overrides
@@ -278,9 +278,9 @@ class Network:
     def load_speed_limits(self):
         """(Re)loads the speed limits from the settings"""
         self.set_download_speed_limit(
-            self._settings.shares.limits.download_speed_kbps)
+            self._settings.network.limits.download_speed_kbps)
         self.set_upload_speed_limit(
-            self._settings.shares.limits.upload_speed_kbps)
+            self._settings.network.limits.upload_speed_kbps)
 
     def set_upload_speed_limit(self, limit_kbps: int):
         """Modifies the upload speed limit. Passing 0 will set the upload speed

@@ -170,7 +170,7 @@ class RoomJoinedEvent(Event):
     The value of `user` will be `None` in case it is us who has left the room
     """
     room: Room
-    user: User = None
+    user: Optional[User] = None
 
 
 @dataclass(frozen=True)
@@ -180,7 +180,7 @@ class RoomLeftEvent(Event):
     The value of `user` will be `None` in case it is us who has left the room
     """
     room: Room
-    user: User = None
+    user: Optional[User] = None
 
 
 @dataclass(frozen=True)
@@ -191,7 +191,7 @@ class RoomMembershipGrantedEvent(Event):
     the room
     """
     room: Room
-    member: User = None
+    member: Optional[User] = None
 
 
 @dataclass(frozen=True)
@@ -202,7 +202,7 @@ class RoomMembershipRevokedEvent(Event):
     from the room
     """
     room: Room
-    member: User = None
+    member: Optional[User] = None
 
 
 @dataclass(frozen=True)
@@ -214,7 +214,7 @@ class RoomOperatorGrantedEvent(Event):
     operator
     """
     room: Room
-    member: User = None
+    member: Optional[User] = None
 
 
 @dataclass(frozen=True)
@@ -225,7 +225,7 @@ class RoomOperatorRevokedEvent(Event):
     operator
     """
     room: Room
-    member: User = None
+    member: Optional[User] = None
 
 
 @dataclass(frozen=True)

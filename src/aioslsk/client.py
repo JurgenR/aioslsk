@@ -100,16 +100,12 @@ class SoulSeekClient:
         self._internal_events.register(
             ConnectionStateChangedEvent, self._on_connection_state_changed)
 
-    async def start(self, scan_shares: bool = True):
-        """Performs a full start up of the client consisting of:
+    async def start(self):
+        """Performs a start up of the client consisting of:
 
         * Calling `load_data` on all defined services
-        * Connecting to the server and opening listening ports
-        * Performs a login with the user credentials defined in the settings
-        * Calling `start` on all defined services
         * Optionally starts a scan of the defined shares
-
-        :param scan_shares: start a shares scan as soon as the client starts
+        * Connecting to the server and opening listening ports
         """
         self.event_loop.set_exception_handler(self._exception_handler)
 
@@ -119,57 +115,10 @@ class SoulSeekClient:
 
         await asyncio.gather(*[svc.load_data() for svc in self.services])
 
-        await self.connect()
-        await self.login()
-
-        if scan_shares:
+        if self.settings.shares.scan_on_start:
             asyncio.create_task(self.shares.scan)
 
-    async def connect(self):
-        """Initializes the network by connecting to the server and opening the
-        configured listening ports
-        """
-        await self.network.initialize()
-
-    async def login(
-            self, client_version: int = CLIENT_VERSION, minor_version: int = MINOR_VERSION):
-        """Performs a logon to the server with the `credentials` defined in the
-        `settings`
-
-        :raise AuthenticationError: When authentication failed
-        """
-        username = self.settings.credentials.username
-        password = self.settings.credentials.password
-
-        # Send the response and wait for a single
-        await self.network.send_server_messages(
-            Login.Request(
-                username=username,
-                password=password,
-                client_version=client_version,
-                md5hash=calc_md5(username + password),
-                minor_version=minor_version
-            )
-        )
-
-        response = await self.network.server_connection.receive_message_object()
-        if not isinstance(response, Login.Response):
-            raise AioSlskException(
-                f"expected login response from server but got : {response}")
-
-        if not response.success:
-            raise AuthenticationError(f"authentication failed for user : {username}")
-
-        self.session = Session(
-            user=self.users.get_or_create_user(username),
-            ip_address=response.ip,
-            greeting=response.greeting,
-            client_version=client_version,
-            minor_version=minor_version
-        )
-        await self._internal_events.emit(SessionInitializedEvent(self.session))
-
-        self.network.server_connection.start_reader_task()
+        await self.connect()
 
     async def run_until_stopped(self):
         await self._stop_event.wait()
@@ -192,6 +141,54 @@ class SoulSeekClient:
 
         await asyncio.gather(*cancelled_tasks, return_exceptions=True)
         await asyncio.gather(*[svc.store_data() for svc in self.services])
+
+    async def connect(self):
+        """Initializes the network by connecting to the server and opening the
+        configured listening ports
+        """
+        await self.network.initialize()
+
+    async def login(
+            self, client_version: int = CLIENT_VERSION, minor_version: int = MINOR_VERSION):
+        """Performs a logon to the server with the `credentials` defined in the
+        `settings`
+
+        :raise AuthenticationError: When authentication failed
+        """
+        username = self.settings.credentials.username
+        password = self.settings.credentials.password
+
+        # Send the login request and wait for the
+        await self.network.send_server_messages(
+            Login.Request(
+                username=username,
+                password=password,
+                client_version=client_version,
+                md5hash=calc_md5(username + password),
+                minor_version=minor_version
+            )
+        )
+
+        response = await self.network.server_connection.receive_message_object()
+        if not isinstance(response, Login.Response):
+            raise AioSlskException(
+                f"expected login response from server but got : {response}")
+
+        if not response.success:
+            raise AuthenticationError(f"authentication failed for user : {username}")
+
+        # Notify all listeners that the session has been initialized
+        self.session = Session(
+            user=self.users.get_or_create_user(username),
+            ip_address=response.ip,
+            greeting=response.greeting,
+            client_version=client_version,
+            minor_version=minor_version
+        )
+        await self._internal_events.emit(SessionInitializedEvent(self.session))
+
+        # Finally start up the reader loop for the server
+        self.network.server_connection.start_reader_task()
 
     def _exception_handler(self, loop, context):
         message = f"unhandled exception on loop {loop!r} : context : {context!r}"
@@ -250,19 +247,6 @@ class SoulSeekClient:
             _, response = await asyncio.wait_for(
                 command.response_future, timeout=10)
             return command.process_response(self, response)
-
-    # Peer requests
-    async def get_user_info(self, user: Union[str, User]):
-        username = user.name if isinstance(user, User) else user
-        await self.peers.get_user_info(username)
-
-    async def get_user_shares(self, user: Union[str, User]):
-        username = user.name if isinstance(user, User) else user
-        await self.peers.get_user_shares(username)
-
-    async def get_user_directory(self, user: Union[str, User], directory: str):
-        username = user.name if isinstance(user, User) else user
-        await self.peers.get_user_directory(username, directory)
 
     # Creation methods
 

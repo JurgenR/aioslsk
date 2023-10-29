@@ -25,9 +25,8 @@ from aioslsk.user.manager import UserManager
 FRIEND = 'friend0'
 DEFAULT_SETTINGS = {
     'credentials': {'username': 'user0', 'password': 'pass0'},
-    'shares': {
+    'transfers': {
         'limits': {
-            'download_slots': 2,
             'upload_slots': 2
         }
     },
