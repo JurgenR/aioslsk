@@ -46,3 +46,10 @@ class SharesShelveCache:
     def write(self, shared_directories: List[SharedDirectory]):
         with shelve.open(self._get_index_path(), 'c') as db:
             db['index'] = shared_directories
+
+
+__all__ = [
+    'SharesCache',
+    'SharesNullCache',
+    'SharesShelveCache',
+]

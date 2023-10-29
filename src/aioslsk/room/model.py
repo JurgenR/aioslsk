@@ -52,3 +52,8 @@ class RoomMessage:
     user: User
     message: str
     room: Room
+
+__all__ = [
+    'Room',
+    'RoomMessage',
+]

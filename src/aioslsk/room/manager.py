@@ -389,3 +389,6 @@ class RoomManager(BaseManager):
         )
         if not self._settings.rooms.auto_join:
             await self.auto_join_rooms()
+
+
+__all__ = ['RoomManager']

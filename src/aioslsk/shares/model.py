@@ -101,3 +101,10 @@ class SharedItem:
         fields = self.__dict__.copy()
         fields['shared_directory'] = None
         return fields
+
+
+__all__ = [
+    'DirectoryShareMode',
+    'SharedDirectory',
+    'SharedItem',
+]

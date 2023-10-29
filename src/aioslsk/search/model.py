@@ -84,3 +84,12 @@ class SearchRequest:
     username: Optional[str] = None
     results: List[SearchResult] = field(default_factory=list)
     started: datetime.datetime = field(default_factory=datetime.datetime.now)
+
+
+__all__ = [
+    'ReceivedSearch',
+    'SearchQuery',
+    'SearchRequest',
+    'SearchResult',
+    'SearchType',
+]

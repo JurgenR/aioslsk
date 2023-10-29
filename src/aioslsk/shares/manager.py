@@ -695,3 +695,8 @@ class SharesManager(BaseManager):
     def is_item_locked(self, item: SharedItem, username: str) -> bool:
         """Checks if the shared item is locked for the given `username`"""
         return self.is_directory_locked(item.shared_directory, username)
+
+
+__all__ = [
+    'SharesManager'
+]

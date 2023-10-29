@@ -245,3 +245,8 @@ class UserManager(BaseManager):
 
     async def _on_session_destroyed(self, event: SessionDestroyedEvent):
         self._session = None
+
+
+__all__ = [
+    'UserManager',
+]

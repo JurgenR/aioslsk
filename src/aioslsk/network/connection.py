@@ -641,3 +641,15 @@ class PeerConnection(DataConnection):
             f"hostname={self.hostname!r}, port={self.port}, state={self.state}, "
             f"incoming={self.incoming}, obfuscated={self.obfuscated}, username={self.username!r}, "
             f"connection_state={self.connection_state}, connection_type={self.connection_type!r})")
+
+
+__all__ = [
+    'CloseReason',
+    'Connection',
+    'ConnectionState',
+    'ListeningConnection',
+    'PeerConnection',
+    'PeerConnectionState',
+    'PeerConnectionType',
+    'ServerConnection',
+]

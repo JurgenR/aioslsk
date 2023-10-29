@@ -149,3 +149,8 @@ class InterestManager(BaseManager):
     async def _on_session_initialized(self, event: SessionInitializedEvent):
         logger.debug(f"interests : session initialized : {event.session}")
         await self.advertise_interests()
+
+
+__all__ = [
+    'InterestManager',
+]

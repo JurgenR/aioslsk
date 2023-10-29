@@ -1012,3 +1012,9 @@ class Network:
         if self._upnp_task is not None:
             self._upnp_task.cancel()
             self._upnp_task = None
+
+
+__all__ = [
+    'Network',
+    'ExpectedResponse'
+]

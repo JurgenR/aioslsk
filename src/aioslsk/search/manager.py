@@ -375,3 +375,6 @@ class SearchManager(BaseManager):
             cancelled_tasks.append(wishlist_task)
 
         return cancelled_tasks
+
+
+__all__ = ['SearchManager']

@@ -1133,3 +1133,7 @@ class TransferManager(BaseManager):
             logger.error(f"PeerTransferQueueFailed : could not find transfer for {filename} from {connection.username}")
         else:
             await transfer.state.fail(reason=reason)
+
+__all__ = [
+    'TransferManager',
+]

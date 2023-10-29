@@ -280,3 +280,8 @@ class Transfer:
             f"local_path={self.local_path!r}, direction={self.direction}, "
             f"state={self.state})"
         )
+
+__all__ = [
+    'Transfer',
+    'TransferDirection',
+]
