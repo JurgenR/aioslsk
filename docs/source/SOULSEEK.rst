@@ -432,20 +432,20 @@ Creating a private room:
 2. Receive:
 
   * :ref:`RoomList` : updated list of rooms. See 'Room List' section on what would be expected here
-  * :ref:`PrivateRoomUsers` : list of users in the room (exluding ourself)
+  * :ref:`PrivateRoomMembers` : list of users in the room (exluding ourself)
   * :ref:`PrivateRoomOperators` : list of operators
   * :ref:`UserJoinedRoom` : with our own username
   * :ref:`JoinRoom` : with our own username
   * :ref:`RoomTickers`
 
 .. note::
-   Messages :ref:`PrivateRoomUsers`, :ref:`PrivateRoomOperators` seems to be repeated for private rooms we are already part of
+   Messages :ref:`PrivateRoomMembers`, :ref:`PrivateRoomOperators` seems to be repeated for private rooms we are already part of
 
 .. note::
    Possibly on the server side the joining happens after some of these messages are sent. In the :ref:`RoomList` message the `rooms_private_owned_user_count` is 0, in the PrivateRoomsUsers message the list of users is empty. The
 
 .. note::
-   :ref:`PrivateRoomUsers` returns the users which are part of the room (excluding the owner) while :ref:`RoomList` rooms_private_user_count only return the amount of online users
+   :ref:`PrivateRoomMembers` returns the users which are part of the room (excluding the owner) while :ref:`RoomList` rooms_private_user_count only return the amount of online users
 
 
 Room Leaving
@@ -485,7 +485,7 @@ The added user:
    * :ref:`PrivateRoomGrantMembership` : with room name and user name
    * :ref:`PrivateRoomMembershipGranted` : with room name
    * :ref:`RoomList`
-   * :ref:`PrivateRoomUsers` : users of the room (excluding the owner?)
+   * :ref:`PrivateRoomMembers` : users of the room (excluding the owner?)
    * :ref:`PrivateRoomOperators`
 
 The owner of the room:
@@ -583,7 +583,7 @@ User for which operator was revoked:
    * :ref:`PrivateRoomRevokeOperator` : with room name and user name (got this twice)
    * :ref:`PrivateRoomOperatorRevoked` : with room name
    * :ref:`RoomList`
-   * :ref:`PrivateRoomUsers` : for all private rooms we are part of
+   * :ref:`PrivateRoomMembers` : for all private rooms we are part of
    * :ref:`PrivateRoomOperators` : for all private rooms we are part of
 
 
@@ -632,11 +632,11 @@ Operator dropping membership:
    * :ref:`PrivateRoomMembershipRevoked` : with room name
    * :ref:`LeaveRoom` : with room name
    * :ref:`RoomList`
-   * :ref:`PrivateRoomUsers` : for private rooms we are still part of
+   * :ref:`PrivateRoomMembers` : for private rooms we are still part of
    * :ref:`PrivateRoomOperators` : for private rooms we are still part of
    * :ref:`PrivateRoomOperatorRevoked`
    * :ref:`RoomList`
-   * :ref:`PrivateRoomUsers` : for private rooms
+   * :ref:`PrivateRoomMembers` : for private rooms
    * :ref:`PrivateRoomOperators` : for private rooms
 
 Received by owner:
@@ -668,7 +668,7 @@ Owner dropping ownership:
 
    * :ref:`UserLeftRoom` : with room name and user name for all other users in the room
    * :ref:`RoomList`
-   * :ref:`PrivateRoomUsers` : for private rooms we are still part of
+   * :ref:`PrivateRoomMembers` : for private rooms we are still part of
    * :ref:`PrivateRoomOperators` : for private rooms we are still part of
 
 Received by operator:
@@ -678,11 +678,11 @@ Received by operator:
    * :ref:`PrivateRoomMembershipRevoked` : with room name
    * :ref:`LeaveRoom` : with room name
    * :ref:`RoomList`
-   * :ref:`PrivateRoomUsers` : for private rooms we are still part of
+   * :ref:`PrivateRoomMembers` : for private rooms we are still part of
    * :ref:`PrivateRoomOperators` : for private rooms we are still part of
    * :ref:`PrivateRoomOperatorRevoked`
    * :ref:`RoomList`
-   * :ref:`PrivateRoomUsers` : for private rooms
+   * :ref:`PrivateRoomMembers` : for private rooms
    * :ref:`PrivateRoomOperators` : for private rooms
 
 Received by member:

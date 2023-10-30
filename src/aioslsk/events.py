@@ -234,9 +234,30 @@ class RoomOperatorRevokedEvent(Event):
 
 
 @dataclass(frozen=True)
+class RoomOperatorsEvent(Event):
+    """Emitted when the server sends us a list of operators in a room"""
+    room: Room
+    operators: List[User]
+
+
+@dataclass(frozen=True)
+class RoomMembersEvent(Event):
+    """Emitted when the server sends us a list of members of a room. The list
+    of members always excludes the owner of the room
+    """
+    room: Room
+    members: List[User]
+
+
+@dataclass(frozen=True)
 class PrivateMessageEvent(Event):
     """Emitted when a private message has been received"""
     message: ChatMessage
+
+
+@dataclass(frozen=True)
+class PublicMessageEvent(Event):
+    message: RoomMessage
 
 
 @dataclass(frozen=True)
@@ -294,7 +315,16 @@ class PrivilegedUsersEvent(Event):
 @dataclass(frozen=True)
 class PrivilegedUserAddedEvent(Event):
     """Emitted when a new privileged user has been added"""
-    users: List[User]
+    user: User
+
+
+@dataclass(frozen=True)
+class PrivilegesUpdate(Event):
+    """Emitted when we receive a message containing how much time is left on the
+    current user's privileges. If `time_left` is 0 the current user has no
+    privileges
+    """
+    time_left: int
 
 
 # Peer

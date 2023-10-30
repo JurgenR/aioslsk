@@ -11,17 +11,20 @@ from ..events import (
     InternalEventBus,
     MessageReceivedEvent,
     on_message,
+    PublicMessageEvent,
     RoomJoinedEvent,
     RoomLeftEvent,
     RoomListEvent,
+    RoomMembersEvent,
+    RoomMembershipGrantedEvent,
+    RoomMembershipRevokedEvent,
     RoomMessageEvent,
+    RoomOperatorGrantedEvent,
+    RoomOperatorRevokedEvent,
+    RoomOperatorsEvent,
     RoomTickerAddedEvent,
     RoomTickerRemovedEvent,
     RoomTickersEvent,
-    RoomOperatorGrantedEvent,
-    RoomOperatorRevokedEvent,
-    RoomMembershipGrantedEvent,
-    RoomMembershipRevokedEvent,
     SessionInitializedEvent,
     UserInfoEvent,
 )
@@ -36,7 +39,7 @@ from ..protocol.messages import (
     UserLeftRoom,
     PrivateRoomGrantMembership,
     PrivateRoomRevokeMembership,
-    PrivateRoomUsers,
+    PrivateRoomMembers,
     PrivateRoomMembershipGranted,
     PrivateRoomOperators,
     PrivateRoomOperatorGranted,
@@ -44,6 +47,7 @@ from ..protocol.messages import (
     PrivateRoomGrantOperator,
     PrivateRoomRevokeOperator,
     PrivateRoomMembershipRevoked,
+    PublicChatMessage,
     TogglePrivateRoomInvites,
     RoomList,
 )
@@ -138,6 +142,19 @@ class RoomManager(BaseManager):
         )
 
         await self._event_bus.emit(RoomMessageEvent(room_message))
+
+    @on_message(PublicChatMessage.Response)
+    async def _on_public_chat_message(self, message: PublicChatMessage.Response, connection: ServerConnection):
+        user = self._user_manager.get_or_create_user(message.username)
+        room = self.get_or_create_room(message.room)
+        public_message = RoomMessage(
+            timestamp=int(time.time()),
+            room=room,
+            user=user,
+            message=message.message
+        )
+
+        await self._event_bus.emit(PublicMessageEvent(public_message))
 
     @on_message(UserJoinedRoom.Response)
     async def _on_user_joined_room(self, message: UserJoinedRoom.Response, connection: ServerConnection):
@@ -295,18 +312,24 @@ class RoomManager(BaseManager):
         await self._event_bus.emit(
             RoomMembershipRevokedEvent(room=room))
 
-    @on_message(PrivateRoomUsers.Response)
-    async def _on_private_room_users(self, message: PrivateRoomUsers.Response, connection: ServerConnection):
+    @on_message(PrivateRoomMembers.Response)
+    async def _on_private_room_users(self, message: PrivateRoomMembers.Response, connection: ServerConnection):
         room = self.get_or_create_room(message.room, private=True)
         room.members = list(
             map(self._user_manager.get_or_create_user, message.usernames)
         )
+
+        await self._event_bus.emit(
+            RoomMembersEvent(room, room.members))
 
     @on_message(PrivateRoomOperators.Response)
     async def _on_private_room_operators(self, message: PrivateRoomOperators.Response, connection: ServerConnection):
         room = self.get_or_create_room(message.room, private=True)
         room.operators = list(
             map(self._user_manager.get_or_create_user, message.usernames))
+
+        await self._event_bus.emit(
+            RoomOperatorsEvent(room, room.operators))
 
     @on_message(PrivateRoomOperatorGranted.Response)
     async def _on_private_room_operator_added(self, message: PrivateRoomOperatorGranted.Response, connection: ServerConnection):

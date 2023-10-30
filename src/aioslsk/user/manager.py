@@ -16,6 +16,7 @@ from ..events import (
     PrivateMessageEvent,
     PrivilegedUsersEvent,
     PrivilegedUserAddedEvent,
+    PrivilegesUpdate,
     UserInfoEvent,
     UserStatusEvent,
     SessionInitializedEvent,
@@ -174,6 +175,9 @@ class UserManager(BaseManager):
     @on_message(CheckPrivileges.Response)
     async def _on_check_privileges(self, message: CheckPrivileges.Response, connection: ServerConnection):
         self.privileges_time_left = message.time_left
+        self._session.privileges_time_left = message.time_left
+
+        await self._event_bus.emit(PrivilegesUpdate(message.time_left))
 
     @on_message(PrivilegedUsers.Response)
     async def _on_privileged_users(self, message: PrivilegedUsers.Response, connection: ServerConnection):
