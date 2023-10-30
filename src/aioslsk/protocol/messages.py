@@ -367,7 +367,7 @@ class Ping(ServerMessage):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x20)
 
 
-class DownloadSpeed(ServerMessage):
+class SendDownloadSpeed(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -520,7 +520,6 @@ class ExactFileSearch(ServerMessage):
         pathname: str = field(metadata={'type': string})
         filesize: int = field(metadata={'type': uint64})
         checksum: int = field(metadata={'type': uint32})
-        unknown: int = field(metadata={'type': uint8})
 
 
 class AdminMessage(ServerMessage):
@@ -528,6 +527,43 @@ class AdminMessage(ServerMessage):
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x42)
+        message: str = field(metadata={'type': string})
+
+
+class GetUserList(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x43)
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x43)
+        users: List[str] = field(metadata={'type': array, 'subtype': string})
+        users_status: List[int] = field(metadata={'type': array, 'subtype': uint32})
+        users_stats: List[UserStats] = field(metadata={'type': array, 'subtype': UserStats})
+        users_slots_free: List[int] = field(metadata={'type': array, 'subtype': uint32})
+        users_countries: List[str] = field(metadata={'type': array, 'subtype': string})
+
+
+class TunneledMessage(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x44)
+        username: str = field(metadata={'type': string})
+        ticket: int = field(metadata={'type': uint32})
+        code: int = field(metadata={'type': uint32})
+        message: str = field(metadata={'type': string})
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x44)
+        username: str = field(metadata={'type': string})
+        ticket: int = field(metadata={'type': uint32})
+        code: int = field(metadata={'type': uint32})
+        ip: str = field(metadata={'type': ipaddr})
+        port: int = field(metadata={'type': uint32})
         message: str = field(metadata={'type': string})
 
 

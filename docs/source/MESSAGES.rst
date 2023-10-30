@@ -467,10 +467,10 @@ Send a ping to the server to let it know we are still alive (every 5 minutes)
 :Send: No parameters
 
 
-.. _DownloadSpeed:
+.. _SendDownloadSpeed:
 
-DownloadSpeed (Code 34)
------------------------
+SendDownloadSpeed (Code 34)
+---------------------------
 
 Sent by old client after download has completed. No longer used.
 
@@ -682,6 +682,71 @@ For the message receiving: message is never seen and is based
    5. **uint64**: filesize
    6. **uint32**: checksum
    7. **uint8**: unknown
+
+
+.. _AdminMessage:
+
+AdminMessage (Code 66)
+----------------------
+
+Sent by the admin when the server is going down for example
+
+:Code: 66 (0x42)
+:Receive:
+   1. **string**: message
+
+
+.. _GetUserList:
+
+GetUserList (Code 67)
+---------------------
+
+Gets all users on the server, no longer used
+
+:Code: 67 (0x43)
+:Send: Nothing
+:Receive:
+   1. Array of usernames:
+
+      1. **string**: users
+
+   2. Array of user statuses:
+
+      1. **uint32**: users_status
+
+   3. Array of user stats:
+
+      1. **UserStats**: users_stats
+
+   4. Array of upload slots free:
+
+      1. **uint32**: users_slots_free
+
+   5. Array of user countries:
+
+      1. **string**: users_countries
+
+
+.. _TunneledMessage:
+
+TunneledMessage (Code 68)
+-------------------------
+
+Tunnel a message through the server to a user
+
+:Code: 68 (0x44)
+:Send:
+   1. **string**: username
+   2. **uint32**: ticket
+   3. **uint32**: code
+   4. **string**: message
+:Receive:
+   1. **string**: username
+   2. **uint32**: ticket
+   3. **uint32**: code
+   4. **ip**: ip
+   5. **uint32**: port
+   6. **string**: message
 
 
 .. _PrivilegedUsers:

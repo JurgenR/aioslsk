@@ -15,6 +15,7 @@ from aioslsk.protocol.messages import (
     AddHatedInterest,
     AddPrivilegedUser,
     AddUser,
+    AdminMessage,
     BranchLevel,
     BranchRoot,
     CannotConnect,
@@ -37,7 +38,7 @@ from aioslsk.protocol.messages import (
     CheckPrivileges,
     ChildDepth,
     ConnectToPeer,
-    DownloadSpeed,
+    SendDownloadSpeed,
     DistributedAliveInterval,
     DistributedBranchLevel,
     DistributedBranchRoot,
@@ -45,6 +46,7 @@ from aioslsk.protocol.messages import (
     DistributedMessage,
     DistributedPing,
     DistributedSearchRequest,
+    ExactFileSearch,
     FileSearch,
     FileSearchEx,
     GetGlobalRecommendations,
@@ -57,6 +59,7 @@ from aioslsk.protocol.messages import (
     GetUserPrivileges,
     GetUserStats,
     GetUserStatus,
+    GetUserList,
     GiveUserPrivileges,
     Kicked,
     Login,
@@ -115,6 +118,7 @@ from aioslsk.protocol.messages import (
     SharedFoldersFiles,
     ToggleParentSearch,
     TogglePrivateRooms,
+    TunneledMessage,
     UserSearch,
     WishlistInterval,
     WishlistSearch,
@@ -800,17 +804,17 @@ class TestPing:
         assert Ping.Request.deserialize(data) == message
 
 
-class TestDownloadSpeed:
+class TestSendDownloadSpeed:
 
-    def test_DownloadSpeed_Request_serialize(self):
-        message = DownloadSpeed.Request('user0', 123)
+    def test_SendDownloadSpeed_Request_serialize(self):
+        message = SendDownloadSpeed.Request('user0', 123)
         data = bytes.fromhex('11000000220000000500000075736572307b000000')
         assert message.serialize() == data
 
-    def test_DownloadSpeed_Request_deserialize(self):
-        message = DownloadSpeed.Request('user0', 123)
+    def test_SendDownloadSpeed_Request_deserialize(self):
+        message = SendDownloadSpeed.Request('user0', 123)
         data = bytes.fromhex('11000000220000000500000075736572307b000000')
-        assert DownloadSpeed.Request.deserialize(data) == message
+        assert SendDownloadSpeed.Request.deserialize(data) == message
 
 
 class TestSharedFoldersFiles:
@@ -918,6 +922,158 @@ class TestRoomList:
         assert RoomList.Request.deserialize(data) == message
 
     # TODO: Response tests
+
+
+class TestExactFileSearch:
+
+    def test_ExactFileSearch_Request_serialize(self):
+        message = ExactFileSearch.Request(
+            ticket=1234,
+            filename='myfile.mp3',
+            pathname='mypath',
+            filesize=0x1122334455667788,
+            checksum=0x11223344,
+            unknown=1
+        )
+        data = bytes.fromhex('2d00000041000000d20400000a0000006d7966696c652e6d7033060000006d797061746888776655443322114433221101')
+        assert message.serialize() == data
+
+    def test_ExactFileSearch_Request_deserialize(self):
+        message = ExactFileSearch.Request(
+            ticket=1234,
+            filename='myfile.mp3',
+            pathname='mypath',
+            filesize=0x1122334455667788,
+            checksum=0x11223344,
+            unknown=1
+        )
+        data = bytes.fromhex('2d00000041000000d20400000a0000006d7966696c652e6d7033060000006d797061746888776655443322114433221101')
+        assert ExactFileSearch.Request.deserialize(data) == message
+
+    def test_ExactFileSearch_Response_serialize(self):
+        message = ExactFileSearch.Response(
+            username='user0',
+            ticket=1234,
+            filename='myfile.mp3',
+            pathname='mypath',
+            filesize=0x1122334455667788,
+            checksum=0x11223344
+        )
+        data = bytes.fromhex('3500000041000000050000007573657230d20400000a0000006d7966696c652e6d7033060000006d7970617468887766554433221144332211')
+        assert message.serialize() == data
+
+    def test_ExactFileSearch_Response_deserialize(self):
+        message = ExactFileSearch.Response(
+            username='user0',
+            ticket=1234,
+            filename='myfile.mp3',
+            pathname='mypath',
+            filesize=0x1122334455667788,
+            checksum=0x11223344
+        )
+        data = bytes.fromhex('3500000041000000050000007573657230d20400000a0000006d7966696c652e6d7033060000006d7970617468887766554433221144332211')
+        assert ExactFileSearch.Response.deserialize(data) == message
+
+
+class TestGetUserList:
+
+    def test_GetUserList_Request_serialize(self):
+        message = GetUserList.Request()
+        data = bytes.fromhex('0400000043000000')
+        assert message.serialize() == data
+
+    def test_GetUserList_Request_deserialize(self):
+        message = GetUserList.Request()
+        data = bytes.fromhex('0400000043000000')
+        assert GetUserList.Request.deserialize(data) == message
+
+    def test_GetUserList_Response_serialize(self):
+        message = GetUserList.Response(
+            users=['user0', 'user1'],
+            users_status=[1, 2],
+            users_slots_free=[10, 20],
+            users_stats=[
+                UserStats(avg_speed=100, uploads=1000, shared_file_count=10000, shared_folder_count=100000),
+                UserStats(avg_speed=200, uploads=2000, shared_file_count=20000, shared_folder_count=200000),
+            ],
+            users_countries=['FR', 'GB']
+        )
+        data = bytes.fromhex('6e00000043000000020000000500000075736572300500000075736572310200000001000000020000000200000064000000e80300000000000010270000a0860100c8000000d007000000000000204e0000400d0300020000000a0000001400000002000000020000004652020000004742')
+        assert message.serialize() == data
+
+    def test_GetUserList_Response_deserialize(self):
+        message = GetUserList.Response(
+            users=['user0', 'user1'],
+            users_status=[1, 2],
+            users_slots_free=[10, 20],
+            users_stats=[
+                UserStats(avg_speed=100, uploads=1000, shared_file_count=10000, shared_folder_count=100000),
+                UserStats(avg_speed=200, uploads=2000, shared_file_count=20000, shared_folder_count=200000),
+            ],
+            users_countries=['FR', 'GB']
+        )
+        data = bytes.fromhex('6e00000043000000020000000500000075736572300500000075736572310200000001000000020000000200000064000000e80300000000000010270000a0860100c8000000d007000000000000204e0000400d0300020000000a0000001400000002000000020000004652020000004742')
+        assert GetUserList.Response.deserialize(data) == message
+
+
+class TestAdminMessage:
+
+    def test_AdminMessage_Response_serialize(self):
+        message = AdminMessage.Response('hello')
+        data = bytes.fromhex('0d000000420000000500000068656c6c6f')
+        assert message.serialize() == data
+
+    def test_AdminMessage_Response_deserialize(self):
+        message = AdminMessage.Response('hello')
+        data = bytes.fromhex('0d000000420000000500000068656c6c6f')
+        assert AdminMessage.Response.deserialize(data) == message
+
+
+class TestTunneledMessage:
+
+    def test_TunneledMessage_Request_serialize(self):
+        message = TunneledMessage.Request(
+            username='user0',
+            ticket=1234,
+            code=1,
+            message='hello'
+        )
+        data = bytes.fromhex('1e00000044000000050000007573657230d2040000010000000500000068656c6c6f')
+        assert message.serialize() == data
+
+    def test_TunneledMessage_Request_deserialize(self):
+        message = TunneledMessage.Request(
+            username='user0',
+            ticket=1234,
+            code=1,
+            message='hello'
+        )
+        data = bytes.fromhex('1e00000044000000050000007573657230d2040000010000000500000068656c6c6f')
+        assert TunneledMessage.Request.deserialize(data) == message
+
+    def test_TunneledMessage_Response_serialize(self):
+        message = TunneledMessage.Response(
+            username='user0',
+            ticket=1234,
+            code=1,
+            ip='1.2.3.4',
+            port=4321,
+            message='hello'
+        )
+        data = bytes.fromhex('2600000044000000050000007573657230d20400000100000004030201e11000000500000068656c6c6f')
+        assert message.serialize() == data
+
+    def test_TunneledMessage_Response_deserialize(self):
+        message = TunneledMessage.Response(
+            username='user0',
+            ticket=1234,
+            code=1,
+            ip='1.2.3.4',
+            port=4321,
+            message='hello'
+        )
+        data = bytes.fromhex('2600000044000000050000007573657230d20400000100000004030201e11000000500000068656c6c6f')
+        assert TunneledMessage.Response.deserialize(data) == message
 
 
 class TestPrivilegedUsers:
