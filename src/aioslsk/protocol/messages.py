@@ -210,7 +210,7 @@ class GetUserStatus(ServerMessage):
         privileged: bool = field(metadata={'type': boolean})
 
 
-class ChatRoomMessage(ServerMessage):
+class RoomChatMessage(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -226,7 +226,7 @@ class ChatRoomMessage(ServerMessage):
         message: str = field(metadata={'type': string})
 
 
-class ChatJoinRoom(ServerMessage):
+class JoinRoom(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -253,7 +253,7 @@ class ChatJoinRoom(ServerMessage):
             })
 
 
-class ChatLeaveRoom(ServerMessage):
+class LeaveRoom(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -266,7 +266,7 @@ class ChatLeaveRoom(ServerMessage):
         room: str = field(metadata={'type': string})
 
 
-class ChatUserJoinedRoom(ServerMessage):
+class UserJoinedRoom(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -279,7 +279,7 @@ class ChatUserJoinedRoom(ServerMessage):
         country_code: str = field(metadata={'type': string})
 
 
-class ChatUserLeftRoom(ServerMessage):
+class UserLeftRoom(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -310,7 +310,7 @@ class ConnectToPeer(ServerMessage):
         obfuscated_port: Optional[int] = field(default=None, metadata={'type': uint32, 'optional': True})
 
 
-class ChatPrivateMessage(ServerMessage):
+class PrivateChatMessage(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -328,7 +328,7 @@ class ChatPrivateMessage(ServerMessage):
         is_admin: Optional[bool] = field(default=False, metadata={'type': boolean, 'optional': True})
 
 
-class ChatAckPrivateMessage(ServerMessage):
+class PrivateChatMessageAck(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -779,7 +779,7 @@ class GetItemSimilarUsers(ServerMessage):
         usernames: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
-class ChatRoomTickers(ServerMessage):
+class RoomTickers(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -788,7 +788,7 @@ class ChatRoomTickers(ServerMessage):
         tickers: List[RoomTicker] = field(metadata={'type': array, 'subtype': RoomTicker})
 
 
-class ChatRoomTickerAdded(ServerMessage):
+class RoomTickerAdded(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -798,7 +798,7 @@ class ChatRoomTickerAdded(ServerMessage):
         ticker: str = field(metadata={'type': string})
 
 
-class ChatRoomTickerRemoved(ServerMessage):
+class RoomTickerRemoved(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -807,7 +807,7 @@ class ChatRoomTickerRemoved(ServerMessage):
         username: str = field(metadata={'type': string})
 
 
-class ChatRoomTickerSet(ServerMessage):
+class SetRoomTicker(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -923,7 +923,7 @@ class PrivateRoomUsers(ServerMessage):
         usernames: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
-class PrivateRoomAddUser(ServerMessage):
+class PrivateRoomGrantMembership(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -938,7 +938,7 @@ class PrivateRoomAddUser(ServerMessage):
         username: str = field(metadata={'type': string})
 
 
-class PrivateRoomRemoveUser(ServerMessage):
+class PrivateRoomRevokeMembership(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -969,7 +969,7 @@ class PrivateRoomDropOwnership(ServerMessage):
         room: str = field(metadata={'type': string})
 
 
-class PrivateRoomAdded(ServerMessage):
+class PrivateRoomMembershipGranted(ServerMessage):
 
     @dataclass
     class Response(MessageDataclass):
@@ -977,7 +977,7 @@ class PrivateRoomAdded(ServerMessage):
         room: str = field(metadata={'type': string})
 
 
-class PrivateRoomRemoved(ServerMessage):
+class PrivateRoomMembershipRevoked(ServerMessage):
 
     @dataclass
     class Response(MessageDataclass):
@@ -985,7 +985,7 @@ class PrivateRoomRemoved(ServerMessage):
         room: str = field(metadata={'type': string})
 
 
-class TogglePrivateRooms(ServerMessage):
+class TogglePrivateRoomInvites(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -1006,7 +1006,7 @@ class NewPassword(ServerMessage):
         password: str = field(metadata={'type': string})
 
 
-class PrivateRoomAddOperator(ServerMessage):
+class PrivateRoomGrantOperator(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -1021,7 +1021,7 @@ class PrivateRoomAddOperator(ServerMessage):
         username: str = field(metadata={'type': string})
 
 
-class PrivateRoomRemoveOperator(ServerMessage):
+class PrivateRoomRevokeOperator(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -1036,7 +1036,7 @@ class PrivateRoomRemoveOperator(ServerMessage):
         username: str = field(metadata={'type': string})
 
 
-class PrivateRoomOperatorAdded(ServerMessage):
+class PrivateRoomOperatorGranted(ServerMessage):
 
     @dataclass
     class Response(MessageDataclass):
@@ -1044,7 +1044,7 @@ class PrivateRoomOperatorAdded(ServerMessage):
         room: str = field(metadata={'type': string})
 
 
-class PrivateRoomOperatorRemoved(ServerMessage):
+class PrivateRoomOperatorRevoked(ServerMessage):
 
     @dataclass
     class Response(MessageDataclass):
@@ -1070,14 +1070,14 @@ class ChatMessageUsers(ServerMessage):
         message: str = field(metadata={'type': string})
 
 
-class ChatEnablePublic(ServerMessage):
+class EnablePublicChat(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x96)
 
 
-class ChatDisablePublic(ServerMessage):
+class DisablePublicChat(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):

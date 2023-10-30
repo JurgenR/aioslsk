@@ -10,14 +10,14 @@ from aioslsk.events import (
 from aioslsk.room.model import Room, RoomMessage
 from aioslsk.user.model import UserStatus, TrackingFlag
 from aioslsk.protocol.messages import (
-    ChatJoinRoom,
-    ChatLeaveRoom,
-    ChatUserJoinedRoom,
-    ChatUserLeftRoom,
-    ChatRoomMessage,
-    ChatRoomTickerAdded,
-    ChatRoomTickers,
-    ChatRoomTickerRemoved,
+    RoomChatMessage,
+    JoinRoom,
+    LeaveRoom,
+    RoomTickerAdded,
+    RoomTickerRemoved,
+    RoomTickers,
+    UserJoinedRoom,
+    UserLeftRoom,
 )
 from aioslsk.protocol.primitives import RoomTicker, UserStats
 from aioslsk.room.manager import RoomManager
@@ -180,7 +180,7 @@ class TestRoomManager:
         manager._event_bus.register(RoomTickersEvent, callback)
 
         await manager._on_chat_room_tickers(
-            ChatRoomTickers.Response(
+            RoomTickers.Response(
                 room='room0',
                 tickers=[
                     RoomTicker('user0', 'hello'),
@@ -209,7 +209,7 @@ class TestRoomManager:
         manager._event_bus.register(RoomTickerAddedEvent, callback)
 
         await manager._on_chat_room_ticker_added(
-            ChatRoomTickerAdded.Response(
+            RoomTickerAdded.Response(
                 room='room0', username='user0', ticker='hello'),
             manager._network.server
         )
@@ -234,7 +234,7 @@ class TestRoomManager:
         room.tickers['user0'] = 'hello'
 
         await manager._on_chat_room_ticker_removed(
-            ChatRoomTickerRemoved.Response(room='room0', username='user0'),
+            RoomTickerRemoved.Response(room='room0', username='user0'),
             manager._network.server
         )
         # Check model
@@ -256,7 +256,7 @@ class TestRoomManager:
         manager.get_or_create_room('room0')
 
         await manager._on_chat_room_ticker_removed(
-            ChatRoomTickerRemoved.Response(room='room0', username='user0'),
+            RoomTickerRemoved.Response(room='room0', username='user0'),
             manager._network.server
         )
 
@@ -269,7 +269,7 @@ class TestRoomManager:
         )
 
     @pytest.mark.asyncio
-    async def test_onChatRoomMessage_shouldEmitEvent(self, manager: RoomManager):
+    async def test_onRoomChatMessage_shouldEmitEvent(self, manager: RoomManager):
         callback = AsyncMock()
         manager._event_bus.register(RoomMessageEvent, callback)
 
@@ -278,7 +278,7 @@ class TestRoomManager:
 
         with patch('time.time', return_value=100.0):
             await manager._on_chat_room_message(
-                ChatRoomMessage.Response(
+                RoomChatMessage.Response(
                     room='room0',
                     username='user0',
                     message='hello'
@@ -299,7 +299,7 @@ class TestRoomManager:
 
         user_stats = (1, 2, 3, 4)
         await manager._on_join_room(
-            ChatJoinRoom.Response(
+            JoinRoom.Response(
                 room='room0',
                 users=['user0'],
                 users_status=[UserStatus.ONLINE],
@@ -350,7 +350,7 @@ class TestRoomManager:
         room1.add_user(user0)
 
         await manager._on_leave_room(
-            ChatLeaveRoom.Response(room='room0'),
+            LeaveRoom.Response(room='room0'),
             manager._network.server
         )
 
@@ -375,7 +375,7 @@ class TestRoomManager:
 
         user_stats = (1, 2, 3, 4)
         await manager._on_user_joined_room(
-            ChatUserJoinedRoom.Response(
+            UserJoinedRoom.Response(
                 room='room0',
                 username='user0',
                 status=UserStatus.ONLINE,
@@ -405,7 +405,7 @@ class TestRoomManager:
         room.add_user(user)
 
         await manager._on_user_left_room(
-            ChatUserLeftRoom.Response(room='room0', username='user0'),
+            UserLeftRoom.Response(room='room0', username='user0'),
             manager._network.server
         )
 

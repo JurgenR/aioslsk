@@ -25,8 +25,8 @@ from ..protocol.messages import (
     AddPrivilegedUser,
     AddUser,
     AdminMessage,
-    ChatPrivateMessage,
-    ChatAckPrivateMessage,
+    PrivateChatMessage,
+    PrivateChatMessageAck,
     CheckPrivileges,
     GetUserStatus,
     GetUserStats,
@@ -154,19 +154,19 @@ class UserManager(BaseManager):
     async def _on_kicked(self, message: Kicked.Response, connection: ServerConnection):
         await self._event_bus.emit(KickedEvent())
 
-    @on_message(ChatPrivateMessage.Response)
-    async def _on_private_message(self, message: ChatPrivateMessage.Response, connection: ServerConnection):
+    @on_message(PrivateChatMessage.Response)
+    async def _on_private_message(self, message: PrivateChatMessage.Response, connection: ServerConnection):
         user = self.get_or_create_user(message.username)
         chat_message = ChatMessage(
             id=message.chat_id,
             timestamp=message.timestamp,
             user=user,
             message=message.message,
-            is_admin=message.is_admin
+            is_admin=bool(message.is_admin)
         )
 
         await self._network.send_server_messages(
-            ChatAckPrivateMessage.Request(message.chat_id)
+            PrivateChatMessageAck.Request(message.chat_id)
         )
         await self._event_bus.emit(PrivateMessageEvent(chat_message))
 

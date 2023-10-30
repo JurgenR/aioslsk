@@ -267,9 +267,9 @@ Get the user status, we will get updates on this automatically if we have perfor
    3. **bool**: privileged
 
 
-.. _ChatRoomMessage:
+.. _RoomChatMessage:
 
-ChatRoomMessage (Code 13)
+RoomChatMessage (Code 13)
 -------------------------
 
 Used to send/receive a message to/from a room
@@ -284,10 +284,10 @@ Used to send/receive a message to/from a room
    3. **string**: message
 
 
-.. _ChatJoinRoom:
+.. _JoinRoom:
 
-ChatJoinRoom (Code 14)
-----------------------
+JoinRoom (Code 14)
+------------------
 
 Used when we want to join a chat room
 
@@ -327,10 +327,10 @@ Used when we want to join a chat room
          1. **string**: operator
 
 
-.. _ChatLeaveRoom:
+.. _LeaveRoom:
 
-ChatLeaveRoom (Code 15)
------------------------
+LeaveRoom (Code 15)
+-------------------
 
 Used when we want to leave a chat room. The receive is confirmation
 
@@ -341,10 +341,10 @@ Used when we want to leave a chat room. The receive is confirmation
    1. **string**: room_name
 
 
-.. _ChatUserJoinedRoom:
+.. _UserJoinedRoom:
 
-ChatUserJoinedRoom (Code 16)
-----------------------------
+UserJoinedRoom (Code 16)
+------------------------
 
 Received when a user joined a room
 
@@ -358,10 +358,10 @@ Received when a user joined a room
    6. **string**: country_code
 
 
-.. _ChatUserLeftRoom:
+.. _UserLeftRoom:
 
-ChatUserLeftRoom (Code 17)
---------------------------
+UserLeftRoom (Code 17)
+----------------------
 
 Received when a user left a room
 
@@ -396,9 +396,9 @@ Received when a peer attempted to connect to us but failed and thus is asking us
       2. **uint32**: obfuscated_port
 
 
-.. _ChatPrivateMessage:
+.. _PrivateChatMessage:
 
-ChatPrivateMessage (Code 22)
+PrivateChatMessage (Code 22)
 ----------------------------
 
 Send or receive a private message
@@ -417,9 +417,9 @@ Send or receive a private message
       1. **bool**: is_admin
 
 
-.. _ChatAckPrivateMessage:
+.. _PrivateChatMessageAck:
 
-ChatAckPrivateMessage (Code 23)
+PrivateChatMessageAck (Code 23)
 -------------------------------
 
 Acknowledge we have received a private message
@@ -1048,10 +1048,10 @@ GetItemSimilarUsers (Code 112)
       1. **string**: username
 
 
-.. _ChatRoomTickers:
+.. _RoomTickers:
 
-ChatRoomTickers (Code 113)
---------------------------
+RoomTickers (Code 113)
+----------------------
 
 List of chat room tickers (room wall)
 
@@ -1064,10 +1064,10 @@ List of chat room tickers (room wall)
       2. **string**: ticker
 
 
-.. _ChatRoomTickerAdded:
+.. _RoomTickerAdded:
 
-ChatRoomTickerAdded (Code 114)
-------------------------------
+RoomTickerAdded (Code 114)
+--------------------------
 
 A ticker has been added to the room (room wall)
 
@@ -1078,10 +1078,10 @@ A ticker has been added to the room (room wall)
    3. **string**: ticker
 
 
-.. _ChatRoomTickerRemoved:
+.. _RoomTickerRemoved:
 
-ChatRoomTickerRemoved (Code 115)
---------------------------------
+RoomTickerRemoved (Code 115)
+----------------------------
 
 A ticker has been removed to the room (room wall)
 
@@ -1091,10 +1091,10 @@ A ticker has been removed to the room (room wall)
    2. **string**: username
 
 
-.. _ChatRoomTickerSet:
+.. _SetRoomTicker:
 
-ChatRoomTickerSet (Code 116)
-----------------------------
+SetRoomTicker (Code 116)
+------------------------
 
 Add or update a ticker for a room (room wall)
 
@@ -1249,10 +1249,10 @@ List of all members that are part of the private room (excludes owner)
       1. **string**: username
 
 
-.. _PrivateRoomAddUser:
+.. _PrivateRoomGrantMembership:
 
-PrivateRoomAddUser (Code 134)
------------------------------
+PrivateRoomGrantMembership (Code 134)
+-------------------------------------
 
 Add another user to the private room. Only operators and the owner can add members to a private room.
 
@@ -1267,10 +1267,10 @@ This message is also received by all other members in the private room
    2. **string**: username
 
 
-.. _PrivateRoomRemoveUser:
+.. _PrivateRoomRevokeMembership:
 
-PrivateRoomRemoveUser (Code 135)
---------------------------------
+PrivateRoomRevokeMembership (Code 135)
+--------------------------------------
 
 Remove another user from the private room. Operators can remove regular members but not other operators or the owner. The owner can remove anyone aside from himself (see :ref:`PrivateRoomDropOwnership`).
 
@@ -1309,24 +1309,24 @@ Drops ownership of a private room, this disbands the entire room.
    1. **string**: room
 
 
-.. _PrivateRoomAdded:
+.. _PrivateRoomMembershipGranted:
 
-PrivateRoomAdded (Code 139)
----------------------------
+PrivateRoomMembershipGranted (Code 139)
+---------------------------------------
 
-Received when the current user was added to the private room
+Received when the current user has been granted membership to a private room
 
 :Code: 139 (0x8B)
 :Receive:
    1. **string**: room
 
 
-.. _PrivateRoomRemoved:
+.. _PrivateRoomMembershipRevoked:
 
-PrivateRoomRemoved (Code 140)
------------------------------
+PrivateRoomMembershipRevoked (Code 140)
+---------------------------------------
 
-Received when the current user was removed from the private room
+Received when the current user had its membership revoked from a private room
 
 :Code: 140 (0x8C)
 :Usage:
@@ -1334,12 +1334,12 @@ Received when the current user was removed from the private room
    1. **string**: room
 
 
-.. _TogglePrivateRooms:
+.. _TogglePrivateRoomInvites:
 
-TogglePrivateRooms (Code 141)
------------------------------
+TogglePrivateRoomInvites (Code 141)
+-----------------------------------
 
-Enables or disables private room invites (through :ref:`PrivateRoomAddUser`)
+Enables or disables private room invites (through :ref:`PrivateRoomGrantMembership`)
 
 :Code: 141 (0x8D)
 :Usage:
@@ -1359,10 +1359,10 @@ NewPassword (Code 142)
    1. **string**: password
 
 
-.. _PrivateRoomAddOperator:
+.. _PrivateRoomGrantOperator:
 
-PrivateRoomAddOperator (Code 143)
----------------------------------
+PrivateRoomGrantOperator (Code 143)
+-----------------------------------
 
 Grant operator privileges to a member in a private room. This message will also be received by all other members in the room (irrelevant of if they are online or not).
 
@@ -1376,9 +1376,9 @@ Grant operator privileges to a member in a private room. This message will also 
    2. **string**: username
 
 
-.. _PrivateRoomRemoveOperator:
+.. _PrivateRoomRevokeOperator:
 
-PrivateRoomRemoveOperator (Code 144)
+PrivateRoomRevokeOperator (Code 144)
 ------------------------------------
 
 Revoke operator privileges from a member in a private room. This message will also be received by all other members in the room (irrelevant of if they are online or not).
@@ -1393,10 +1393,10 @@ Revoke operator privileges from a member in a private room. This message will al
    2. **string**: username
 
 
-.. _PrivateRoomOperatorAdded:
+.. _PrivateRoomOperatorGranted:
 
-PrivateRoomOperatorAdded (Code 145)
------------------------------------
+PrivateRoomOperatorGranted (Code 145)
+-------------------------------------
 
 Received when granted operator privileges in a private room
 
@@ -1405,9 +1405,9 @@ Received when granted operator privileges in a private room
    1. **string**: room
 
 
-.. _PrivateRoomOperatorRemoved:
+.. _PrivateRoomOperatorRevoked:
 
-PrivateRoomOperatorRemoved (Code 146)
+PrivateRoomOperatorRevoked (Code 146)
 -------------------------------------
 
 Received when operator privileges in a private room were revoked
@@ -1448,9 +1448,9 @@ Send a private message to a list of users
    2. **string**: message
 
 
-.. _ChatEnablePublic:
+.. _EnablePublicChat:
 
-ChatEnablePublic (Code 150)
+EnablePublicChat (Code 150)
 ---------------------------
 
 Enables public chat, see :ref:`ChatPublicMessage`
@@ -1459,9 +1459,9 @@ Enables public chat, see :ref:`ChatPublicMessage`
 :Send: No parameters
 
 
-.. _ChatDisablePublic:
+.. _DisablePublicChat:
 
-ChatDisablePublic (Code 151)
+DisablePublicChat (Code 151)
 ----------------------------
 
 Disables public chat, see :ref:`ChatPublicMessage`
@@ -1475,7 +1475,7 @@ Disables public chat, see :ref:`ChatPublicMessage`
 ChatPublicMessage (Code 152)
 ----------------------------
 
-Chat message from all public rooms, use :ref:`ChatEnablePublic` and :ref:`ChatDisablePublic` to disable / enable receiving these messages.
+Chat message from all public rooms, use :ref:`EnablePublicChat` and :ref:`DisablePublicChat` to disable / enable receiving these messages.
 
 :Code: 152 (0x98)
 :Receive:

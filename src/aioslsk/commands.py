@@ -8,10 +8,10 @@ from .protocol.messages import (
     AddHatedInterest,
     AddInterest,
     AddUser,
-    ChatJoinRoom,
-    ChatLeaveRoom,
-    ChatPrivateMessage,
-    ChatRoomMessage,
+    JoinRoom,
+    LeaveRoom,
+    PrivateChatMessage,
+    RoomChatMessage,
     GetGlobalRecommendations,
     GetItemRecommendations,
     GetItemSimilarUsers,
@@ -26,11 +26,11 @@ from .protocol.messages import (
     PeerUserInfoReply,
     GetUserStats,
     GetUserStatus,
-    PrivateRoomAddOperator,
-    PrivateRoomRemoveOperator,
-    PrivateRoomAddUser,
-    PrivateRoomRemoveUser,
-    PrivateRoomRemoved,
+    PrivateRoomGrantOperator,
+    PrivateRoomRevokeOperator,
+    PrivateRoomGrantMembership,
+    PrivateRoomRevokeMembership,
+    PrivateRoomMembershipRevoked,
     PrivateRoomDropMembership,
     PrivateRoomDropOwnership,
     RemoveHatedInterest,
@@ -38,7 +38,7 @@ from .protocol.messages import (
     RoomList,
     RoomSearch,
     SetStatus,
-    TogglePrivateRooms,
+    TogglePrivateRoomInvites,
     UserSearch,
 )
 from .protocol.primitives import (
@@ -152,7 +152,7 @@ class GetRoomListCommand(BaseCommand[RoomList.Response, List[Room]]):
         ]
 
 
-class JoinRoomCommand(BaseCommand[ChatJoinRoom.Response, Room]):
+class JoinRoomCommand(BaseCommand[JoinRoom.Response, Room]):
 
     def __init__(self, room: str, private: bool = False):
         super().__init__()
@@ -161,24 +161,24 @@ class JoinRoomCommand(BaseCommand[ChatJoinRoom.Response, Room]):
 
     async def send(self, client: SoulSeekClient):
         await client.network.send_server_messages(
-            ChatJoinRoom.Request(self.room, is_private=self.private)
+            JoinRoom.Request(self.room, is_private=self.private)
         )
 
     def response(self) -> 'JoinRoomCommand':
         self.response_future = ExpectedResponse(
             ServerConnection,
-            ChatJoinRoom.Response,
+            JoinRoom.Response,
             fields={
                 'room': self.room
             }
         )
         return self
 
-    def process_response(self, client: SoulSeekClient, response: ChatJoinRoom.Response) -> Room:
+    def process_response(self, client: SoulSeekClient, response: JoinRoom.Response) -> Room:
         return client.rooms.get_or_create_room(response.room)
 
 
-class LeaveRoomCommand(BaseCommand[ChatLeaveRoom.Response, Room]):
+class LeaveRoomCommand(BaseCommand[LeaveRoom.Response, Room]):
 
     def __init__(self, room: str):
         super().__init__()
@@ -186,24 +186,24 @@ class LeaveRoomCommand(BaseCommand[ChatLeaveRoom.Response, Room]):
 
     async def send(self, client: SoulSeekClient):
         await client.network.send_server_messages(
-            ChatLeaveRoom.Request(self.room)
+            LeaveRoom.Request(self.room)
         )
 
     def response(self) -> 'LeaveRoomCommand':
         self.response_future = ExpectedResponse(
             ServerConnection,
-            ChatLeaveRoom.Response,
+            LeaveRoom.Response,
             fields={
                 'room': self.room
             }
         )
         return self
 
-    def process_response(self, client: SoulSeekClient, response: ChatLeaveRoom.Response) -> Room:
+    def process_response(self, client: SoulSeekClient, response: LeaveRoom.Response) -> Room:
         return client.rooms.get_or_create_room(response.room)
 
 
-class GrantRoomMembershipCommand(BaseCommand[PrivateRoomAddUser.Response, Tuple[Room, User]]):
+class GrantRoomMembershipCommand(BaseCommand[PrivateRoomGrantMembership.Response, Tuple[Room, User]]):
 
     def __init__(self, room: str, username: str):
         super().__init__()
@@ -212,13 +212,13 @@ class GrantRoomMembershipCommand(BaseCommand[PrivateRoomAddUser.Response, Tuple[
 
     async def send(self, client: SoulSeekClient):
         await client.network.send_server_messages(
-            PrivateRoomAddUser.Request(self.room, self.username)
+            PrivateRoomGrantMembership.Request(self.room, self.username)
         )
 
     def response(self) -> 'GrantRoomMembershipCommand':
         self.response_future = ExpectedResponse(
             ServerConnection,
-            PrivateRoomAddUser.Response,
+            PrivateRoomGrantMembership.Response,
             fields={
                 'room': self.room,
                 'username': self.username
@@ -226,14 +226,14 @@ class GrantRoomMembershipCommand(BaseCommand[PrivateRoomAddUser.Response, Tuple[
         )
         return self
 
-    def process_response(self, client: SoulSeekClient, response: PrivateRoomAddUser.Response) -> Tuple[Room, User]:
+    def process_response(self, client: SoulSeekClient, response: PrivateRoomGrantMembership.Response) -> Tuple[Room, User]:
         return (
             client.rooms.get_or_create_room(response.room),
             client.users.get_or_create_user(response.username)
         )
 
 
-class RevokeRoomMembershipCommand(BaseCommand[PrivateRoomRemoveUser.Response, Tuple[Room, User]]):
+class RevokeRoomMembershipCommand(BaseCommand[PrivateRoomRevokeMembership.Response, Tuple[Room, User]]):
 
     def __init__(self, room: str, username: str):
         super().__init__()
@@ -242,13 +242,13 @@ class RevokeRoomMembershipCommand(BaseCommand[PrivateRoomRemoveUser.Response, Tu
 
     async def send(self, client: SoulSeekClient):
         await client.network.send_server_messages(
-            PrivateRoomRemoveUser.Request(self.room, self.username)
+            PrivateRoomRevokeMembership.Request(self.room, self.username)
         )
 
     def response(self) -> 'RevokeRoomMembershipCommand':
         self.response_future = ExpectedResponse(
             ServerConnection,
-            PrivateRoomRemoveUser.Response,
+            PrivateRoomRevokeMembership.Response,
             fields={
                 'room': self.room,
                 'username': self.username
@@ -256,14 +256,14 @@ class RevokeRoomMembershipCommand(BaseCommand[PrivateRoomRemoveUser.Response, Tu
         )
         return self
 
-    def process_response(self, client: SoulSeekClient, response: PrivateRoomRemoveUser.Response) -> Tuple[Room, User]:
+    def process_response(self, client: SoulSeekClient, response: PrivateRoomRevokeMembership.Response) -> Tuple[Room, User]:
         return (
             client.rooms.get_or_create_room(response.room),
             client.users.get_or_create_user(response.username)
         )
 
 
-class DropRoomMembershipCommand(BaseCommand[PrivateRoomRemoved.Response, Room]):
+class DropRoomMembershipCommand(BaseCommand[PrivateRoomMembershipRevoked.Response, Room]):
 
     def __init__(self, room: str):
         super().__init__()
@@ -279,7 +279,7 @@ class DropRoomMembershipCommand(BaseCommand[PrivateRoomRemoved.Response, Room]):
     def response(self) -> 'DropRoomMembershipCommand':
         self.response_future = ExpectedResponse(
             ServerConnection,
-            PrivateRoomRemoved.Response,
+            PrivateRoomMembershipRevoked.Response,
             fields={
                 'room': self.room,
                 'username': self._username
@@ -287,7 +287,7 @@ class DropRoomMembershipCommand(BaseCommand[PrivateRoomRemoved.Response, Room]):
         )
         return self
 
-    def process_response(self, client: SoulSeekClient, response: PrivateRoomRemoved.Response) -> Room:
+    def process_response(self, client: SoulSeekClient, response: PrivateRoomMembershipRevoked.Response) -> Room:
         return client.rooms.get_or_create_room(response.room)
 
 
@@ -435,7 +435,7 @@ class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, Tuple[str, int,
         return (response.ip, response.port, response.obfuscated_port)
 
 
-class GrantRoomOperatorCommand(BaseCommand[PrivateRoomAddOperator.Response, None]):
+class GrantRoomOperatorCommand(BaseCommand[PrivateRoomGrantOperator.Response, None]):
 
     def __init__(self, room: str, username: str):
         super().__init__()
@@ -444,13 +444,13 @@ class GrantRoomOperatorCommand(BaseCommand[PrivateRoomAddOperator.Response, None
 
     async def send(self, client: SoulSeekClient):
         await client.network.send_server_messages(
-            PrivateRoomAddOperator.Request(self.room, self.username)
+            PrivateRoomGrantOperator.Request(self.room, self.username)
         )
 
     def response(self) -> 'GrantRoomOperatorCommand':
         self.response_future = ExpectedResponse(
             ServerConnection,
-            PrivateRoomAddOperator.Response,
+            PrivateRoomGrantOperator.Response,
             fields={
                 'room': self.room,
                 'username': self.username
@@ -458,11 +458,11 @@ class GrantRoomOperatorCommand(BaseCommand[PrivateRoomAddOperator.Response, None
         )
         return self
 
-    def process_response(self, client: SoulSeekClient, response: PrivateRoomAddOperator.Response) -> None:
+    def process_response(self, client: SoulSeekClient, response: PrivateRoomGrantOperator.Response) -> None:
         return None
 
 
-class RevokeRoomOperatorCommand(BaseCommand[PrivateRoomRemoveOperator.Response, None]):
+class RevokeRoomOperatorCommand(BaseCommand[PrivateRoomRevokeOperator.Response, None]):
 
     def __init__(self, room: str, username: str):
         super().__init__()
@@ -471,13 +471,13 @@ class RevokeRoomOperatorCommand(BaseCommand[PrivateRoomRemoveOperator.Response, 
 
     async def send(self, client: SoulSeekClient):
         await client.network.send_server_messages(
-            PrivateRoomRemoveOperator.Request(self.room, self.username)
+            PrivateRoomRevokeOperator.Request(self.room, self.username)
         )
 
     def response(self) -> 'RevokeRoomOperatorCommand':
         self.response_future = ExpectedResponse(
             ServerConnection,
-            PrivateRoomRemoveOperator.Response,
+            PrivateRoomRevokeOperator.Response,
             fields={
                 'room': self.room,
                 'username': self.username
@@ -485,11 +485,11 @@ class RevokeRoomOperatorCommand(BaseCommand[PrivateRoomRemoveOperator.Response, 
         )
         return self
 
-    def process_response(self, client: SoulSeekClient, response: PrivateRoomRemoveOperator.Response) -> None:
+    def process_response(self, client: SoulSeekClient, response: PrivateRoomRevokeOperator.Response) -> None:
         return None
 
 
-class TogglePrivateRoomsCommand(BaseCommand[TogglePrivateRooms.Response, None]):
+class TogglePrivateRoomInvitesCommand(BaseCommand[TogglePrivateRoomInvites.Response, None]):
 
     def __init__(self, enable: bool):
         super().__init__()
@@ -497,20 +497,20 @@ class TogglePrivateRoomsCommand(BaseCommand[TogglePrivateRooms.Response, None]):
 
     async def send(self, client: SoulSeekClient):
         await client.network.send_server_messages(
-            TogglePrivateRooms.Request(self.enable)
+            TogglePrivateRoomInvites.Request(self.enable)
         )
 
-    def response(self) -> 'TogglePrivateRoomsCommand':
+    def response(self) -> 'TogglePrivateRoomInvitesCommand':
         self.response_future = ExpectedResponse(
             ServerConnection,
-            TogglePrivateRooms.Response,
+            TogglePrivateRoomInvites.Response,
             fields={
                 'enabled': self.enable
             }
         )
         return self
 
-    def process_response(self, client: SoulSeekClient, response: TogglePrivateRooms.Response) -> None:
+    def process_response(self, client: SoulSeekClient, response: TogglePrivateRoomInvites.Response) -> None:
         return None
 
 
@@ -557,14 +557,14 @@ class PrivateMessageCommand(BaseCommand[None, None]):
 
     async def send(self, client: SoulSeekClient):
         await client.network.send_server_messages(
-            ChatPrivateMessage.Request(
+            PrivateChatMessage.Request(
                 self.username,
                 self.message
             )
         )
 
 
-class RoomMessageCommand(BaseCommand[ChatRoomMessage.Response, RoomMessage]):
+class RoomMessageCommand(BaseCommand[RoomChatMessage.Response, RoomMessage]):
 
     def __init__(self, room: str, message: str):
         super().__init__()
@@ -575,7 +575,7 @@ class RoomMessageCommand(BaseCommand[ChatRoomMessage.Response, RoomMessage]):
     async def send(self, client: SoulSeekClient):
         self._username = client.session.user.name
         await client.network.send_server_messages(
-            ChatRoomMessage.Request(
+            RoomChatMessage.Request(
                 self.room,
                 self.message
             )
@@ -584,7 +584,7 @@ class RoomMessageCommand(BaseCommand[ChatRoomMessage.Response, RoomMessage]):
     def response(self) -> 'RoomMessageCommand':
         self.response_future = ExpectedResponse(
             ServerConnection,
-            ChatRoomMessage.Response,
+            RoomChatMessage.Response,
             fields={
                 'room': self.room,
                 'username': self._username,
@@ -593,7 +593,7 @@ class RoomMessageCommand(BaseCommand[ChatRoomMessage.Response, RoomMessage]):
         )
         return self
 
-    def process_response(self, client: SoulSeekClient, response: ChatRoomMessage.Response) -> RoomMessage:
+    def process_response(self, client: SoulSeekClient, response: RoomChatMessage.Response) -> RoomMessage:
         return RoomMessage(
             timestamp=int(time.time()),
             user=client.users.get_or_create_user(self._username),

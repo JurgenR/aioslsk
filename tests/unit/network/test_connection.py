@@ -6,7 +6,7 @@ from aioslsk.exceptions import (
     MessageSerializationError,
 )
 from aioslsk.protocol.messages import (
-    ChatLeaveRoom,
+    LeaveRoom,
     DistributedBranchLevel,
     MessageDataclass,
     PeerInit,
@@ -148,7 +148,7 @@ class TestDataConnection:
     # receive_message
     @pytest.mark.asyncio
     async def test_receiveMessage_unobfuscatedConnection(self, network: Network):
-        expected_message = ChatLeaveRoom.Response('room').serialize()
+        expected_message = LeaveRoom.Response('room').serialize()
         header, content = expected_message[:4], expected_message[4:]
 
         connection = self._create_connection(network)
@@ -161,7 +161,7 @@ class TestDataConnection:
     @pytest.mark.asyncio
     async def test_receiveMessage_obfuscatedConnection(self, network: Network):
         expected_message = encode(
-            ChatLeaveRoom.Response('room').serialize(), key=bytes.fromhex('12345678'))
+            LeaveRoom.Response('room').serialize(), key=bytes.fromhex('12345678'))
         header, content = expected_message[:8], expected_message[8:]
 
         connection = self._create_connection(network)
@@ -224,7 +224,7 @@ class TestDataConnection:
     # send_message
     @pytest.mark.asyncio
     async def test_sendMessage_unobfuscatedConnection(self, network: Network):
-        expected_message = ChatLeaveRoom.Response('room').serialize()
+        expected_message = LeaveRoom.Response('room').serialize()
 
         connection = self._create_connection(network)
         connection._writer = Mock()
@@ -237,7 +237,7 @@ class TestDataConnection:
 
     @pytest.mark.asyncio
     async def test_sendMessage_obfuscatedConnection(self, network: Network):
-        expected_message = ChatLeaveRoom.Response('room').serialize()
+        expected_message = LeaveRoom.Response('room').serialize()
         enc_message = encode(expected_message, key=bytes.fromhex('11223344'))
 
         connection = self._create_connection(network)
@@ -255,7 +255,7 @@ class TestDataConnection:
 
     @pytest.mark.asyncio
     async def test_sendMessage_exception_shouldDisconnectAndRaise(self, network: Network):
-        expected_message = ChatLeaveRoom.Response('room').serialize()
+        expected_message = LeaveRoom.Response('room').serialize()
 
         connection = self._create_connection(network)
         connection._writer = Mock()
@@ -271,7 +271,7 @@ class TestDataConnection:
 
     @pytest.mark.asyncio
     async def test_sendMessage_timeoutException_shouldDisconnectAndRaise(self, network: Network):
-        expected_message = ChatLeaveRoom.Response('room').serialize()
+        expected_message = LeaveRoom.Response('room').serialize()
 
         connection = self._create_connection(network)
         connection._writer = Mock()
