@@ -467,6 +467,19 @@ Send a ping to the server to let it know we are still alive (every 5 minutes)
 :Send: No parameters
 
 
+.. _SendDownloadSpeed:
+
+SendDownloadSpeed (Code 34)
+---------------------------
+
+Sent by old client after download has completed. No longer used.
+
+:Code: 34 (0x22)
+:Send:
+   1. **string**: ticket
+   2. **uint32**: speed
+
+
 .. _SharedFoldersFiles:
 
 SharedFoldersFiles (Code 35)
@@ -520,6 +533,23 @@ Search for a file on a specific user, the user will receive this query in the fo
    3. **string**: query
 
 
+.. _DeprecatedGetItemRecommendations:
+
+DeprecatedGetItemRecommendations (Code 50)
+------------------------------------------
+
+Similar to GetItemRecommendations_ except that no score is returned
+
+:Code: 50 (0x32)
+:Send:
+   1. **string**: item
+:Receive:
+   1. **string**: item
+   2. Array of item recommendations:
+
+      1. **string**: recommendation
+
+
 .. _AddInterest:
 
 AddInterest (Code 51)
@@ -561,6 +591,23 @@ Request the server to send a list of recommendations and unrecommendations. A ma
       2. **uint32**: number
 
 
+.. _GetInterests:
+
+GetInterests (Code 55)
+----------------------
+
+Request the server the list of interests it currently has stored for us. This was sent by older clients during logon, presumably to sync the interests on the client and the server. Deprecated as the client should just advertise all interests after logon.
+
+Not known whether the server still responds to this command
+
+:Code: 55 (0x37)
+:Send: No parameters
+:Receive:
+   1. Array of interets:
+
+      1. **string**: interest
+
+
 .. _GetGlobalRecommendations:
 
 GetGlobalRecommendations (Code 56)
@@ -597,6 +644,30 @@ GetUserInterests (Code 57)
    3. Array of hated interests:
 
       1. **string**: hated_interests
+
+
+.. _ExecuteCommand:
+
+ExecuteCommand (Code 58)
+------------------------
+
+Send a command to the server.
+
+The command type has only ever been seen as having value ``admin``, the ``arguments`` array contains the subcommand and arguments. Example when banning a user:
+
+* ``command_type`` : ``admin``
+* ``arguments``
+
+   * 0 : ``ban``
+   * 1 : ``some user``
+   * 2 : probably some extra args, perhaps time limit in case of ban, ... (optional)
+
+:Code: 58 (0x3A)
+:Send:
+   1. **string**: command_type
+   2. Array of arguments:
+
+      1. **string**: argument
 
 
 .. _RoomList:
@@ -640,6 +711,100 @@ Parameter ``rooms_private_owned_user_count`` / ``rooms_private_user_count`` shou
    7. Array of rooms in which we are operator:
 
       1. **string**: rooms_private_operated
+
+
+.. _ExactFileSearch:
+
+ExactFileSearch (Code 65)
+-------------------------
+
+Used by older clients but doesn't return anything. The ``pathname`` is optional but is still required to be sent.
+
+For the message sending: The first 4 parameters are definitely correct, the client will send 5 bytes however they are always 0.
+
+For the message receiving: message is never seen and is based
+
+:Code: 65 (0x41)
+:Send:
+   1. **uint32**: ticket
+   2. **string**: filename
+   3. **string**: pathname
+   4. **uint64**: filesize
+   5. **uint32**: checksum
+   6. **uint8**: unknown
+:Receive:
+   1. **string**: username
+   2. **uint32**: ticket
+   3. **string**: filename
+   4. **string**: pathname
+   5. **uint64**: filesize
+   6. **uint32**: checksum
+   7. **uint8**: unknown
+
+
+.. _AdminMessage:
+
+AdminMessage (Code 66)
+----------------------
+
+Sent by the admin when the server is going down for example
+
+:Code: 66 (0x42)
+:Receive:
+   1. **string**: message
+
+
+.. _GetUserList:
+
+GetUserList (Code 67)
+---------------------
+
+Gets all users on the server, no longer used
+
+:Code: 67 (0x43)
+:Send: Nothing
+:Receive:
+   1. Array of usernames:
+
+      1. **string**: users
+
+   2. Array of user statuses:
+
+      1. **uint32**: users_status
+
+   3. Array of user stats:
+
+      1. **UserStats**: users_stats
+
+   4. Array of upload slots free:
+
+      1. **uint32**: users_slots_free
+
+   5. Array of user countries:
+
+      1. **string**: users_countries
+
+
+.. _TunneledMessage:
+
+TunneledMessage (Code 68)
+-------------------------
+
+Tunnel a message through the server to a user
+
+:Code: 68 (0x44)
+:Send:
+   1. **string**: username
+   2. **uint32**: ticket
+   3. **uint32**: code
+   4. **string**: message
+:Receive:
+   1. **string**: username
+   2. **uint32**: ticket
+   3. **uint32**: code
+   4. **ip**: ip
+   5. **uint32**: port
+   6. **string**: message
 
 
 .. _PrivilegedUsers:

@@ -7,6 +7,7 @@ from ..network.connection import ConnectionState, ServerConnection
 from ..events import (
     build_message_map,
     on_message,
+    AdminMessageEvent,
     ConnectionStateChangedEvent,
     EventBus,
     InternalEventBus,
@@ -23,13 +24,13 @@ from ..events import (
 from ..protocol.messages import (
     AddPrivilegedUser,
     AddUser,
+    AdminMessage,
     ChatPrivateMessage,
     ChatAckPrivateMessage,
     CheckPrivileges,
     GetUserStatus,
     GetUserStats,
     Kicked,
-    Login,
     PrivilegedUsers,
     RemoveUser,
     SetStatus,
@@ -144,6 +145,10 @@ class UserManager(BaseManager):
         # If there's no more tracking done reset the user status
         if user.tracking_flags == TrackingFlag(0):
             user.status = UserStatus.UNKNOWN
+
+    @on_message(AdminMessage.Response)
+    async def _on_admin_message(self, message: AdminMessage.Response, connection: ServerConnection):
+        await self._event_bus.emit(AdminMessageEvent(message.message))
 
     @on_message(Kicked.Response)
     async def _on_kicked(self, message: Kicked.Response, connection: ServerConnection):

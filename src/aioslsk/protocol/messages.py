@@ -367,6 +367,15 @@ class Ping(ServerMessage):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x20)
 
 
+class SendDownloadSpeed(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x22)
+        username: str = field(metadata={'type': string})
+        speed: int = field(metadata={'type': uint32})
+
+
 class SharedFoldersFiles(ServerMessage):
 
     @dataclass(order=True)
@@ -407,6 +416,20 @@ class UserSearch(ServerMessage):
         query: str = field(metadata={'type': string})
 
 
+class DeprecatedGetItemRecommendations(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x32)
+        item: str = field(metadata={'type': string})
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x32)
+        item: str = field(metadata={'type': string})
+        recommendations: List[str] = field(metadata={'type': array, 'subtype': string})
+
+
 class AddInterest(ServerMessage):
 
     @dataclass(order=True)
@@ -438,6 +461,18 @@ class GetRecommendations(ServerMessage):
         unrecommendations: List[ItemRecommendation] = field(
             metadata={'type': array, 'subtype': ItemRecommendation}
         )
+
+
+class GetInterests(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x37)
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x37)
+        interests: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
 class GetGlobalRecommendations(ServerMessage):
@@ -472,6 +507,15 @@ class GetUserInterests(ServerMessage):
         hated_interests: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
+class ExecuteCommand(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x3A)
+        command_type: str = field(metadata={'type': string})
+        arguments: List[str] = field(metadata={'type': array, 'subtype': string})
+
+
 class RoomList(ServerMessage):
 
     @dataclass(order=True)
@@ -490,11 +534,71 @@ class RoomList(ServerMessage):
         rooms_private_operated: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
+class ExactFileSearch(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x41)
+        ticket: int = field(metadata={'type': uint32})
+        filename: str = field(metadata={'type': string})
+        pathname: str = field(metadata={'type': string})
+        filesize: int = field(metadata={'type': uint64})
+        checksum: int = field(metadata={'type': uint32})
+        unknown: int = field(metadata={'type': uint8})
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x41)
+        username: str = field(metadata={'type': string})
+        ticket: int = field(metadata={'type': uint32})
+        filename: str = field(metadata={'type': string})
+        pathname: str = field(metadata={'type': string})
+        filesize: int = field(metadata={'type': uint64})
+        checksum: int = field(metadata={'type': uint32})
+
+
 class AdminMessage(ServerMessage):
 
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x42)
+        message: str = field(metadata={'type': string})
+
+
+class GetUserList(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x43)
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x43)
+        users: List[str] = field(metadata={'type': array, 'subtype': string})
+        users_status: List[int] = field(metadata={'type': array, 'subtype': uint32})
+        users_stats: List[UserStats] = field(metadata={'type': array, 'subtype': UserStats})
+        users_slots_free: List[int] = field(metadata={'type': array, 'subtype': uint32})
+        users_countries: List[str] = field(metadata={'type': array, 'subtype': string})
+
+
+class TunneledMessage(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x44)
+        username: str = field(metadata={'type': string})
+        ticket: int = field(metadata={'type': uint32})
+        code: int = field(metadata={'type': uint32})
+        message: str = field(metadata={'type': string})
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x44)
+        username: str = field(metadata={'type': string})
+        ticket: int = field(metadata={'type': uint32})
+        code: int = field(metadata={'type': uint32})
+        ip: str = field(metadata={'type': ipaddr})
+        port: int = field(metadata={'type': uint32})
         message: str = field(metadata={'type': string})
 
 

@@ -117,6 +117,11 @@ class SessionDestroyedEvent(Event):
 
 
 @dataclass(frozen=True)
+class AdminMessageEvent(Event):
+    message: str
+
+
+@dataclass(frozen=True)
 class KickedEvent(Event):
     """Emitted when we are kicked from the server"""
 
