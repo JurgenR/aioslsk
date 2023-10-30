@@ -8,33 +8,41 @@ from .protocol.messages import (
     AddHatedInterest,
     AddInterest,
     AddUser,
-    JoinRoom,
-    LeaveRoom,
-    PrivateChatMessage,
-    RoomChatMessage,
+    CheckPrivileges,
+    DisablePublicChat,
+    EnablePublicChat,
+    FileSearch,
     GetGlobalRecommendations,
     GetItemRecommendations,
     GetItemSimilarUsers,
     GetPeerAddress,
     GetRecommendations,
     GetSimilarUsers,
-    PeerSharesReply,
-    PeerSharesRequest,
-    PeerDirectoryContentsReply,
-    PeerDirectoryContentsRequest,
-    PeerUserInfoRequest,
-    PeerUserInfoReply,
+    GetUserInterests,
     GetUserStats,
     GetUserStatus,
-    PrivateRoomGrantOperator,
-    PrivateRoomRevokeOperator,
-    PrivateRoomGrantMembership,
-    PrivateRoomRevokeMembership,
-    PrivateRoomMembershipRevoked,
+    GiveUserPrivileges,
+    JoinRoom,
+    LeaveRoom,
+    NewPassword,
+    PeerDirectoryContentsReply,
+    PeerDirectoryContentsRequest,
+    PeerSharesReply,
+    PeerSharesRequest,
+    PeerUserInfoReply,
+    PeerUserInfoRequest,
+    PrivateChatMessage,
+    PrivateChatMessageUsers,
     PrivateRoomDropMembership,
     PrivateRoomDropOwnership,
+    PrivateRoomGrantMembership,
+    PrivateRoomGrantOperator,
+    PrivateRoomMembershipRevoked,
+    PrivateRoomRevokeMembership,
+    PrivateRoomRevokeOperator,
     RemoveHatedInterest,
     RemoveInterest,
+    RoomChatMessage,
     RoomList,
     RoomSearch,
     SetStatus,
@@ -62,6 +70,7 @@ RT = TypeVar('RT')
 """Response value type"""
 
 Recommendations = Tuple[List[Recommendation], List[Recommendation]]
+UserInterests = Tuple[List[str], List[str]]
 
 
 class BaseCommand(ABC, Generic[RC, RT]):
@@ -489,6 +498,20 @@ class RevokeRoomOperatorCommand(BaseCommand[PrivateRoomRevokeOperator.Response, 
         return None
 
 
+class TogglePublicChatCommand(BaseCommand[None, None]):
+
+    def __init__(self, enable: bool):
+        super().__init__()
+        self.enable: bool = enable
+
+    async def send(self, client: SoulSeekClient):
+        if self.enable:
+            message = EnablePublicChat.Request()
+        else:
+            message = DisablePublicChat.Request()
+        await client.network.send_server_messages(message)
+
+
 class TogglePrivateRoomInvitesCommand(BaseCommand[TogglePrivateRoomInvites.Response, None]):
 
     def __init__(self, enable: bool):
@@ -514,6 +537,22 @@ class TogglePrivateRoomInvitesCommand(BaseCommand[TogglePrivateRoomInvites.Respo
         return None
 
 
+class GlobalSearchCommand(BaseCommand[None, None]):
+
+    def __init__(self, query: str):
+        super().__init__()
+        self.query: str = query
+
+    async def send(self, client: SoulSeekClient):
+        ticket = next(client._ticket_generator)
+        await client.network.send_server_messages(
+            FileSearch.Request(
+                ticket,
+                query=self.query
+            )
+        )
+
+
 class UserSearchCommand(BaseCommand[None, None]):
 
     def __init__(self, username: str, query: str):
@@ -522,10 +561,11 @@ class UserSearchCommand(BaseCommand[None, None]):
         self.query: str = query
 
     async def send(self, client: SoulSeekClient):
+        ticket = next(client._ticket_generator)
         await client.network.send_server_messages(
             UserSearch.Request(
                 self.username,
-                next(client._ticket_generator),
+                ticket,
                 self.query
             )
         )
@@ -559,6 +599,23 @@ class PrivateMessageCommand(BaseCommand[None, None]):
         await client.network.send_server_messages(
             PrivateChatMessage.Request(
                 self.username,
+                self.message
+            )
+        )
+
+
+class PrivateMessageUsersCommand(BaseCommand[None, None]):
+    """Sends a private message to multiple users"""
+
+    def __init__(self, usernames: List[str], message: str):
+        super().__init__()
+        self.usernames: str = usernames
+        self.message: str = message
+
+    async def send(self, client: SoulSeekClient):
+        await client.network.send_server_messages(
+            PrivateChatMessageUsers.Request(
+                self.usernames,
                 self.message
             )
         )
@@ -650,6 +707,31 @@ class RemoveHatedInterestCommand(BaseCommand[None, None]):
         )
 
 
+class GetUserInterestsCommand(BaseCommand[GetUserInterests.Response, UserInterests]):
+
+    def __init__(self, username: str):
+        super().__init__()
+        self.username: str = username
+
+    async def send(self, client: SoulSeekClient):
+        await client.network.send_server_messages(
+            GetUserInterests.Request(self.username)
+        )
+
+    def response(self) -> 'GetUserInterestsCommand':
+        self.response_future = ExpectedResponse(
+            ServerConnection,
+            GetUserInterests.Response,
+            fields={
+                'username': self.username,
+            }
+        )
+        return self
+
+    def process_response(self, client: SoulSeekClient, response: GetUserInterests.Response) -> UserInterests:
+        return response.interests, response.hated_interests
+
+
 class SetStatusCommand(BaseCommand[None, None]):
 
     def __init__(self, status: UserStatus):
@@ -659,6 +741,49 @@ class SetStatusCommand(BaseCommand[None, None]):
     async def send(self, client: SoulSeekClient):
         await client.network.send_server_messages(
             SetStatus.Request(self.status.value)
+        )
+
+
+class SetNewPasswordCommand(BaseCommand[None, None]):
+
+    def __init__(self, password: str):
+        super().__init__()
+        self.password: str = password
+
+    async def send(self, client: SoulSeekClient):
+        await client.network.send_server_messages(
+            NewPassword.Request(self.password)
+        )
+
+
+class CheckPrivilegesCommand(BaseCommand[CheckPrivileges.Response, int]):
+
+    async def send(self, client: SoulSeekClient):
+        await client.network.send_server_messages(CheckPrivileges.Request())
+
+    def response(self) -> 'CheckPrivilegesCommand':
+        self.response_future = ExpectedResponse(
+            ServerConnection,
+            CheckPrivileges.Response
+        )
+
+    def process_response(self, client: SoulSeekClient, response: CheckPrivileges.Response) -> int:
+        return response.time_left
+
+
+class GivePrivilegesCommand(BaseCommand[None, None]):
+
+    def __init__(self, username: str, days: int):
+        super().__init__()
+        self.username: str = username
+        self.days: int = days
+
+    async def send(self, client: SoulSeekClient):
+        await client.network.send_server_messages(
+            GiveUserPrivileges.Request(
+                username=self.username,
+                days=self.days
+            )
         )
 
 
@@ -685,7 +810,8 @@ class AddUserCommand(BaseCommand[AddUser.Response, User]):
 
     def process_response(self, client: SoulSeekClient, response: AddUser.Response) -> User:
         if response.exists:
-            return client.users.get_or_create_user(response.username)
+            user = client.users.get_or_create_user(response.username)
+            return user
         else:
             raise NoSuchUserError(
                 f"user {self.username!r} does not exist on the server")

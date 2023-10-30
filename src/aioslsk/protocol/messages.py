@@ -914,7 +914,7 @@ class ChildDepth(ServerMessage):
         depth: int = field(metadata={'type': uint32})
 
 
-class PrivateRoomUsers(ServerMessage):
+class PrivateRoomMembers(ServerMessage):
 
     @dataclass
     class Response(MessageDataclass):
@@ -1061,7 +1061,7 @@ class PrivateRoomOperators(ServerMessage):
         usernames: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
-class ChatMessageUsers(ServerMessage):
+class PrivateChatMessageUsers(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -1084,7 +1084,7 @@ class DisablePublicChat(ServerMessage):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x97)
 
 
-class ChatPublicMessage(ServerMessage):
+class PublicChatMessage(ServerMessage):
 
     @dataclass
     class Response(MessageDataclass):

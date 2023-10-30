@@ -1234,10 +1234,10 @@ ChildDepth (Code 129)
    1. **uint32**: depth
 
 
-.. _PrivateRoomUsers:
+.. _PrivateRoomMembers:
 
-PrivateRoomUsers (Code 133)
----------------------------
+PrivateRoomMembers (Code 133)
+-----------------------------
 
 List of all members that are part of the private room (excludes owner)
 
@@ -1432,10 +1432,10 @@ List of operators for a private room.
       1. **string**: username
 
 
-.. _ChatMessageUsers:
+.. _PrivateChatMessageUsers:
 
-ChatMessageUsers (Code 149)
----------------------------
+PrivateChatMessageUsers (Code 149)
+----------------------------------
 
 Send a private message to a list of users
 
@@ -1453,7 +1453,7 @@ Send a private message to a list of users
 EnablePublicChat (Code 150)
 ---------------------------
 
-Enables public chat, see :ref:`ChatPublicMessage`
+Enables public chat, see :ref:`PublicChatMessage`
 
 :Code: 150 (0x96)
 :Send: No parameters
@@ -1464,15 +1464,15 @@ Enables public chat, see :ref:`ChatPublicMessage`
 DisablePublicChat (Code 151)
 ----------------------------
 
-Disables public chat, see :ref:`ChatPublicMessage`
+Disables public chat, see :ref:`PublicChatMessage`
 
 :Code: 151 (0x97)
 :Send: No parameters
 
 
-.. _ChatPublicMessage:
+.. _PublicChatMessage:
 
-ChatPublicMessage (Code 152)
+PublicChatMessage (Code 152)
 ----------------------------
 
 Chat message from all public rooms, use :ref:`EnablePublicChat` and :ref:`DisablePublicChat` to disable / enable receiving these messages.

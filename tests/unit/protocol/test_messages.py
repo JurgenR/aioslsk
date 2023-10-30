@@ -24,9 +24,9 @@ from aioslsk.protocol.messages import (
     DisablePublicChat,
     EnablePublicChat,
     LeaveRoom,
-    ChatMessageUsers,
+    PrivateChatMessageUsers,
     PrivateChatMessage,
-    ChatPublicMessage,
+    PublicChatMessage,
     RoomChatMessage,
     RoomSearch,
     RoomTickerAdded,
@@ -102,7 +102,7 @@ from aioslsk.protocol.messages import (
     PrivateRoomMembershipRevoked,
     PrivateRoomRevokeOperator,
     PrivateRoomRevokeMembership,
-    PrivateRoomUsers,
+    PrivateRoomMembers,
     PrivilegedUsers,
     PrivilegesNotification,
     PrivilegesNotificationAck,
@@ -1851,23 +1851,23 @@ class TestChildDepth:
         assert ChildDepth.Request.deserialize(data) == message
 
 
-class TestPrivateRoomUsers:
+class TestPrivateRoomMembers:
 
-    def test_PrivateRoomUsers_Response_serialize(self):
-        message = PrivateRoomUsers.Response(
+    def test_PrivateRoomMembers_Response_serialize(self):
+        message = PrivateRoomMembers.Response(
             room='room0',
             usernames=['user0', 'user1']
         )
         data = bytes.fromhex('230000008500000005000000726f6f6d3002000000050000007573657230050000007573657231')
         assert message.serialize() == data
 
-    def test_PrivateRoomUsers_Response_deserialize(self):
-        message = PrivateRoomUsers.Response(
+    def test_PrivateRoomMembers_Response_deserialize(self):
+        message = PrivateRoomMembers.Response(
             room='room0',
             usernames=['user0', 'user1']
         )
         data = bytes.fromhex('230000008500000005000000726f6f6d3002000000050000007573657230050000007573657231')
-        assert PrivateRoomUsers.Response.deserialize(data) == message
+        assert PrivateRoomMembers.Response.deserialize(data) == message
 
 
 class TestPrivateRoomGrantMembership:
@@ -2133,23 +2133,23 @@ class TestPrivateRoomOperators:
         assert PrivateRoomOperators.Response.deserialize(data) == message
 
 
-class TestChatMessageUsers:
+class TestPrivateChatMessageUsers:
 
-    def test_ChatMessageUsers_Request_serialize(self):
-        message = ChatMessageUsers.Request(
+    def test_PrivateChatMessageUsers_Request_serialize(self):
+        message = PrivateChatMessageUsers.Request(
             usernames=['user0', 'user1'],
             message="Hello"
         )
         data = bytes.fromhex('2300000095000000020000000500000075736572300500000075736572310500000048656c6c6f')
         assert message.serialize() == data
 
-    def test_ChatMessageUsers_Request_deserialize(self):
-        message = ChatMessageUsers.Request(
+    def test_PrivateChatMessageUsers_Request_deserialize(self):
+        message = PrivateChatMessageUsers.Request(
             usernames=['user0', 'user1'],
             message="Hello"
         )
         data = bytes.fromhex('2300000095000000020000000500000075736572300500000075736572310500000048656c6c6f')
-        assert ChatMessageUsers.Request.deserialize(data) == message
+        assert PrivateChatMessageUsers.Request.deserialize(data) == message
 
 
 class TestEnablePublicChat:
@@ -2178,10 +2178,10 @@ class TestDisablePublicChat:
         assert DisablePublicChat.Request.deserialize(data) == message
 
 
-class TestChatPublicMessage:
+class TestPublicChatMessage:
 
-    def test_ChatPublicMessage_Response_serialize(self):
-        message = ChatPublicMessage.Response(
+    def test_PublicChatMessage_Response_serialize(self):
+        message = PublicChatMessage.Response(
             room='room0',
             username='user0',
             message="Hello"
@@ -2189,14 +2189,14 @@ class TestChatPublicMessage:
         data = bytes.fromhex('1f0000009800000005000000726f6f6d300500000075736572300500000048656c6c6f')
         assert message.serialize() == data
 
-    def test_ChatPublicMessage_Response_deserialize(self):
-        message = ChatPublicMessage.Response(
+    def test_PublicChatMessage_Response_deserialize(self):
+        message = PublicChatMessage.Response(
             room='room0',
             username='user0',
             message="Hello"
         )
         data = bytes.fromhex('1f0000009800000005000000726f6f6d300500000075736572300500000048656c6c6f')
-        assert ChatPublicMessage.Response.deserialize(data) == message
+        assert PublicChatMessage.Response.deserialize(data) == message
 
 
 class TestFileSearchEx:
