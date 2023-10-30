@@ -416,6 +416,20 @@ class UserSearch(ServerMessage):
         query: str = field(metadata={'type': string})
 
 
+class DeprecatedGetItemRecommendations(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x32)
+        item: str = field(metadata={'type': string})
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x32)
+        item: str = field(metadata={'type': string})
+        recommendations: List[str] = field(metadata={'type': array, 'subtype': string})
+
+
 class AddInterest(ServerMessage):
 
     @dataclass(order=True)
@@ -447,6 +461,18 @@ class GetRecommendations(ServerMessage):
         unrecommendations: List[ItemRecommendation] = field(
             metadata={'type': array, 'subtype': ItemRecommendation}
         )
+
+
+class GetInterests(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x37)
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x37)
+        interests: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
 class GetGlobalRecommendations(ServerMessage):

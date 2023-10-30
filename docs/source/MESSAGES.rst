@@ -533,6 +533,23 @@ Search for a file on a specific user, the user will receive this query in the fo
    3. **string**: query
 
 
+.. _DeprecatedGetItemRecommendations:
+
+DeprecatedGetItemRecommendations (Code 50)
+------------------------------------------
+
+Similar to GetItemRecommendations_ except that no score is returned
+
+:Code: 50 (0x32)
+:Send:
+   1. **string**: item
+:Receive:
+   1. **string**: item
+   2. Array of item recommendations:
+
+      1. **string**: recommendation
+
+
 .. _AddInterest:
 
 AddInterest (Code 51)
@@ -572,6 +589,23 @@ Request the server to send a list of recommendations and unrecommendations. A ma
 
       1. **string**: unrecommendation
       2. **uint32**: number
+
+
+.. _GetInterests:
+
+GetInterests (Code 55)
+----------------------
+
+Request the server the list of interests it currently has stored for us. This was sent by older clients during logon, presumably to sync the interests on the client and the server. Deprecated as the client should just advertise all interests after logon.
+
+Not known whether the server still responds to this command
+
+:Code: 55 (0x37)
+:Send: No parameters
+:Receive:
+   1. Array of interets:
+
+      1. **string**: interest
 
 
 .. _GetGlobalRecommendations:
