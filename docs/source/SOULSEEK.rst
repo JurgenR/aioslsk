@@ -415,28 +415,28 @@ The room list is received after login but can be refreshed by sending another :r
 Room Joining / Creation
 -----------------------
 
-To join a public room a :ref:`ChatJoinRoom` message is sent to the server, containing the name of the room and whether the room is private. If the room does not yet exist it is created.
+To join a public room a :ref:`JoinRoom` message is sent to the server, containing the name of the room and whether the room is private. If the room does not yet exist it is created.
 
 Creating a public room:
 
-1. Send :ref:`ChatJoinRoom` (is_private=0)
+1. Send :ref:`JoinRoom` (is_private=0)
 2. Receive:
 
-  * :ref:`ChatUserJoinedRoom`
-  * :ref:`ChatJoinRoom` : with our own username
-  * :ref:`ChatRoomTickers`
+  * :ref:`UserJoinedRoom`
+  * :ref:`JoinRoom` : with our own username
+  * :ref:`RoomTickers`
 
 Creating a private room:
 
-1. Send :ref:`ChatJoinRoom` (is_private=1)
+1. Send :ref:`JoinRoom` (is_private=1)
 2. Receive:
 
   * :ref:`RoomList` : updated list of rooms. See 'Room List' section on what would be expected here
   * :ref:`PrivateRoomUsers` : list of users in the room (exluding ourself)
   * :ref:`PrivateRoomOperators` : list of operators
-  * :ref:`ChatUserJoinedRoom` : with our own username
-  * :ref:`ChatJoinRoom` : with our own username
-  * :ref:`ChatRoomTickers`
+  * :ref:`UserJoinedRoom` : with our own username
+  * :ref:`JoinRoom` : with our own username
+  * :ref:`RoomTickers`
 
 .. note::
    Messages :ref:`PrivateRoomUsers`, :ref:`PrivateRoomOperators` seems to be repeated for private rooms we are already part of
@@ -453,16 +453,16 @@ Room Leaving
 
 From the user leaving the room:
 
-1. Send: :ref:`ChatLeaveRoom` : with room name
+1. Send: :ref:`LeaveRoom` : with room name
 2. Receive:
 
-   * :ref:`ChatLeaveRoom` : with room name
+   * :ref:`LeaveRoom` : with room name
 
 Other users in the room:
 
 1. Receive:
 
-   * :ref:`ChatUserLeftRoom` : with room name and user name
+   * :ref:`UserLeftRoom` : with room name and user name
 
 
 Add User to Private Room
@@ -472,18 +472,18 @@ Owners and operators can add users to rooms.
 
 User adding another user:
 
-1. Send: :ref:`PrivateRoomAddUser` : with room name and user name
+1. Send: :ref:`PrivateRoomGrantMembership` : with room name and user name
 2. Receive:
 
-   * :ref:`PrivateRoomAddUser` : with room name and user name
+   * :ref:`PrivateRoomGrantMembership` : with room name and user name
    * Server message: User <user_name> is now a member of room <room_name>
 
 The added user:
 
 1. Receive:
 
-   * :ref:`PrivateRoomAddUser` : with room name and user name
-   * :ref:`PrivateRoomAdded` : with room name
+   * :ref:`PrivateRoomGrantMembership` : with room name and user name
+   * :ref:`PrivateRoomMembershipGranted` : with room name
    * :ref:`RoomList`
    * :ref:`PrivateRoomUsers` : users of the room (excluding the owner?)
    * :ref:`PrivateRoomOperators`
@@ -492,7 +492,7 @@ The owner of the room:
 
 1. Receive:
 
-   * :ref:`PrivateRoomAddUser` : with room name and user name
+   * :ref:`PrivateRoomGrantMembership` : with room name and user name
    * Server message: User [<user_name>] was added as a member of room [<room_name>] by operator [<operator_name>]
 
 Other members in room:
@@ -511,25 +511,25 @@ Owners can remove operators and members, operators can only remove members.
 
 User removing another user (owner):
 
-1. Send: :ref:`PrivateRoomRemoveUser` : with room name and user name
+1. Send: :ref:`PrivateRoomRevokeMembership` : with room name and user name
 2. Receive:
 
-   * :ref:`PrivateRoomRemoveUser` : with room name and user name
+   * :ref:`PrivateRoomRevokeMembership` : with room name and user name
    * Server message: User <user_name> is no longer a member of room <room_name>
 
 User being removed:
 
 1. Receive:
 
-   * :ref:`PrivateRoomRemoved` : with room name
-   * :ref:`ChatLeaveRoom` : with room name
+   * :ref:`PrivateRoomMembershipRevoked` : with room name
+   * :ref:`LeaveRoom` : with room name
    * :ref:`RoomList`
 
 The owner of the room:
 
 1. Receive:
 
-   * :ref:`PrivateRoomRemoveUser` : with room name and user name
+   * :ref:`PrivateRoomRevokeMembership` : with room name and user name
    * Server message: User <user_name> is no longer a member of room <room_name>
 
 Other members in room:
@@ -546,10 +546,10 @@ Granting Operator to Private Room
 
 User granting operator:
 
-1. Send: :ref:`PrivateRoomAddOperator` : with room name and user name
+1. Send: :ref:`PrivateRoomGrantOperator` : with room name and user name
 2. Receive:
 
-   * :ref:`PrivateRoomAddOperator` : with room name and user name (got this twice for some reason, perhaps a bug in the server? Should probably be PrivateRoomOperatorAdded)
+   * :ref:`PrivateRoomGrantOperator` : with room name and user name (got this twice for some reason, perhaps a bug in the server? Should probably be :ref:`PrivateRoomOperatorGranted`)
    * Server message: User <user_name> is now an operator of room <room_name>
 
 User receiving operator:
@@ -570,18 +570,18 @@ Revoking Operator from Private Room
 
 User revoking operator:
 
-1. Send: :ref:`PrivateRoomRemoveOperator` : with room name and user name
+1. Send: :ref:`PrivateRoomRevokeOperator` : with room name and user name
 2. Receive:
 
-   * :ref:`PrivateRoomRemoveOperator` : with room name and user name (got this twice for some reason, perhaps a bug in the server? Should probably be :ref:`PrivateRoomRemoveOperator`)
+   * :ref:`PrivateRoomRevokeOperator` : with room name and user name (got this twice for some reason, perhaps a bug in the server? Should probably be :ref:`PrivateRoomRevokeOperator`)
    * Server message: User <user_name> is no longer an operator of room <room_name>
 
 User for which operator was revoked:
 
 1. Receive:
 
-   * :ref:`PrivateRoomRemoveOperator` : with room name and user name (got this twice)
-   * :ref:`PrivateRoomOperatorRemoved` : with room name
+   * :ref:`PrivateRoomRevokeOperator` : with room name and user name (got this twice)
+   * :ref:`PrivateRoomOperatorRevoked` : with room name
    * :ref:`RoomList`
    * :ref:`PrivateRoomUsers` : for all private rooms we are part of
    * :ref:`PrivateRoomOperators` : for all private rooms we are part of
@@ -600,8 +600,8 @@ Member dropping membership:
 1. Send: PrivateRoomDropMembership : with room name
 2. Receive:
 
-   * :ref:`PrivateRoomRemoved` : with room name
-   * :ref:`ChatLeaveRoom` : with room name
+   * :ref:`PrivateRoomMembershipRevoked` : with room name
+   * :ref:`LeaveRoom` : with room name
    * :ref:`RoomList`
 
 
@@ -609,16 +609,16 @@ Received by owner:
 
 1. Receive:
 
-   * :ref:`PrivateRoomRemoveUser` : with room name and user name
+   * :ref:`PrivateRoomRevokeMembership` : with room name and user name
    * Server message: User <user_name> is no longer a member of room <room_name>
-   * :ref:`ChatUserLeftRoom` : with room name and user name
+   * :ref:`UserLeftRoom` : with room name and user name
 
 Received by operator:
 
 1. Receive:
 
-   * :ref:`PrivateRoomRemoveUser` : with room name and user name
-   * :ref:`ChatUserLeftRoom` : with room name and user name
+   * :ref:`PrivateRoomRevokeMembership` : with room name and user name
+   * :ref:`UserLeftRoom` : with room name and user name
 
 
 As operator
@@ -629,12 +629,12 @@ Operator dropping membership:
 1. Send: PrivateRoomDropMembership : with room name
 2. Receive:
 
-   * :ref:`PrivateRoomRemoved` : with room name
-   * :ref:`ChatLeaveRoom` : with room name
+   * :ref:`PrivateRoomMembershipRevoked` : with room name
+   * :ref:`LeaveRoom` : with room name
    * :ref:`RoomList`
    * :ref:`PrivateRoomUsers` : for private rooms we are still part of
    * :ref:`PrivateRoomOperators` : for private rooms we are still part of
-   * :ref:`PrivateRoomOperatorRemoved`
+   * :ref:`PrivateRoomOperatorRevoked`
    * :ref:`RoomList`
    * :ref:`PrivateRoomUsers` : for private rooms
    * :ref:`PrivateRoomOperators` : for private rooms
@@ -643,19 +643,19 @@ Received by owner:
 
 1. Receive:
 
-   * :ref:`PrivateRoomRemoveUser`
+   * :ref:`PrivateRoomRevokeMembership`
    * Server message: User <user_name> is no longer a member of room <room_name>
-   * :ref:`ChatUserLeftRoom`
-   * :ref:`PrivateRoomRemoveOperator` (twice)
+   * :ref:`UserLeftRoom`
+   * :ref:`PrivateRoomRevokeOperator` (twice)
    * Server message: User <user_name> is no longer an operator of room <room_name>
 
 Received by member:
 
 1. Receive:
 
-   * :ref:`PrivateRoomRemoveUser`
-   * :ref:`ChatUserLeftRoom`
-   * :ref:`PrivateRoomRemoveOperator` (twice)
+   * :ref:`PrivateRoomRevokeMembership`
+   * :ref:`UserLeftRoom`
+   * :ref:`PrivateRoomRevokeOperator` (twice)
 
 
 Dropping Ownership
@@ -666,7 +666,7 @@ Owner dropping ownership:
 1. Send: PrivateRoomDropOwnership : with room name
 2. Receive:
 
-   * :ref:`ChatUserLeftRoom` : with room name and user name for all other users in the room
+   * :ref:`UserLeftRoom` : with room name and user name for all other users in the room
    * :ref:`RoomList`
    * :ref:`PrivateRoomUsers` : for private rooms we are still part of
    * :ref:`PrivateRoomOperators` : for private rooms we are still part of
@@ -675,12 +675,12 @@ Received by operator:
 
 1. Receive:
 
-   * :ref:`PrivateRoomRemoved` : with room name
-   * :ref:`ChatLeaveRoom` : with room name
+   * :ref:`PrivateRoomMembershipRevoked` : with room name
+   * :ref:`LeaveRoom` : with room name
    * :ref:`RoomList`
    * :ref:`PrivateRoomUsers` : for private rooms we are still part of
    * :ref:`PrivateRoomOperators` : for private rooms we are still part of
-   * :ref:`PrivateRoomOperatorRemoved`
+   * :ref:`PrivateRoomOperatorRevoked`
    * :ref:`RoomList`
    * :ref:`PrivateRoomUsers` : for private rooms
    * :ref:`PrivateRoomOperators` : for private rooms
@@ -689,10 +689,10 @@ Received by member:
 
 1. Receive:
 
-   * :ref:`ChatUserLeftRoom` : for the operator that was in the room
-   * :ref:`PrivateRoomRemoveOperator` : for the operator that was in the room
-   * :ref:`PrivateRoomRemoved`
-   * :ref:`ChatLeaveRoom`
+   * :ref:`UserLeftRoom` : for the operator that was in the room
+   * :ref:`PrivateRoomRevokeOperator` : for the operator that was in the room
+   * :ref:`PrivateRoomMembershipRevoked`
+   * :ref:`LeaveRoom`
    * :ref:`RoomList`
 
 

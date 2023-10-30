@@ -1,8 +1,8 @@
 from aioslsk.events import EventBus, PrivateMessageEvent
 from aioslsk.protocol.messages import (
     AddUser,
-    ChatPrivateMessage,
-    ChatAckPrivateMessage,
+    PrivateChatMessage,
+    PrivateChatMessageAck,
     RemoveUser,
 )
 from aioslsk.settings import Settings
@@ -139,14 +139,14 @@ class TestUserManager:
         assert 0 == manager._network.send_server_messages.await_count
 
     @pytest.mark.asyncio
-    async def test_onChatPrivateMessage_shouldSendAckAndEmitEvent(self, manager: UserManager):
+    async def test_onPrivateChatMessage_shouldSendAckAndEmitEvent(self, manager: UserManager):
         callback = AsyncMock()
         manager._event_bus.register(PrivateMessageEvent, callback)
 
         user = manager.get_or_create_user('user0')
 
         await manager._on_private_message(
-            ChatPrivateMessage.Response(
+            PrivateChatMessage.Response(
                 chat_id=1,
                 username='user0',
                 message='hello',
@@ -157,7 +157,7 @@ class TestUserManager:
         )
 
         manager._network.send_server_messages.assert_awaited_once_with(
-            ChatAckPrivateMessage.Request(1)
+            PrivateChatMessageAck.Request(1)
         )
         message = ChatMessage(
             id=1,
