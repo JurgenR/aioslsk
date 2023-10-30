@@ -612,6 +612,30 @@ GetUserInterests (Code 57)
       1. **string**: hated_interests
 
 
+.. _ExecuteCommand:
+
+ExecuteCommand (Code 58)
+------------------------
+
+Send a command to the server.
+
+The command type has only ever been seen as having value ``admin``, the ``arguments`` array contains the subcommand and arguments. Example when banning a user:
+
+* ``command_type`` : ``admin``
+* ``arguments``
+
+   * 0 : ``ban``
+   * 1 : ``some user``
+   * 2 : probably some extra args, perhaps time limit in case of ban, ... (optional)
+
+:Code: 58 (0x3A)
+:Send:
+   1. **string**: command_type
+   2. Array of arguments:
+
+      1. **string**: argument
+
+
 .. _RoomList:
 
 RoomList (Code 64)

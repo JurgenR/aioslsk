@@ -481,6 +481,15 @@ class GetUserInterests(ServerMessage):
         hated_interests: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
+class ExecuteCommand(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x3A)
+        command_type: str = field(metadata={'type': string})
+        arguments: List[str] = field(metadata={'type': array, 'subtype': string})
+
+
 class RoomList(ServerMessage):
 
     @dataclass(order=True)

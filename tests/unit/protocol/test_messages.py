@@ -47,6 +47,7 @@ from aioslsk.protocol.messages import (
     DistributedPing,
     DistributedSearchRequest,
     ExactFileSearch,
+    ExecuteCommand,
     FileSearch,
     FileSearchEx,
     GetGlobalRecommendations,
@@ -1543,6 +1544,25 @@ class TestGetUserInterests:
         )
         data = bytes.fromhex('43000000390000000500000075736572300200000009000000696e7465726573743009000000696e74657265737431020000000600000068617465643006000000686174656431')
         assert GetUserInterests.Response.deserialize(data) == message
+
+
+class TestExecuteCommand:
+
+    def test_ExecuteCommand_Request_serialize(self):
+        message = ExecuteCommand.Request(
+            command_type='admin',
+            arguments=['ban', 'user0', '123']
+        )
+        data = bytes.fromhex('280000003a0000000500000061646d696e030000000300000062616e05000000757365723003000000313233')
+        assert message.serialize() == data
+
+    def test_ExecuteCommand_Request_deserialize(self):
+        message = ExecuteCommand.Request(
+            command_type='admin',
+            arguments=['ban', 'user0', '123']
+        )
+        data = bytes.fromhex('280000003a0000000500000061646d696e030000000300000062616e05000000757365723003000000313233')
+        assert ExecuteCommand.Request.deserialize(data) == message
 
 
 class TestGetItemSimilarUsers:
