@@ -23,6 +23,8 @@ The components of the messages use a little-endian byte order.
 +--------+-------------+-------+
 | uchar  | int         | 1     |
 +--------+-------------+-------+
+| int32  | int         | 4     |
++--------+-------------+-------+
 | string | str         |       |
 +--------+-------------+-------+
 | bool   | bool        | 1     |
@@ -575,7 +577,7 @@ RemoveInterest (Code 52)
 GetRecommendations (Code 54)
 ----------------------------
 
-Request the server to send a list of recommendations and unrecommendations. A maximum of 100 each will be returned
+Request the server to send a list of recommendations and unrecommendations. A maximum of 100 each will be returned. The score can be negative.
 
 :Code: 54 (0x36)
 :Send: No parameters
@@ -583,12 +585,12 @@ Request the server to send a list of recommendations and unrecommendations. A ma
    1. Array of recommendations:
 
       1. **string**: recommendation
-      2. **uint32**: number
+      2. **int32**: score
 
    2. Array of non recommendations:
 
       1. **string**: unrecommendation
-      2. **uint32**: number
+      2. **int32**: score
 
 
 .. _GetInterests:
@@ -619,12 +621,12 @@ GetGlobalRecommendations (Code 56)
    1. Array of recommendations:
 
       1. **string**: recommendation
-      2. **uint32**: number
+      2. **int32**: score
 
    2. Array of non recommendations:
 
       1. **string**: recommendation
-      2. **uint32**: number
+      2. **int32**: score
 
 
 .. _GetUserInterests:
@@ -1028,7 +1030,7 @@ GetItemRecommendations (Code 111)
    2. Array of item recommendations:
 
       1. **string**: recommendation
-      2. **uint32**: number
+      2. **int32**: score
 
 
 .. _GetItemSimilarUsers:

@@ -4,7 +4,7 @@ from aioslsk.protocol.primitives import (
     FileData,
     Attribute,
     PotentialParent,
-    ItemRecommendation,
+    Recommendation,
     SimilarUser,
     RoomTicker,
     UserStats,
@@ -1388,22 +1388,22 @@ class TestGetItemRecommendations:
         message = GetItemRecommendations.Response(
             item='item',
             recommendations=[
-                ItemRecommendation('recommendation0', 1),
-                ItemRecommendation('recommendation1', 2)
+                Recommendation('recommendation0', 1),
+                Recommendation('recommendation1', -1)
             ]
         )
-        data = bytes.fromhex('3e0000006f000000040000006974656d020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e3102000000')
+        data = bytes.fromhex('3e0000006f000000040000006974656d020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31ffffffff')
         assert message.serialize() == data
 
     def test_GetItemRecommendations_Response_deserialize(self):
         message = GetItemRecommendations.Response(
             item='item',
             recommendations=[
-                ItemRecommendation('recommendation0', 1),
-                ItemRecommendation('recommendation1', 2)
+                Recommendation('recommendation0', 1),
+                Recommendation('recommendation1', -1)
             ]
         )
-        data = bytes.fromhex('3e0000006f000000040000006974656d020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e3102000000')
+        data = bytes.fromhex('3e0000006f000000040000006974656d020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31ffffffff')
         assert GetItemRecommendations.Response.deserialize(data) == message
 
 
@@ -1448,29 +1448,29 @@ class TestGetRecommendations:
     def test_GetRecommendations_Response_serialize(self):
         message = GetRecommendations.Response(
             recommendations=[
-                ItemRecommendation('recommendation0', 1),
-                ItemRecommendation('recommendation1', 2)
+                Recommendation('recommendation0', 1),
+                Recommendation('recommendation1', -1)
             ],
             unrecommendations=[
-                ItemRecommendation('unrecommendation0', 1),
-                ItemRecommendation('unrecommendation1', 2)
+                Recommendation('unrecommendation0', 1),
+                Recommendation('unrecommendation1', -1)
             ]
         )
-        data = bytes.fromhex('6c00000036000000020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31020000000200000011000000756e7265636f6d6d656e646174696f6e300100000011000000756e7265636f6d6d656e646174696f6e3102000000')
+        data = bytes.fromhex('6c00000036000000020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31ffffffff0200000011000000756e7265636f6d6d656e646174696f6e300100000011000000756e7265636f6d6d656e646174696f6e31ffffffff')
         assert message.serialize() == data
 
     def test_GetRecommendations_Response_deserialize(self):
         message = GetRecommendations.Response(
             recommendations=[
-                ItemRecommendation('recommendation0', 1),
-                ItemRecommendation('recommendation1', 2)
+                Recommendation('recommendation0', 1),
+                Recommendation('recommendation1', -1)
             ],
             unrecommendations=[
-                ItemRecommendation('unrecommendation0', 1),
-                ItemRecommendation('unrecommendation1', 2)
+                Recommendation('unrecommendation0', 1),
+                Recommendation('unrecommendation1', -1)
             ]
         )
-        data = bytes.fromhex('6c00000036000000020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31020000000200000011000000756e7265636f6d6d656e646174696f6e300100000011000000756e7265636f6d6d656e646174696f6e3102000000')
+        data = bytes.fromhex('6c00000036000000020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31ffffffff0200000011000000756e7265636f6d6d656e646174696f6e300100000011000000756e7265636f6d6d656e646174696f6e31ffffffff')
         assert GetRecommendations.Response.deserialize(data) == message
 
 
@@ -1489,29 +1489,29 @@ class TestGetGlobalRecommendations:
     def test_GetGlobalRecommendations_Response_serialize(self):
         message = GetGlobalRecommendations.Response(
             recommendations=[
-                ItemRecommendation('recommendation0', 1),
-                ItemRecommendation('recommendation1', 2)
+                Recommendation('recommendation0', 1),
+                Recommendation('recommendation1', -1)
             ],
             unrecommendations=[
-                ItemRecommendation('unrecommendation0', 1),
-                ItemRecommendation('unrecommendation1', 2)
+                Recommendation('unrecommendation0', 1),
+                Recommendation('unrecommendation1', -1)
             ]
         )
-        data = bytes.fromhex('6c00000038000000020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31020000000200000011000000756e7265636f6d6d656e646174696f6e300100000011000000756e7265636f6d6d656e646174696f6e3102000000')
+        data = bytes.fromhex('6c00000038000000020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31ffffffff0200000011000000756e7265636f6d6d656e646174696f6e300100000011000000756e7265636f6d6d656e646174696f6e31ffffffff')
         assert message.serialize() == data
 
     def test_GetGlobalRecommendations_Response_deserialize(self):
         message = GetGlobalRecommendations.Response(
             recommendations=[
-                ItemRecommendation('recommendation0', 1),
-                ItemRecommendation('recommendation1', 2)
+                Recommendation('recommendation0', 1),
+                Recommendation('recommendation1', -1)
             ],
             unrecommendations=[
-                ItemRecommendation('unrecommendation0', 1),
-                ItemRecommendation('unrecommendation1', 2)
+                Recommendation('unrecommendation0', 1),
+                Recommendation('unrecommendation1', -1)
             ]
         )
-        data = bytes.fromhex('6c00000038000000020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31020000000200000011000000756e7265636f6d6d656e646174696f6e300100000011000000756e7265636f6d6d656e646174696f6e3102000000')
+        data = bytes.fromhex('6c00000038000000020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31ffffffff0200000011000000756e7265636f6d6d656e646174696f6e300100000011000000756e7265636f6d6d656e646174696f6e31ffffffff')
         assert GetGlobalRecommendations.Response.deserialize(data) == message
 
 

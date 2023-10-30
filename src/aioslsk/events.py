@@ -6,11 +6,11 @@ import logging
 from typing import Callable, Dict, List, Optional, Tuple, Type, TYPE_CHECKING
 
 from .room.model import Room, RoomMessage
-from .user.model import ChatMessage, User, TrackingFlag
+from .user.model import ChatMessage, User
 from .protocol.primitives import (
     DirectoryData,
     MessageDataclass,
-    ItemRecommendation,
+    Recommendation,
 )
 from .search.model import SearchRequest, SearchResult
 from .session import Session
@@ -262,20 +262,20 @@ class SimilarUsersEvent(Event):
 
 @dataclass(frozen=True)
 class RecommendationsEvent(Event):
-    recommendations: List[ItemRecommendation]
-    unrecommendations: List[ItemRecommendation]
+    recommendations: List[Recommendation]
+    unrecommendations: List[Recommendation]
 
 
 @dataclass(frozen=True)
 class GlobalRecommendationsEvent(Event):
-    recommendations: List[ItemRecommendation]
-    unrecommendations: List[ItemRecommendation]
+    recommendations: List[Recommendation]
+    unrecommendations: List[Recommendation]
 
 
 @dataclass(frozen=True)
 class ItemRecommendationsEvent(Event):
     item: str
-    recommendations: List[ItemRecommendation]
+    recommendations: List[Recommendation]
 
 
 @dataclass(frozen=True)

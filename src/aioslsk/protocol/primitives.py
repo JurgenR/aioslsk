@@ -91,6 +91,16 @@ class uint64(int):
         return parse_basic(pos, data, '<Q')
 
 
+class int32(int):
+
+    def serialize(self):
+        return struct.pack('<i', self)
+
+    @classmethod
+    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, int]:
+        return parse_basic(pos, data, '<i')
+
+
 class string(str):
 
     def serialize(self, encoding: str = 'utf-8'):
@@ -336,9 +346,9 @@ class SimilarUser(ProtocolDataclass):
 
 
 @dataclass(frozen=True, order=True)
-class ItemRecommendation(ProtocolDataclass):
+class Recommendation(ProtocolDataclass):
     recommendation: str = field(metadata={'type': string})
-    number: int = field(metadata={'type': uint32})
+    score: int = field(metadata={'type': int32})
 
 
 @dataclass(frozen=True, order=True)
