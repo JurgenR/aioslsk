@@ -43,7 +43,7 @@ from .protocol.messages import (
 )
 from .protocol.primitives import (
     DirectoryData,
-    ItemRecommendation,
+    Recommendation,
     MessageDataclass,
     UserStats
 )
@@ -61,7 +61,7 @@ RC = TypeVar('RC', bound=Union[MessageDataclass, None])
 RT = TypeVar('RT')
 """Response value type"""
 
-Recommendations = Tuple[List[ItemRecommendation], List[ItemRecommendation]]
+Recommendations = Tuple[List[Recommendation], List[Recommendation]]
 
 
 class BaseCommand(ABC, Generic[RC, RT]):
@@ -303,7 +303,7 @@ class DropRoomOwnershipCommand(BaseCommand[None, None]):
         )
 
 
-class GetItemRecommendationsCommand(BaseCommand[GetItemRecommendations.Response, List[ItemRecommendation]]):
+class GetItemRecommendationsCommand(BaseCommand[GetItemRecommendations.Response, List[Recommendation]]):
 
     def __init__(self, item: str):
         super().__init__()
@@ -324,7 +324,7 @@ class GetItemRecommendationsCommand(BaseCommand[GetItemRecommendations.Response,
         )
         return self
 
-    def process_response(self, client: SoulSeekClient, response: GetItemRecommendations.Response) -> List[ItemRecommendation]:
+    def process_response(self, client: SoulSeekClient, response: GetItemRecommendations.Response) -> List[Recommendation]:
         return response.recommendations
 
 

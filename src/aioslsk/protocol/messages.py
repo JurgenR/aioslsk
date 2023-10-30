@@ -36,7 +36,7 @@ from .primitives import (
     UserStats,
     PotentialParent,
     SimilarUser,
-    ItemRecommendation,
+    Recommendation,
     RoomTicker,
 )
 
@@ -455,11 +455,11 @@ class GetRecommendations(ServerMessage):
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x36)
-        recommendations: List[ItemRecommendation] = field(
-            metadata={'type': array, 'subtype': ItemRecommendation}
+        recommendations: List[Recommendation] = field(
+            metadata={'type': array, 'subtype': Recommendation}
         )
-        unrecommendations: List[ItemRecommendation] = field(
-            metadata={'type': array, 'subtype': ItemRecommendation}
+        unrecommendations: List[Recommendation] = field(
+            metadata={'type': array, 'subtype': Recommendation}
         )
 
 
@@ -484,11 +484,11 @@ class GetGlobalRecommendations(ServerMessage):
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x38)
-        recommendations: List[ItemRecommendation] = field(
-            metadata={'type': array, 'subtype': ItemRecommendation}
+        recommendations: List[Recommendation] = field(
+            metadata={'type': array, 'subtype': Recommendation}
         )
-        unrecommendations: List[ItemRecommendation] = field(
-            metadata={'type': array, 'subtype': ItemRecommendation}
+        unrecommendations: List[Recommendation] = field(
+            metadata={'type': array, 'subtype': Recommendation}
         )
 
 
@@ -762,7 +762,7 @@ class GetItemRecommendations(ServerMessage):
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x6F)
         item: str = field(metadata={'type': string})
-        recommendations: List[ItemRecommendation] = field(metadata={'type': array, 'subtype': ItemRecommendation})
+        recommendations: List[Recommendation] = field(metadata={'type': array, 'subtype': Recommendation})
 
 
 class GetItemSimilarUsers(ServerMessage):
