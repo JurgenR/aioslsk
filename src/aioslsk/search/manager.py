@@ -295,9 +295,18 @@ class SearchManager(BaseManager):
         await self._query_shares_and_reply(message.ticket, message.username, message.query)
 
     @on_message(ServerSearchRequest.Response)
-    async def _on_server_search_request(self, message: ServerSearchRequest.Response, connection):
+    async def _on_server_search_request(self, message: ServerSearchRequest.Response, connection: ServerConnection):
         username = self._session.user.name
         if message.username == username:
+            return
+
+        await self._query_shares_and_reply(
+            message.ticket, message.username, message.query)
+
+    @on_message(FileSearch.Response)
+    async def _on_file_search(self, message: FileSearch.Response, connection: ServerConnection):
+        """Received when user performs a user or room search"""
+        if message.username == self._session.user.name:
             return
 
         await self._query_shares_and_reply(
