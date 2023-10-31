@@ -240,7 +240,6 @@ class UserManager(BaseManager):
             self.reset_users()
 
     async def _on_session_initialized(self, event: SessionInitializedEvent):
-        logger.debug(f"user : session initialized : {event.session}")
         self._session = event.session
         await self._network.send_server_messages(
             CheckPrivileges.Request(),

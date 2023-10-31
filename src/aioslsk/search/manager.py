@@ -175,6 +175,10 @@ class SearchManager(BaseManager):
         """Performs a query on the shares manager and reports the results to the
         user
         """
+        if not self._session:
+            logger.warning("not returning search results : no valid session was set")
+            return
+
         visible, locked = self._shares_manager.query(query, username=username)
 
         result_count = len(visible) + len(locked)
@@ -345,7 +349,6 @@ class SearchManager(BaseManager):
             self._cancel_wishlist_task()
 
     async def _on_session_initialized(self, event: SessionInitializedEvent):
-        logger.debug(f"search : session initialized : {event.session}")
         self._session = event.session
 
     async def _on_session_destroyed(self, event: SessionDestroyedEvent):

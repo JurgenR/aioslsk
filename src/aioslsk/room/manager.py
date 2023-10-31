@@ -406,7 +406,6 @@ class RoomManager(BaseManager):
             self.reset_rooms()
 
     async def _on_session_initialized(self, event: SessionInitializedEvent):
-        logger.debug(f"rooms : session initialized : {event.session}")
         await self._network.send_server_messages(
             TogglePrivateRoomInvites.Request(self._settings.rooms.private_room_invites)
         )

@@ -19,4 +19,6 @@ SERVER_RESPONSE_TIMEOUT: float = 30
 DISCONNECT_TIMEOUT: float = 10
 PATH_SEPERATOR_PATTERN = re.compile(r"[\\/]+")
 """Pattern for splitting/normalizing remote paths"""
-UPNP_SEARCH_TIMEOUT = 10
+UPNP_SEARCH_TIMEOUT: int = 10
+POTENTIAL_PARENTS_CACHE_SIZE: int = 20
+"""Maximum amount of potential parents stored"""

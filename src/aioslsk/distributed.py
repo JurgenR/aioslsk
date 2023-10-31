@@ -1,10 +1,12 @@
 import asyncio
+from collections import deque
 from dataclasses import dataclass
 from functools import partial
 import logging
-from typing import List, Optional, Union, Tuple
+from typing import Deque, List, Optional, Union, Tuple
 
 from .base_manager import BaseManager
+from .constants import POTENTIAL_PARENTS_CACHE_SIZE
 from .events import (
     on_message,
     build_message_map,
@@ -77,7 +79,8 @@ class DistributedNetwork(BaseManager):
         parent
         """
         self.children: List[DistributedPeer] = []
-        self.potential_parents: List[str] = []
+        self.potential_parents: Deque[str] = deque(
+            maxlen=POTENTIAL_PARENTS_CACHE_SIZE)
         self.distributed_peers: List[DistributedPeer] = []
 
         # State parameters sent by the server
@@ -137,11 +140,21 @@ class DistributedNetwork(BaseManager):
             if peer.username == username and peer.connection == connection:
                 return peer
 
+    async def reset(self):
+        """Disconnects all parent and child connections"""
+        await self._unset_children()
+        await self._unset_parent()
+
     async def _set_parent(self, peer: DistributedPeer):
+        """Sets the given peer to be our parent.
+
+        :param peer: Peer that should become our parent
+        """
         logger.info(f"set parent : {peer}")
         self.parent = peer
 
-        self._cancel_potential_parent_tasks()
+        await asyncio.gather(
+            *self._cancel_potential_parent_tasks(), return_exceptions=True)
         # Cancel all tasks related to potential parents and disconnect all other
         # distributed connections except for children and the parent connection
         # Other distributed connection from the parent that we have should also
@@ -150,13 +163,15 @@ class DistributedNetwork(BaseManager):
             dpeer.connection for dpeer in self.distributed_peers
             if dpeer in [self.parent, ] + self.children and dpeer.connection is not None
         ]
+
+        disconnect_tasks = []
         for peer_connection in self._network.peer_connections:
             if peer_connection.connection_type == PeerConnectionType.DISTRIBUTED:
                 if peer_connection not in distributed_connections:
-                    asyncio.create_task(
-                        peer_connection.disconnect(reason=CloseReason.REQUESTED),
-                        name=f'disconnect-distributed-{task_counter()}'
+                    disconnect_tasks.append(
+                        peer_connection.disconnect(reason=CloseReason.REQUESTED)
                     )
+        await asyncio.gather(*disconnect_tasks, return_exceptions=True)
 
         await self._notify_server_of_parent()
         await self._notify_children_of_branch_values()
@@ -174,10 +189,25 @@ class DistributedNetwork(BaseManager):
                 if peer.connection:
                     await peer.connection.disconnect(reason=CloseReason.REQUESTED)
 
+    async def _unset_children(self):
+        await asyncio.gather(*[
+                self._unset_child(child) for child in self.children
+            ],
+            return_exceptions=True
+        )
+
+    async def _unset_child(self, peer: DistributedPeer):
+        if peer.connection:
+            await peer.connection.disconnect(CloseReason.REQUESTED)
+
     async def _unset_parent(self):
         logger.debug(f"unset parent {self.parent!r}")
 
         self.parent = None
+
+        if not self._session:
+            logger.warning("not advertising branch levels : session is destroyed")
+            return
 
         username = self._session.user.name
         await self._notify_server_of_parent()
@@ -234,13 +264,20 @@ class DistributedNetwork(BaseManager):
         await self._add_child(peer)
 
     async def _add_child(self, peer: DistributedPeer):
+        if not peer.connection:
+            return
+
         logger.debug(f"adding distributed connection as child : {peer!r}")
         self.children.append(peer)
         # Let the child know where we are in the distributed tree
         root, level = self._get_advertised_branch_values()
-        if peer.connection:
-            await peer.connection.send_message(DistributedBranchLevel.Request(level))
-            await peer.connection.send_message(DistributedBranchRoot.Request(root))
+
+        await peer.connection.send_message(DistributedBranchLevel.Request(level))
+        await peer.connection.send_message(DistributedBranchRoot.Request(root))
+
+    def _remove_child(self, peer: DistributedPeer):
+        logger.info(f"removing child : {peer!r}")
+        self.children.remove(peer)
 
     def _potential_parent_task_callback(self, username: str, task: asyncio.Task):
         """Callback for potential parent handling task. This callback simply
@@ -286,9 +323,9 @@ class DistributedNetwork(BaseManager):
             logger.debug("ignoring PotentialParents message : searching for parent is disabled")
             return
 
-        self.potential_parents = [
+        self.potential_parents.extend(
             entry.username for entry in message.entries
-        ]
+        )
 
         for entry in message.entries:
             task = asyncio.create_task(
@@ -307,20 +344,26 @@ class DistributedNetwork(BaseManager):
 
     @on_message(ServerSearchRequest.Response)
     async def _on_server_search_request(self, message: ServerSearchRequest.Response, connection):
-        username = self._session.user.name
-        if message.username == username:
-            return
+        if not self._session:
+            logger.warning("got server search request without a valid session")
 
-        if not self.parent:
-            # Set ourself as parent
-            parent = DistributedPeer(
-                username,
-                None,
-                branch_root=username,
-                branch_level=0
-            )
-            await self._set_parent(parent)
+        else:
+            username = self._session.user.name
+            if message.username == username:
+                return
 
+            if not self.parent:
+                # Set ourself as parent
+                parent = DistributedPeer(
+                    username,
+                    None,
+                    branch_root=username,
+                    branch_level=0
+                )
+                await self._set_parent(parent)
+
+        # Pass the message on to the children anyway, could just be that the
+        #
         await self.send_messages_to_children(message)
 
     # Distributed messages
@@ -416,7 +459,6 @@ class DistributedNetwork(BaseManager):
             await self._MESSAGE_MAP[message.__class__](message, event.connection)
 
     async def _on_session_initialized(self, event: SessionInitializedEvent):
-        logger.debug(f"distributed : session initialized : {event.session}")
         self._session = event.session
         await self._notify_server_of_parent()
 
@@ -431,26 +473,22 @@ class DistributedNetwork(BaseManager):
             return
 
         if event.state == ConnectionState.CLOSED:
-            # Check if it was the parent that was disconnected
-            parent = self.parent
-            if parent and event.connection == parent.connection:
-                await self._unset_parent()
+            peer = self.get_distributed_peer(
+                event.connection.username, event.connection)
+            if not peer:
+                logger.warning(
+                    f"distributed connection was not registered with the network : {event.connection!r}")
                 return
 
-            # Check if it was a child
-            new_children = []
-            for child in self.children:
-                if child.connection == event.connection:
-                    logger.debug(f"removing child {child!r}")
-                else:
-                    new_children.append(child)
-            self.children = new_children
+            # Check if it was the parent or child that was disconnected
+            if self.parent and peer == self.parent:
+                await self._unset_parent()
+
+            if peer in self.children:
+                self._remove_child(peer)
 
             # Remove from the distributed connections
-            self.distributed_peers = [
-                peer for peer in self.distributed_peers
-                if peer.connection != event.connection
-            ]
+            self.distributed_peers.remove(peer)
 
     async def send_messages_to_children(self, *messages: Union[MessageDataclass, bytes]):
         for child in self.children:
