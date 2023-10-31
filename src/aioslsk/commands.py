@@ -45,6 +45,8 @@ from .protocol.messages import (
     RoomChatMessage,
     RoomList,
     RoomSearch,
+    RoomTickerAdded,
+    SetRoomTicker,
     SetStatus,
     TogglePrivateRoomInvites,
     UserSearch,
@@ -659,6 +661,36 @@ class RoomMessageCommand(BaseCommand[RoomChatMessage.Response, RoomMessage]):
         )
 
 
+class SetRoomTickerCommand(BaseCommand[RoomTickerAdded, None]):
+
+    def __init__(self, room: str, ticker: str):
+        super().__init__()
+        self.room: str = room
+        self.ticker: str = ticker
+        self._username: Optional[str] = None
+
+    async def send(self, client: SoulSeekClient):
+        self._username = client.session.user.name
+        await client.network.send_server_messages(
+            SetRoomTicker.Request(
+                self.room,
+                self.ticker
+            )
+        )
+
+    def response(self) -> 'SetRoomTickerCommand':
+        self.response_future = ExpectedResponse(
+            ServerConnection,
+            RoomTickerAdded.Response,
+            fields={
+                'room': self.room,
+                'username': self._username,
+                'ticker': self.ticker
+            }
+        )
+        return self
+
+
 class AddInterestCommand(BaseCommand[None, None]):
 
     def __init__(self, interest: str):
@@ -832,7 +864,7 @@ class PeerGetUserInfoCommand(BaseCommand[PeerUserInfoReply.Request, User]):
         self.response_future = ExpectedResponse(
             PeerConnection,
             PeerUserInfoReply.Request,
-            peer=self.username,
+            peer=self.username
         )
         return self
 

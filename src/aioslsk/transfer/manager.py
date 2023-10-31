@@ -941,7 +941,6 @@ class TransferManager(BaseManager):
                 await connection.disconnect(CloseReason.REQUESTED)
 
     async def _on_session_initialized(self, event: SessionInitializedEvent):
-        logger.debug(f"transfers : session initialized : {event.session}")
         await self.manage_transfers()
 
     @on_message(PeerTransferRequest.Request)

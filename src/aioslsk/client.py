@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 import logging
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from .base_manager import BaseManager
 from .commands import BaseCommand
@@ -32,7 +32,6 @@ from .settings import Settings
 from .transfer.cache import TransferCache, TransferNullCache
 from .transfer.manager import TransferManager
 from .user.manager import UserManager
-from .user.model import User
 from .utils import ticket_generator
 
 
