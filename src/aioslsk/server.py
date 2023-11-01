@@ -11,7 +11,6 @@ from .events import (
     EventBus,
     InternalEventBus,
     ScanCompleteEvent,
-    ServerDisconnectedEvent,
 )
 from .protocol.messages import Ping, SharedFoldersFiles
 from .network.connection import ConnectionState, ServerConnection
@@ -97,7 +96,3 @@ class ServerManager(BaseManager):
         elif event.state == ConnectionState.CLOSING:
 
             self._cancel_ping_task()
-
-        elif event.state == ConnectionState.CLOSED:
-
-            await self._event_bus.emit(ServerDisconnectedEvent())

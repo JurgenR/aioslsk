@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 # Internal functions
 
 def on_message(message_class: Type[MessageDataclass]):
-    """Decorator for methods listening to specific L{Message} events"""
+    """Decorator for methods listening to specific `MessageData` events"""
     def register(event_func):
         event_func._registered_message = message_class
         return event_func
@@ -90,16 +90,6 @@ class InternalEventBus(EventBus):
 # Public events
 class Event:
     pass
-
-
-@dataclass(frozen=True)
-class ServerConnectedEvent(Event):
-    """Emitted when server got connected"""
-
-
-@dataclass(frozen=True)
-class ServerDisconnectedEvent(Event):
-    """Emitted when server got disconnected"""
 
 
 @dataclass(frozen=True)
@@ -348,12 +338,6 @@ class UserDirectoryEvent(Event):
 @dataclass(frozen=True)
 class TransferAddedEvent(Event):
     transfer: Transfer
-
-
-@dataclass(frozen=True)
-class TransferStateChanged(Event):
-    transfer: Transfer
-    state: TransferState.State
 
 
 # Internal Events
