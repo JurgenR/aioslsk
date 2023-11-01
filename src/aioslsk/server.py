@@ -10,9 +10,8 @@ from .events import (
     ConnectionStateChangedEvent,
     EventBus,
     InternalEventBus,
-    ScanCompleteEvent,
 )
-from .protocol.messages import Ping, SharedFoldersFiles
+from .protocol.messages import Ping
 from .network.connection import ConnectionState, ServerConnection
 from .network.network import Network
 from .shares.manager import SharesManager
@@ -52,16 +51,6 @@ class ServerManager(BaseManager):
         """Send ping to the server"""
         await self._network.send_server_messages(Ping.Request())
 
-    async def report_shares(self):
-        """Reports the shares amount to the server"""
-        folder_count, file_count = self._shares_manager.get_stats()
-        logger.debug(f"reporting shares to the server (folder_count={folder_count}, file_count={file_count})")
-        await self._network.send_server_messages(
-            SharedFoldersFiles.Request(
-                shared_folder_count=folder_count,
-                shared_file_count=file_count
-            )
-        )
 
     # Job methods
 
@@ -79,9 +68,6 @@ class ServerManager(BaseManager):
             self._ping_task = None
 
     # Listeners
-
-    async def _on_scan_completed(self, event: ScanCompleteEvent):
-        await self.report_shares()
 
     async def _on_state_changed(self, event: ConnectionStateChangedEvent):
         if not isinstance(event.connection, ServerConnection):

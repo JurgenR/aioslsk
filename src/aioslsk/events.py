@@ -350,7 +350,7 @@ class InternalEvent(Event):
 class ConnectionStateChangedEvent(InternalEvent):
     connection: Connection
     state: ConnectionState
-    close_reason: CloseReason
+    close_reason: Optional[CloseReason] = None
 
 
 @dataclass(frozen=True)

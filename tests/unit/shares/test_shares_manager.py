@@ -11,7 +11,7 @@ from pytest_unordered import unordered
 import os
 import sys
 from typing import List
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 
 
 RESOURCES = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'resources')
@@ -75,12 +75,14 @@ async def _load_and_scan(manager: SharesManager):
 
 @pytest.fixture
 def manager(tmp_path):
-    return SharesManager(Settings(**DEFAULT_SETTINGS), InternalEventBus())
+    return SharesManager(
+        Settings(**DEFAULT_SETTINGS), InternalEventBus(), AsyncMock())
 
 
 @pytest.fixture
 def manager_query(tmp_path):
-    manager = SharesManager(Settings(**DEFAULT_SETTINGS), InternalEventBus())
+    manager = SharesManager(
+        Settings(**DEFAULT_SETTINGS), InternalEventBus(), AsyncMock())
     manager._shared_directories = [SHARED_DIRECTORY]
     manager._build_term_map(SHARED_DIRECTORY)
 

@@ -299,6 +299,7 @@ class SoulSeekClient:
         return SharesManager(
             self.settings,
             self._internal_events,
+            self.network,
             cache=cache
         )
 
