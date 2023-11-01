@@ -421,8 +421,8 @@ class SharesManager(BaseManager):
         """Scan the files and their attributes for all directories currently
         defined in the `shared_directories`
 
-        This method will emit a `ScanCompleteEvent` on the internal event bus
-        and report the shares to the server
+        This method will emit a `ScanCompleteEvent` on the event bus and report
+        the shares to the server
         """
         start_time = time.perf_counter()
 

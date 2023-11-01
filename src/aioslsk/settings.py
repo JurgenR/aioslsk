@@ -25,7 +25,7 @@ class UpnpSettings(BaseModel, validate_assignment=True):
 
 
 class ReconnectSettings(BaseModel, validate_assignment=True):
-    auto: bool = True
+    auto: bool = False
     timeout: int = 10
 
 
@@ -68,6 +68,8 @@ class CredentialsSettings(BaseModel, validate_assignment=True):
     password: str
     info: UserInfoSettings = Field(default_factory=UserInfoSettings)
 
+    def are_configured(self) -> bool:
+        return self.username is not None and self.password is not None
 
 class SearchSettings(BaseModel, validate_assignment=True):
     wishlist: List[WishlistSettingEntry] = Field(default_factory=list)

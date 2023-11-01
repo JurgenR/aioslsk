@@ -318,32 +318,45 @@ class Network:
         for conn in self.peer_connections:
             conn.download_rate_limiter = self._download_rate_limiter
 
-    async def _connection_watchdog_job(self):
+    async def _server_connection_watchdog_job(self):
         """Reconnects to the server if it is closed. This should be started as a
         task and should be cancelled upon request.
         """
         timeout = self._settings.network.server.reconnect.timeout
         logger.info("starting server connection watchdog")
+        last_state = self.server_connection.state
         while True:
             await asyncio.sleep(0.5)
 
             if self.server_connection.state == ConnectionState.CLOSED:
-                logger.info(f"will attempt to reconnect to server in {timeout} seconds")
-                await asyncio.sleep(timeout)
-                try:
-                    await self.connect_server()
-                except ConnectionFailedError:
-                    logger.warning("failed to reconnect to server")
 
-    async def start_connection_watchdog(self):
+                if not self._settings.credentials.are_configured():
+                    if self.server_connection.state != last_state:
+                        logger.warning(
+                            "credentials are not correctly configured in the "
+                            "settings, will not attempt to reconnect"
+                        )
+                    continue
+
+                else:
+                    logger.info(f"will attempt to reconnect to server in {timeout} seconds")
+                    await asyncio.sleep(timeout)
+                    try:
+                        await self.connect_server()
+                    except ConnectionFailedError:
+                        logger.warning("failed to reconnect to server")
+
+            last_state = self.server_connection.state
+
+    async def start_server_connection_watchdog(self):
         """Starts the server connection watchdog if it is not already running"""
         if self._connection_watchdog_task is None:
             self._connection_watchdog_task = asyncio.create_task(
-                self._connection_watchdog_job(),
+                self._server_connection_watchdog_job(),
                 name=f'watchdog-task-{task_counter()}'
             )
 
-    def stop_connection_watchdog(self):
+    def stop_server_connection_watchdog(self):
         """Stops the server connection watchdog if it is running"""
         if self._connection_watchdog_task is not None:
             self._connection_watchdog_task.cancel()
@@ -824,7 +837,7 @@ class Network:
             self, state: ConnectionState, connection: Connection,
             close_reason: CloseReason = CloseReason.UNKNOWN):
         """Called when the state of a connection changes. This method calls 3
-        private method based on the type of L{connection} that was passed
+        private method based on the type of `connection` that was passed
 
         :param state: the new state the connection has received
         :param connection: the connection for which the state changed
@@ -857,7 +870,7 @@ class Network:
 
             # Register server connection watchdog
             if self._settings.network.server.reconnect.auto:
-                await self.start_connection_watchdog()
+                await self.start_server_connection_watchdog()
 
         elif state == ConnectionState.CLOSING:
 
@@ -876,12 +889,12 @@ class Network:
             # An EOF will also be sent in case you are kicked due to the same
             # login being used in another location
             if close_reason == CloseReason.REQUESTED:
-                self.stop_connection_watchdog()
+                self.stop_server_connection_watchdog()
 
             elif close_reason == CloseReason.EOF:
                 logger.warning(
                     "server closed connection, will not attempt to reconnect")
-                self.stop_connection_watchdog()
+                self.stop_server_connection_watchdog()
 
     async def _on_peer_connection_state_changed(
             self, state: ConnectionState, connection: PeerConnection,

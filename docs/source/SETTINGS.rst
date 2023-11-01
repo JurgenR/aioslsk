@@ -30,7 +30,8 @@ Network
 +------------------------------------+---------+---------------------------------------------------------------------------------------------------+--------------------+
 | network.server.port                | integer |                                                                                                   | 2416               |
 +------------------------------------+---------+---------------------------------------------------------------------------------------------------+--------------------+
-| network.server.reconnect.auto      | boolean | Automatically try to reconnect to the server when the server disconnects                          | true               |
+| network.server.reconnect.auto      | boolean | Automatically try to reconnect to the server when the server disconnects. No attempt to reconnect | false              |
+|                                    |         | will be made when: disconnecting, server closed connection, credentials are not set               |                    |
 +------------------------------------+---------+---------------------------------------------------------------------------------------------------+--------------------+
 | network.server.reconnect.timeout   | integer | Timeout after which we should try reconnecting to the server                                      | 10                 |
 +------------------------------------+---------+---------------------------------------------------------------------------------------------------+--------------------+
