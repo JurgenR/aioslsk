@@ -46,6 +46,7 @@ from ..events import (
     PeerInitializedEvent,
     MessageReceivedEvent,
     SessionInitializedEvent,
+    ServerReconnectedEvent,
 )
 from ..protocol.messages import (
     CannotConnect,
@@ -345,6 +346,9 @@ class Network:
                         await self.connect_server()
                     except ConnectionFailedError:
                         logger.warning("failed to reconnect to server")
+                    else:
+                        await self._internal_event_bus.emit(
+                            ServerReconnectedEvent())
 
             last_state = self.server_connection.state
 
