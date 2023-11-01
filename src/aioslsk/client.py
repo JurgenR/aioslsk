@@ -4,7 +4,8 @@ import logging
 from typing import List, Optional
 
 from .base_manager import BaseManager
-from .commands import BaseCommand
+from .commands import BaseCommand, RC, RT
+from .constants import DEFAULT_COMMAND_TIMEOUT
 from .distributed import DistributedNetwork
 from .events import (
     build_message_map,
@@ -174,7 +175,10 @@ class SoulSeekClient:
                 f"expected login response from server but got : {response}")
 
         if not response.success:
-            raise AuthenticationError(f"authentication failed for user : {username}")
+            raise AuthenticationError(
+                response.reason,
+                f"authentication failed for user : {username}"
+            )
 
         # Notify all listeners that the session has been initialized
         self.session = Session(
@@ -200,10 +204,14 @@ class SoulSeekClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.stop()
 
-    async def __call__(self, command: BaseCommand):
-        await self.execute(command)
+    async def __call__(
+            self, command: BaseCommand[RC, RT], response: bool = False,
+            timeout: float = DEFAULT_COMMAND_TIMEOUT) -> Optional[RT]:
+        return await self.execute(command, response=response, timeout=timeout)
 
-    async def execute(self, command: BaseCommand):
+    async def execute(
+            self, command: BaseCommand[RC, RT], response: bool = False,
+            timeout: float = DEFAULT_COMMAND_TIMEOUT) -> Optional[RT]:
         """Execute a `BaseCommand`, see the `commands.py` module for a list of
         possible commands.
 
@@ -216,7 +224,8 @@ class SoulSeekClient:
         ..code-block:: python
             from aioslsk.commands import GetUserStatusCommand
 
-            status = await client.execute(GetUserStatusCommand('someuser').response())
+            status = await client.execute(
+                GetUserStatusCommand('someuser'), reponse=True)
 
         Example without response:
 
@@ -226,26 +235,31 @@ class SoulSeekClient:
             await client.execute(JoinRoomCommand('cool room'))
 
         :param command: Command class to execute
+        :param response: Wait for the response (default: `False`)
+        :param timeout: Timeout waiting for response (default: `10`)
         :raise InvalidSessionError: When no logon has been performed
         :return: Optional response depending on how the command was configured
         """
         if self.session is None:
             raise InvalidSessionError("client is not logged in")
 
-        if command.response_future:
-            self.network.register_response_future(command.response_future)
+        response_future = command.build_expected_response(self)
+        if response and response_future:
+            response_future = command.build_expected_response(self)
+            self.network.register_response_future(response_future)
 
         try:
             await command.send(self)
         except Exception:
-            if command.response_future:
-                command.response_future.cancel()
+            if response and response_future:
+                response_future.cancel()
             raise
 
-        if command.response_future:
-            _, response = await asyncio.wait_for(
-                command.response_future, timeout=10)
-            return command.process_response(self, response)
+        if response and response_future:
+            _, response_obj = await asyncio.wait_for(
+                response_future, timeout=timeout)
+            return command.handle_response(self, response_obj)
+        return None
 
     # Creation methods
 

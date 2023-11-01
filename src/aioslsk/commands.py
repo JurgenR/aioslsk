@@ -77,24 +77,20 @@ UserInterests = Tuple[List[str], List[str]]
 
 class BaseCommand(ABC, Generic[RC, RT]):
 
-    def __init__(self):
-        self.response_future: Optional[ExpectedResponse] = None
-
     @abstractmethod
     async def send(self, client: SoulSeekClient):
         ...
 
-    def response(self) -> 'BaseCommand':
-        return self
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return None
 
-    def process_response(self, client: SoulSeekClient, response: RC) -> Optional[RT]:
+    def handle_response(self, client: SoulSeekClient, response: RC) -> Optional[RT]:
         return None
 
 
 class GetUserStatusCommand(BaseCommand[GetUserStatus.Response, UserStatus]):
 
     def __init__(self, username: str):
-        super().__init__()
         self.username: str = username
 
     async def send(self, client: SoulSeekClient):
@@ -102,17 +98,16 @@ class GetUserStatusCommand(BaseCommand[GetUserStatus.Response, UserStatus]):
             GetUserStatus.Request(self.username)
         )
 
-    def response(self) -> 'GetUserStatusCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             GetUserStatus.Response,
             fields={
                 'username': self.username
             }
         )
-        return self
 
-    def process_response(
+    def handle_response(
             self, client: SoulSeekClient, response: GetUserStatus.Response) -> UserStatus:
         return UserStatus(response.status)
 
@@ -120,7 +115,6 @@ class GetUserStatusCommand(BaseCommand[GetUserStatus.Response, UserStatus]):
 class GetUserStatsCommand(BaseCommand[GetUserStats.Response, UserStats]):
 
     def __init__(self, username: str):
-        super().__init__()
         self.username: str = username
 
     async def send(self, client: SoulSeekClient):
@@ -128,17 +122,16 @@ class GetUserStatsCommand(BaseCommand[GetUserStats.Response, UserStats]):
             GetUserStats.Request(self.username)
         )
 
-    def response(self) -> 'GetUserStatsCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             GetUserStats.Response,
             fields={
                 'username': self.username
             }
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: GetUserStats.Response) -> UserStats:
+    def handle_response(self, client: SoulSeekClient, response: GetUserStats.Response) -> UserStats:
         return response.user_stats
 
 
@@ -149,14 +142,13 @@ class GetRoomListCommand(BaseCommand[RoomList.Response, List[Room]]):
             RoomList.Request()
         )
 
-    def response(self) -> 'GetRoomListCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             RoomList.Response
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: RoomList.Response) -> List[Room]:
+    def handle_response(self, client: SoulSeekClient, response: RoomList.Response) -> List[Room]:
         return [
             room for name, room in client.rooms.rooms.items()
             if name in response.rooms
@@ -166,7 +158,6 @@ class GetRoomListCommand(BaseCommand[RoomList.Response, List[Room]]):
 class JoinRoomCommand(BaseCommand[JoinRoom.Response, Room]):
 
     def __init__(self, room: str, private: bool = False):
-        super().__init__()
         self.room: str = room
         self.private: bool = private
 
@@ -175,24 +166,22 @@ class JoinRoomCommand(BaseCommand[JoinRoom.Response, Room]):
             JoinRoom.Request(self.room, is_private=self.private)
         )
 
-    def response(self) -> 'JoinRoomCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             JoinRoom.Response,
             fields={
                 'room': self.room
             }
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: JoinRoom.Response) -> Room:
+    def handle_response(self, client: SoulSeekClient, response: JoinRoom.Response) -> Room:
         return client.rooms.get_or_create_room(response.room)
 
 
 class LeaveRoomCommand(BaseCommand[LeaveRoom.Response, Room]):
 
     def __init__(self, room: str):
-        super().__init__()
         self.room: str = room
 
     async def send(self, client: SoulSeekClient):
@@ -200,24 +189,22 @@ class LeaveRoomCommand(BaseCommand[LeaveRoom.Response, Room]):
             LeaveRoom.Request(self.room)
         )
 
-    def response(self) -> 'LeaveRoomCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             LeaveRoom.Response,
             fields={
                 'room': self.room
             }
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: LeaveRoom.Response) -> Room:
+    def handle_response(self, client: SoulSeekClient, response: LeaveRoom.Response) -> Room:
         return client.rooms.get_or_create_room(response.room)
 
 
 class GrantRoomMembershipCommand(BaseCommand[PrivateRoomGrantMembership.Response, Tuple[Room, User]]):
 
     def __init__(self, room: str, username: str):
-        super().__init__()
         self.room: str = room
         self.username: str = username
 
@@ -226,8 +213,8 @@ class GrantRoomMembershipCommand(BaseCommand[PrivateRoomGrantMembership.Response
             PrivateRoomGrantMembership.Request(self.room, self.username)
         )
 
-    def response(self) -> 'GrantRoomMembershipCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             PrivateRoomGrantMembership.Response,
             fields={
@@ -235,9 +222,8 @@ class GrantRoomMembershipCommand(BaseCommand[PrivateRoomGrantMembership.Response
                 'username': self.username
             }
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: PrivateRoomGrantMembership.Response) -> Tuple[Room, User]:
+    def handle_response(self, client: SoulSeekClient, response: PrivateRoomGrantMembership.Response) -> Tuple[Room, User]:
         return (
             client.rooms.get_or_create_room(response.room),
             client.users.get_or_create_user(response.username)
@@ -247,7 +233,6 @@ class GrantRoomMembershipCommand(BaseCommand[PrivateRoomGrantMembership.Response
 class RevokeRoomMembershipCommand(BaseCommand[PrivateRoomRevokeMembership.Response, Tuple[Room, User]]):
 
     def __init__(self, room: str, username: str):
-        super().__init__()
         self.room: str = room
         self.username: str = username
 
@@ -256,8 +241,8 @@ class RevokeRoomMembershipCommand(BaseCommand[PrivateRoomRevokeMembership.Respon
             PrivateRoomRevokeMembership.Request(self.room, self.username)
         )
 
-    def response(self) -> 'RevokeRoomMembershipCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             PrivateRoomRevokeMembership.Response,
             fields={
@@ -265,9 +250,8 @@ class RevokeRoomMembershipCommand(BaseCommand[PrivateRoomRevokeMembership.Respon
                 'username': self.username
             }
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: PrivateRoomRevokeMembership.Response) -> Tuple[Room, User]:
+    def handle_response(self, client: SoulSeekClient, response: PrivateRoomRevokeMembership.Response) -> Tuple[Room, User]:
         return (
             client.rooms.get_or_create_room(response.room),
             client.users.get_or_create_user(response.username)
@@ -277,35 +261,31 @@ class RevokeRoomMembershipCommand(BaseCommand[PrivateRoomRevokeMembership.Respon
 class DropRoomMembershipCommand(BaseCommand[PrivateRoomMembershipRevoked.Response, Room]):
 
     def __init__(self, room: str):
-        super().__init__()
         self.room: str = room
         self._username: Optional[str] = None
 
     async def send(self, client: SoulSeekClient):
-        self._username = client.session.user.name
         await client.network.send_server_messages(
             PrivateRoomDropMembership.Request(self.room)
         )
 
-    def response(self) -> 'DropRoomMembershipCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             PrivateRoomMembershipRevoked.Response,
             fields={
                 'room': self.room,
-                'username': self._username
+                'username': client.session.user.name
             }
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: PrivateRoomMembershipRevoked.Response) -> Room:
+    def handle_response(self, client: SoulSeekClient, response: PrivateRoomMembershipRevoked.Response) -> Room:
         return client.rooms.get_or_create_room(response.room)
 
 
 class DropRoomOwnershipCommand(BaseCommand[None, None]):
 
     def __init__(self, room: str):
-        super().__init__()
         self.room: str = room
 
     async def send(self, client: SoulSeekClient):
@@ -317,7 +297,6 @@ class DropRoomOwnershipCommand(BaseCommand[None, None]):
 class GetItemRecommendationsCommand(BaseCommand[GetItemRecommendations.Response, List[Recommendation]]):
 
     def __init__(self, item: str):
-        super().__init__()
         self.item: str = item
 
     async def send(self, client: SoulSeekClient):
@@ -325,17 +304,16 @@ class GetItemRecommendationsCommand(BaseCommand[GetItemRecommendations.Response,
             GetItemRecommendations.Request(self.item)
         )
 
-    def response(self) -> 'GetItemRecommendationsCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             GetItemRecommendations.Response,
             fields={
                 'item': self.item
             }
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: GetItemRecommendations.Response) -> List[Recommendation]:
+    def handle_response(self, client: SoulSeekClient, response: GetItemRecommendations.Response) -> List[Recommendation]:
         return response.recommendations
 
 
@@ -346,14 +324,13 @@ class GetRecommendationsCommand(BaseCommand[GetRecommendations.Response, Recomme
             GetRecommendations.Request()
         )
 
-    def response(self) -> 'GetRecommendationsCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             GetRecommendations.Response
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: GetRecommendations.Response) -> Recommendations:
+    def handle_response(self, client: SoulSeekClient, response: GetRecommendations.Response) -> Recommendations:
         return response.recommendations, response.unrecommendations
 
 
@@ -364,21 +341,19 @@ class GetGlobalRecommendationsCommand(BaseCommand[GetGlobalRecommendations.Respo
             GetGlobalRecommendations.Request()
         )
 
-    def response(self) -> 'GetGlobalRecommendationsCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             GetGlobalRecommendations.Response
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: GetGlobalRecommendations.Response) -> Recommendations:
+    def handle_response(self, client: SoulSeekClient, response: GetGlobalRecommendations.Response) -> Recommendations:
         return response.recommendations, response.unrecommendations
 
 
 class GetItemSimilarUsersCommand(BaseCommand[GetItemSimilarUsers.Response, List[User]]):
 
     def __init__(self, item: str):
-        super().__init__()
         self.item: str = item
 
     async def send(self, client: SoulSeekClient):
@@ -386,17 +361,16 @@ class GetItemSimilarUsersCommand(BaseCommand[GetItemSimilarUsers.Response, List[
             GetItemSimilarUsers.Request(self.item)
         )
 
-    def response(self) -> 'GetItemSimilarUsersCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             GetItemSimilarUsers.Response,
             fields={
                 'item': self.item
             }
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: GetItemSimilarUsers.Response) -> List[User]:
+    def handle_response(self, client: SoulSeekClient, response: GetItemSimilarUsers.Response) -> List[User]:
         return list(map(client.users.get_or_create_user, response.usernames))
 
 
@@ -407,14 +381,13 @@ class GetSimilarUsersCommand(BaseCommand[GetSimilarUsers.Response, List[User]]):
             GetSimilarUsers.Request()
         )
 
-    def response(self) -> 'GetSimilarUsersCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             GetSimilarUsers.Response
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: GetSimilarUsers.Response) -> List[User]:
+    def handle_response(self, client: SoulSeekClient, response: GetSimilarUsers.Response) -> List[User]:
         return [
             client.users.get_or_create_user(user.username)
             for user in response.users
@@ -424,7 +397,6 @@ class GetSimilarUsersCommand(BaseCommand[GetSimilarUsers.Response, List[User]]):
 class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, Tuple[str, int, int]]):
 
     def __init__(self, username: str):
-        super().__init__()
         self.username: str = username
 
     async def send(self, client: SoulSeekClient):
@@ -432,24 +404,22 @@ class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, Tuple[str, int,
             GetPeerAddress.Request(self.username)
         )
 
-    def response(self) -> 'GetPeerAddressCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             GetPeerAddress.Response,
             fields={
                 'username': self.username
             }
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: GetPeerAddress.Response) -> Tuple[str, int, int]:
+    def handle_response(self, client: SoulSeekClient, response: GetPeerAddress.Response) -> Tuple[str, int, int]:
         return (response.ip, response.port, response.obfuscated_port)
 
 
 class GrantRoomOperatorCommand(BaseCommand[PrivateRoomGrantOperator.Response, None]):
 
     def __init__(self, room: str, username: str):
-        super().__init__()
         self.room: str = room
         self.username: str = username
 
@@ -458,8 +428,8 @@ class GrantRoomOperatorCommand(BaseCommand[PrivateRoomGrantOperator.Response, No
             PrivateRoomGrantOperator.Request(self.room, self.username)
         )
 
-    def response(self) -> 'GrantRoomOperatorCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             PrivateRoomGrantOperator.Response,
             fields={
@@ -467,16 +437,14 @@ class GrantRoomOperatorCommand(BaseCommand[PrivateRoomGrantOperator.Response, No
                 'username': self.username
             }
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: PrivateRoomGrantOperator.Response) -> None:
+    def handle_response(self, client: SoulSeekClient, response: PrivateRoomGrantOperator.Response) -> None:
         return None
 
 
 class RevokeRoomOperatorCommand(BaseCommand[PrivateRoomRevokeOperator.Response, None]):
 
     def __init__(self, room: str, username: str):
-        super().__init__()
         self.room: str = room
         self.username: str = username
 
@@ -485,8 +453,8 @@ class RevokeRoomOperatorCommand(BaseCommand[PrivateRoomRevokeOperator.Response, 
             PrivateRoomRevokeOperator.Request(self.room, self.username)
         )
 
-    def response(self) -> 'RevokeRoomOperatorCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             PrivateRoomRevokeOperator.Response,
             fields={
@@ -494,16 +462,14 @@ class RevokeRoomOperatorCommand(BaseCommand[PrivateRoomRevokeOperator.Response, 
                 'username': self.username
             }
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: PrivateRoomRevokeOperator.Response) -> None:
+    def handle_response(self, client: SoulSeekClient, response: PrivateRoomRevokeOperator.Response) -> None:
         return None
 
 
 class TogglePublicChatCommand(BaseCommand[None, None]):
 
     def __init__(self, enable: bool):
-        super().__init__()
         self.enable: bool = enable
 
     async def send(self, client: SoulSeekClient):
@@ -517,7 +483,6 @@ class TogglePublicChatCommand(BaseCommand[None, None]):
 class TogglePrivateRoomInvitesCommand(BaseCommand[TogglePrivateRoomInvites.Response, None]):
 
     def __init__(self, enable: bool):
-        super().__init__()
         self.enable: bool = enable
 
     async def send(self, client: SoulSeekClient):
@@ -525,24 +490,22 @@ class TogglePrivateRoomInvitesCommand(BaseCommand[TogglePrivateRoomInvites.Respo
             TogglePrivateRoomInvites.Request(self.enable)
         )
 
-    def response(self) -> 'TogglePrivateRoomInvitesCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             TogglePrivateRoomInvites.Response,
             fields={
                 'enabled': self.enable
             }
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: TogglePrivateRoomInvites.Response) -> None:
+    def handle_response(self, client: SoulSeekClient, response: TogglePrivateRoomInvites.Response) -> None:
         return None
 
 
 class GlobalSearchCommand(BaseCommand[None, None]):
 
     def __init__(self, query: str):
-        super().__init__()
         self.query: str = query
 
     async def send(self, client: SoulSeekClient):
@@ -558,7 +521,6 @@ class GlobalSearchCommand(BaseCommand[None, None]):
 class UserSearchCommand(BaseCommand[None, None]):
 
     def __init__(self, username: str, query: str):
-        super().__init__()
         self.username: str = username
         self.query: str = query
 
@@ -576,7 +538,6 @@ class UserSearchCommand(BaseCommand[None, None]):
 class RoomSearchCommand(BaseCommand[None, None]):
 
     def __init__(self, room: str, query: str):
-        super().__init__()
         self.room: str = room
         self.query: str = query
 
@@ -593,7 +554,6 @@ class RoomSearchCommand(BaseCommand[None, None]):
 class PrivateMessageCommand(BaseCommand[None, None]):
 
     def __init__(self, username: str, message: str):
-        super().__init__()
         self.username: str = username
         self.message: str = message
 
@@ -610,8 +570,7 @@ class PrivateMessageUsersCommand(BaseCommand[None, None]):
     """Sends a private message to multiple users"""
 
     def __init__(self, usernames: List[str], message: str):
-        super().__init__()
-        self.usernames: str = usernames
+        self.usernames: List[str] = usernames
         self.message: str = message
 
     async def send(self, client: SoulSeekClient):
@@ -626,13 +585,10 @@ class PrivateMessageUsersCommand(BaseCommand[None, None]):
 class RoomMessageCommand(BaseCommand[RoomChatMessage.Response, RoomMessage]):
 
     def __init__(self, room: str, message: str):
-        super().__init__()
         self.room: str = room
         self.message: str = message
-        self._username: Optional[str] = None
 
     async def send(self, client: SoulSeekClient):
-        self._username = client.session.user.name
         await client.network.send_server_messages(
             RoomChatMessage.Request(
                 self.room,
@@ -640,37 +596,33 @@ class RoomMessageCommand(BaseCommand[RoomChatMessage.Response, RoomMessage]):
             )
         )
 
-    def response(self) -> 'RoomMessageCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             RoomChatMessage.Response,
             fields={
                 'room': self.room,
-                'username': self._username,
+                'username': client.session.user.name,
                 'message': self.message
             }
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: RoomChatMessage.Response) -> RoomMessage:
+    def handle_response(self, client: SoulSeekClient, response: RoomChatMessage.Response) -> RoomMessage:
         return RoomMessage(
             timestamp=int(time.time()),
-            user=client.users.get_or_create_user(self._username),
+            user=client.users.get_or_create_user(client.session.user.name),
             room=client.rooms.get_or_create_room(self.room),
             message=self.message
         )
 
 
-class SetRoomTickerCommand(BaseCommand[RoomTickerAdded, None]):
+class SetRoomTickerCommand(BaseCommand[RoomTickerAdded.Response, None]):
 
     def __init__(self, room: str, ticker: str):
-        super().__init__()
         self.room: str = room
         self.ticker: str = ticker
-        self._username: Optional[str] = None
 
     async def send(self, client: SoulSeekClient):
-        self._username = client.session.user.name
         await client.network.send_server_messages(
             SetRoomTicker.Request(
                 self.room,
@@ -678,23 +630,21 @@ class SetRoomTickerCommand(BaseCommand[RoomTickerAdded, None]):
             )
         )
 
-    def response(self) -> 'SetRoomTickerCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             RoomTickerAdded.Response,
             fields={
                 'room': self.room,
-                'username': self._username,
+                'username': client.session.user.name,
                 'ticker': self.ticker
             }
         )
-        return self
 
 
 class AddInterestCommand(BaseCommand[None, None]):
 
     def __init__(self, interest: str):
-        super().__init__()
         self.interest: str = interest
 
     async def send(self, client: SoulSeekClient):
@@ -706,7 +656,6 @@ class AddInterestCommand(BaseCommand[None, None]):
 class AddHatedInterestCommand(BaseCommand[None, None]):
 
     def __init__(self, hated_interest: str):
-        super().__init__()
         self.hated_interest: str = hated_interest
 
     async def send(self, client: SoulSeekClient):
@@ -718,7 +667,6 @@ class AddHatedInterestCommand(BaseCommand[None, None]):
 class RemoveInterestCommand(BaseCommand[None, None]):
 
     def __init__(self, interest: str):
-        super().__init__()
         self.interest: str = interest
 
     async def send(self, client: SoulSeekClient):
@@ -730,7 +678,6 @@ class RemoveInterestCommand(BaseCommand[None, None]):
 class RemoveHatedInterestCommand(BaseCommand[None, None]):
 
     def __init__(self, hated_interest: str):
-        super().__init__()
         self.hated_interest: str = hated_interest
 
     async def send(self, client: SoulSeekClient):
@@ -742,7 +689,6 @@ class RemoveHatedInterestCommand(BaseCommand[None, None]):
 class GetUserInterestsCommand(BaseCommand[GetUserInterests.Response, UserInterests]):
 
     def __init__(self, username: str):
-        super().__init__()
         self.username: str = username
 
     async def send(self, client: SoulSeekClient):
@@ -750,24 +696,22 @@ class GetUserInterestsCommand(BaseCommand[GetUserInterests.Response, UserInteres
             GetUserInterests.Request(self.username)
         )
 
-    def response(self) -> 'GetUserInterestsCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             GetUserInterests.Response,
             fields={
                 'username': self.username,
             }
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: GetUserInterests.Response) -> UserInterests:
+    def handle_response(self, client: SoulSeekClient, response: GetUserInterests.Response) -> UserInterests:
         return response.interests, response.hated_interests
 
 
 class SetStatusCommand(BaseCommand[None, None]):
 
     def __init__(self, status: UserStatus):
-        super().__init__()
         self.status: UserStatus = status
 
     async def send(self, client: SoulSeekClient):
@@ -779,7 +723,6 @@ class SetStatusCommand(BaseCommand[None, None]):
 class SetNewPasswordCommand(BaseCommand[None, None]):
 
     def __init__(self, password: str):
-        super().__init__()
         self.password: str = password
 
     async def send(self, client: SoulSeekClient):
@@ -793,20 +736,19 @@ class CheckPrivilegesCommand(BaseCommand[CheckPrivileges.Response, int]):
     async def send(self, client: SoulSeekClient):
         await client.network.send_server_messages(CheckPrivileges.Request())
 
-    def response(self) -> 'CheckPrivilegesCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             CheckPrivileges.Response
         )
 
-    def process_response(self, client: SoulSeekClient, response: CheckPrivileges.Response) -> int:
+    def handle_response(self, client: SoulSeekClient, response: CheckPrivileges.Response) -> int:
         return response.time_left
 
 
 class GivePrivilegesCommand(BaseCommand[None, None]):
 
     def __init__(self, username: str, days: int):
-        super().__init__()
         self.username: str = username
         self.days: int = days
 
@@ -822,7 +764,6 @@ class GivePrivilegesCommand(BaseCommand[None, None]):
 class AddUserCommand(BaseCommand[AddUser.Response, User]):
 
     def __init__(self, username: str):
-        super().__init__()
         self.username: str = username
 
     async def send(self, client: SoulSeekClient):
@@ -830,17 +771,16 @@ class AddUserCommand(BaseCommand[AddUser.Response, User]):
             AddUser.Request(username=self.username)
         )
 
-    def response(self) -> 'AddUserCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             ServerConnection,
             AddUser.Response,
             fields={
                 'username': self.username
             }
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: AddUser.Response) -> User:
+    def handle_response(self, client: SoulSeekClient, response: AddUser.Response) -> User:
         if response.exists:
             user = client.users.get_or_create_user(response.username)
             return user
@@ -852,7 +792,6 @@ class AddUserCommand(BaseCommand[AddUser.Response, User]):
 class PeerGetUserInfoCommand(BaseCommand[PeerUserInfoReply.Request, User]):
 
     def __init__(self, username: str):
-        super().__init__()
         self.username: str = username
 
     async def send(self, client: SoulSeekClient):
@@ -860,22 +799,20 @@ class PeerGetUserInfoCommand(BaseCommand[PeerUserInfoReply.Request, User]):
             self.username, PeerUserInfoRequest.Request()
         )
 
-    def response(self) -> 'PeerGetUserInfoCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             PeerConnection,
             PeerUserInfoReply.Request,
             peer=self.username
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: PeerUserInfoReply.Request) -> User:
+    def handle_response(self, client: SoulSeekClient, response: PeerUserInfoReply.Request) -> User:
         return client.users.get_or_create_user(self.username)
 
 
 class PeerGetSharesCommand(BaseCommand[PeerSharesReply.Request, Tuple[List[DirectoryData], List[DirectoryData]]]):
 
     def __init__(self, username: str):
-        super().__init__()
         self.username: str = username
 
     async def send(self, client: SoulSeekClient):
@@ -883,15 +820,14 @@ class PeerGetSharesCommand(BaseCommand[PeerSharesReply.Request, Tuple[List[Direc
             self.username, PeerSharesRequest.Request()
         )
 
-    def response(self) -> 'PeerGetSharesCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             PeerConnection,
             PeerSharesReply.Request,
             peer=self.username
         )
-        return self
 
-    def process_response(
+    def handle_response(
             self, client: SoulSeekClient, response: PeerSharesReply.Request) -> Tuple[List[DirectoryData], List[DirectoryData]]:
         locked_dirs = response.locked_directories or []
         return response.directories, locked_dirs
@@ -900,7 +836,6 @@ class PeerGetSharesCommand(BaseCommand[PeerSharesReply.Request, Tuple[List[Direc
 class PeerGetDirectoryContentCommand(BaseCommand[PeerDirectoryContentsReply.Request, List[DirectoryData]]):
 
     def __init__(self, username: str, directory: str):
-        super().__init__()
         self.username: str = username
         self.directory: str = directory
         self._ticket: Optional[int] = None
@@ -911,8 +846,8 @@ class PeerGetDirectoryContentCommand(BaseCommand[PeerDirectoryContentsReply.Requ
             self.username, PeerDirectoryContentsRequest.Request(self._ticket, self.directory)
         )
 
-    def response(self) -> 'PeerGetDirectoryContentCommand':
-        self.response_future = ExpectedResponse(
+    def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        return ExpectedResponse(
             PeerConnection,
             PeerDirectoryContentsReply.Request,
             peer=self.username,
@@ -921,7 +856,6 @@ class PeerGetDirectoryContentCommand(BaseCommand[PeerDirectoryContentsReply.Requ
                 'directory': self.directory
             }
         )
-        return self
 
-    def process_response(self, client: SoulSeekClient, response: PeerDirectoryContentsReply.Request) -> List[DirectoryData]:
+    def handle_response(self, client: SoulSeekClient, response: PeerDirectoryContentsReply.Request) -> List[DirectoryData]:
         return response.directories

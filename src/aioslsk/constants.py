@@ -22,3 +22,4 @@ PATH_SEPERATOR_PATTERN = re.compile(r"[\\/]+")
 UPNP_SEARCH_TIMEOUT: int = 10
 POTENTIAL_PARENTS_CACHE_SIZE: int = 20
 """Maximum amount of potential parents stored"""
+DEFAULT_COMMAND_TIMEOUT: float = 10

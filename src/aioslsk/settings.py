@@ -1,3 +1,4 @@
+import os
 from typing import Dict, List, Optional, Set
 
 from pydantic import BaseModel, Field
@@ -82,7 +83,7 @@ class TransfersSettings(BaseModel, validate_assignment=True):
 
 class SharesSettings(BaseModel, validate_assignment=True):
     scan_on_start: bool = True
-    download: Optional[str] = None
+    download: str = os.getcwd()
     directories: List[SharedDirectorySettingEntry] = Field(default_factory=list)
 
 
@@ -110,7 +111,7 @@ class DebugSettings(BaseModel, validate_assignment=True):
 
 class Settings(BaseSettings, validate_assignment=True):
     network: NetworkSettings = Field(default_factory=NetworkSettings)
-    credentials: CredentialsSettings = Field(default_factory=CredentialsSettings)
+    credentials: CredentialsSettings = Field(default_factory=CredentialsSettings)  # type: ignore
     searches: SearchSettings = Field(default_factory=SearchSettings)
     shares: SharesSettings = Field(default_factory=SharesSettings)
     users: UsersSettings = Field(default_factory=UsersSettings)
