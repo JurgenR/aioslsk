@@ -14,7 +14,7 @@ from weakref import WeakSet
 
 from ..base_manager import BaseManager
 from .cache import SharesNullCache, SharesCache
-from ..events import InternalEventBus, ScanCompleteEvent
+from ..events import InternalEventBus, ScanCompleteEvent, SessionInitializedEvent
 from ..exceptions import (
     FileNotFoundError,
     FileNotSharedError,
@@ -26,6 +26,8 @@ from ..naming import (
     DefaultNamingStrategy,
     NumberDuplicateStrategy,
 )
+from ..network.network import Network
+from ..protocol.messages import SharedFoldersFiles
 from ..protocol.primitives import DirectoryData
 from ..search.model import SearchQuery
 from ..settings import Settings
@@ -127,9 +129,10 @@ class SharesManager(BaseManager):
 
     def __init__(
             self, settings: Settings, internal_event_bus: InternalEventBus,
-            cache: Optional[SharesCache] = None):
+            network: Network, cache: Optional[SharesCache] = None):
         self._settings: Settings = settings
         self._internal_event_bus: InternalEventBus = internal_event_bus
+        self._network: Network = network
         self._term_map: Dict[str, WeakSet[SharedItem]] = {}
         self._shared_directories: List[SharedDirectory] = list()
         self.scan_task: Optional[asyncio.Task] = None
@@ -141,6 +144,10 @@ class SharesManager(BaseManager):
             DefaultNamingStrategy(),
             NumberDuplicateStrategy()
         ]
+
+    def register_listeners(self):
+        self._internal_event_bus.register(
+            SessionInitializedEvent, self._on_session_initialized)
 
     @property
     def shared_directories(self):
@@ -415,6 +422,7 @@ class SharesManager(BaseManager):
         defined in the `shared_directories`
 
         This method will emit a `ScanCompleteEvent` on the internal event bus
+        and report the shares to the server
         """
         start_time = time.perf_counter()
 
@@ -435,6 +443,8 @@ class SharesManager(BaseManager):
         await self._internal_event_bus.emit(
             ScanCompleteEvent(folder_count, file_count)
         )
+
+        await self.report_shares()
 
     async def get_filesize(self, shared_item: SharedItem) -> int:
         return await asyncos.path.getsize(shared_item.get_absolute_path())
@@ -695,3 +705,17 @@ class SharesManager(BaseManager):
     def is_item_locked(self, item: SharedItem, username: str) -> bool:
         """Checks if the shared item is locked for the given `username`"""
         return self.is_directory_locked(item.shared_directory, username)
+
+    async def report_shares(self):
+        """Reports the shares amount to the server"""
+        folder_count, file_count = self.get_stats()
+        logger.debug(f"reporting shares ({folder_count=}, {file_count=})")
+        await self._network.send_server_messages(
+            SharedFoldersFiles.Request(
+                shared_folder_count=folder_count,
+                shared_file_count=file_count
+            )
+        )
+
+    async def _on_session_initialized(self, event: SessionInitializedEvent):
+        await self.report_shares()
