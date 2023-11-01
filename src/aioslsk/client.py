@@ -13,6 +13,7 @@ from .events import (
     EventBus,
     InternalEventBus,
     MessageReceivedEvent,
+    ServerReconnectedEvent,
     SessionDestroyedEvent,
     SessionInitializedEvent,
 )
@@ -99,6 +100,8 @@ class SoulSeekClient:
             MessageReceivedEvent, self._on_message_received)
         self._internal_events.register(
             ConnectionStateChangedEvent, self._on_connection_state_changed)
+        self._internal_events.register(
+            ServerReconnectedEvent, self._on_server_reconnected)
 
     async def start(self):
         """Performs a start up of the client consisting of:
@@ -358,8 +361,14 @@ class SoulSeekClient:
             await self._MESSAGE_MAP[message.__class__](message, event.connection)
 
     async def _on_connection_state_changed(self, event: ConnectionStateChangedEvent):
-        if isinstance(event.connection, ServerConnection) and event.state == ConnectionState.CLOSED:
-            if (session := self.session):
-                event = SessionDestroyedEvent(session)
-                self.session = None
-                await self._internal_events.emit(event)
+        if isinstance(event.connection, ServerConnection):
+            if event.state == ConnectionState.CLOSED:
+                if session := self.session:
+                    event = SessionDestroyedEvent(session)
+                    self.session = None
+                    await self._internal_events.emit(event)
+
+    async def _on_server_reconnected(self, event: ServerReconnectedEvent):
+        """Automatically logs the user back on in case the server was """
+        if self.settings.network.server.reconnect.auto:
+            await self.login()

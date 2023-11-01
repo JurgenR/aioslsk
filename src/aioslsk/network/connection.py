@@ -216,7 +216,7 @@ class DataConnection(Connection):
             raise ConnectionFailedError(f"{self.hostname}:{self.port} : failed to connect") from exc
 
         else:
-            logger.debug(f"{self.hostname}:{self.port} : successfully connected")
+            logger.debug(f"{self.hostname}:{self.port} : connected")
             await self.set_state(ConnectionState.CONNECTED)
 
     async def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):

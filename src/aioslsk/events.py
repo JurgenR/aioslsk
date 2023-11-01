@@ -23,7 +23,6 @@ if TYPE_CHECKING:
         PeerConnection,
     )
     from .transfer.model import Transfer
-    from .transfer.state import TransferState
 
 
 logger = logging.getLogger(__name__)
@@ -89,7 +88,7 @@ class InternalEventBus(EventBus):
 
 # Public events
 class Event:
-    pass
+    """Base class for events"""
 
 
 @dataclass(frozen=True)
@@ -108,6 +107,7 @@ class SessionDestroyedEvent(Event):
 
 @dataclass(frozen=True)
 class AdminMessageEvent(Event):
+    """Emitted when a global admin message has been received"""
     message: str
 
 
@@ -343,14 +343,22 @@ class TransferAddedEvent(Event):
 # Internal Events
 
 class InternalEvent(Event):
-    pass
+    """Base class for internal events"""
 
 
 @dataclass(frozen=True)
 class ConnectionStateChangedEvent(InternalEvent):
+    """Indicates a state change in any type of connection"""
     connection: Connection
     state: ConnectionState
     close_reason: Optional[CloseReason] = None
+
+
+@dataclass(frozen=True)
+class ServerReconnectedEvent(InternalEvent):
+    """Indicates server reconnected, used internally to automatically log back
+    in
+    """
 
 
 @dataclass(frozen=True)
@@ -363,12 +371,12 @@ class MessageReceivedEvent(InternalEvent):
 @dataclass(frozen=True)
 class PeerInitializedEvent(InternalEvent):
     """Emitted when a new peer connection has been established and the
-    initialization message has been received
+    initialization message has been received or sent
     """
     connection: PeerConnection
     requested: bool
     """Indictes whether the connection was initialized by another user or opened
-    on our request
+    on the client's request
     """
 
 
