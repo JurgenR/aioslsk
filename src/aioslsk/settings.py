@@ -69,7 +69,8 @@ class CredentialsSettings(BaseModel, validate_assignment=True):
     info: UserInfoSettings = Field(default_factory=UserInfoSettings)
 
     def are_configured(self) -> bool:
-        return self.username is not None and self.password is not None
+        """Returns whether the credentials are correctly configured"""
+        return self.username and self.password is not None
 
 class SearchSettings(BaseModel, validate_assignment=True):
     wishlist: List[WishlistSettingEntry] = Field(default_factory=list)
