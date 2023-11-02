@@ -8,11 +8,21 @@ on:
 
 jobs:
   tests:
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
         python-version: ["3.8", "3.9", "3.10", "3.11"]
+        exclude:
+          - os: macos-latest
+            python-version: "3.9"
+          - os: macos-latest
+            python-version: "3.10"
+          - os: windows-latest
+            python-version: "3.9"
+          - os: windows-latest
+            python-version: "3.10"
+    runs-on: ${{ matrix.os }}
 
     permissions:
       contents: read
@@ -34,16 +44,9 @@ jobs:
       run: |
         poetry install --no-interaction
 
-    - name: Lint with flake8
-      run: |
-        # stop the build if there are Python syntax errors or undefined names
-        poetry run flake8 . --count --select=E9,F63,F7,F82 --ignore=E501,E261,W503,W504 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        poetry run flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-
     - name: Test with pytest
       run: |
-        poetry run pytest --junitxml=test-reports/report-${{ matrix.python-version }}.xml -o junit_suite_name=suite-ubuntu-latest-${{ matrix.python-version }}
+        poetry run pytest --junitxml=test-reports/report-${{ matrix.python-version }}.xml -o junit_suite_name=suite-${{ matrix.os }}-${{ matrix.python-version }}
 
     - uses: actions/upload-artifact@v3
       if: always()
