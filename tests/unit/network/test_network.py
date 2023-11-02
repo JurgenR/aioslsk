@@ -1,9 +1,8 @@
-import copy
 import pytest
 from typing import Tuple
 from unittest.mock import AsyncMock, Mock
 
-from aioslsk.events import InternalEventBus
+from aioslsk.events import EventBus
 from aioslsk.exceptions import ConnectionFailedError, ListeningConnectionFailedError
 from aioslsk.network.network import Network, ListeningConnectionErrorMode
 from aioslsk.settings import Settings
@@ -45,7 +44,7 @@ class TestNetworkManager:
 
     def _create_network(self, settings=None) -> Network:
         sett = settings or Settings(**DEFAULT_SETTINGS)
-        network = Network(sett, InternalEventBus())
+        network = Network(sett, EventBus())
         network.server_connection = Mock()
 
         return network

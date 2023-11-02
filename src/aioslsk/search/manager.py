@@ -9,7 +9,6 @@ from ..events import (
     on_message,
     build_message_map,
     EventBus,
-    InternalEventBus,
     ConnectionStateChangedEvent,
     MessageReceivedEvent,
     UserInfoEvent,
@@ -56,14 +55,12 @@ class SearchManager(BaseManager):
     """Handler for searches requests"""
 
     def __init__(
-            self, settings: Settings,
-            event_bus: EventBus, internal_event_bus: InternalEventBus,
+            self, settings: Settings, event_bus: EventBus,
             user_manager: UserManager, shares_manager: SharesManager,
             upload_info_provider: UploadInfoProvider,
             network: Network):
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
-        self._internal_event_bus: InternalEventBus = internal_event_bus
         self._network: Network = network
         self._user_manager: UserManager = user_manager
         self._shares_manager: SharesManager = shares_manager
@@ -87,13 +84,13 @@ class SearchManager(BaseManager):
         self._wishlist_task: Optional[asyncio.Task] = None
 
     def register_listeners(self):
-        self._internal_event_bus.register(
+        self._event_bus.register(
             ConnectionStateChangedEvent, self._on_state_changed)
-        self._internal_event_bus.register(
+        self._event_bus.register(
             MessageReceivedEvent, self._on_message_received)
-        self._internal_event_bus.register(
+        self._event_bus.register(
             SessionInitializedEvent, self._on_session_initialized)
-        self._internal_event_bus.register(
+        self._event_bus.register(
             SessionDestroyedEvent, self._on_session_destroyed)
 
     def remove_request(self, request: Union[SearchRequest, int]):

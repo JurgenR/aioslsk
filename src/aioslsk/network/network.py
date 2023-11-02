@@ -42,7 +42,7 @@ from ..events import (
     build_message_map,
     on_message,
     ConnectionStateChangedEvent,
-    InternalEventBus,
+    EventBus,
     PeerInitializedEvent,
     MessageReceivedEvent,
     SessionInitializedEvent,
@@ -55,7 +55,6 @@ from ..protocol.messages import (
     MessageDataclass,
     PeerInit,
     PeerPierceFirewall,
-    Login,
     SetListenPort,
 )
 from . import upnp
@@ -129,9 +128,9 @@ class ExpectedResponse(asyncio.Future):
 
 class Network:
 
-    def __init__(self, settings: Settings, internal_event_bus: InternalEventBus):
+    def __init__(self, settings: Settings, event_bus: EventBus):
         self._settings: Settings = settings
-        self._internal_event_bus: InternalEventBus = internal_event_bus
+        self._event_bus: EventBus = event_bus
         self._upnp = upnp.UPNP(self._settings)
         self._ticket_generator = ticket_generator()
         self._expected_response_futures: List[ExpectedResponse] = []
@@ -162,7 +161,7 @@ class Network:
         self.register_listeners()
 
     def register_listeners(self):
-        self._internal_event_bus.register(
+        self._event_bus.register(
             SessionInitializedEvent, self._on_session_initialized)
 
     def create_server_connection(self) -> ServerConnection:
@@ -347,7 +346,7 @@ class Network:
                     except ConnectionFailedError:
                         logger.warning("failed to reconnect to server")
                     else:
-                        await self._internal_event_bus.emit(
+                        await self._event_bus.emit(
                             ServerReconnectedEvent())
 
             last_state = self.server_connection.state
@@ -472,7 +471,7 @@ class Network:
             connection.download_rate_limiter = self._download_rate_limiter
             connection.upload_rate_limiter = self._upload_rate_limiter
 
-        await self._internal_event_bus.emit(
+        await self._event_bus.emit(
             PeerInitializedEvent(connection, requested=True))
         return connection
 
@@ -780,7 +779,7 @@ class Network:
         else:
             peer_connection.set_connection_state(PeerConnectionState.ESTABLISHED)
 
-        await self._internal_event_bus.emit(
+        await self._event_bus.emit(
             PeerInitializedEvent(peer_connection, requested=False))
 
     async def send_peer_messages(
@@ -854,7 +853,7 @@ class Network:
         elif isinstance(connection, PeerConnection):
             await self._on_peer_connection_state_changed(state, connection, close_reason=close_reason)
 
-        await self._internal_event_bus.emit(
+        await self._event_bus.emit(
             ConnectionStateChangedEvent(connection, state, close_reason)
         )
 
@@ -956,7 +955,7 @@ class Network:
             else:
                 connection.set_connection_state(PeerConnectionState.ESTABLISHED)
 
-            await self._internal_event_bus.emit(
+            await self._event_bus.emit(
                 PeerInitializedEvent(connection, requested=False))
 
         elif isinstance(peer_init_message, PeerPierceFirewall.Request):
@@ -985,9 +984,9 @@ class Network:
         if message.__class__ in self._MESSAGE_MAP:
             await self._MESSAGE_MAP[message.__class__](message, connection)
 
-        # Emit on the internal message bus. Internal handling has priority over
-        # completing the future responses
-        await self._internal_event_bus.emit(MessageReceivedEvent(message, connection))
+        # Emit on the message bus. Event handling has priority over completing
+        # the future responses
+        await self._event_bus.emit(MessageReceivedEvent(message, connection))
 
         # Complete expected response futures
         for expected_response in self._expected_response_futures:

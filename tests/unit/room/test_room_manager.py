@@ -54,7 +54,6 @@ def user_manager(session: Session) -> UserManager:
     user_manager = UserManager(
         Settings(**DEFAULT_SETTINGS),
         Mock(), # Event bus
-        Mock(), # Internal event bus
         AsyncMock(), # Network
     )
     user_manager._session = session
@@ -66,14 +65,12 @@ def user_manager(session: Session) -> UserManager:
 @pytest.fixture
 def manager(user_manager: UserManager) -> RoomManager:
     event_bus = EventBus()
-    internal_event_bus = Mock()
     network = AsyncMock()
     network.server = AsyncMock()
 
     manager = RoomManager(
         Settings(**DEFAULT_SETTINGS),
         event_bus,
-        internal_event_bus,
         user_manager,
         network
     )

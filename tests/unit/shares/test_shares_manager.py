@@ -1,4 +1,4 @@
-from aioslsk.events import InternalEventBus
+from aioslsk.events import EventBus
 from aioslsk.exceptions import FileNotFoundError, FileNotSharedError
 from aioslsk.shares.manager import SharesManager, extract_attributes
 from aioslsk.shares.model import DirectoryShareMode, SharedDirectory, SharedItem
@@ -75,14 +75,13 @@ async def _load_and_scan(manager: SharesManager):
 
 @pytest.fixture
 def manager(tmp_path):
-    return SharesManager(
-        Settings(**DEFAULT_SETTINGS), InternalEventBus(), AsyncMock())
+    return SharesManager(Settings(**DEFAULT_SETTINGS), EventBus(), AsyncMock())
 
 
 @pytest.fixture
 def manager_query(tmp_path):
     manager = SharesManager(
-        Settings(**DEFAULT_SETTINGS), InternalEventBus(), AsyncMock())
+        Settings(**DEFAULT_SETTINGS), EventBus(), AsyncMock())
     manager._shared_directories = [SHARED_DIRECTORY]
     manager._build_term_map(SHARED_DIRECTORY)
 

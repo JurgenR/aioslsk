@@ -44,7 +44,6 @@ def user_manager() -> UserManager:
     user_manager = UserManager(
         Settings(**DEFAULT_SETTINGS),
         Mock(), # Event bus
-        Mock(), # Internal event bus
         AsyncMock(), # Network
     )
     user_manager.track_user = AsyncMock()
@@ -60,15 +59,11 @@ def manager(tmpdir, user_manager: UserManager) -> TransferManager:
     event_bus = Mock()
     event_bus.emit = AsyncMock()
     event_bus.register = Mock()
-    internal_event_bus = Mock()
-    internal_event_bus.emit = AsyncMock()
-    internal_event_bus.register = Mock()
     shares_manager = Mock()
 
     return TransferManager(
         Settings(**DEFAULT_SETTINGS),
         event_bus, # event bus
-        internal_event_bus, # internal event bus
         user_manager,
         shares_manager, # shares manager
         network, # network

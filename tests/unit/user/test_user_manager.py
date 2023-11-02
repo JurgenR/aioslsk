@@ -10,7 +10,7 @@ from aioslsk.user.manager import UserManager
 from aioslsk.user.model import ChatMessage, User, UserStatus, TrackingFlag
 
 import pytest
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 
 DEFAULT_SETTINGS = {
@@ -23,14 +23,12 @@ DEFAULT_SETTINGS = {
 @pytest.fixture
 def manager() -> UserManager:
     event_bus = EventBus()
-    internal_event_bus = Mock()
     network = AsyncMock()
     network.server = AsyncMock()
 
     manager = UserManager(
         Settings(**DEFAULT_SETTINGS),
         event_bus,
-        internal_event_bus,
         network
     )
 

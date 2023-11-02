@@ -29,7 +29,6 @@ def user_manager() -> UserManager:
     user_manager = UserManager(
         Settings(**DEFAULT_SETTINGS),
         Mock(), # Event bus
-        Mock(), # Internal event bus
         AsyncMock(), # Network
     )
     return user_manager
@@ -42,16 +41,12 @@ def manager(user_manager: UserManager) -> SearchManager:
     event_bus = Mock()
     event_bus.emit = AsyncMock()
     event_bus.register = Mock()
-    internal_event_bus = Mock()
-    internal_event_bus.emit = AsyncMock()
-    internal_event_bus.register = Mock()
     shares_manager = Mock()
     transfer_manager = Mock()
 
     return SearchManager(
         Settings(**DEFAULT_SETTINGS),
         event_bus,
-        internal_event_bus,
         user_manager,
         shares_manager,
         transfer_manager,

@@ -10,8 +10,8 @@ from .constants import POTENTIAL_PARENTS_CACHE_SIZE
 from .events import (
     on_message,
     build_message_map,
-    InternalEventBus,
     ConnectionStateChangedEvent,
+    EventBus,
     PeerInitializedEvent,
     MessageReceivedEvent,
     SessionDestroyedEvent,
@@ -64,11 +64,9 @@ class DistributedPeer:
 class DistributedNetwork(BaseManager):
     """Class responsible for handling the distributed network"""
 
-    def __init__(
-            self, settings: Settings, internal_event_bus: InternalEventBus,
-            network: Network):
+    def __init__(self, settings: Settings, event_bus: EventBus, network: Network):
         self._settings: Settings = settings
-        self._internal_event_bus: InternalEventBus = internal_event_bus
+        self._event_bus: EventBus = event_bus
         self._network: Network = network
 
         self._ticket_generator = ticket_generator()
@@ -97,15 +95,15 @@ class DistributedNetwork(BaseManager):
         self._potential_parent_tasks: List[asyncio.Task] = []
 
     def register_listeners(self):
-        self._internal_event_bus.register(
+        self._event_bus.register(
             PeerInitializedEvent, self._on_peer_connection_initialized)
-        self._internal_event_bus.register(
+        self._event_bus.register(
             ConnectionStateChangedEvent, self._on_state_changed)
-        self._internal_event_bus.register(
+        self._event_bus.register(
             MessageReceivedEvent, self._on_message_received)
-        self._internal_event_bus.register(
+        self._event_bus.register(
             SessionInitializedEvent, self._on_session_initialized)
-        self._internal_event_bus.register(
+        self._event_bus.register(
             SessionDestroyedEvent, self._on_session_destroyed)
 
     def _get_advertised_branch_values(self) -> Tuple[str, int]:

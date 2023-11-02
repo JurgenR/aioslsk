@@ -5,7 +5,6 @@ from .events import (
     on_message,
     build_message_map,
     EventBus,
-    InternalEventBus,
     MessageReceivedEvent,
     UserDirectoryEvent,
     UserInfoEvent,
@@ -36,13 +35,12 @@ class PeerManager(BaseManager):
 
     def __init__(
             self, settings: Settings,
-            event_bus: EventBus, internal_event_bus: InternalEventBus,
+            event_bus: EventBus,
             user_manager: UserManager,
             shares_manager: SharesManager, upload_info_provider: UploadInfoProvider,
             network: Network):
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
-        self._internal_event_bus: InternalEventBus = internal_event_bus
         self._network: Network = network
         self._user_manager: UserManager = user_manager
         self._shares_manager: SharesManager = shares_manager
@@ -55,7 +53,7 @@ class PeerManager(BaseManager):
         self.register_listeners()
 
     def register_listeners(self):
-        self._internal_event_bus.register(
+        self._event_bus.register(
             MessageReceivedEvent, self._on_message_received)
 
     # Peer messages

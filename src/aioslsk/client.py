@@ -11,7 +11,6 @@ from .events import (
     build_message_map,
     ConnectionStateChangedEvent,
     EventBus,
-    InternalEventBus,
     MessageReceivedEvent,
     ServerReconnectedEvent,
     SessionDestroyedEvent,
@@ -57,7 +56,6 @@ class SoulSeekClient:
         self._stop_event: Optional[asyncio.Event] = None
 
         self.events: EventBus = event_bus or EventBus()
-        self._internal_events: InternalEventBus = InternalEventBus()
         self.session: Optional[Session] = None
 
         self.network: Network = self.create_network()
@@ -96,11 +94,11 @@ class SoulSeekClient:
         return asyncio.get_running_loop()
 
     def register_listeners(self):
-        self._internal_events.register(
+        self.events.register(
             MessageReceivedEvent, self._on_message_received)
-        self._internal_events.register(
+        self.events.register(
             ConnectionStateChangedEvent, self._on_connection_state_changed)
-        self._internal_events.register(
+        self.events.register(
             ServerReconnectedEvent, self._on_server_reconnected)
 
     async def start(self):
@@ -191,7 +189,7 @@ class SoulSeekClient:
             client_version=client_version,
             minor_version=minor_version
         )
-        await self._internal_events.emit(SessionInitializedEvent(self.session))
+        await self.events.emit(SessionInitializedEvent(self.session))
 
         # Finally start up the reader loop for the server
         self.network.server_connection.start_reader_task()
@@ -267,16 +265,12 @@ class SoulSeekClient:
     # Creation methods
 
     def create_network(self) -> Network:
-        return Network(
-            self.settings,
-            self._internal_events
-        )
+        return Network(self.settings, self.events)
 
     def create_user_manager(self) -> UserManager:
         return UserManager(
             self.settings,
             self.events,
-            self._internal_events,
             self.network
         )
 
@@ -284,7 +278,6 @@ class SoulSeekClient:
         return RoomManager(
             self.settings,
             self.events,
-            self._internal_events,
             self.users,
             self.network
         )
@@ -293,7 +286,6 @@ class SoulSeekClient:
         return InterestManager(
             self.settings,
             self.events,
-            self._internal_events,
             self.users,
             self.network
         )
@@ -301,7 +293,7 @@ class SoulSeekClient:
     def create_shares_manager(self, cache: SharesCache) -> SharesManager:
         return SharesManager(
             self.settings,
-            self._internal_events,
+            self.events,
             self.network,
             cache=cache
         )
@@ -310,7 +302,6 @@ class SoulSeekClient:
         return TransferManager(
             self.settings,
             self.events,
-            self._internal_events,
             self.users,
             self.shares,
             self.network,
@@ -321,7 +312,6 @@ class SoulSeekClient:
         return SearchManager(
             self.settings,
             self.events,
-            self._internal_events,
             self.users,
             self.shares,
             self.transfers,
@@ -332,8 +322,6 @@ class SoulSeekClient:
         return ServerManager(
             self.settings,
             self.events,
-            self._internal_events,
-            self.shares,
             self.network
         )
 
@@ -341,7 +329,6 @@ class SoulSeekClient:
         return PeerManager(
             self.settings,
             self.events,
-            self._internal_events,
             self.users,
             self.shares,
             self.transfers,
@@ -351,7 +338,7 @@ class SoulSeekClient:
     def create_distributed_network(self) -> DistributedNetwork:
         return DistributedNetwork(
             self.settings,
-            self._internal_events,
+            self.events,
             self.network
         )
 
@@ -366,7 +353,7 @@ class SoulSeekClient:
                 if session := self.session:
                     event = SessionDestroyedEvent(session)
                     self.session = None
-                    await self._internal_events.emit(event)
+                    await self.events.emit(event)
 
     async def _on_server_reconnected(self, event: ServerReconnectedEvent):
         """Automatically logs the user back on in case the server was """

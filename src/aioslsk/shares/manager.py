@@ -14,7 +14,7 @@ from weakref import WeakSet
 
 from ..base_manager import BaseManager
 from .cache import SharesNullCache, SharesCache
-from ..events import InternalEventBus, ScanCompleteEvent, SessionInitializedEvent
+from ..events import EventBus, ScanCompleteEvent, SessionInitializedEvent
 from ..exceptions import (
     FileNotFoundError,
     FileNotSharedError,
@@ -128,10 +128,10 @@ class SharesManager(BaseManager):
     _ALIAS_LENGTH = 5
 
     def __init__(
-            self, settings: Settings, internal_event_bus: InternalEventBus,
+            self, settings: Settings, event_bus: EventBus,
             network: Network, cache: Optional[SharesCache] = None):
         self._settings: Settings = settings
-        self._internal_event_bus: InternalEventBus = internal_event_bus
+        self._event_bus: EventBus = event_bus
         self._network: Network = network
         self._term_map: Dict[str, WeakSet[SharedItem]] = {}
         self._shared_directories: List[SharedDirectory] = list()
@@ -146,7 +146,7 @@ class SharesManager(BaseManager):
         ]
 
     def register_listeners(self):
-        self._internal_event_bus.register(
+        self._event_bus.register(
             SessionInitializedEvent, self._on_session_initialized)
 
     @property
@@ -440,7 +440,7 @@ class SharesManager(BaseManager):
 
         logger.info(f"completed scan in {time.perf_counter() - start_time} seconds")
         folder_count, file_count = self.get_stats()
-        await self._internal_event_bus.emit(
+        await self._event_bus.emit(
             ScanCompleteEvent(folder_count, file_count)
         )
 
