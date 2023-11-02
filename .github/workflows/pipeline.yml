@@ -53,6 +53,13 @@ jobs:
     needs: tests
     if: always()
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      issues: read
+      checks: write
+      pull-requests: write
+
     steps:
       - name: Download Test Result Artifacts
         uses: actions/download-artifact@v3
