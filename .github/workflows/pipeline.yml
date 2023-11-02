@@ -48,7 +48,7 @@ jobs:
     - uses: actions/upload-artifact@v3
       if: always()
       with:
-        name: test-results-${{ matrix.python-version }}
+        name: test-report-${{ matrix.python-version }}
         path: test-reports/report-${{ matrix.python-version }}.xml
 
   publish-test-results:
@@ -71,6 +71,6 @@ jobs:
         uses: EnricoMi/publish-unit-test-result-action/composite@v2
         with:
           report_individual_runs: true
-          files: "artifacts/**/*.xml"
+          files: "test-reports/**/*.xml"
       - name: Display structure of downloaded files
         run: ls -R
