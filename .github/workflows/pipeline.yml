@@ -48,8 +48,19 @@ jobs:
       with:
         name: test-results-${{ matrix.python-version }}
         path: test-reports/report-${{ matrix.python-version }}.xml
-    - name: Test Results ${{ matrix.python-version }}
-      uses: EnricoMi/publish-unit-test-result-action@v2
-      with:
-        files: |
-          test-reports/*.xml
+
+  publish-test-results:
+    needs: tests
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Test Result Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: test-reports
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: "artifacts/**/*.xml"
+      - name: Display structure of downloaded files
+        run: ls -R
