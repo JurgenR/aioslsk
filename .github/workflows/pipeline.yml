@@ -8,48 +8,83 @@ on:
 
 jobs:
   tests:
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
         python-version: ["3.8", "3.9", "3.10", "3.11"]
+        exclude:
+          - os: macos-latest
+            python-version: "3.9"
+          - os: macos-latest
+            python-version: "3.10"
+          - os: windows-latest
+            python-version: "3.9"
+          - os: windows-latest
+            python-version: "3.10"
+    runs-on: ${{ matrix.os }}
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry Action
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-pip-wheels
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache
+          key: venv-${{ runner.os }}-${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          poetry install --no-interaction
+
+      - name: Test with pytest
+        run: |
+          poetry run pytest --junitxml=test-reports/report-${{ matrix.os }}-${{ matrix.python-version }}.xml -o junit_suite_name=suite-${{ matrix.os }}-${{ matrix.python-version }}
+
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: report-${{ matrix.os }}-${{ matrix.python-version }}
+          path: test-reports/report-${{ matrix.os }}-${{ matrix.python-version }}.xml
+
+  publish-test-results:
+    needs: tests
+    if: always()
+    runs-on: ubuntu-latest
 
     permissions:
       contents: read
-      issues: read
       checks: write
+      issues: read
       pull-requests: write
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v3
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install Poetry Action
-      uses: snok/install-poetry@v1.3.3
-    - name: Install dependencies
-      run: |
-        poetry install --no-interaction
+      - name: Download Test Result Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: test-reports
 
-    - name: Lint with flake8
-      run: |
-        # stop the build if there are Python syntax errors or undefined names
-        poetry run flake8 . --count --select=E9,F63,F7,F82 --ignore=E501,E261,W503,W504 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        poetry run flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action/composite@v2
+        with:
+          report_individual_runs: true
+          files: "test-reports/**/*.xml"
 
-    - name: Test with pytest
-      run: |
-        poetry run pytest --junitxml=test-reports/report-${{ matrix.python-version }}.xml
-
-    - uses: actions/upload-artifact@v3
-      if: always()
-      with:
-        name: test-results-${{ matrix.python-version }}
-        path: test-reports/report-${{ matrix.python-version }}.xml
-    - name: Test Results ${{ matrix.python-version }}
-      uses: EnricoMi/publish-unit-test-result-action@v2
-      with:
-        files: |
-          test-reports/*.xml
+      - name: Display structure of downloaded files
+        run: ls -R
