@@ -81,11 +81,6 @@ class EventBus:
                     logger.exception(f"exception notifying listener {listener!r} of event {event!r}")
 
 
-class InternalEventBus(EventBus):
-
-    pass
-
-
 # Public events
 class Event:
     """Base class for events"""

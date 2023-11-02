@@ -7,7 +7,6 @@ from ..events import (
     on_message,
     EventBus,
     GlobalRecommendationsEvent,
-    InternalEventBus,
     ItemRecommendationsEvent,
     MessageReceivedEvent,
     RecommendationsEvent,
@@ -39,12 +38,11 @@ class InterestManager(BaseManager):
 
     def __init__(
             self, settings: Settings,
-            event_bus: EventBus, internal_event_bus: InternalEventBus,
+            event_bus: EventBus,
             user_manager: UserManager, network: Network):
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._user_manager: UserManager = user_manager
-        self._internal_event_bus: InternalEventBus = internal_event_bus
         self._network: Network = network
 
         self._MESSAGE_MAP = build_message_map(self)
@@ -52,9 +50,9 @@ class InterestManager(BaseManager):
         self.register_listeners()
 
     def register_listeners(self):
-        self._internal_event_bus.register(
+        self._event_bus.register(
             MessageReceivedEvent, self._on_message_received)
-        self._internal_event_bus.register(
+        self._event_bus.register(
             SessionInitializedEvent, self._on_session_initialized)
 
     async def advertise_interests(self):

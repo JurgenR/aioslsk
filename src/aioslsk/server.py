@@ -3,18 +3,11 @@ import logging
 from typing import Optional
 
 from .base_manager import BaseManager
-from .constants import (
-    SERVER_PING_INTERVAL,
-)
-from .events import (
-    ConnectionStateChangedEvent,
-    EventBus,
-    InternalEventBus,
-)
+from .constants import SERVER_PING_INTERVAL
+from .events import ConnectionStateChangedEvent, EventBus
 from .protocol.messages import Ping
 from .network.connection import ConnectionState, ServerConnection
 from .network.network import Network
-from .shares.manager import SharesManager
 from .settings import Settings
 from .utils import task_counter
 
@@ -25,14 +18,9 @@ logger = logging.getLogger(__name__)
 class ServerManager(BaseManager):
     """Class handling server state changes"""
 
-    def __init__(
-            self, settings: Settings,
-            event_bus: EventBus, internal_event_bus: InternalEventBus,
-            shares_manager: SharesManager, network: Network):
+    def __init__(self, settings: Settings, event_bus: EventBus, network: Network):
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
-        self._internal_event_bus: InternalEventBus = internal_event_bus
-        self._shares_manager: SharesManager = shares_manager
         self._network: Network = network
 
         self._ping_task: Optional[asyncio.Task] = None
@@ -44,7 +32,7 @@ class ServerManager(BaseManager):
         return self._network.server_connection.state
 
     def register_listeners(self):
-        self._internal_event_bus.register(
+        self._event_bus.register(
             ConnectionStateChangedEvent, self._on_state_changed)
 
     async def send_ping(self):

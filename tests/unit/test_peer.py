@@ -48,7 +48,6 @@ class TestPeer:
         return UserManager(
             settings,
             Mock(), # Event bus
-            Mock(), # Internal event bs
             AsyncMock() # Network
         )
 
@@ -57,7 +56,6 @@ class TestPeer:
         user_manager = self._create_user_manager(settings_obj)
 
         event_bus = AsyncMock()
-        internal_event_bus = Mock()
         shares_manager = Mock()
         transfer_manager = Mock()
         network = AsyncMock()
@@ -66,7 +64,6 @@ class TestPeer:
         manager = PeerManager(
             settings_obj,
             event_bus,
-            internal_event_bus,
             user_manager,
             shares_manager,
             transfer_manager,

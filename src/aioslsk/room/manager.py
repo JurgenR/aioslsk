@@ -8,7 +8,6 @@ from ..events import (
     build_message_map,
     ConnectionStateChangedEvent,
     EventBus,
-    InternalEventBus,
     MessageReceivedEvent,
     on_message,
     PublicMessageEvent,
@@ -65,12 +64,10 @@ class RoomManager(BaseManager):
     """Class handling rooms"""
 
     def __init__(
-            self, settings: Settings,
-            event_bus: EventBus, internal_event_bus: InternalEventBus,
+            self, settings: Settings, event_bus: EventBus,
             user_manager: UserManager, network: Network):
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
-        self._internal_event_bus: InternalEventBus = internal_event_bus
         self._user_manager: UserManager = user_manager
         self._network: Network = network
 
@@ -115,11 +112,11 @@ class RoomManager(BaseManager):
         self.rooms = {}
 
     def register_listeners(self):
-        self._internal_event_bus.register(
+        self._event_bus.register(
             MessageReceivedEvent, self._on_message_received)
-        self._internal_event_bus.register(
+        self._event_bus.register(
             ConnectionStateChangedEvent, self._on_state_changed)
-        self._internal_event_bus.register(
+        self._event_bus.register(
             SessionInitializedEvent, self._on_session_initialized)
 
     async def auto_join_rooms(self):

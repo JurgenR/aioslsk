@@ -31,7 +31,6 @@ from ..events import (
     build_message_map,
     on_message,
     EventBus,
-    InternalEventBus,
     MessageReceivedEvent,
     PeerInitializedEvent,
     SessionInitializedEvent,
@@ -76,14 +75,11 @@ class Reasons:
 class TransferManager(BaseManager):
 
     def __init__(
-            self, settings: Settings,
-            event_bus: EventBus, internal_event_bus: InternalEventBus,
-            user_manager: UserManager,
-            shares_manager: SharesManager, network: Network,
-            cache: Optional[TransferCache] = None):
+            self, settings: Settings, event_bus: EventBus,
+            user_manager: UserManager, shares_manager: SharesManager,
+            network: Network, cache: Optional[TransferCache] = None):
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
-        self._internal_event_bus: InternalEventBus = internal_event_bus
         self._user_manager: UserManager = user_manager
         self._shares_manager: SharesManager = shares_manager
         self._network: Network = network
@@ -102,11 +98,11 @@ class TransferManager(BaseManager):
         return self._transfers
 
     def register_listeners(self):
-        self._internal_event_bus.register(
+        self._event_bus.register(
             MessageReceivedEvent, self._on_message_received)
-        self._internal_event_bus.register(
+        self._event_bus.register(
             PeerInitializedEvent, self._on_peer_initialized)
-        self._internal_event_bus.register(
+        self._event_bus.register(
             SessionInitializedEvent, self._on_session_initialized)
 
     async def read_cache(self):

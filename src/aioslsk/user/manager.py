@@ -10,7 +10,6 @@ from ..events import (
     AdminMessageEvent,
     ConnectionStateChangedEvent,
     EventBus,
-    InternalEventBus,
     KickedEvent,
     MessageReceivedEvent,
     PrivateMessageEvent,
@@ -48,13 +47,9 @@ logger = logging.getLogger(__name__)
 class UserManager(BaseManager):
     """Class handling users"""
 
-    def __init__(
-            self, settings: Settings,
-            event_bus: EventBus, internal_event_bus: InternalEventBus,
-            network: Network):
+    def __init__(self, settings: Settings, event_bus: EventBus, network: Network):
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
-        self._internal_event_bus: InternalEventBus = internal_event_bus
         self._network: Network = network
 
         self._session: Optional[Session] = None
@@ -66,13 +61,13 @@ class UserManager(BaseManager):
         self.register_listeners()
 
     def register_listeners(self):
-        self._internal_event_bus.register(
+        self._event_bus.register(
             MessageReceivedEvent, self._on_message_received)
-        self._internal_event_bus.register(
+        self._event_bus.register(
             ConnectionStateChangedEvent, self._on_state_changed)
-        self._internal_event_bus.register(
+        self._event_bus.register(
             SessionInitializedEvent, self._on_session_initialized)
-        self._internal_event_bus.register(
+        self._event_bus.register(
             SessionDestroyedEvent, self._on_session_destroyed)
 
     def get_self(self) -> User:
