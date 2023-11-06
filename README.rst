@@ -6,9 +6,7 @@ aioslsk is a Python library for the SoulSeek protocol built on top of asyncio.
 
 Supported Python versions are currently 3.8 - 3.11
 
-Documentation:
-
-
+You can find the full documentation `here <http://aioslsk.readthedocs.io/>`_
 
 Installation
 ============
@@ -27,20 +25,25 @@ Starting the client and sending a private message:
 
     import asyncio
     from aioslsk.client import SoulSeekClient
-    from aioslsk.settings import Settings
+    from aioslsk.commands import PrivateMessageCommand
+    from aioslsk.settings import Settings, CredentialsSettings
+
+    # Create default settings and configure credentials
+    settings: Settings = Settings(
+        credentials=CredentialsSettings(
+            username='my_user',
+            password='Secret123'
+        )
+    )
 
     async def main():
         client: SoulSeekClient = SoulSeekClient(settings)
 
-        # Create default settings and configure credentials
-        settings: Settings = Settings.create_default()
-        settings.set('credentials.username', 'my_user')
-        settings.set('credentials.password', 'Secret123')
-
         await client.start()
+        await client.login()
 
         # Send a private message
-        await client.send_private_message('my_friend', 'Hi!')
+        await client.execute(PrivateMessageCommand('my_friend', 'Hi!'))
 
         await client.stop()
 
