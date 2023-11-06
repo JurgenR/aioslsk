@@ -268,9 +268,9 @@ class TestTransferManager:
         USER = 'user0'
         USER2 = 'user1'
 
-        user = manager._user_manager.get_or_create_user(USER)
+        user = manager._user_manager.get_user_object(USER)
         user.status = UserStatus.UNKNOWN
-        user2 = manager._user_manager.get_or_create_user(USER2)
+        user2 = manager._user_manager.get_user_object(USER2)
         user2.status = UserStatus.ONLINE
 
         transfer = Transfer(USER, 'C:\\dir0', TransferDirection.UPLOAD)
@@ -282,9 +282,9 @@ class TestTransferManager:
         USER = 'user0'
         USER2 = 'user1'
 
-        user = manager._user_manager.get_or_create_user(USER)
+        user = manager._user_manager.get_user_object(USER)
         user.privileged = False
-        user2 = manager._user_manager.get_or_create_user(USER2)
+        user2 = manager._user_manager.get_user_object(USER2)
         user2.privileged = True
 
         transfer = Transfer(USER, 'C:\\dir0', TransferDirection.UPLOAD)
@@ -296,8 +296,8 @@ class TestTransferManager:
         USER = 'user0'
         USER2 = FRIEND
 
-        manager._user_manager.get_or_create_user(USER)
-        manager._user_manager.get_or_create_user(USER2)
+        manager._user_manager.get_user_object(USER)
+        manager._user_manager.get_user_object(USER2)
 
         transfer = Transfer(USER, 'C:\\dir0', TransferDirection.UPLOAD)
         transfer2 = Transfer(USER2, 'C:\\dir0', TransferDirection.UPLOAD)

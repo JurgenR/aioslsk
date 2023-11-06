@@ -52,9 +52,9 @@ class SoulSeekClient:
             event_bus: Optional[EventBus] = None):
         self.settings: Settings = settings
 
-        self._ticket_generator = ticket_generator()
         self._stop_event: Optional[asyncio.Event] = None
 
+        self.ticket_generator = ticket_generator()
         self.events: EventBus = event_bus or EventBus()
         self.session: Optional[Session] = None
 
@@ -183,13 +183,18 @@ class SoulSeekClient:
 
         # Notify all listeners that the session has been initialized
         self.session = Session(
-            user=self.users.get_or_create_user(username),
+            user=self.users.get_user_object(username),
             ip_address=response.ip,
             greeting=response.greeting,
             client_version=client_version,
             minor_version=minor_version
         )
-        await self.events.emit(SessionInitializedEvent(self.session))
+        await self.events.emit(
+            SessionInitializedEvent(
+                session=self.session,
+                raw_message=response
+            )
+        )
 
         # Finally start up the reader loop for the server
         self.network.server_connection.start_reader_task()
@@ -236,7 +241,8 @@ class SoulSeekClient:
             await client.execute(JoinRoomCommand('cool room'))
 
         :param command: Command class to execute
-        :param response: Wait for the response (default: `False`)
+        :param response: Whether to wait for the response or simply send
+            (default: `False`)
         :param timeout: Timeout waiting for response (default: `10`)
         :raise InvalidSessionError: When no logon has been performed
         :return: Optional response depending on how the command was configured
@@ -312,7 +318,6 @@ class SoulSeekClient:
         return SearchManager(
             self.settings,
             self.events,
-            self.users,
             self.shares,
             self.transfers,
             self.network
@@ -351,9 +356,9 @@ class SoulSeekClient:
         if isinstance(event.connection, ServerConnection):
             if event.state == ConnectionState.CLOSED:
                 if session := self.session:
-                    event = SessionDestroyedEvent(session)
+                    session_event = SessionDestroyedEvent(session)
                     self.session = None
-                    await self.events.emit(event)
+                    await self.events.emit(session_event)
 
     async def _on_server_reconnected(self, event: ServerReconnectedEvent):
         """Automatically logs the user back on in case the server was """

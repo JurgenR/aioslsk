@@ -108,7 +108,7 @@ class InterestManager(BaseManager):
     async def _on_get_user_interests(self, message: GetUserInterests.Response, connection: ServerConnection):
         await self._event_bus.emit(
             UserInterestsEvent(
-                user=self._user_manager.get_or_create_user(message.username),
+                user=self._user_manager.get_user_object(message.username),
                 interests=message.interests,
                 hated_interests=message.hated_interests
             )
@@ -119,7 +119,7 @@ class InterestManager(BaseManager):
         await self._event_bus.emit(
             SimilarUsersEvent(
                 users=[
-                    self._user_manager.get_or_create_user(user.username)
+                    self._user_manager.get_user_object(user.username)
                     for user in message.users
                 ]
             )
@@ -131,7 +131,7 @@ class InterestManager(BaseManager):
             SimilarUsersEvent(
                 item=message.item,
                 users=[
-                    self._user_manager.get_or_create_user(username)
+                    self._user_manager.get_user_object(username)
                     for username in message.usernames
                 ]
             )

@@ -23,6 +23,7 @@ from typing import ClassVar, List, Optional
 from ..exceptions import UnknownMessageError
 from .primitives import (
     boolean,
+    bytearr,
     uint8,
     uint16,
     uint32,
@@ -1248,10 +1249,11 @@ class PeerUserInfoReply(PeerMessage):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x10)
         description: str = field(metadata={'type': string})
         has_picture: bool = field(metadata={'type': boolean})
-        picture: Optional[str] = field(default=None, metadata={'type': string, 'if_true': 'has_picture'})
+        picture: Optional[bytes] = field(default=None, metadata={'type': bytearr, 'if_true': 'has_picture'})
         upload_slots: int = field(default=0, metadata={'type': uint32})
         queue_size: int = field(default=0, metadata={'type': uint32})
         has_slots_free: bool = field(default=False, metadata={'type': boolean})
+        upload_permissions: Optional[int] = field(default=None, metadata={'type': uint32, 'optional': True})
 
 
 class PeerDirectoryContentsRequest(PeerMessage):

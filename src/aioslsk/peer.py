@@ -7,7 +7,6 @@ from .events import (
     EventBus,
     MessageReceivedEvent,
     UserDirectoryEvent,
-    UserInfoEvent,
     UserSharesReplyEvent,
 )
 from .protocol.messages import (
@@ -82,11 +81,15 @@ class PeerManager(BaseManager):
 
         logger.info(f"PeerSharesReply : from username {connection.username}, got {len(message.directories)} directories")
 
-        user = self._user_manager.get_or_create_user(connection.username)
-        locked_directories = message.locked_directories or []
+        user = self._user_manager.get_user_object(connection.username)
 
         await self._event_bus.emit(
-            UserSharesReplyEvent(user, message.directories, locked_directories)
+            UserSharesReplyEvent(
+                user=user,
+                directories=message.directories,
+                locked_directories=message.locked_directories or [],
+                raw_message=message
+            )
         )
 
     @on_message(PeerDirectoryContentsRequest.Request)
@@ -112,26 +115,15 @@ class PeerManager(BaseManager):
                 "got PeerDirectoryContentsReply for a connection that wasn't properly initialized")
             return
 
-        user = self._user_manager.get_or_create_user(connection.username)
+        user = self._user_manager.get_user_object(connection.username)
         await self._event_bus.emit(
-            UserDirectoryEvent(user, message.directory, message.directories)
+            UserDirectoryEvent(
+                user=user,
+                directory=message.directory,
+                directories=message.directories,
+                raw_message=message
+            )
         )
-
-    @on_message(PeerUserInfoReply.Request)
-    async def _on_peer_user_info_reply(self, message: PeerUserInfoReply.Request, connection: PeerConnection):
-        if not connection.username:
-            logger.warning(
-                "got PeerUserInfoReply for a connection that wasn't properly initialized")
-            return
-
-        user = self._user_manager.get_or_create_user(connection.username)
-        user.description = message.description
-        user.picture = message.picture
-        user.upload_slots = message.upload_slots
-        user.queue_length = message.queue_size
-        user.has_slots_free = message.has_slots_free
-
-        await self._event_bus.emit(UserInfoEvent(user))
 
     @on_message(PeerUserInfoRequest.Request)
     async def _on_peer_user_info_request(self, message: PeerUserInfoRequest.Request, connection: PeerConnection):

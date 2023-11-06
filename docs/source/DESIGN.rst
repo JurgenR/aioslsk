@@ -30,7 +30,6 @@ The client consists of several services (or managers) that each have their own r
 * ``shares``: Responsible for managing files and directories that we share
 * ``search``: Responsible for handling all incoming and outgoing search requests and results
 
-    * Uses ``users`` to grab ``User`` objects used when emitting events
     * Uses ``shares`` to perform queries
     * Uses ``transfers`` to obtain information on free upload slots, upload speed, etc to provide during the result
 

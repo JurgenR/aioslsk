@@ -151,7 +151,7 @@ class TransferManager(BaseManager):
             cancelled_tasks.extend(transfer.cancel_tasks())
         return cancelled_tasks
 
-    async def download(self, user: Union[str, User], filename: str) -> Transfer:
+    async def download(self, username: str, filename: str) -> Transfer:
         """Requests to start a downloading the file from the given user
 
         :param user: User from which to download the file
@@ -161,7 +161,6 @@ class TransferManager(BaseManager):
             be requested. If the transfer already exists in the client then this
             transfer will be returned
         """
-        username = user.name if isinstance(user, User) else user
         transfer = await self.add(
             Transfer(
                 username,
@@ -448,7 +447,12 @@ class TransferManager(BaseManager):
         queued_downloads = []
         queued_uploads = []
         for transfer in self._transfers:
-            user = self._user_manager.get_or_create_user(transfer.username)
+            # Get the user object from the user manager, if the user is tracked
+            # this user object will be returned. Otherwise a new user object is
+            # created, but not assigned to the user manager, whose status is
+            # UNKNOWN, giving it the benefit of the doubt and scheduling the
+            # transfers
+            user = self._user_manager.get_user_object(transfer.username)
             if user.status == UserStatus.OFFLINE:
                 continue
 
@@ -475,7 +479,7 @@ class TransferManager(BaseManager):
 
         ranking = []
         for upload in uploads:
-            user = self._user_manager.get_or_create_user(upload.username)
+            user = self._user_manager.get_user_object(upload.username)
 
             rank = 0
             # Rank UNKNOWN status lower, OFFLINE should be blocked

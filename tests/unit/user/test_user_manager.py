@@ -13,9 +13,10 @@ import pytest
 from unittest.mock import AsyncMock
 
 
+DEFAULT_USERNAME = 'user0'
 DEFAULT_SETTINGS = {
     'credentials': {
-        'username': 'user0',
+        'username': DEFAULT_USERNAME,
         'password': 'Test1234'
     }
 }
@@ -37,103 +38,74 @@ def manager() -> UserManager:
 
 class TestUserManager:
 
-    def test_getOrCreateUser_missingUserByName_shouldCreateAndReturnUser(self, manager: UserManager):
+    def test_getUserObject_missingUserByName_shouldCreateAndReturnUser(self, manager: UserManager):
         username = 'myuser'
 
-        user = manager.get_or_create_user(username)
+        user = manager.get_user_object(username)
         assert isinstance(user, User)
         assert username == user.name
         assert username in manager.users
 
-    def test_getOrCreateUser_existingUserByName_shouldReturnUser(self, manager: UserManager):
+    def test_getUserObject_existingUserByName_shouldReturnUser(self, manager: UserManager):
         username = 'myuser'
         user = User(name=username)
         manager.users[username] = user
 
-        assert user == manager.get_or_create_user(username)
+        assert user == manager.get_user_object(username)
 
-    def test_getOrCreateUser_missingUserByObject_shouldCreateAndReturnUser(self, manager: UserManager):
-        original = User('user0')
-
-        user = manager.get_or_create_user(original)
-
-        assert user == original
-        assert manager.users == {'user0': user}
-
-    def test_getOrCreateUser_existingUserByObject_shouldReturnUser(self, manager: UserManager):
-        original = User('user0')
-        manager.users = {'user0': original}
-
-        user = manager.get_or_create_user(original)
-
-        assert user == original
-        assert manager.users == {'user0': original}
-
-    def test_getOrCreateUser_existingUserByName_shouldReturnUser(self, manager: UserManager):
+    def test_getUserObject_existingUserByName_shouldReturnUser(self, manager: UserManager):
         username = 'myuser'
         user = User(name=username)
         manager.users[username] = user
 
-        assert user == manager.get_or_create_user(username)
+        assert user == manager.get_user_object(username)
 
     @pytest.mark.asyncio
     async def test_trackUser_userNotTracked_shouldSendAddUser(self, manager: UserManager):
-        user = manager.get_or_create_user('user0')
+        user = manager.get_user_object(DEFAULT_USERNAME)
 
-        await manager.track_user('user0', TrackingFlag.REQUESTED)
+        await manager.track_user(DEFAULT_USERNAME, TrackingFlag.FRIEND)
 
-        assert user.tracking_flags == TrackingFlag.REQUESTED
+        assert manager._tracked_users[DEFAULT_USERNAME].flags == TrackingFlag.FRIEND
         manager._network.send_server_messages.assert_awaited_once_with(
-            AddUser.Request('user0')
+            AddUser.Request(DEFAULT_USERNAME)
         )
 
     @pytest.mark.asyncio
     async def test_trackUser_userTracked_shouldNotSendAddUser(self, manager: UserManager):
-        user = manager.get_or_create_user('user0')
-        user.status = UserStatus.ONLINE
-        user.tracking_flags = TrackingFlag.FRIEND
+        user = manager.get_user_object(DEFAULT_USERNAME)
+        manager.set_tracking_flag(user, TrackingFlag.FRIEND)
 
-        await manager.track_user('user0', TrackingFlag.REQUESTED)
+        await manager.track_user(DEFAULT_USERNAME, TrackingFlag.TRANSFER)
 
-        assert user.tracking_flags == TrackingFlag.REQUESTED | TrackingFlag.FRIEND
+        assert manager._tracked_users[DEFAULT_USERNAME].flags == TrackingFlag.TRANSFER | TrackingFlag.FRIEND
         assert 0 == manager._network.send_server_messages.await_count
 
     @pytest.mark.asyncio
     async def test_untrackUser_lastAddUserFlag_shouldSendRemoveUser(self, manager: UserManager):
-        user = manager.get_or_create_user('user0')
-        user.status = UserStatus.ONLINE
-        user.tracking_flags = TrackingFlag.FRIEND
+        user = manager.get_user_object(DEFAULT_USERNAME)
+        manager.set_tracking_flag(user, TrackingFlag.FRIEND)
 
-        await manager.untrack_user('user0', TrackingFlag.FRIEND)
+        user.status = UserStatus.ONLINE
+        manager._tracked_users[user.name].flags = TrackingFlag.FRIEND
+
+        await manager.untrack_user(DEFAULT_USERNAME, TrackingFlag.FRIEND)
 
         assert user.status == UserStatus.UNKNOWN
-        assert user.tracking_flags == TrackingFlag(0)
+        assert DEFAULT_USERNAME not in manager._tracked_users
         manager._network.send_server_messages.assert_awaited_once_with(
-            RemoveUser.Request('user0')
-        )
-
-    @pytest.mark.asyncio
-    async def test_untrackUser_lastAddUserFlag_shouldSendRemoveUserAndNotSetStatusUnknown(self, manager: UserManager):
-        user = manager.get_or_create_user('user0')
-        user.status = UserStatus.ONLINE
-        user.tracking_flags = TrackingFlag.FRIEND | TrackingFlag.ROOM_USER
-
-        await manager.untrack_user('user0', TrackingFlag.FRIEND)
-
-        assert user.status == UserStatus.ONLINE
-        assert user.tracking_flags == TrackingFlag.ROOM_USER
-        manager._network.send_server_messages.assert_awaited_once_with(
-            RemoveUser.Request('user0')
+            RemoveUser.Request(DEFAULT_USERNAME)
         )
 
     @pytest.mark.asyncio
     async def test_untrackUser_addUserFlagRemains_shouldNotSendRemoveUser(self, manager: UserManager):
-        user = manager.get_or_create_user('user0')
-        user.tracking_flags = TrackingFlag.FRIEND | TrackingFlag.REQUESTED
+        user = manager.get_user_object(DEFAULT_USERNAME)
+        manager.set_tracking_flag(user, TrackingFlag.FRIEND)
+        manager.set_tracking_flag(user, TrackingFlag.REQUESTED)
 
-        await manager.untrack_user('user0', TrackingFlag.FRIEND)
+        await manager.untrack_user(DEFAULT_USERNAME, TrackingFlag.FRIEND)
 
-        assert user.tracking_flags == TrackingFlag.REQUESTED
+        assert manager._tracked_users[DEFAULT_USERNAME].flags == TrackingFlag.REQUESTED
         assert 0 == manager._network.send_server_messages.await_count
 
     @pytest.mark.asyncio
@@ -141,18 +113,16 @@ class TestUserManager:
         callback = AsyncMock()
         manager._event_bus.register(PrivateMessageEvent, callback)
 
-        user = manager.get_or_create_user('user0')
+        user = manager.get_user_object(DEFAULT_USERNAME)
 
-        await manager._on_private_message(
-            PrivateChatMessage.Response(
-                chat_id=1,
-                username='user0',
-                message='hello',
-                timestamp=100.0,
-                is_admin=False
-            ),
-            manager._network.server
+        raw_message = PrivateChatMessage.Response(
+            chat_id=1,
+            username=DEFAULT_USERNAME,
+            message='hello',
+            timestamp=100.0,
+            is_admin=False
         )
+        await manager._on_private_message(raw_message, manager._network.server)
 
         manager._network.send_server_messages.assert_awaited_once_with(
             PrivateChatMessageAck.Request(1)
@@ -164,4 +134,5 @@ class TestUserManager:
             message='hello',
             is_admin=False
         )
-        callback.assert_awaited_once_with(PrivateMessageEvent(message))
+        callback.assert_awaited_once_with(
+            PrivateMessageEvent(message=message, raw_message=raw_message))
