@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, Mock
 
 DEFAULT_USERNAME = 'user0'
 USER_DESCRIPTION = 'describes the user'
-USER_PICTURE = 'https://example.com/picture.png'
+USER_PICTURE = bytes.fromhex('AABBCCDDEE')
 UPLOAD_SLOTS = 2
 QUEUE_SIZE = 100
 HAS_SLOTS_FREE = True

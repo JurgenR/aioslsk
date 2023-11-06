@@ -14,8 +14,6 @@ Welcome to aioslsk's documentation!
    ./SETTINGS
    ./MESSAGES
    ./SOULSEEK
-   ./API
-
 
 Indices and tables
 ==================
