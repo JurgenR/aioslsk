@@ -20,5 +20,4 @@ jobs:
           POETRY_CORE_VERSION: "1.5.2"
           ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: "main"
-          PUBLISH_REGISTRY: "https://pypi.org/legacy/"
           PUBLISH_REGISTRY_PASSWORD: ${{ secrets.PYPI_TOKEN }}
