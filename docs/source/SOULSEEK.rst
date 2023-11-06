@@ -152,8 +152,8 @@ Bin: ``0100 1010 1110 1110 1001 0100 0001 0100``
 
 Key shifted 31 bits to the right:
 
-Hex: ``95 dd 28 28``
-Bin: ``1001 0101 1101 1101 0010 1000 0010 1000``
+* Hex: ``95 dd 28 28``
+* Bin: ``1001 0101 1101 1101 0010 1000 0010 1000``
 
 Convert to little-endian: ``95 dd 28 28`` -> ``28 28 dd 95``
 
@@ -163,7 +163,9 @@ XOR the first 4 bytes (``20 28 dd 95``) with the rotated key:
 |     | b3 | b2 | b1 | b0 |
 +=====+====+====+====+====+
 |     | 28 | 28 | dd | 95 |
++-----+----+----+----+----+
 | XOR | 20 | 28 | dd | 95 |
++-----+----+----+----+----+
 |     | 08 | 00 | 00 | 00 |
 +-----+----+----+----+----+
 
@@ -174,13 +176,13 @@ Convert to big-endian: ``28 28 dd 95`` -> ``95 dd 28 28``
 
 Original key:
 
-Hex: ``95 dd 28 28``
-Bin: ``1001 0101 1101 1101 0010 1000 0010 1000``
+* Hex: ``95 dd 28 28``
+* Bin: ``1001 0101 1101 1101 0010 1000 0010 1000``
 
 Key shifted 31 bits to the right:
 
-Hex: ``2b ba 50 51``
-Bin: ``0010 1011 1011 1010 0101 0000 0101 0001``
+* Hex: ``2b ba 50 51``
+* Bin: ``0010 1011 1011 1010 0101 0000 0101 0001``
 
 Convert to little-endian: ``2b ba 50 51`` -> ``51 50 ba 2b``
 
@@ -190,7 +192,9 @@ XOR the second 4 bytes (``28 50 ba 2b``) with the rotated key:
 |     | b3 | b2 | b1 | b0 |
 +=====+====+====+====+====+
 |     | 51 | 50 | ba | 2b |
++-----+----+----+----+----+
 | XOR | 28 | 50 | ba | 2b |
++-----+----+----+----+----+
 |     | 79 | 00 | 00 | 00 |
 +-----+----+----+----+----+
 
@@ -201,13 +205,13 @@ Convert to big-endian: ``51 50 ba 2b`` -> ``2b ba 50 51``
 
 Original key:
 
-Hex: ``2b ba 50 51``
-Bin: ``0010 1011 1011 1010 0101 0000 0101 0001``
+* Hex: ``2b ba 50 51``
+* Bin: ``0010 1011 1011 1010 0101 0000 0101 0001``
 
 Key shifted 31 bits to the right:
 
-Hex: ``57 74 a0 a2``
-Bin: ``0101 0111 0111 0100 1010 0000 1010 0010``
+* Hex: ``57 74 a0 a2``
+* Bin: ``0101 0111 0111 0100 1010 0000 1010 0010``
 
 Convert to little-endian: ``57 74 a0 a2`` -> ``a2 a0 74 57``
 
@@ -217,7 +221,9 @@ XOR the third 4 bytes (``4a a3 74 57``) with the rotated key:
 |     | b3 | b2 | b1 | b0 |
 +=====+====+====+====+====+
 |     | a2 | a0 | 74 | 57 |
++-----+----+----+----+----+
 | XOR | 4a | a3 | 74 | 57 |
++-----+----+----+----+----+
 |     | e8 | 03 | 00 | 00 |
 +-----+----+----+----+----+
 
@@ -255,7 +261,7 @@ List of open questions:
 Obtaining children
 ------------------
 
-The :ref:`AcceptChildren` command tells the server whether we want to have any children, this is probably used in combination with the :ref:`ToggleParentSearch` command which enables searching for parents. Enabling it will cause us to be listed in :ref:`PotentialParents` commands sent to other peers. It is not mandatory to have a parent and to obtain children if we ourselves are the branch root (branch level is 0).
+The :ref:`AcceptChildren` command tells the server whether we want to have any children, this is used in combination with the :ref:`ToggleParentSearch` command which enables searching for parents. Enabling it will cause us to be listed in :ref:`PotentialParents` commands sent to other peers. It is not mandatory to have a parent and to obtain children if we ourselves are the branch root (branch level is 0).
 
 The process is very similar to the one to obtain a parent except that this time we are in the role of the other peer; we need to advertise the branch level and branch root using the :ref:`DistributedBranchLevel` and :ref:`DistributedBranchRoot` commands as soon as another peer establishes.
 

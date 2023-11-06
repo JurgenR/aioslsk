@@ -12,7 +12,7 @@ jobs:
       contents: write
     steps:
       - name: Publish aioslsk to PyPi
-        uses: code-specialist/pypi-poetry-publish@v1.2
+        uses: code-specialist/pypi-poetry-publish@v1
         with:
           PACKAGE_DIRECTORY: "./src/aioslsk/"
           PYTHON_VERSION: "3.8"
@@ -20,4 +20,4 @@ jobs:
           ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: "main"
           PUBLISH_REGISTRY: "https://test.pypi.org/legacy/"
-          PUBLISH_REGISTRY_PASSWORD: ${{ secrets.PYPI_TEST_TOKEN }}
+          PUBLISH_REGISTRY_PASSWORD: ${{ secrets.PYPI_TOKEN }}
