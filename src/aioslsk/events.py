@@ -3,7 +3,7 @@ import asyncio
 from dataclasses import dataclass, field
 import inspect
 import logging
-from typing import Callable, Dict, List, Optional, Tuple, Type, TYPE_CHECKING
+from typing import Callable, Dict, List, Optional, Tuple, Type, TYPE_CHECKING, Union
 
 from .room.model import Room, RoomMessage
 from .user.model import ChatMessage, User
@@ -11,6 +11,46 @@ from .protocol.primitives import (
     DirectoryData,
     MessageDataclass,
     Recommendation,
+)
+from .protocol.messages import (
+    AddUser,
+    AdminMessage,
+    CheckPrivileges,
+    GetGlobalRecommendations,
+    GetItemRecommendations,
+    GetItemSimilarUsers,
+    GetRecommendations,
+    GetSimilarUsers,
+    GetUserInterests,
+    GetUserStats,
+    GetUserStatus,
+    JoinRoom,
+    Kicked,
+    LeaveRoom,
+    Login,
+    PeerDirectoryContentsReply,
+    PeerSharesReply,
+    PeerUserInfoReply,
+    PrivateChatMessage,
+    PrivateRoomGrantMembership,
+    PrivateRoomGrantOperator,
+    PrivateRoomMembers,
+    PrivateRoomMembershipGranted,
+    PrivateRoomMembershipRevoked,
+    PrivateRoomOperatorGranted,
+    PrivateRoomOperatorRevoked,
+    PrivateRoomOperators,
+    PrivateRoomRevokeMembership,
+    PrivateRoomRevokeOperator,
+    PrivilegedUsers,
+    PublicChatMessage,
+    RoomChatMessage,
+    RoomList,
+    RoomTickerAdded,
+    RoomTickerRemoved,
+    RoomTickers,
+    UserJoinedRoom,
+    UserLeftRoom,
 )
 from .search.model import SearchRequest, SearchResult
 from .session import Session
@@ -90,6 +130,7 @@ class Event:
 class SessionInitializedEvent(Event):
     """Emitted after successful login"""
     session: Session
+    raw_message: Login.Response
 
 
 @dataclass(frozen=True)
@@ -104,31 +145,78 @@ class SessionDestroyedEvent(Event):
 class AdminMessageEvent(Event):
     """Emitted when a global admin message has been received"""
     message: str
+    raw_message: AdminMessage.Response
 
 
 @dataclass(frozen=True)
 class KickedEvent(Event):
     """Emitted when we are kicked from the server"""
+    raw_message: Kicked.Response
 
 
 @dataclass(frozen=True)
-class UserInfoEvent(Event):
+class UserTrackingEvent:
+    """Emitted when a user is now successfully by the library tracked. This will
+    be triggered when:
+
+    The `user` object will contain the tracked user. `data` will contain the
+    data returned by the server
+    """
+    user: User
+    raw_message: AddUser.Response
+
+
+@dataclass(frozen=True)
+class UserTrackingFailedEvent:
+    username: str
+    raw_message: AddUser.Response
+
+
+@dataclass(frozen=True)
+class UserUntrackingEvent:
+    """Emitted when a user is no longer tracked by the library"""
     user: User
 
 
 @dataclass(frozen=True)
-class UserStatusEvent(Event):
-    user: User
+class UserStatusUpdateEvent(Event):
+    """Emitted when the server sends an update for the users status / privileges
+    or a request for it
+
+    Following
+    """
+    before: User
+    current: User
+    raw_message: GetUserStatus.Response
+
+
+@dataclass(frozen=True)
+class UserStatsUpdateEvent(Event):
+    """Emitted when the server send an update for the user's sharing statistics
+    """
+    before: User
+    current: User
+    raw_message: GetUserStats.Response
+
+
+@dataclass(frozen=True)
+class UserInfoUpdateEvent(Event):
+    """Emitted when user info has been received"""
+    before: User
+    current: User
+    raw_message: PeerUserInfoReply.Request
 
 
 @dataclass(frozen=True)
 class RoomListEvent(Event):
     rooms: List[Room]
+    raw_message: RoomList.Response
 
 
 @dataclass(frozen=True)
 class RoomMessageEvent(Event):
     message: RoomMessage
+    raw_message: RoomChatMessage.Response
 
 
 @dataclass(frozen=True)
@@ -136,6 +224,7 @@ class RoomTickersEvent(Event):
     """Emitted when a list of tickers has been received for a room"""
     room: Room
     tickers: Dict[str, str]
+    raw_message: RoomTickers.Response
 
 
 @dataclass(frozen=True)
@@ -144,6 +233,7 @@ class RoomTickerAddedEvent(Event):
     room: Room
     user: User
     ticker: str
+    raw_message: RoomTickerAdded.Response
 
 
 @dataclass(frozen=True)
@@ -151,15 +241,17 @@ class RoomTickerRemovedEvent(Event):
     """Emitted when a ticker has been removed from the room by a user"""
     room: Room
     user: User
+    raw_message: RoomTickerRemoved.Response
 
 
 @dataclass(frozen=True)
 class RoomJoinedEvent(Event):
     """Emitted after a user joined a chat room
 
-    The value of `user` will be `None` in case it is us who has left the room
+    The value of `user` will be `None` in case it is us who has joined the room
     """
     room: Room
+    raw_message: Union[JoinRoom.Response, UserJoinedRoom.Response]
     user: Optional[User] = None
 
 
@@ -170,6 +262,7 @@ class RoomLeftEvent(Event):
     The value of `user` will be `None` in case it is us who has left the room
     """
     room: Room
+    raw_message: Union[LeaveRoom.Response, UserLeftRoom.Response]
     user: Optional[User] = None
 
 
@@ -177,10 +270,11 @@ class RoomLeftEvent(Event):
 class RoomMembershipGrantedEvent(Event):
     """Emitted when a member has been added to the private room
 
-    The value of `user` will be `None` in case it is us who has been added to
+    The value of `member` will be `None` in case it is us who has been added to
     the room
     """
     room: Room
+    raw_message: Union[PrivateRoomGrantMembership.Response, PrivateRoomMembershipGranted.Response]
     member: Optional[User] = None
 
 
@@ -188,10 +282,11 @@ class RoomMembershipGrantedEvent(Event):
 class RoomMembershipRevokedEvent(Event):
     """Emitted when a member has been removed to the private room
 
-    The value of `user` will be `None` in case it is us who has been removed
+    The value of `member` will be `None` in case it is us who has been removed
     from the room
     """
     room: Room
+    raw_message: Union[PrivateRoomRevokeMembership.Response, PrivateRoomMembershipRevoked.Response]
     member: Optional[User] = None
 
 
@@ -200,10 +295,11 @@ class RoomOperatorGrantedEvent(Event):
     """Emitted when a member has been granted operator privileges on a private
     room
 
-    The value of `user` will be `None` in case it is us who has been granted
+    The value of `member` will be `None` in case it is us who has been granted
     operator
     """
     room: Room
+    raw_message: Union[PrivateRoomGrantOperator.Response, PrivateRoomOperatorGranted.Response]
     member: Optional[User] = None
 
 
@@ -215,6 +311,7 @@ class RoomOperatorRevokedEvent(Event):
     operator
     """
     room: Room
+    raw_message: Union[PrivateRoomRevokeOperator.Response, PrivateRoomOperatorRevoked.Response]
     member: Optional[User] = None
 
 
@@ -223,6 +320,7 @@ class RoomOperatorsEvent(Event):
     """Emitted when the server sends us a list of operators in a room"""
     room: Room
     operators: List[User]
+    raw_message: PrivateRoomOperators.Response
 
 
 @dataclass(frozen=True)
@@ -232,17 +330,26 @@ class RoomMembersEvent(Event):
     """
     room: Room
     members: List[User]
+    raw_message: PrivateRoomMembers.Response
 
 
 @dataclass(frozen=True)
 class PrivateMessageEvent(Event):
     """Emitted when a private message has been received"""
     message: ChatMessage
+    raw_message: PrivateChatMessage.Response
 
 
 @dataclass(frozen=True)
 class PublicMessageEvent(Event):
-    message: RoomMessage
+    """Emitted when a message has been received from a public room and public
+    chat has been enabled
+    """
+    timestamp: int
+    user: User
+    room: Room
+    message: str
+    raw_message: PublicChatMessage.Response
 
 
 @dataclass(frozen=True)
@@ -263,6 +370,7 @@ class SearchRequestReceivedEvent(Event):
 @dataclass(frozen=True)
 class SimilarUsersEvent(Event):
     users: List[User]
+    raw_message: Union[GetSimilarUsers.Response, GetItemSimilarUsers.Response]
     item: Optional[str] = None
 
 
@@ -270,18 +378,21 @@ class SimilarUsersEvent(Event):
 class RecommendationsEvent(Event):
     recommendations: List[Recommendation]
     unrecommendations: List[Recommendation]
+    raw_message: GetRecommendations.Response
 
 
 @dataclass(frozen=True)
 class GlobalRecommendationsEvent(Event):
     recommendations: List[Recommendation]
     unrecommendations: List[Recommendation]
+    raw_message: GetGlobalRecommendations.Response
 
 
 @dataclass(frozen=True)
 class ItemRecommendationsEvent(Event):
     item: str
     recommendations: List[Recommendation]
+    raw_message: GetItemRecommendations.Response
 
 
 @dataclass(frozen=True)
@@ -289,12 +400,14 @@ class UserInterestsEvent(Event):
     user: User
     interests: List[str]
     hated_interests: List[str]
+    raw_message: GetUserInterests.Response
 
 
 @dataclass(frozen=True)
 class PrivilegedUsersEvent(Event):
     """Emitted when the list of privileged users has been received"""
     users: List[User]
+    raw_message: PrivilegedUsers.Response
 
 
 @dataclass(frozen=True)
@@ -304,12 +417,13 @@ class PrivilegedUserAddedEvent(Event):
 
 
 @dataclass(frozen=True)
-class PrivilegesUpdate(Event):
+class PrivilegesUpdateEvent(Event):
     """Emitted when we receive a message containing how much time is left on the
     current user's privileges. If `time_left` is 0 the current user has no
     privileges
     """
     time_left: int
+    raw_message: CheckPrivileges.Response
 
 
 # Peer
@@ -318,7 +432,8 @@ class PrivilegesUpdate(Event):
 class UserSharesReplyEvent(Event):
     user: User
     directories: List[DirectoryData]
-    locked_directories: List[DirectoryData] = field(default_factory=list)
+    locked_directories: List[DirectoryData]
+    raw_message: PeerSharesReply.Request
 
 
 @dataclass(frozen=True)
@@ -326,6 +441,7 @@ class UserDirectoryEvent(Event):
     user: User
     directory: str
     directories: List[DirectoryData]
+    raw_message: PeerDirectoryContentsReply.Request
 
 
 # Transfer

@@ -11,7 +11,6 @@ from ..events import (
     EventBus,
     ConnectionStateChangedEvent,
     MessageReceivedEvent,
-    UserInfoEvent,
     SearchRequestReceivedEvent,
     SearchResultEvent,
     SessionDestroyedEvent,
@@ -42,8 +41,6 @@ from ..shares.manager import SharesManager
 from ..shares.utils import convert_items_to_file_data
 from ..session import Session
 from ..transfer.interface import UploadInfoProvider
-from ..user.manager import UserManager
-from ..user.model import User
 from ..utils import task_counter, ticket_generator
 from .model import ReceivedSearch, SearchResult, SearchRequest, SearchType
 
@@ -56,13 +53,11 @@ class SearchManager(BaseManager):
 
     def __init__(
             self, settings: Settings, event_bus: EventBus,
-            user_manager: UserManager, shares_manager: SharesManager,
-            upload_info_provider: UploadInfoProvider,
+            shares_manager: SharesManager, upload_info_provider: UploadInfoProvider,
             network: Network):
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._network: Network = network
-        self._user_manager: UserManager = user_manager
         self._shares_manager: SharesManager = shares_manager
         self._upload_info_provider: UploadInfoProvider = upload_info_provider
 
@@ -145,7 +140,7 @@ class SearchManager(BaseManager):
         )
         return self.requests[ticket]
 
-    async def search_user(self, user: Union[str, User], query: str) -> SearchRequest:
+    async def search_user(self, username: str, query: str) -> SearchRequest:
         """Performs a search request on the specific user. The results generated
         by this query will stored in the returned object or can be listened to
         through the `SearchResultEvent` event
@@ -154,7 +149,6 @@ class SearchManager(BaseManager):
         :param query: The search query
         :return: An object containing the search request details and results
         """
-        username = user.name if isinstance(user, User) else user
         ticket = next(self._ticket_generator)
 
         await self._network.send_server_messages(
@@ -329,13 +323,6 @@ class SearchManager(BaseManager):
             await self._event_bus.emit(SearchResultEvent(query, search_result))
 
         await connection.disconnect(reason=CloseReason.REQUESTED)
-
-        # Update the user info
-        user = self._user_manager.get_or_create_user(message.username)
-        user.avg_speed = message.avg_speed
-        user.queue_length = message.queue_size
-        user.has_slots_free = message.has_slots_free
-        await self._event_bus.emit(UserInfoEvent(user))
 
     @on_message(WishlistInterval.Response)
     async def _on_wish_list_interval(self, message: WishlistInterval.Response, connection):

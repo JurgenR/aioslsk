@@ -2564,28 +2564,78 @@ class TestPeerUserInfoReply:
         data = bytes.fromhex('1d000000100000000b0000006465736372697074696f6e00050000000a00000001')
         assert PeerUserInfoReply.Request.deserialize(data) == message
 
+    def test_PeerUserInfoReply_Request_serialize_withoutPictureWithPermissions(self):
+        message = PeerUserInfoReply.Request(
+            description="description",
+            has_picture=False,
+            upload_slots=5,
+            queue_size=10,
+            has_slots_free=True,
+            upload_permissions=0
+        )
+        data = bytes.fromhex('21000000100000000b0000006465736372697074696f6e00050000000a0000000100000000')
+        assert message.serialize() == data
+
+    def test_PeerUserInfoReply_Request_deserialize_withoutPictureWithPermissions(self):
+        message = PeerUserInfoReply.Request(
+            description="description",
+            has_picture=False,
+            upload_slots=5,
+            queue_size=10,
+            has_slots_free=True,
+            upload_permissions=0
+        )
+        data = bytes.fromhex('21000000100000000b0000006465736372697074696f6e00050000000a0000000100000000')
+        assert PeerUserInfoReply.Request.deserialize(data) == message
+
     def test_PeerUserInfoReply_Request_serialize_withPicture(self):
         message = PeerUserInfoReply.Request(
             description="description",
             has_picture=True,
-            picture='picture.png',
+            picture=bytes.fromhex('AABBCCDDEE'),
             upload_slots=5,
             queue_size=10,
             has_slots_free=True
         )
-        data = bytes.fromhex('2c000000100000000b0000006465736372697074696f6e010b000000706963747572652e706e67050000000a00000001')
+        data = bytes.fromhex('26000000100000000b0000006465736372697074696f6e0105000000aabbccddee050000000a00000001')
         assert message.serialize() == data
 
     def test_PeerUserInfoReply_Request_deserialize_withPicture(self):
         message = PeerUserInfoReply.Request(
             description="description",
             has_picture=True,
-            picture='picture.png',
+            picture=bytes.fromhex('AABBCCDDEE'),
             upload_slots=5,
             queue_size=10,
             has_slots_free=True
         )
-        data = bytes.fromhex('2c000000100000000b0000006465736372697074696f6e010b000000706963747572652e706e67050000000a00000001')
+        data = bytes.fromhex('26000000100000000b0000006465736372697074696f6e0105000000aabbccddee050000000a00000001')
+        assert PeerUserInfoReply.Request.deserialize(data) == message
+
+    def test_PeerUserInfoReply_Request_serialize_withPictureWithPermissions(self):
+        message = PeerUserInfoReply.Request(
+            description="description",
+            has_picture=True,
+            picture=bytes.fromhex('AABBCCDDEE'),
+            upload_slots=5,
+            queue_size=10,
+            has_slots_free=True,
+            upload_permissions=3
+        )
+        data = bytes.fromhex('2a000000100000000b0000006465736372697074696f6e0105000000aabbccddee050000000a0000000103000000')
+        assert message.serialize() == data
+
+    def test_PeerUserInfoReply_Request_deserialize_withPictureWithPermissions(self):
+        message = PeerUserInfoReply.Request(
+            description="description",
+            has_picture=True,
+            picture=bytes.fromhex('AABBCCDDEE'),
+            upload_slots=5,
+            queue_size=10,
+            has_slots_free=True,
+            upload_permissions=3
+        )
+        data = bytes.fromhex('2a000000100000000b0000006465736372697074696f6e0105000000aabbccddee050000000a0000000103000000')
         assert PeerUserInfoReply.Request.deserialize(data) == message
 
 

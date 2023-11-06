@@ -60,7 +60,7 @@ class NetworkSettings(BaseModel, validate_assignment=True):
 
 class UserInfoSettings(BaseModel, validate_assignment=True):
     description: Optional[str] = None
-    picture: Optional[str] = None
+    picture: Optional[bytes] = None
 
 
 class CredentialsSettings(BaseModel, validate_assignment=True):

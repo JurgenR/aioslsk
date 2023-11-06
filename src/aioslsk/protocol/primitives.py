@@ -118,6 +118,19 @@ class string(str):
         return pos_after_len + length, decode_string(value)
 
 
+class bytearr(bytes):
+
+    def serialize(self):
+        length = len(self)
+        return uint32(length).serialize() + bytes(self)
+
+    @classmethod
+    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, str]:
+        pos_after_len, length = uint32.deserialize(pos, data)
+        value = data[pos_after_len:pos_after_len + length]
+        return pos_after_len + length, value
+
+
 class ipaddr(str):
 
     def serialize(self) -> bytes:

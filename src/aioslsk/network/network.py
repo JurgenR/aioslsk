@@ -222,20 +222,21 @@ class Network:
 
         if error_mode == ListeningConnectionErrorMode.ALL:
             if all(isinstance(res, ConnectionFailedError) for res in results):
-                await self.disconnect_listening_connections()
+                await self.disconnect_listening_ports()
                 raise ListeningConnectionFailedError("failed to open any listening ports")
 
         elif error_mode == ListeningConnectionErrorMode.ANY:
             if any(isinstance(res, ConnectionFailedError) for res in results):
-                await self.disconnect_listening_connections()
+                await self.disconnect_listening_ports()
                 raise ListeningConnectionFailedError("one or more listening ports failed to connect")
 
         elif error_mode == ListeningConnectionErrorMode.CLEAR:
             if not self.listening_connections[0] or self.listening_connections[0].state != ConnectionState.CONNECTED:
-                await self.disconnect_listening_connections()
+                await self.disconnect_listening_ports()
                 raise ListeningConnectionFailedError("failed to connect non-obfuscated listening port")
 
-    async def disconnect_listening_connections(self):
+    async def disconnect_listening_ports(self):
+        """Disconnects all listening ports"""
         await asyncio.gather(
             *[
                 listening_connection.disconnect(CloseReason.REQUESTED)
@@ -281,6 +282,18 @@ class Network:
         nonobf_port = get_port(self.listening_connections[0])
         obf_port = get_port(self.listening_connections[1])
         return nonobf_port, obf_port
+
+    async def advertise_listening_ports(self):
+        """Notifies the server of our current listening ports"""
+        port, obfuscated_port = self.get_listening_ports()
+
+        await self.send_server_messages(
+            SetListenPort.Request(
+                port,
+                obfuscated_port_amount=1 if obfuscated_port else 0,
+                obfuscated_port=obfuscated_port
+            )
+        )
 
     # Settings listeners
     def load_speed_limits(self):
@@ -994,15 +1007,7 @@ class Network:
                 expected_response.set_result((connection, message, ))
 
     async def _on_session_initialized(self, event: SessionInitializedEvent):
-        port, obfuscated_port = self.get_listening_ports()
-
-        await self.send_server_messages(
-            SetListenPort.Request(
-                port,
-                obfuscated_port_amount=1 if obfuscated_port else 0,
-                obfuscated_port=obfuscated_port
-            )
-        )
+        await self.advertise_listening_ports()
 
     # Task callbacks
     def _handle_connect_to_peer_callback(self, message: ConnectToPeer.Response, task: asyncio.Task):

@@ -11,23 +11,24 @@ from aioslsk.settings import Settings
 from aioslsk.user.manager import UserManager
 
 import pytest
-from unittest.mock import ANY, AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock
 
 
+DEFAULT_USERNAME = 'user0'
 USER_DESCRIPTION = 'describes the user'
-USER_PICTURE = 'https://example.com/picture.png'
+USER_PICTURE = bytes.fromhex('AABBCCDDEE')
 UPLOAD_SLOTS = 2
 QUEUE_SIZE = 100
 HAS_SLOTS_FREE = True
 DEFAULT_SETTINGS = {
     'credentials': {
-        'username': 'user0',
+        'username': DEFAULT_USERNAME,
         'password': 'Test1234',
     }
 }
 SETTINGS_WITH_INFO = {
     'credentials': {
-        'username': 'user0',
+        'username': DEFAULT_USERNAME,
         'password': 'Test1234',
         'info': {
             'description': USER_DESCRIPTION,
@@ -76,6 +77,7 @@ class TestPeer:
     async def test_onPeerInfoRequest_withInfo_shouldSendPeerInfoReply(self):
         manager = self._create_peer_manager(SETTINGS_WITH_INFO)
         connection = AsyncMock()
+        connection.username = DEFAULT_USERNAME
         manager._upload_info_provider.get_upload_slots = Mock(return_value=UPLOAD_SLOTS)
         manager._upload_info_provider.get_queue_size = Mock(return_value=QUEUE_SIZE)
         manager._upload_info_provider.has_slots_free = Mock(return_value=HAS_SLOTS_FREE)
@@ -96,6 +98,7 @@ class TestPeer:
     async def test_onPeerInfoRequest_withoutInfo_shouldSendPeerInfoReply(self):
         manager = self._create_peer_manager(DEFAULT_SETTINGS)
         connection = AsyncMock()
+        connection.username = DEFAULT_USERNAME
         manager._upload_info_provider.get_upload_slots = Mock(return_value=UPLOAD_SLOTS)
         manager._upload_info_provider.get_queue_size = Mock(return_value=QUEUE_SIZE)
         manager._upload_info_provider.has_slots_free = Mock(return_value=HAS_SLOTS_FREE)
@@ -141,16 +144,14 @@ class TestPeer:
         DIRECTORIES = [DirectoryData(DIRECTORY, files=[])]
 
         manager = self._create_peer_manager()
-        user = manager._user_manager.get_or_create_user(USER)
+        user = manager._user_manager.get_user_object(USER)
 
         connection = AsyncMock()
         connection.username = USER
 
-        await manager._on_peer_directory_contents_reply(
-            PeerDirectoryContentsReply.Request(1234, DIRECTORY, DIRECTORIES),
-            connection
-        )
+        raw_message = PeerDirectoryContentsReply.Request(1234, DIRECTORY, DIRECTORIES)
+        await manager._on_peer_directory_contents_reply(raw_message, connection)
 
         manager._event_bus.emit.assert_awaited_once_with(
-            UserDirectoryEvent(user, DIRECTORY, DIRECTORIES)
+            UserDirectoryEvent(user, DIRECTORY, DIRECTORIES, raw_message)
         )

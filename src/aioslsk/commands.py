@@ -1,7 +1,16 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 import time
-from typing import Generic, List, Optional, TypeVar, Union, Tuple, TYPE_CHECKING
+from typing import (
+    Generic,
+    List,
+    NamedTuple,
+    Optional,
+    Union,
+    Tuple,
+    TypeVar,
+    TYPE_CHECKING,
+)
 
 from .exceptions import NoSuchUserError
 from .protocol.messages import (
@@ -51,16 +60,13 @@ from .protocol.messages import (
     TogglePrivateRoomInvites,
     UserSearch,
 )
-from .protocol.primitives import (
-    DirectoryData,
-    Recommendation,
-    MessageDataclass,
-    UserStats
-)
+from .protocol.primitives import DirectoryData, Recommendation, MessageDataclass
 from .network.network import ExpectedResponse
 from .network.connection import PeerConnection, ServerConnection
-from .user.model import User, UserStatus
 from .room.model import Room, RoomMessage
+from .user.model import User, UserStatus, TrackingFlag, UploadPermissions
+from .search.model import SearchRequest, SearchType
+
 
 if TYPE_CHECKING:
     from .client import SoulSeekClient
@@ -73,6 +79,27 @@ RT = TypeVar('RT')
 
 Recommendations = Tuple[List[Recommendation], List[Recommendation]]
 UserInterests = Tuple[List[str], List[str]]
+
+
+class UserStatusInfo(NamedTuple):
+    status: UserStatus
+    privileged: bool
+
+
+class UserStatsInfo(NamedTuple):
+    avg_speed: int
+    uploads: int
+    shared_file_count: int
+    shared_folder_count: int
+
+
+class UserInfo(NamedTuple):
+    description: str
+    picture: Optional[bytes]
+    has_slots_free: bool
+    upload_slots: int
+    queue_length: int
+    upload_permissions: UploadPermissions
 
 
 class BaseCommand(ABC, Generic[RC, RT]):
@@ -88,7 +115,7 @@ class BaseCommand(ABC, Generic[RC, RT]):
         return None
 
 
-class GetUserStatusCommand(BaseCommand[GetUserStatus.Response, UserStatus]):
+class GetUserStatusCommand(BaseCommand[GetUserStatus.Response, UserStatusInfo]):
 
     def __init__(self, username: str):
         self.username: str = username
@@ -108,11 +135,14 @@ class GetUserStatusCommand(BaseCommand[GetUserStatus.Response, UserStatus]):
         )
 
     def handle_response(
-            self, client: SoulSeekClient, response: GetUserStatus.Response) -> UserStatus:
-        return UserStatus(response.status)
+            self, client: SoulSeekClient, response: GetUserStatus.Response) -> UserStatusInfo:
+        return UserStatusInfo(
+            UserStatus(response.status),
+            response.privileged
+        )
 
 
-class GetUserStatsCommand(BaseCommand[GetUserStats.Response, UserStats]):
+class GetUserStatsCommand(BaseCommand[GetUserStats.Response, UserStatsInfo]):
 
     def __init__(self, username: str):
         self.username: str = username
@@ -131,8 +161,13 @@ class GetUserStatsCommand(BaseCommand[GetUserStats.Response, UserStats]):
             }
         )
 
-    def handle_response(self, client: SoulSeekClient, response: GetUserStats.Response) -> UserStats:
-        return response.user_stats
+    def handle_response(self, client: SoulSeekClient, response: GetUserStats.Response) -> UserStatsInfo:
+        return UserStatsInfo(
+            response.user_stats.avg_speed,
+            response.user_stats.uploads,
+            response.user_stats.shared_file_count,
+            response.user_stats.shared_folder_count,
+        )
 
 
 class GetRoomListCommand(BaseCommand[RoomList.Response, List[Room]]):
@@ -226,7 +261,7 @@ class GrantRoomMembershipCommand(BaseCommand[PrivateRoomGrantMembership.Response
     def handle_response(self, client: SoulSeekClient, response: PrivateRoomGrantMembership.Response) -> Tuple[Room, User]:
         return (
             client.rooms.get_or_create_room(response.room),
-            client.users.get_or_create_user(response.username)
+            client.users.get_user_object(response.username)
         )
 
 
@@ -254,7 +289,7 @@ class RevokeRoomMembershipCommand(BaseCommand[PrivateRoomRevokeMembership.Respon
     def handle_response(self, client: SoulSeekClient, response: PrivateRoomRevokeMembership.Response) -> Tuple[Room, User]:
         return (
             client.rooms.get_or_create_room(response.room),
-            client.users.get_or_create_user(response.username)
+            client.users.get_user_object(response.username)
         )
 
 
@@ -371,7 +406,7 @@ class GetItemSimilarUsersCommand(BaseCommand[GetItemSimilarUsers.Response, List[
         )
 
     def handle_response(self, client: SoulSeekClient, response: GetItemSimilarUsers.Response) -> List[User]:
-        return list(map(client.users.get_or_create_user, response.usernames))
+        return list(map(client.users.get_user_object, response.usernames))
 
 
 class GetSimilarUsersCommand(BaseCommand[GetSimilarUsers.Response, List[User]]):
@@ -389,7 +424,7 @@ class GetSimilarUsersCommand(BaseCommand[GetSimilarUsers.Response, List[User]]):
 
     def handle_response(self, client: SoulSeekClient, response: GetSimilarUsers.Response) -> List[User]:
         return [
-            client.users.get_or_create_user(user.username)
+            client.users.get_user_object(user.username)
             for user in response.users
         ]
 
@@ -507,14 +542,20 @@ class GlobalSearchCommand(BaseCommand[None, None]):
 
     def __init__(self, query: str):
         self.query: str = query
+        self._ticket: Optional[int] = None
 
     async def send(self, client: SoulSeekClient):
-        ticket = next(client._ticket_generator)
+        self._ticket = next(client.ticket_generator)
         await client.network.send_server_messages(
             FileSearch.Request(
-                ticket,
+                self._ticket,
                 query=self.query
             )
+        )
+        client.searches.requests[self._ticket] = SearchRequest(
+            ticket=self._ticket,
+            query=self.query,
+            search_type=SearchType.NETWORK
         )
 
 
@@ -523,15 +564,22 @@ class UserSearchCommand(BaseCommand[None, None]):
     def __init__(self, username: str, query: str):
         self.username: str = username
         self.query: str = query
+        self._ticket: Optional[int] = None
 
     async def send(self, client: SoulSeekClient):
-        ticket = next(client._ticket_generator)
+        self._ticket = next(client.ticket_generator)
         await client.network.send_server_messages(
             UserSearch.Request(
                 self.username,
-                ticket,
+                self._ticket,
                 self.query
             )
+        )
+        client.searches.requests[self._ticket] = SearchRequest(
+            ticket=self._ticket,
+            query=self.query,
+            username=self.username,
+            search_type=SearchType.USER
         )
 
 
@@ -540,14 +588,22 @@ class RoomSearchCommand(BaseCommand[None, None]):
     def __init__(self, room: str, query: str):
         self.room: str = room
         self.query: str = query
+        self._ticket: Optional[int] = None
 
     async def send(self, client: SoulSeekClient):
+        self._ticket = next(client.ticket_generator)
         await client.network.send_server_messages(
             RoomSearch.Request(
                 self.room,
-                next(client._ticket_generator),
+                self._ticket,
                 self.query
             )
+        )
+        client.searches.requests[self._ticket] = SearchRequest(
+            ticket=self._ticket,
+            query=self.query,
+            room=self.room,
+            search_type=SearchType.ROOM
         )
 
 
@@ -610,7 +666,7 @@ class RoomMessageCommand(BaseCommand[RoomChatMessage.Response, RoomMessage]):
     def handle_response(self, client: SoulSeekClient, response: RoomChatMessage.Response) -> RoomMessage:
         return RoomMessage(
             timestamp=int(time.time()),
-            user=client.users.get_or_create_user(client.session.user.name),
+            user=client.users.get_user_object(client.session.user.name),
             room=client.rooms.get_or_create_room(self.room),
             message=self.message
         )
@@ -761,15 +817,13 @@ class GivePrivilegesCommand(BaseCommand[None, None]):
         )
 
 
-class AddUserCommand(BaseCommand[AddUser.Response, User]):
+class TrackUserCommand(BaseCommand[AddUser.Response, User]):
 
     def __init__(self, username: str):
         self.username: str = username
 
     async def send(self, client: SoulSeekClient):
-        await client.network.send_server_messages(
-            AddUser.Request(username=self.username)
-        )
+        await client.users.track_user(self.username, TrackingFlag.REQUESTED)
 
     def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
         return ExpectedResponse(
@@ -782,14 +836,22 @@ class AddUserCommand(BaseCommand[AddUser.Response, User]):
 
     def handle_response(self, client: SoulSeekClient, response: AddUser.Response) -> User:
         if response.exists:
-            user = client.users.get_or_create_user(response.username)
-            return user
+            return client.users.get_user_object(response.username)
         else:
             raise NoSuchUserError(
                 f"user {self.username!r} does not exist on the server")
 
 
-class PeerGetUserInfoCommand(BaseCommand[PeerUserInfoReply.Request, User]):
+class UntrackUserCommand(BaseCommand[None, User]):
+
+    def __init__(self, username: str):
+        self.username: str = username
+
+    async def send(self, client: SoulSeekClient):
+        await client.users.untrack_user(self.username, TrackingFlag.REQUESTED)
+
+
+class PeerGetUserInfoCommand(BaseCommand[PeerUserInfoReply.Request, UserInfo]):
 
     def __init__(self, username: str):
         self.username: str = username
@@ -806,8 +868,19 @@ class PeerGetUserInfoCommand(BaseCommand[PeerUserInfoReply.Request, User]):
             peer=self.username
         )
 
-    def handle_response(self, client: SoulSeekClient, response: PeerUserInfoReply.Request) -> User:
-        return client.users.get_or_create_user(self.username)
+    def handle_response(self, client: SoulSeekClient, response: PeerUserInfoReply.Request) -> UserInfo:
+        if response.upload_permissions is None:
+            upload_permissions = UploadPermissions.UNKNOWN
+        else:
+            upload_permissions = UploadPermissions(response.upload_permissions)
+        return UserInfo(
+            response.description,
+            response.picture if response.has_picture else None,
+            response.has_slots_free,
+            response.upload_slots,
+            response.queue_size,
+            upload_permissions
+        )
 
 
 class PeerGetSharesCommand(BaseCommand[PeerSharesReply.Request, Tuple[List[DirectoryData], List[DirectoryData]]]):
@@ -841,7 +914,7 @@ class PeerGetDirectoryContentCommand(BaseCommand[PeerDirectoryContentsReply.Requ
         self._ticket: Optional[int] = None
 
     async def send(self, client: SoulSeekClient):
-        self._ticket = next(client._ticket_generator)
+        self._ticket = next(client.ticket_generator)
         await client.network.send_peer_messages(
             self.username, PeerDirectoryContentsRequest.Request(self._ticket, self.directory)
         )

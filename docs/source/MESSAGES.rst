@@ -10,35 +10,40 @@ Data Types
 
 The components of the messages use a little-endian byte order.
 
-+--------+-------------+-------+
-| Type   | Python type | bytes |
-+========+=============+=======+
-| uint8  | int         | 1     |
-+--------+-------------+-------+
-| uint16 | int         | 2     |
-+--------+-------------+-------+
-| uint32 | int         | 4     |
-+--------+-------------+-------+
-| uint64 | int         | 8     |
-+--------+-------------+-------+
-| uchar  | int         | 1     |
-+--------+-------------+-------+
-| int32  | int         | 4     |
-+--------+-------------+-------+
-| string | str         |       |
-+--------+-------------+-------+
-| bool   | bool        | 1     |
-+--------+-------------+-------+
++---------+-------------+-------+
+|  Type   | Python type | bytes |
++=========+=============+=======+
+| uint8   | int         | 1     |
++---------+-------------+-------+
+| uint16  | int         | 2     |
++---------+-------------+-------+
+| uint32  | int         | 4     |
++---------+-------------+-------+
+| uint64  | int         | 8     |
++---------+-------------+-------+
+| uchar   | int         | 1     |
++---------+-------------+-------+
+| int32   | int         | 4     |
++---------+-------------+-------+
+| string  | str         |       |
++---------+-------------+-------+
+| boolean | bool        | 1     |
++---------+-------------+-------+
 
 String
 ------
 
-String datatype consists of a ``uint32`` denoting its length followed by the list of bytes.
+``string``` datatype consists of a ``uint32`` denoting its length followed by the list of bytes. Strings will be UTF-8 encoded / decoded before sending
 
 Array
 -----
 
-Array datatype consists of a ``uint32`` denoting the amount of elements followed by its elements.
+``array`` datatype consists of a ``uint32`` denoting the amount of elements followed by its elements.
+
+Bytearr
+-------
+
+``bytearr`` datatype consists of a ``uint32`` denoting its length followed by the list of bytes.
 
 
 Data Structures
@@ -163,7 +168,7 @@ Login into the server, this should be the first message sent to the server upon 
    4. **string**: MD5 hash of concatenated username and password
    5. **uint32**: minor_version
 :Receive:
-   1. **bool**: result. true on success, false on failure
+   1. **boolean**: result. true on success, false on failure
    2. If result==true
 
       1. **string**: greeting
@@ -229,7 +234,7 @@ Track a user
    1. **string**: username
 :Receive:
    1. **string**: username
-   2. **bool**: exist
+   2. **boolean**: exist
    3. if exists==true
 
       1. **uint32**: status
@@ -264,7 +269,7 @@ Get the user status, we will get updates on this automatically if we have perfor
 :Receive:
    1. **string**: username
    2. **uint32**: status
-   3. **bool**: privileged
+   3. **boolean**: privileged
 
 
 .. _RoomChatMessage:
@@ -414,7 +419,7 @@ Send or receive a private message
    4. **string**: message
    5. Optional:
 
-      1. **bool**: is_admin
+      1. **boolean**: is_admin
 
 
 .. _PrivateChatMessageAck:
@@ -832,7 +837,7 @@ Indicates whether we want to receive :ref:`PotentialParents` messages from the s
 
 :Code: 71 (0x47)
 :Send:
-   1. **bool**: enable
+   1. **boolean**: enable
 
 
 .. _ParentIP:
@@ -960,7 +965,7 @@ Tell the server we are not accepting any distributed children, the server *shoul
 
 :Code: 100 (0x64)
 :Send:
-   1. **bool**: accept
+   1. **boolean**: accept
 
 
 .. _PotentialParents:
@@ -1163,7 +1168,7 @@ Retrieve whether a user has privileges
 :Send: No parameters
 :Receive:
    1. **string**: username
-   2. **bool**: privileged
+   2. **boolean**: privileged
 
 
 .. _GiveUserPrivileges:
@@ -1344,9 +1349,9 @@ Enables or disables private room invites (through :ref:`PrivateRoomGrantMembersh
 :Code: 141 (0x8D)
 :Usage:
 :Send:
-   1. **bool**: enable
+   1. **boolean**: enable
 :Receive:
-   1. **bool**: enabled
+   1. **boolean**: enabled
 
 
 .. _NewPassword:
@@ -1622,7 +1627,7 @@ Response to a search request
 
       1. **FileData**: results
 
-   4. **bool**: has_slots_free
+   4. **boolean**: has_slots_free
    5. **uint32**: avg_speed
    6. **uint32**: queue_size
    7. **uint32**: unknown: always 0
@@ -1652,14 +1657,17 @@ Response to PeerUserInfoRequest
 :Code: 16 (0x10)
 :Send/Receive:
    1. **string**: description
-   2. **bool**: has_picture
+   2. **boolean**: has_picture
    3. If has_picture==true
 
-      1. **string**: picture
+      1. **bytearr**: picture
 
    4. **uint32**: slots_free
    5. **uint32**: total_uploads
-   6. **bool**: has_slots_free
+   6. **boolean**: has_slots_free
+   7. Optional:
+
+      1. **uint32**: upload_permissions
 
 
 .. _PeerDirectoryContentsRequest:
@@ -1714,7 +1722,7 @@ PeerTransferReply (Code 41)
 :Code: 41 (0x29)
 :Send/Receive:
    1. **uint32**: ticket
-   2. **bool**: allowed
+   2. **boolean**: allowed
    3. If allowed==true
 
       1. **uint32**: filesize

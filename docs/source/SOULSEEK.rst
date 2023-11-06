@@ -54,6 +54,17 @@ Exception Cases
 * If the user was previously logged in with and the password does not match results in failure reason ``INVALIDPASS``
 * If the credentials are valid but the user is logged in elsewhere the other user will receive message :ref:`Kicked` and the connection will be terminated
 
+Disconnecting
+=============
+
+Upon disconnect the user gets logged out:
+
+1. Server: Change the user status to Offline
+2. Server: Remove the user from all joined rooms
+3. Server: Send :ref:`GetUserStatus` to all users currently tracking the disconnected
+
+TODO: Which values are reset?
+
 
 .. _peer-connections:
 
@@ -394,25 +405,109 @@ Attribute table:
    Couldn't find any other than these. Number 3 seems to be missing, could this be something used in the past or maybe for video? Theoretically we could invent new attributes here, like something for video, images, extra metadata for music files. The official clients don't seem to do anything with the extra attributes
 
 
+Global Search
+-------------
+
+Perform a query to everyone on the network.
+
+1. Searcher: Send :ref:`FileSearch`
+2. Server: Send :ref:`ServerSearchRequest` to distributed network roots (level = 0)
+3. Roots (level 0): Send :ref:`DistributedServerSearchRequest`
+4. Roots children: (level 1): Send :ref:`DistributedSearchRequest`
+
+
+Room Search
+-----------
+
+Performs a search on every one in a single room:
+
+1. Searcher send: :ref:`RoomSearch` : with a `ticket`, the `query` and `room` name
+2. Room user receive: :ref:`FileSearch`
+
+
+User Search
+-----------
+
+Searches an individual user:
+
+1. Searcher send :ref:`UserSearch` : with a `ticket`, the `query` and `username`
+2. Target user receive: :ref:`FileSearch`
+
+
+Delivering Search Results
+-------------------------
+
+Delivery of search results is the same process for all kinds of search messages:
+
+1. Receive :ref:`FileSearch`. Containing `ticket` and `username`
+2. If the query matches:
+
+   1. Initialize peer connection (``P``) for the `username` from the request
+   2. Send :ref:`PeerSearchReply` : `ticket` from the original search request and query matches
+
+
+Users
+=====
+
+There's two situations where the server will automatically send updates for a user:
+
+* User was explicitly added with the :ref:`AddUser` message
+* User is part of a room we are currently in
+
+The updates will come in the form of two messages:
+
+* :ref:`GetUserStatus` : update on user status and privileges
+* :ref:`GetUserStats` : update on user stats (shared files/folders, upload stats)
+
+The following describes the behaviour when another user modifies his status / stats:
+
+* User logs in:
+
+   * TODO
+
+* User send :ref:`SetUserStatus`
+
+   * Server send: :ref:`GetUserStatus` to all users in all rooms the user has joined (includes the user sending the update)
+   * Server send: :ref:`GetUserStatus` to all users that have sent an :ref:`AddUser` message
+
+* User disconnects (offline)
+
+   * Presumably a :ref:`GetUserStatus` is sent to all users in the rooms the user had joined. But the user is removed from all rooms before the update is sent
+   * Server send: :ref:`GetUserStatus` to all users that have sent an :ref:`AddUser` message
+
+* User send :ref:`SharedFoldersFiles`
+
+   * Server send: :ref:`GetUserStats` to all users in all rooms the user has joined (includes the user sending the update)
+
+* User send :ref:`SendUploadSpeed`
+
+   * No updates sent
+
+* Adding privileges to a user
+
+   * TODO
+
+
 Rooms
 =====
 
 After joining a room, we will automatically be receiving :ref:`GetUserStatus` updates from the server.
 
-Only private rooms have an owner and operators.
+Only private rooms have an owner, operators and members.
+
 
 Room List
 ---------
 
 The room list is received after login but can be refreshed by sending another :ref:`RoomList` request. The :ref:`RoomList` message consists of lists of rooms categorized by room type:
 
-* ``rooms`` : all public rooms
+* ``rooms`` : public rooms
 * ``rooms_private_owned`` : private rooms which we own
 * ``rooms_private`` : private rooms which we are part of. this excludes the rooms in rooms_private_owned
 * ``rooms_private_operated`` : private rooms in which we are operator
 
 .. note::
-   Not all public rooms are listed in the initial :ref:`RoomList` message after login. Possibly (needs investigation) it returns only the rooms with more than 5 members.
+   Not all public rooms are listed in the initial :ref:`RoomList` message after login; only rooms with 5 or more joined users
 
 
 Room Joining / Creation
