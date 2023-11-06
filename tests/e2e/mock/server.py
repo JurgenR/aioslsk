@@ -603,7 +603,7 @@ class MockServer:
             )
 
     @on_message(PrivateChatMessageUsers.Request)
-    async def on_chat_private_message(self, message: PrivateChatMessageUsers.Request, peer: Peer):
+    async def on_private_chat_message_users(self, message: PrivateChatMessageUsers.Request, peer: Peer):
         """User sends a private message to multiple users
 
         TODO: Investigate:

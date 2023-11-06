@@ -107,13 +107,15 @@ async def wait_for_search_results(request: SearchRequest, timeout=5):
 
 async def wait_for_transfer_state(transfer: Transfer, state: TransferState.State, timeout: int = 60):
     start = time.time()
+    current_state = transfer.state.VALUE
     while time.time() < start + timeout:
-        if transfer.state.VALUE == state:
+        current_state = transfer.state.VALUE
+        if current_state == state:
             break
         else:
             await asyncio.sleep(0.05)
     else:
-        raise Exception(f"transfer {transfer} did not go to state {state} in {timeout}s")
+        raise Exception(f"transfer {transfer} did not go to state {state} in {timeout}s (was {current_state})")
 
 
 async def wait_for_transfer_to_finish(transfer: Transfer, timeout: int = 60):
