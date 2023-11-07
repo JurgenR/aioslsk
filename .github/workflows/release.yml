@@ -11,6 +11,13 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Generate app token
+        id: generate-app-token
+        uses: getsentry/action-github-app-token@v2
+        with:
+          app_id: ${{ secrets.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Publish aioslsk to PyPi
         uses: code-specialist/pypi-poetry-publish@v1.2
         with:
@@ -18,6 +25,6 @@ jobs:
           PYTHON_VERSION: "3.8"
           POETRY_VERSION: "1.4.2"
           POETRY_CORE_VERSION: "1.5.2"
-          ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACCESS_TOKEN: ${{ steps.generate-app-token.outputs.token }}
           BRANCH: "main"
           PUBLISH_REGISTRY_PASSWORD: ${{ secrets.PYPI_TOKEN }}
