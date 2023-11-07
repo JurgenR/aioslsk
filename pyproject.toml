@@ -4,7 +4,7 @@ version = "v1.0.3"
 description = "Asyncio based SoulSeek client"
 authors = ["JurgenR <1249228+JurgenR@users.noreply.github.com>"]
 repository = "https://github.com/JurgenR/aioslsk/"
-documenation = "https://readthedocs.org/projects/aioslsk/"
+documentation = "https://readthedocs.org/projects/aioslsk/"
 readme = "README.rst"
 license = "GPL-3.0-or-later"
 packages = [{include = "aioslsk", from = "src"}]
