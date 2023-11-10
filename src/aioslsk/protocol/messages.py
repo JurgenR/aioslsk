@@ -368,6 +368,21 @@ class Ping(ServerMessage):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x20)
 
 
+class SendConnectTicket(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x21)
+        username: str = field(metadata={'type': string})
+        ticket: int = field(metadata={'type': uint32})
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x21)
+        username: str = field(metadata={'type': string})
+        ticket: int = field(metadata={'type': uint32})
+
+
 class SendDownloadSpeed(ServerMessage):
 
     @dataclass(order=True)
@@ -915,6 +930,13 @@ class ChildDepth(ServerMessage):
         depth: int = field(metadata={'type': uint32})
 
 
+class ResetDistributed(ServerMessage):
+
+    @dataclass
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x82)
+
+
 class PrivateRoomMembers(ServerMessage):
 
     @dataclass
@@ -1095,7 +1117,7 @@ class PublicChatMessage(ServerMessage):
         message: str = field(metadata={'type': string})
 
 
-class FileSearchEx(ServerMessage):
+class GetRelatedSearches(ServerMessage):
 
     @dataclass
     class Request(MessageDataclass):
@@ -1106,7 +1128,7 @@ class FileSearchEx(ServerMessage):
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x99)
         query: str = field(metadata={'type': string})
-        unknown: int = field(metadata={'type': uint32})
+        related_searches: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
 class CannotConnect(ServerMessage):
