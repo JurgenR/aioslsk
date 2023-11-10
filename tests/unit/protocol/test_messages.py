@@ -38,7 +38,6 @@ from aioslsk.protocol.messages import (
     CheckPrivileges,
     ChildDepth,
     ConnectToPeer,
-    SendDownloadSpeed,
     DistributedAliveInterval,
     DistributedBranchLevel,
     DistributedBranchRoot,
@@ -49,7 +48,7 @@ from aioslsk.protocol.messages import (
     ExactFileSearch,
     ExecuteCommand,
     FileSearch,
-    FileSearchEx,
+    GetRelatedSearches,
     GetGlobalRecommendations,
     GetItemRecommendations,
     GetItemSimilarUsers,
@@ -109,8 +108,11 @@ from aioslsk.protocol.messages import (
     RemoveHatedInterest,
     RemoveInterest,
     RemoveUser,
+    ResetDistributed,
     RoomList,
     SearchInactivityTimeout,
+    SendConnectTicket,
+    SendDownloadSpeed,
     SendUploadSpeed,
     ServerMessage,
     ServerSearchRequest,
@@ -777,6 +779,41 @@ class TestFileSearch:
         )
         data = bytes.fromhex('1a0000001a000000050000007573657230d2040000050000005175657279')
         assert FileSearch.Response.deserialize(data) == message
+
+
+class TestSendConnectTicket:
+
+    def test_SendConnectTicket_Request_serialize(self):
+        message = SendConnectTicket.Request(
+            username='user0',
+            ticket=1234
+        )
+        data = bytes.fromhex('1100000021000000050000007573657230d2040000')
+        assert message.serialize() == data
+
+    def test_SendConnectTicket_Request_deserialize(self):
+        message = SendConnectTicket.Request(
+            username='user0',
+            ticket=1234
+        )
+        data = bytes.fromhex('1100000021000000050000007573657230d2040000')
+        assert SendConnectTicket.Request.deserialize(data) == message
+
+    def test_SendConnectTicket_Response_serialize(self):
+        message = SendConnectTicket.Response(
+            username='user0',
+            ticket=1234
+        )
+        data = bytes.fromhex('1100000021000000050000007573657230d2040000')
+        assert message.serialize() == data
+
+    def test_SendConnectTicket_Response_deserialize(self):
+        message = SendConnectTicket.Response(
+            username='user0',
+            ticket=1234
+        )
+        data = bytes.fromhex('1100000021000000050000007573657230d2040000')
+        assert SendConnectTicket.Response.deserialize(data) == message
 
 
 class TestSetStatus:
@@ -1851,6 +1888,20 @@ class TestChildDepth:
         assert ChildDepth.Request.deserialize(data) == message
 
 
+
+class TestResetDistributed:
+
+    def test_ResetDistributed_Response_serialize(self):
+        message = ResetDistributed.Response()
+        data = bytes.fromhex('0400000082000000')
+        assert message.serialize() == data
+
+    def test_ResetDistributed_Response_deserialize(self):
+        message = ResetDistributed.Response()
+        data = bytes.fromhex('0400000082000000')
+        assert ResetDistributed.Response.deserialize(data) == message
+
+
 class TestPrivateRoomMembers:
 
     def test_PrivateRoomMembers_Response_serialize(self):
@@ -2199,33 +2250,33 @@ class TestPublicChatMessage:
         assert PublicChatMessage.Response.deserialize(data) == message
 
 
-class TestFileSearchEx:
+class TestGetRelatedSearches:
 
-    def test_FileSearchEx_Request_serialize(self):
-        message = FileSearchEx.Request('Query')
+    def test_GetRelatedSearches_Request_serialize(self):
+        message = GetRelatedSearches.Request('Query')
         data = bytes.fromhex('0d00000099000000050000005175657279')
         assert message.serialize() == data
 
-    def test_FileSearchEx_Request_deserialize(self):
-        message = FileSearchEx.Request('Query')
+    def test_GetRelatedSearches_Request_deserialize(self):
+        message = GetRelatedSearches.Request('Query')
         data = bytes.fromhex('0d00000099000000050000005175657279')
-        assert FileSearchEx.Request.deserialize(data) == message
+        assert GetRelatedSearches.Request.deserialize(data) == message
 
-    def test_FileSearchEx_Response_serialize(self):
-        message = FileSearchEx.Response(
+    def test_GetRelatedSearches_Response_serialize(self):
+        message = GetRelatedSearches.Response(
             query='Query',
-            unknown=1
+            related_searches=['some', 'thing']
         )
-        data = bytes.fromhex('110000009900000005000000517565727901000000')
+        data = bytes.fromhex('22000000990000000500000051756572790200000004000000736f6d65050000007468696e67')
         assert message.serialize() == data
 
-    def test_FileSearchEx_Response_deserialize(self):
-        message = FileSearchEx.Response(
+    def test_GetRelatedSearches_Response_deserialize(self):
+        message = GetRelatedSearches.Response(
             query='Query',
-            unknown=1
+            related_searches=['some', 'thing']
         )
-        data = bytes.fromhex('110000009900000005000000517565727901000000')
-        assert FileSearchEx.Response.deserialize(data) == message
+        data = bytes.fromhex('22000000990000000500000051756572790200000004000000736f6d65050000007468696e67')
+        assert GetRelatedSearches.Response.deserialize(data) == message
 
 
 class TestCannotConnect:

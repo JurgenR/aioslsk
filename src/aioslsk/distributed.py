@@ -33,6 +33,7 @@ from .protocol.messages import (
     ParentMinSpeed,
     ParentSpeedRatio,
     PotentialParents,
+    ResetDistributed,
     ServerSearchRequest,
     ToggleParentSearch,
 )
@@ -360,9 +361,11 @@ class DistributedNetwork(BaseManager):
                 )
                 await self._set_parent(parent)
 
-        # Pass the message on to the children anyway, could just be that the
-        #
         await self.send_messages_to_children(message)
+
+    @on_message(ResetDistributed.Response)
+    async def _on_reset_distributed(self, message: ResetDistributed.Response, connection: ServerConnection):
+        await self.reset()
 
     # Distributed messages
 

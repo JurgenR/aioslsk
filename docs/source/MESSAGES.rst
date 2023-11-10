@@ -127,8 +127,11 @@ Possible statuses:
 | 2     | online  |
 +-------+---------+
 
-Attributes
-----------
+
+.. _table-file-attributes:
+
+File Attributes
+---------------
 
 * Lossless: FLAC, WAV
 * Compressed: MP3, M4A, AAC, OGG
@@ -148,6 +151,26 @@ Attributes
 +-------+-------------------+----------------------+
 
 
+.. _table-upload-permissions:
+
+Upload Permissions
+------------------
+
+Permissions indicating who is allowed to initiate an upload a file to the user. Optionally returned in the :ref:`PeerUserInfoReply` message.
+
++-------+-------------------+
+| Value |      Meaning      |
++=======+===================+
+| 0     | No-one            |
++-------+-------------------+
+| 1     | Everyone          |
++-------+-------------------+
+| 2     | User list         |
++-------+-------------------+
+| 3     | Permitted list    |
++-------+-------------------+
+
+
 .. _server-messages:
 
 Server Messages
@@ -160,12 +183,15 @@ Login (Code 1)
 
 Login into the server, this should be the first message sent to the server upon connecting
 
+* The ``md5_hash`` parameter in the request is the MD5 hash of the concatenated ``username`` and ``password``
+* The ``md5_hash`` parameter in the response is the MD5 hash of the ``password``
+
 :Code: 1 (0x01)
 :Send:
    1. **string**: username
    2. **string**: password
-   3. **uint32**:
-   4. **string**: MD5 hash of concatenated username and password
+   3. **uint32**: version
+   4. **string**: md5_hash
    5. **uint32**: minor_version
 :Receive:
    1. **boolean**: result. true on success, false on failure
@@ -173,7 +199,7 @@ Login into the server, this should be the first message sent to the server upon 
 
       1. **string**: greeting
       2. **ip**: ip_address
-      3. **string**: md5_hash , hash of the password
+      3. **string**: md5_hash
       4. **uint8**: privileged
 
    3. If result==false
@@ -219,7 +245,7 @@ If the peer does not exist we will receive a response with IP address, port set 
    4. Optional:
 
       1. **uint32**: has obfuscated listening port
-      2. **uint32**: obfuscated listening port
+      2. **uint16**: obfuscated listening port
 
 
 .. _AddUser:
@@ -471,7 +497,23 @@ Ping (Code 32)
 Send a ping to the server to let it know we are still alive (every 5 minutes)
 
 :Code: 32 (0x20)
-:Send: No parameters
+:Send: Nothing
+
+
+.. _SendConnectTicket:
+
+SendConnectTicket (Code 33)
+---------------------------
+
+Deprecated
+
+:Code: 33 (0x21)
+:Send:
+   1. **string**: username
+   2. **uint32**: ticket
+:Receive:
+   1. **string**: username
+   2. **uint32**: ticket
 
 
 .. _SendDownloadSpeed:
@@ -585,7 +627,7 @@ GetRecommendations (Code 54)
 Request the server to send a list of recommendations and unrecommendations. A maximum of 100 each will be returned. The score can be negative.
 
 :Code: 54 (0x36)
-:Send: No parameters
+:Send: Nothing
 :Receive:
    1. Array of recommendations:
 
@@ -608,7 +650,7 @@ Request the server the list of interests it currently has stored for us. This wa
 Not known whether the server still responds to this command
 
 :Code: 55 (0x37)
-:Send: No parameters
+:Send: Nothing
 :Receive:
    1. Array of interets:
 
@@ -621,7 +663,7 @@ GetGlobalRecommendations (Code 56)
 ----------------------------------
 
 :Code: 56 (0x38)
-:Send: No parameters
+:Send: Nothing
 :Receive:
    1. Array of recommendations:
 
@@ -689,7 +731,7 @@ Parameter ``rooms_private`` excludes private rooms of which we are owner
 Parameter ``rooms_private_owned_user_count`` / ``rooms_private_user_count`` should be the amount of users who have joined the private room, not the amount of members
 
 :Code: 42 (0x2A)
-:Send: No parameters
+:Send: Nothing
 :Receive:
    1. Array of room names:
 
@@ -937,7 +979,7 @@ CheckPrivileges (Code 92)
 Checks whether the requesting user has privileges, `time_left` will be `0` in case the user has no privileges, time left in seconds otherwise.
 
 :Code: 92 (0x5C)
-:Send: No parameters
+:Send: Nothing
 :Receive:
    1. **uint32**: time_left
 
@@ -1014,7 +1056,7 @@ GetSimilarUsers (Code 110)
 --------------------------
 
 :Code: 110 (0x6E)
-:Send: No parameters
+:Send: Nothing
 :Receive:
    1. Array of similar users:
 
@@ -1165,7 +1207,7 @@ GetUserPrivileges (Code 122)
 Retrieve whether a user has privileges
 
 :Code: 122 (0x7A)
-:Send: No parameters
+:Send: Nothing
 :Receive:
    1. **string**: username
    2. **boolean**: privileged
@@ -1237,6 +1279,15 @@ ChildDepth (Code 129)
 :Code: 129 (0x81)
 :Send:
    1. **uint32**: depth
+
+
+ResetDistributed (Code 130)
+---------------------------
+
+Server requests to reset our parent and children
+
+:Code: 127 (0x7F)
+:Receive: Nothing
 
 
 .. _PrivateRoomMembers:
@@ -1461,7 +1512,7 @@ EnablePublicChat (Code 150)
 Enables public chat, see :ref:`PublicChatMessage`
 
 :Code: 150 (0x96)
-:Send: No parameters
+:Send: Nothing
 
 
 .. _DisablePublicChat:
@@ -1472,7 +1523,7 @@ DisablePublicChat (Code 151)
 Disables public chat, see :ref:`PublicChatMessage`
 
 :Code: 151 (0x97)
-:Send: No parameters
+:Send: Nothing
 
 
 .. _PublicChatMessage:
@@ -1489,24 +1540,21 @@ Chat message from all public rooms, use :ref:`EnablePublicChat` and :ref:`Disabl
    3. **string**: message
 
 
-.. _FileSearchEx:
+.. _GetRelatedSearches:
 
-FileSearchEx (Code 153)
------------------------
+GetRelatedSearches (Code 153)
+-----------------------------
 
-Usually this is sent by the client right after the :ref:`FileSearch` message using the same `query`, the server responds with the same query and an unknown integer that is always 0.
-
-The meaning of the `unknown` parameter is not clear, could be that this is a ticket number, perhaps an empty string or list. Speculation:
-
-* Request for a list of recommendations for the query but no longer works
-* Something related to global search for privileged users (non-privileged returns just `0`)
+Usually this is sent by the client right after the :ref:`FileSearch` message using the same `query` to retrieve the related searches for that query
 
 :Code: 153 (0x99)
 :Send:
    1. **string**: query
 :Receive:
    1. **string**: query
-   2. **uint32**: unknown
+   2. Array of related searches:
+
+      1. **string**: related_searches
 
 
 .. _CannotConnect:
