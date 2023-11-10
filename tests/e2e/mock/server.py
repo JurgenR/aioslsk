@@ -32,7 +32,7 @@ from aioslsk.protocol.messages import (
     EnablePublicChat,
     ExactFileSearch,
     FileSearch,
-    FileSearchEx,
+    GetRelatedSearches,
     GetGlobalRecommendations,
     GetItemRecommendations,
     GetPeerAddress,
@@ -903,12 +903,11 @@ class MockServer:
             return_exceptions=True
         )
 
-    @on_message(FileSearchEx.Request)
-    async def on_file_searchex(self, message: FileSearchEx.Request, peer: Peer):
-        """Messages with unknown purpose"""
-        await peer.send_message(FileSearchEx.Response(
+    @on_message(GetRelatedSearches.Request)
+    async def on_get_related_searches(self, message: GetRelatedSearches.Request, peer: Peer):
+        await peer.send_message(GetRelatedSearches.Response(
             message.query,
-            unknown=0
+            related_searches=[]
         ))
 
     @on_message(SetRoomTicker.Request)
