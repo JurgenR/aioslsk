@@ -27,15 +27,38 @@ These metadata keys are implemented:
 ** deserialization : during deserialization the code will determine if the message
     has been fully parsed. If not it will parse this field
 """
-from dataclasses import dataclass, field, fields, is_dataclass
+from dataclasses import dataclass, field, Field, fields, is_dataclass
 import hashlib
 import logging
 import socket
 import struct
-from typing import Any, ClassVar, Dict, List, Tuple, Union
+from typing import (
+    Any,
+    ClassVar,
+    Dict,
+    List,
+    Optional,
+    Protocol,
+    Tuple,
+    Type,
+    TypeVar,
+    Union
+)
 import zlib
 
 logger = logging.getLogger(__name__)
+
+
+T = TypeVar('T', bound='Serializable')
+
+class Serializable(Protocol[T]):
+
+    @classmethod
+    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, T]:
+        ...
+
+    def serialize(self) -> bytes:
+        ...
 
 
 def decode_string(value: bytes) -> str:
@@ -45,82 +68,81 @@ def decode_string(value: bytes) -> str:
         return value.decode('cp1252')
 
 
-def parse_basic(pos: int, data: bytes, data_type: str):
-    size = struct.calcsize(data_type)
-    value = data[pos:pos + size]
-    return pos + size, struct.unpack(data_type, value)[0]
-
-
 class uint8(int):
+    STRUCT = struct.Struct('<B')
 
-    def serialize(self):
-        return struct.pack('<B', self)
+    def serialize(self) -> bytes:
+        return self.STRUCT.pack(self)
 
     @classmethod
     def deserialize(cls, pos: int, data: bytes) -> Tuple[int, int]:
-        return parse_basic(pos, data, '<B')
+        return pos + cls.STRUCT.size, cls.STRUCT.unpack_from(data, offset=pos)[0]
 
 
 class uint16(int):
+    STRUCT = struct.Struct('<H')
 
-    def serialize(self):
-        return struct.pack('<H', self)
+    def serialize(self) -> bytes:
+        return self.STRUCT.pack(self)
 
     @classmethod
     def deserialize(cls, pos: int, data: bytes) -> Tuple[int, int]:
-        return parse_basic(pos, data, '<H')
+        return pos + cls.STRUCT.size, cls.STRUCT.unpack_from(data, offset=pos)[0]
 
 
 class uint32(int):
+    STRUCT = struct.Struct('<I')
 
-    def serialize(self):
-        return struct.pack('<I', self)
+    def serialize(self) -> bytes:
+        return self.STRUCT.pack(self)
 
     @classmethod
     def deserialize(cls, pos: int, data: bytes) -> Tuple[int, int]:
-        return parse_basic(pos, data, '<I')
+        return pos + cls.STRUCT.size, cls.STRUCT.unpack_from(data, offset=pos)[0]
 
 
 class uint64(int):
+    STRUCT = struct.Struct('<Q')
 
-    def serialize(self):
-        return struct.pack('<Q', self)
+    def serialize(self) -> bytes:
+        return self.STRUCT.pack(self)
 
     @classmethod
     def deserialize(cls, pos: int, data: bytes) -> Tuple[int, int]:
-        return parse_basic(pos, data, '<Q')
+        return pos + cls.STRUCT.size, cls.STRUCT.unpack_from(data, offset=pos)[0]
 
 
 class int32(int):
+    STRUCT = struct.Struct('<i')
 
-    def serialize(self):
-        return struct.pack('<i', self)
+    def serialize(self) -> bytes:
+        return self.STRUCT.pack(self)
 
     @classmethod
     def deserialize(cls, pos: int, data: bytes) -> Tuple[int, int]:
-        return parse_basic(pos, data, '<i')
+        return pos + cls.STRUCT.size, cls.STRUCT.unpack_from(data, offset=pos)[0]
 
 
 class string(str):
 
-    def serialize(self, encoding: str = 'utf-8'):
+    def serialize(self, encoding: str = 'utf-8') -> bytes:
         byte_string = self.encode(encoding)
 
-        length = len(byte_string)
-        return uint32(length).serialize() + byte_string
+        return uint32(len(byte_string)).serialize() + byte_string
 
     @classmethod
     def deserialize(cls, pos: int, data: bytes) -> Tuple[int, str]:
         pos_after_len, length = uint32.deserialize(pos, data)
-        data_type = '<{}s'.format(length)
-        value = struct.unpack(
-            data_type, data[pos_after_len:pos_after_len + length])[0]
+        value = data[pos_after_len:pos_after_len + length]
+        if len(value) != length:
+            raise Exception(
+                f"expected string with length ({length}), got {len(value)}")
         return pos_after_len + length, decode_string(value)
 
 
 class bytearr(bytes):
 
-    def serialize(self):
+    def serialize(self) -> bytes:
         length = len(self)
         return uint32(length).serialize() + bytes(self)
 
@@ -132,46 +154,50 @@ class bytearr(bytes):
 
 
 class ipaddr(str):
+    STRUCT = struct.Struct('<4s')
 
     def serialize(self) -> bytes:
         ip_b = socket.inet_aton(self)
-        return struct.pack('<4s', bytes(reversed(ip_b)))
+        return self.STRUCT.pack(bytes(reversed(ip_b)))
 
     @classmethod
     def deserialize(cls, pos: int, data) -> Tuple[int, str]:
-        data_type = '<4s'
-        value = struct.unpack(data_type, data[pos:pos + 4])[0]
+        value = cls.STRUCT.unpack(data[pos:pos + 4])[0]
         ip_addr = socket.inet_ntoa(bytes(reversed(value)))
         return pos + 4, ip_addr
 
 
 class boolean(int):
+    STRUCT = struct.Struct('<?')
 
-    def serialize(self):
-        return struct.pack('<?', self)
+    def serialize(self) -> bytes:
+        return self.STRUCT.pack(self)
 
     @classmethod
     def deserialize(cls, pos: int, data: bytes) -> Tuple[int, bool]:
-        return parse_basic(pos, data, '<?')
+        return pos + cls.STRUCT.size, cls.STRUCT.unpack_from(data, offset=pos)[0]
 
 
 class array(list):
 
-    def serialize(self, element_type):
+    def serialize(self, element_type: Type[T]) -> bytes:
         body = uint32(len(self)).serialize()
+        is_protocoldc = is_dataclass(element_type)
         for value in self:
-            body += element_type(value).serialize()
+            if is_protocoldc:
+                body += value.serialize()
+            else:
+                body += element_type(value).serialize()
         return body
 
     @classmethod
-    def deserialize(cls, pos: int, data: bytes, element_type) -> Tuple[int, List[Any]]:
+    def deserialize(cls, pos: int, data: bytes, element_type: Type[T]) -> Tuple[int, List[T]]:
         items = []
-        pos_after_array_len, array_len = uint32.deserialize(pos, data)
-        current_item_pos = pos_after_array_len
+        pos, array_len = uint32.deserialize(pos, data)
         for _ in range(array_len):
-            current_item_pos, item = element_type.deserialize(current_item_pos, data)
+            pos, item = element_type.deserialize(pos, data)
             items.append(item)
-        return current_item_pos, items
+        return pos, items
 
 
 class ProtocolDataclass:
@@ -188,18 +214,23 @@ class ProtocolDataclass:
         password: str = field(metadata={'type': string})
         has_privileges: bool = field(metadata={'type': boolean})
     """
+    _CACHED_FIELDS: Optional[Tuple[Field]] = None
+    """Cache version of the `dataclasses.fields` return for the current class
+    """
 
     def serialize(self) -> bytes:
         message = bytes()
-        obj_fields = fields(self)
-        for obj_field in obj_fields:
+        if self.__class__._CACHED_FIELDS is None:
+            self.__class__._CACHED_FIELDS = fields(self)
+
+        for obj_field in fields(self):
             value = self._get_value_for_field(self, obj_field)
             if value is None:
                 continue
 
             # Serialize
             try:
-                proto_type = obj_field.metadata['type']
+                proto_type: Type[Serializable] = obj_field.metadata['type']
             except KeyError:
                 raise Exception(f"no 'type' for field {obj_field.name!r} defined")
 
@@ -222,9 +253,11 @@ class ProtocolDataclass:
 
     @classmethod
     def deserialize(cls, pos: int, message: bytes):
-        obj_fields = fields(cls)
+        if cls._CACHED_FIELDS is None:
+            cls._CACHED_FIELDS = fields(cls)
+
         field_map: Dict[str, Any] = {}
-        for obj_field in obj_fields:
+        for obj_field in cls._CACHED_FIELDS:
             if not cls._field_needs_deserialization(obj_field, field_map, pos, message):
                 continue
 
@@ -233,12 +266,9 @@ class ProtocolDataclass:
             except KeyError:
                 raise Exception(f"no 'type' for field {obj_field.name!r} defined")
 
-            if is_dataclass(proto_type):
+            if isinstance(proto_type, ProtocolDataclass):
                 pos, value = proto_type.deserialize(pos, message)
             elif 'subtype' in obj_field.metadata:
-                # if obj_field.name == 'directories':
-                #     import pdb; pdb.set_trace()
-
                 pos, value = proto_type.deserialize(pos, message, obj_field.metadata['subtype'])
             else:
                 pos, value = proto_type.deserialize(pos, message)
@@ -248,7 +278,7 @@ class ProtocolDataclass:
         return pos, cls(**field_map)
 
     @classmethod
-    def _field_needs_deserialization(cls, field, field_map: Dict[str, Any], pos: int, message: bytes):
+    def _field_needs_deserialization(cls, field: Field, field_map: Dict[str, Any], pos: int, message: bytes):
         # For if_true and if_false we need to return only if the condition is
         # is false as we still want to check the 'optional' field
         if 'if_true' in field.metadata:
@@ -264,7 +294,7 @@ class ProtocolDataclass:
 
         return True
 
-    def _get_value_for_field(self, obj, fld):
+    def _get_value_for_field(self, obj, fld: Field) -> Optional[Serializable]:
         value = getattr(obj, fld.name)
 
         # Order of checking the metadata is important
@@ -346,10 +376,22 @@ class MessageDataclass(ProtocolDataclass):
         return obj
 
 
+_ATTR_STRUCT = struct.Struct('<II')
+
 @dataclass(frozen=True, order=True)
 class Attribute(ProtocolDataclass):
     key: int = field(metadata={'type': uint32})
     value: int = field(metadata={'type': uint32})
+
+    @classmethod
+    def deserialize(cls, pos: int, message: bytes):
+        return (
+            pos + _ATTR_STRUCT.size,
+            cls(*_ATTR_STRUCT.unpack_from(message, offset=pos))
+        )
+
+    def serialize(self) -> bytes:
+        return _ATTR_STRUCT.pack(self.key, self.value)
 
 
 @dataclass(frozen=True, order=True)
@@ -393,11 +435,44 @@ class FileData(ProtocolDataclass):
     extension: str = field(metadata={'type': string})
     attributes: List[Attribute] = field(metadata={'type': array, 'subtype': Attribute})
 
+    @classmethod
+    def deserialize(cls, pos: int, message: bytes):
+        pos, unknown = uint8.deserialize(pos, message)
+        pos, filename = string.deserialize(pos, message)
+        pos, filesize = uint64.deserialize(pos, message)
+        pos, ext = string.deserialize(pos, message)
+        pos, attrs = array.deserialize(pos, message, Attribute)
+        return pos, cls(
+            unknown=unknown,
+            filename=filename,
+            filesize=filesize,
+            extension=ext,
+            attributes=attrs
+        )
+
+    def serialize(self) -> bytes:
+        return (
+            uint8(self.unknown).serialize() +
+            string(self.filename).serialize() +
+            uint64(self.filesize).serialize() +
+            string(self.extension).serialize() +
+            array(self.attributes).serialize(Attribute)
+        )
+
 
 @dataclass(frozen=True, order=True)
 class DirectoryData(ProtocolDataclass):
     name: str = field(metadata={'type': string})
     files: List[FileData] = field(metadata={'type': array, 'subtype': FileData})
+
+    @classmethod
+    def deserialize(cls, pos: int, message: bytes):
+        pos, name = string.deserialize(pos, message)
+        pos, files = array.deserialize(pos, message, element_type=FileData)
+        return pos, cls(name, files)
+
+    def serialize(self) -> bytes:
+        return string(self.name).serialize() + array(self.files).serialize(FileData)
 
 
 def has_unparsed_bytes(pos: int, message: bytes) -> bool:

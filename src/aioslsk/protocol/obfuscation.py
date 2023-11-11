@@ -1,4 +1,5 @@
 import secrets
+from math import ceil
 from typing import Optional
 
 
@@ -46,13 +47,22 @@ def decode(data: bytes) -> bytes:
     :return: De-obfuscated data
     """
     key = data[:KEY_SIZE]
-    enc_message = data[KEY_SIZE:]
-    dec_message = bytearray()
-    for idx, byt in enumerate(enc_message):
-        if idx % KEY_SIZE == 0:
-            key = rotate_key(key, rot_bits=31)
-        dec_message.append(key[idx % KEY_SIZE] ^ byt)
-    return bytes(dec_message)
+    message = bytearray(data[KEY_SIZE:])
+    message_len = len(message)
+
+    # Generate key array
+    key_amount = min(ceil(message_len / KEY_SIZE), 32)
+
+    full_key = bytearray()
+    for rot_bits in range(31, 31 - key_amount, -1):
+        full_key.extend(rotate_key(key, rot_bits=rot_bits))
+    full_key_len = len(full_key)
+
+    # XOR all bytes with the key
+    for idx in range(message_len):
+        message[idx] ^= full_key[idx % full_key_len]
+
+    return bytes(message)
 
 
 def encode(data: bytes, key: Optional[bytes] = None) -> bytes:
