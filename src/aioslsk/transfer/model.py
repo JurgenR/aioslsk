@@ -275,7 +275,7 @@ class Transfer:
 
     def take_progress_snapshot(self) -> TransferProgressSnapshot:
         snapshot = TransferProgressSnapshot(
-            state=self.state.VALUE,
+            state=self.state.VALUE if isinstance(self.state, TransferState) else self.state,
             bytes_transfered=self.bytes_transfered,
             speed=self.get_speed(),
             start_time=self.start_time,
