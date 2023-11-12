@@ -82,6 +82,7 @@ class TransferLimitSettings(BaseModel, validate_assignment=True):
 
 class TransfersSettings(BaseModel, validate_assignment=True):
     limits: TransferLimitSettings = Field(default_factory=TransferLimitSettings)
+    report_interval: float = 0.250
 
 
 class SharesSettings(BaseModel, validate_assignment=True):

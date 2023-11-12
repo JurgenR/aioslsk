@@ -128,6 +128,8 @@ Transfers
 +===============================+=========+==========================================+=========+
 | transfers.limits.upload_slots | integer | Maximum amount of simultaneously uploads | 2       |
 +-------------------------------+---------+------------------------------------------+---------+
+| transfers.report_interval     | float   | Transfer progress reporting interval     | 0.250   |
++-------------------------------+---------+------------------------------------------+---------+
 
 
 Debug

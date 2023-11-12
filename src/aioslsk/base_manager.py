@@ -18,6 +18,11 @@ class BaseManager(ABC):
         shutdown
         """
 
+    async def start(self):
+        """Optionally performs a start action on the manager. Gets called after
+        loading the data but before connecting
+        """
+
     async def stop(self) -> List[asyncio.Task]:
         """Cancel all running tasks
 

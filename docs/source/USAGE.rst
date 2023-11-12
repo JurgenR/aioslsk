@@ -173,6 +173,30 @@ Retrieving the transfers:
     downloads: List[Transfer] = client.transfers.get_downloads()
     uploads: List[Transfer] = client.transfers.get_uploads()
 
+Events are available to listen for the transfer progress:
+
+.. code-block:: python
+
+    from aioslsk.transfer.model import Transfer
+    from aioslsk.events import TransferAddedEvent, TransferProgressEvent, TransferRemovedEvent
+
+    async def on_transfer_added(event: TransferAddedEvent):
+        if transfer.is_upload():
+            print(f"New upload added from {event.transfer.username} with name {event.transfer.filename}!")
+
+    async def on_transfer_progress(event: TransferProgressEvent):
+        for transfer, previous, current in event.updates:
+            if previous.state != current.state:
+                print(f"A transfer moved from state {previous.state} to {current.state}!")
+
+    async def on_transfer_removed(event: TransferRemovedEvent):
+        if transfer.is_upload():
+            print(f"Upload from {event.transfer.username} with name {event.transfer.filename} removed!")
+
+    client.events.register(TransferAddedEvent, on_transfer_added)
+    client.events.register(TransferProgressEvent, on_transfer_progress)
+    client.events.register(TransferRemovedEvent, on_transfer_removed)
+
 
 Setting Limits
 --------------

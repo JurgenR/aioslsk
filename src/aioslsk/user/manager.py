@@ -212,7 +212,8 @@ class UserManager(BaseManager):
                 # remove the user from the list
                 user.status = UserStatus.UNKNOWN
 
-                del self._tracked_users[username]
+                if username in self._tracked_users:
+                    del self._tracked_users[username]
                 await self._event_bus.emit(UserUntrackingEvent(user=user))
 
     @on_message(AdminMessage.Response)

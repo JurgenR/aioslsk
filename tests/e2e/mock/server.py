@@ -929,12 +929,12 @@ class MockServer:
 
         # Remove the ticker if it was set
         if peer.user.name in room.tickers:
+            del room.tickers[peer.user.name]
             remove_message = RoomTickerRemoved.Response(
                 room=room.name,
                 username=peer.user.name
             )
             await self.notify_room_users(room, remove_message)
-            del room.tickers[peer.user.name]
 
         logger.debug(f"setting ticker : {peer.user.name} : {message.ticker}")
         room.tickers[peer.user.name] = message.ticker
@@ -1071,7 +1071,7 @@ class MockServer:
         else:
             new_speed = (peer.user.avg_speed * peer.user.uploads) + message.speed
             new_speed /= (peer.user.uploads + 1)
-            peer.user.avg_speed = new_speed
+            peer.user.avg_speed = int(new_speed)
 
         peer.user.uploads += 1
 
@@ -1176,7 +1176,7 @@ class MockServer:
             if peer.user in room.joined_users:
                 await self.leave_room(room, peer)
 
-    @on_message(PrivateRoomDropMembership)
+    @on_message(PrivateRoomDropMembership.Request)
     async def on_private_room_drop_membership(self, message: PrivateRoomDropMembership.Request, peer: Peer):
         room = self.find_room_by_name(message.room)
 
@@ -1193,7 +1193,7 @@ class MockServer:
         await self.remove_from_private_room(room, peer)
         await self.revoke_operator(room, peer.user)
 
-    @on_message(PrivateRoomDropOwnership)
+    @on_message(PrivateRoomDropOwnership.Request)
     async def on_private_room_drop_ownership(self, message: PrivateRoomDropOwnership.Request, peer: Peer):
         room = self.find_room_by_name(message.room)
 

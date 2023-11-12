@@ -115,6 +115,7 @@ class SoulSeekClient:
         self._stop_event = asyncio.Event()
 
         await asyncio.gather(*[svc.load_data() for svc in self.services])
+        await asyncio.gather(*[svc.start() for svc in self.services])
 
         if self.settings.shares.scan_on_start:
             asyncio.create_task(self.shares.scan)
