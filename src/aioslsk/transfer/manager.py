@@ -710,7 +710,7 @@ class TransferManager(BaseManager):
 
         # Send transfer ticket
         try:
-            await connection.send_message(uint32.serialize(ticket))
+            await connection.send_message(uint32(ticket).serialize())
         except ConnectionWriteError:
             logger.info(f"failed to send transfer ticket : {transfer!r}")
             await self.queue(transfer)
