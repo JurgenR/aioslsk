@@ -1,4 +1,6 @@
 from aioslsk.client import SoulSeekClient
+from aioslsk.events import TransferAddedEvent, TransferProgressEvent
+from aioslsk.network.connection import CloseReason
 from aioslsk.transfer.model import TransferState
 from .mock.server import MockServer
 from .fixtures import mock_server, client_1, client_2
@@ -8,12 +10,14 @@ from .utils import (
     wait_for_transfer_to_transfer,
     wait_for_transfer_state,
     wait_until_clients_initialized,
+    wait_for_transfer_added,
 )
 import asyncio
 import filecmp
 import logging
 import os
 import pytest
+from unittest.mock import AsyncMock
 
 
 logger = logging.getLogger(__name__)
@@ -23,6 +27,7 @@ class TestE2ETransfer:
 
     @pytest.mark.asyncio
     async def test_transfer(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        """Happy path for performing a transfer"""
         await wait_until_clients_initialized(mock_server, amount=2)
 
         request = await client_1.searches.search('Strange')
@@ -55,7 +60,51 @@ class TestE2ETransfer:
         assert filecmp.cmp(download.local_path, upload.local_path)
 
     @pytest.mark.asyncio
+    async def test_transfer_events(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        """Happy path, test events"""
+        await wait_until_clients_initialized(mock_server, amount=2)
+
+        request = await client_1.searches.search('Strange')
+        await wait_for_search_results(request)
+
+        # Lower speeds so the transfer isn't instantaneous (file is +-200kb)
+        client_1.network.set_download_speed_limit(100)
+        client_2.network.set_upload_speed_limit(100)
+
+        # Register listeners
+        downloader_add_listener = AsyncMock()
+        downloader_progress_listener = AsyncMock()
+        uploader_add_listener = AsyncMock()
+        uploader_progress_listener = AsyncMock()
+        client_1.events.register(TransferAddedEvent, downloader_add_listener)
+        client_1.events.register(TransferProgressEvent, downloader_progress_listener)
+        client_2.events.register(TransferAddedEvent, uploader_add_listener)
+        client_2.events.register(TransferProgressEvent, uploader_progress_listener)
+
+        result = request.results[0]
+        download = await client_1.transfers.download(
+            result.username,
+            result.shared_items[0].filename
+        )
+
+        upload = await wait_for_transfer_added(client_2)
+
+        await wait_for_transfer_state(download, TransferState.COMPLETE)
+        await wait_for_transfer_state(upload, TransferState.COMPLETE)
+
+        downloader_add_listener.assert_awaited_once()
+        uploader_add_listener.assert_awaited_once()
+
+        assert downloader_progress_listener.await_count > 0
+        assert uploader_progress_listener.await_count > 0
+
+    @pytest.mark.asyncio
     async def test_transfer_abortDownload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        """Tests aborting a download
+
+        The download should end up in ABORTED state
+        The upload should end up in FAILED state
+        """
         await wait_until_clients_initialized(mock_server, amount=2)
 
         request = await client_1.searches.search('Strange')
@@ -101,6 +150,11 @@ class TestE2ETransfer:
 
     @pytest.mark.asyncio
     async def test_transfer_abortUpload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        """Tests aborting an upload.
+
+        The download should end up in FAILED state
+        The upload should end up in ABORTED state
+        """
         await wait_until_clients_initialized(mock_server, amount=2)
 
         request = await client_1.searches.search('Strange')

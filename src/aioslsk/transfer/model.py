@@ -1,6 +1,7 @@
 from __future__ import annotations
 import asyncio
 from collections import deque
+from dataclasses import dataclass
 from enum import Enum
 import logging
 import time
@@ -20,12 +21,25 @@ class TransferDirection(Enum):
     DOWNLOAD = 1
 
 
+@dataclass(frozen=True, eq=True)
+class TransferProgressSnapshot:
+    """Represents the current progress of a transfer, used for reporting
+    progress back to the user
+    """
+    state: TransferState.State
+    bytes_transfered: int
+    speed: float
+    start_time: Optional[float] = None
+    complete_time: Optional[float] = None
+
+
 class Transfer:
     """Class representing a transfer"""
     _UNPICKABLE_FIELDS = (
         '_speed_log',
         '_transfer_task',
         '_remotely_queue_task',
+        'progress_snapshot',
         'state_listeners'
     )
 
@@ -70,8 +84,9 @@ class Transfer:
         transfer entered the complete or incomplete state
         """
 
+        self.progress_snapshot: TransferProgressSnapshot = self.take_progress_snapshot()
+        """Snapshot of the transfer progress"""
         self._speed_log: Deque[Tuple[float, int]] = deque(maxlen=SPEED_LOG_ENTRIES)
-
         self._remotely_queue_task: Optional[asyncio.Task] = None
         self._transfer_task: Optional[asyncio.Task] = None
         self.state_listeners: List[TransferStateListener] = []
@@ -84,6 +99,7 @@ class Transfer:
         self._remotely_queue_task = None
         self._transfer_task = None
         self.state_listeners = []
+        self.progress_snapshot = self.take_progress_snapshot()
         self.__dict__['state'] = TransferState.init_from_state(obj_state['state'], self)
 
     def __getstate__(self):
@@ -256,6 +272,17 @@ class Transfer:
             self._transfer_task.cancel()
 
         return tasks
+
+    def take_progress_snapshot(self) -> TransferProgressSnapshot:
+        snapshot = TransferProgressSnapshot(
+            state=self.state.VALUE,
+            bytes_transfered=self.bytes_transfered,
+            speed=self.get_speed(),
+            start_time=self.start_time,
+            complete_time=self.complete_time
+        )
+        self.progress_snapshot = snapshot
+        return snapshot
 
     def _remotely_queue_task_complete(self, task: asyncio.Task):
         self._remotely_queue_task = None

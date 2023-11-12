@@ -96,7 +96,7 @@ async def wait_for_search_request(client: SoulSeekClient, timeout: float = 10):
     raise Exception('timeout waiting for search results')
 
 
-async def wait_for_search_results(request: SearchRequest, timeout=5):
+async def wait_for_search_results(request: SearchRequest, timeout: float = 5):
     start = time.time()
     while time.time() < start + timeout:
         if request.results:
@@ -105,7 +105,19 @@ async def wait_for_search_results(request: SearchRequest, timeout=5):
     raise Exception('timeout waiting for search results')
 
 
-async def wait_for_transfer_state(transfer: Transfer, state: TransferState.State, timeout: int = 60):
+async def wait_for_transfer_added(client: SoulSeekClient, timeout: float = 3) -> Transfer:
+    start = time.time()
+    init_transfer_amount = len(client.transfers.transfers)
+    while time.time() < start + timeout:
+        if len(client.transfers.transfers) > init_transfer_amount:
+            return client.transfers.transfers[-1]
+        else:
+            await asyncio.sleep(0.01)
+    else:
+        raise Exception(f"transfer {client} did not have a transfer added in {timeout}s")
+
+
+async def wait_for_transfer_state(transfer: Transfer, state: TransferState.State, timeout: int = 15):
     start = time.time()
     current_state = transfer.state.VALUE
     while time.time() < start + timeout:
@@ -115,7 +127,7 @@ async def wait_for_transfer_state(transfer: Transfer, state: TransferState.State
         else:
             await asyncio.sleep(0.05)
     else:
-        raise Exception(f"transfer {transfer} did not go to state {state} in {timeout}s (was {current_state})")
+        raise Exception(f"transfer {transfer} did not go to tate {state} in {timeout}s (was {current_state})")
 
 
 async def wait_for_transfer_to_finish(transfer: Transfer, timeout: int = 60):

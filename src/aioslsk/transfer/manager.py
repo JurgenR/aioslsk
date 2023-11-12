@@ -5,7 +5,7 @@ import asyncio
 import logging
 from operator import itemgetter
 import os
-from typing import Dict, List, Optional, Tuple, TYPE_CHECKING, Union
+from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 
 from ..base_manager import BaseManager
 from .cache import TransferNullCache, TransferCache
@@ -35,6 +35,8 @@ from ..events import (
     PeerInitializedEvent,
     SessionInitializedEvent,
     TransferAddedEvent,
+    TransferProgressEvent,
+    TransferRemovedEvent,
 )
 from ..protocol.primitives import uint32, uint64
 from ..protocol.messages import (
@@ -51,7 +53,7 @@ from ..protocol.messages import (
 )
 from .model import Transfer, TransferDirection
 from .state import TransferState
-from ..user.model import User, UserStatus, TrackingFlag
+from ..user.model import UserStatus, TrackingFlag
 from ..settings import Settings
 from ..shares.manager import SharesManager
 from ..user.manager import UserManager
@@ -88,6 +90,7 @@ class TransferManager(BaseManager):
 
         self._transfers: List[Transfer] = []
         self._file_connection_futures: Dict[int, asyncio.Future] = {}
+        self._progress_reporting_task: Optional[asyncio.Task] = None
 
         self._MESSAGE_MAP = build_message_map(self)
 
@@ -140,6 +143,9 @@ class TransferManager(BaseManager):
     async def store_data(self):
         self.write_cache()
 
+    async def start(self):
+        await self.start_progress_reporting_task()
+
     async def stop(self) -> List[asyncio.Task]:
         """Cancel all current transfer tasks
 
@@ -149,7 +155,38 @@ class TransferManager(BaseManager):
         cancelled_tasks = []
         for transfer in self.transfers:
             cancelled_tasks.extend(transfer.cancel_tasks())
+
+        if self._progress_reporting_task:
+            cancelled_tasks.append(self._progress_reporting_task)
+            self.stop_progress_reporting_task()
+
         return cancelled_tasks
+
+    async def start_progress_reporting_task(self):
+        if not self._progress_reporting_task:
+            self._progress_reporting_task = asyncio.create_task(
+                self._progress_reporting_job(),
+                name=f'progress-reporting-{task_counter()}'
+            )
+
+    def stop_progress_reporting_task(self):
+        if self._progress_reporting_task:
+            self._progress_reporting_task.cancel()
+            self._progress_reporting_task = None
+
+    async def _progress_reporting_job(self):
+        while True:
+            updates = []
+            for transfer in self._transfers:
+                previous = transfer.progress_snapshot
+                current = transfer.take_progress_snapshot()
+                if previous != current:
+                    updates.append((transfer, previous, current))
+
+            if updates:
+                await self._event_bus.emit(TransferProgressEvent(updates))
+
+            await asyncio.sleep(self._settings.transfers.report_interval)
 
     async def download(self, username: str, filename: str) -> Transfer:
         """Requests to start a downloading the file from the given user
@@ -253,7 +290,8 @@ class TransferManager(BaseManager):
 
     async def remove(self, transfer: Transfer):
         """Remove a transfer from the list of transfers. This will attempt to
-        abort the transfer before removing it
+        abort the transfer before removing it. Emits a `TransferRemovedEvent`
+        after removal
 
         :param transfer: Transfer object to remove
         :raise TransferNotFoundError: Raised when the transfer was not added to
@@ -268,9 +306,10 @@ class TransferManager(BaseManager):
         except InvalidStateTransition:
             pass
         except Exception:
-            logger.exception("error aborting transfer before removal")
+            logger.exception(f"error aborting transfer before removal : {transfer!r}")
         finally:
             self._transfers.remove(transfer)
+            await self._event_bus.emit(TransferRemovedEvent(transfer))
 
         await self.manage_transfers()
 
@@ -528,8 +567,7 @@ class TransferManager(BaseManager):
 
     async def _queue_remotely(self, transfer: Transfer):
         """Remotely queue the given transfer. If the message was successfully
-        delivered the transfer will go in REMOTELY_QUEUED state. Otherwise the
-        transfer will remain in QUEUED state
+        delivered the `remotely_queued` flag will be set for the transfer
         """
         logger.debug(f"attempting to queue transfer remotely : {transfer!r}")
         try:

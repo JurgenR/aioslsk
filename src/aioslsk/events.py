@@ -1,6 +1,6 @@
 from __future__ import annotations
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import inspect
 import logging
 from typing import Callable, Dict, List, Optional, Tuple, Type, TYPE_CHECKING, Union
@@ -62,7 +62,7 @@ if TYPE_CHECKING:
         CloseReason,
         PeerConnection,
     )
-    from .transfer.model import Transfer
+    from .transfer.model import Transfer, TransferProgressSnapshot
 
 
 logger = logging.getLogger(__name__)
@@ -155,7 +155,7 @@ class KickedEvent(Event):
 
 
 @dataclass(frozen=True)
-class UserTrackingEvent:
+class UserTrackingEvent(Event):
     """Emitted when a user is now successfully by the library tracked. This will
     be triggered when:
 
@@ -167,13 +167,13 @@ class UserTrackingEvent:
 
 
 @dataclass(frozen=True)
-class UserTrackingFailedEvent:
+class UserTrackingFailedEvent(Event):
     username: str
     raw_message: AddUser.Response
 
 
 @dataclass(frozen=True)
-class UserUntrackingEvent:
+class UserUntrackingEvent(Event):
     """Emitted when a user is no longer tracked by the library"""
     user: User
 
@@ -448,7 +448,29 @@ class UserDirectoryEvent(Event):
 
 @dataclass(frozen=True)
 class TransferAddedEvent(Event):
+    """Emitted when a transfer has been attached to the client"""
     transfer: Transfer
+
+
+@dataclass(frozen=True)
+class TransferRemovedEvent(Event):
+    """Emitted when a transfer has been detached from the client"""
+    transfer: Transfer
+
+
+@dataclass(frozen=True)
+class TransferProgressEvent(Event):
+    """Called periodically to report progress. The interval is determined by the
+    `transfers.progress_interval` settings parameter
+
+    This event only includes transfers where the transfer state has been changed
+    since the previous event. If there are no updates the event will no be
+    called
+    """
+    updates: List[Tuple[Transfer, TransferProgressSnapshot, TransferProgressSnapshot]]
+    """List of progress updates: transfer instance, previous snapshot, current
+    snapshot
+    """
 
 
 # Internal Events
