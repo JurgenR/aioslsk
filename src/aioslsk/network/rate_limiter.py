@@ -1,4 +1,5 @@
 from __future__ import annotations
+from abc import ABC, abstractmethod
 import asyncio
 import time
 
@@ -6,7 +7,7 @@ import time
 INTERVAL = 0.01
 
 
-class RateLimiter:
+class RateLimiter(ABC):
 
     def __init__(self, limit_bps: int):
         self.limit_bps: int = limit_bps
@@ -23,29 +24,34 @@ class RateLimiter:
         else:
             return LimitedRateLimiter(limit_kbps)
 
+    @abstractmethod
     def is_empty(self) -> bool:
         """Returns if the bucket is empty"""
-        raise NotImplementedError("method 'is_empty' should be overridden in a subclass")
+        ...
 
+    @abstractmethod
     def refill(self) -> bool:
         """Refill the bucket"""
-        raise NotImplementedError("method 'refill' should be overridden in a subclass")
+        ...
 
+    @abstractmethod
     async def take_tokens(self) -> int:
         """Takes tokens from the bucket"""
-        raise NotImplementedError("method 'take_tokens' should be overridden in a subclass")
+        ...
 
+    @abstractmethod
     def add_tokens(self, token_amount: int):
         """Adds tokens to the bucket"""
-        raise NotImplementedError("method 'add_tokens' should be overridden in a subclass")
+        ...
 
+    @abstractmethod
     def copy_tokens(self, other: 'RateLimiter'):
         """Copies to tokens from another rate limiter instance"""
-        raise NotImplementedError("method 'copy_tokens' should be overridden in a subclass")
+        ...
 
 
 class UnlimitedRateLimiter(RateLimiter):
-    UPPER_LIMIT = 8192
+    MIN_BUCKET_SIZE = 8192
 
     def __init__(self):
         super().__init__(limit_bps=0)
@@ -57,7 +63,7 @@ class UnlimitedRateLimiter(RateLimiter):
         return False
 
     async def take_tokens(self) -> int:
-        return self.UPPER_LIMIT
+        return self.MIN_BUCKET_SIZE
 
     def add_tokens(self, token_amount: int):
         pass
@@ -67,14 +73,13 @@ class UnlimitedRateLimiter(RateLimiter):
 
 
 class LimitedRateLimiter(RateLimiter):
-    LOWER_LIMIT = 128
-    UPPER_LIMIT = 1024
+    MIN_BUCKET_SIZE = 128
 
     def __init__(self, limit_kbps: int):
         super().__init__(limit_bps=limit_kbps * 1024)
 
     def is_empty(self) -> bool:
-        return self.bucket < self.LOWER_LIMIT
+        return self.bucket < self.MIN_BUCKET_SIZE
 
     def refill(self) -> bool:
         if self.limit_bps == self.bucket:
@@ -94,10 +99,10 @@ class LimitedRateLimiter(RateLimiter):
         while True:
             is_empty = self.refill()
             if not is_empty:
-                self.bucket -= self.LOWER_LIMIT
-                return self.LOWER_LIMIT
+                self.bucket -= self.MIN_BUCKET_SIZE
+                return self.MIN_BUCKET_SIZE
 
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(INTERVAL)
 
     def add_tokens(self, token_amount: int):
         self.bucket += token_amount
