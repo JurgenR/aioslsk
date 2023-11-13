@@ -11,6 +11,8 @@ To use:
 from aioslsk.settings import CredentialsSettings, Settings
 from aioslsk.client import SoulSeekClient
 from aioslsk import commands as cmds
+from aioslsk.transfer.cache import TransferShelveCache
+from aioslsk.shares.cache import SharesShelveCache
 import asyncio
 import os
 import json
@@ -30,6 +32,9 @@ import types
 import warnings
 
 from asyncio import futures
+
+
+logger = logging.getLogger(__name__)
 
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -167,6 +172,12 @@ class REPLThread(threading.Thread):
 #### END
 
 if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--cache-dir')
+    args = parser.parse_args()
+
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
@@ -180,7 +191,11 @@ if __name__ == '__main__':
         settings_dct = json.load(fh)
 
     settings: Settings = Settings(**settings_dct)
-    client = SoulSeekClient(settings)
+    client = SoulSeekClient(
+        settings,
+        transfer_cache=TransferShelveCache(args.cache_dir) if args.cache_dir else None,
+        shares_cache=SharesShelveCache(args.cache_dir) if args.cache_dir else None
+    )
 
     loop.run_until_complete(client.start())
     loop.run_until_complete(client.login())
@@ -212,7 +227,11 @@ if __name__ == '__main__':
     while True:
         try:
             loop.run_forever()
+        except SystemExit:
+            loop.run_until_complete(client.stop())
+            raise
         except KeyboardInterrupt:
+            loop.run_until_complete(client.stop())
             if repl_future and not repl_future.done():
                 repl_future.cancel()
                 repl_future_interrupted = True
