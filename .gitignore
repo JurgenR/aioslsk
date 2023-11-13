@@ -131,3 +131,7 @@ dmypy.json
 # VSCode
 .vscode/
 *.code-workspace
+
+# Debug tool files
+tools/debug/settings.json
+tools/debug/logs/**
