@@ -4,7 +4,7 @@ import logging
 import re
 import socket
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Set
 import typing
 
 from aioslsk.events import on_message, build_message_map
@@ -196,7 +196,7 @@ class MockServer:
         self.users: List[User] = []
         self.rooms: List[Room] = []
         self.peers: List[Peer] = []
-        self.track_map: Dict[str, List[str]] = {}
+        self.track_map: Dict[str, Set[str]] = {}
         self.distributed_strategy: DistributedStrategy = distributed_strategy or DistributedStrategy(self.peers)
 
         self.chat_id_gen = chat_id_generator()
@@ -575,9 +575,9 @@ class MockServer:
         """
         if (user := self.find_user_by_name(message.username)) is not None:
             if message.username in self.track_map:
-                self.track_map[message.username].append(peer.user.name)
+                self.track_map[message.username].add(peer.user.name)
             else:
-                self.track_map[message.username] = [peer.user.name]
+                self.track_map[message.username] = {peer.user.name}
 
             await peer.send_message(
                 AddUser.Response(
@@ -1606,21 +1606,26 @@ class MockServer:
         interests = user.interests
 
 
-async def main():
+async def main(args):
     admin_users = [
         User(name='admin0', password='pass0', is_admin=True),
     ]
 
     privileged_users = [
-        User(name='priv0', password='pass0', privileges_time_left=3600 * 24 * 7),
-        User(name='Khyle91', password='Test1234', privileges_time_left=3600 * 24 * 7)
+        User(name='priv0', password='pass0', privileges_time_left=3600 * 24 * 7)
     ]
 
-    mock_server = MockServer(port=2240)
+    mock_server = MockServer(port=args.port)
     mock_server.users.extend(admin_users + privileged_users)
     async with await mock_server.connect():
         await mock_server.connection.serve_forever()
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--port', type=int, default=2416)
+
+    args = parser.parse_args()
+
+    asyncio.run(main(args))

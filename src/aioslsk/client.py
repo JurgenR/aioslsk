@@ -89,8 +89,7 @@ class SoulSeekClient:
         self._MESSAGE_MAP = build_message_map(self)
         self.register_listeners()
 
-    @property
-    def event_loop(self):
+    def get_event_loop(self):
         return asyncio.get_running_loop()
 
     def register_listeners(self):
@@ -108,7 +107,7 @@ class SoulSeekClient:
         * Optionally starts a scan of the defined shares
         * Connecting to the server and opening listening ports
         """
-        self.event_loop.set_exception_handler(self._exception_handler)
+        self.get_event_loop().set_exception_handler(self._exception_handler)
 
         # Allows creating client before actually calling asyncio.run(client.start())
         # see https://stackoverflow.com/questions/55918048/asyncio-semaphore-runtimeerror-task-got-future-attached-to-a-different-loop
