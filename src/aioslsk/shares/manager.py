@@ -141,7 +141,6 @@ class SharesManager(BaseManager):
         self._network: Network = network
         self._term_map: Dict[str, WeakSet[SharedItem]] = {}
         self._shared_directories: List[SharedDirectory] = list()
-        self.scan_task: Optional[asyncio.Task] = None
         self._session: Optional[Session] = None
 
         self.cache: SharesCache = cache if cache else SharesNullCache()
@@ -151,6 +150,8 @@ class SharesManager(BaseManager):
             DefaultNamingStrategy(),
             NumberDuplicateStrategy()
         ]
+
+        self.register_listeners()
 
     def register_listeners(self):
         self._event_bus.register(
