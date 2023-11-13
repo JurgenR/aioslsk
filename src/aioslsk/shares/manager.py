@@ -14,7 +14,12 @@ from weakref import WeakSet
 
 from ..base_manager import BaseManager
 from .cache import SharesNullCache, SharesCache
-from ..events import EventBus, ScanCompleteEvent, SessionInitializedEvent
+from ..events import (
+    EventBus,
+    ScanCompleteEvent,
+    SessionInitializedEvent,
+    SessionDestroyedEvent,
+)
 from ..exceptions import (
     FileNotFoundError,
     FileNotSharedError,
@@ -30,6 +35,7 @@ from ..network.network import Network
 from ..protocol.messages import SharedFoldersFiles
 from ..protocol.primitives import DirectoryData
 from ..search.model import SearchQuery
+from ..session import Session
 from ..settings import Settings
 from .utils import create_term_pattern, convert_items_to_file_data
 
@@ -136,6 +142,7 @@ class SharesManager(BaseManager):
         self._term_map: Dict[str, WeakSet[SharedItem]] = {}
         self._shared_directories: List[SharedDirectory] = list()
         self.scan_task: Optional[asyncio.Task] = None
+        self._session: Optional[Session] = None
 
         self.cache: SharesCache = cache if cache else SharesNullCache()
         self.executor = None
@@ -148,6 +155,8 @@ class SharesManager(BaseManager):
     def register_listeners(self):
         self._event_bus.register(
             SessionInitializedEvent, self._on_session_initialized)
+        self._event_bus.register(
+            SessionDestroyedEvent, self._on_session_destroyed)
 
     @property
     def shared_directories(self):
@@ -708,6 +717,10 @@ class SharesManager(BaseManager):
 
     async def report_shares(self):
         """Reports the shares amount to the server"""
+        if not self._session:
+            logger.warning("attempted to report shares without valid session")
+            return
+
         folder_count, file_count = self.get_stats()
         logger.debug(f"reporting shares ({folder_count=}, {file_count=})")
         await self._network.send_server_messages(
@@ -718,4 +731,8 @@ class SharesManager(BaseManager):
         )
 
     async def _on_session_initialized(self, event: SessionInitializedEvent):
+        self._session = event.session
         await self.report_shares()
+
+    async def _on_session_destroyed(self, event: SessionDestroyedEvent):
+        self._session = None
