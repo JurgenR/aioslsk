@@ -172,9 +172,19 @@ class REPLThread(threading.Thread):
 #### END
 
 if __name__ == '__main__':
+    DEFAULT_SETTINGS_FILE = os.path.join(SCRIPT_DIR, 'settings.json')
+
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--cache-dir')
+    parser.add_argument(
+        '--cache-dir',
+        help="Optional transfer/shares cache directory"
+    )
+    parser.add_argument(
+        '--settings',
+        help="Optional path to a settings.json file",
+        default=DEFAULT_SETTINGS_FILE
+    )
     args = parser.parse_args()
 
 
@@ -182,12 +192,11 @@ if __name__ == '__main__':
     asyncio.set_event_loop(loop)
 
     # Load settings and start the client
-    SETTINGS_FILE = os.path.join(SCRIPT_DIR, 'settings.json')
     LOG_DIR = os.path.join(SCRIPT_DIR, 'logs', datetime.datetime.now().strftime('%Y%m%d_%H%M%S'))
     os.makedirs(LOG_DIR, exist_ok=True)
     logging.config.dictConfig(make_logging_config(LOG_DIR))
 
-    with open(SETTINGS_FILE, 'r') as fh:
+    with open(args.settings, 'r') as fh:
         settings_dct = json.load(fh)
 
     settings: Settings = Settings(**settings_dct)

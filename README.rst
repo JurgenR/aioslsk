@@ -60,6 +60,16 @@ Install poetry_ and setup the project dependencies by running:
     poetry install
 
 
+A tool is available to start the client for debugging purposes (try out commands to the server, ...):
+
+1. Create a ``settings.json`` file containing valid credentials in the ``tools/debug/`` directory (or pass a path using ``--settings``)
+2. Run ``poetry run python -m tools.debug.debug_mode`` to start the REPL
+3. Run an example command: ``>>> await client(cmds.GetPeerAddressCommand('some user'), response=True)``
+4. To close the REPL execute ``exit()`` or press ``Ctrl+Z``
+
+Optionally the script takes a ``--cache-dir`` that will read/write the transfer and shares cache from the given directory
+
+
 Dependencies
 ------------
 
@@ -74,7 +84,7 @@ The package uses several dependencies:
 Building the documentation
 --------------------------
 
-.. code-block:: bash
+.. code-block:: shell
 
     cd docs/
     poetry run make html
@@ -85,15 +95,22 @@ Running Tests
 
 Running all tests:
 
-.. code-block:: bash
+.. code-block:: shell
 
     poetry run pytest tests/
 
 Running all tests with code coverage report:
 
-.. code-block:: bash
+.. code-block:: shell
 
     poetry run pytest --cov=aioslsk --cov-report term-missing tests/
+
+Running the mock server:
+
+.. code-block:: shell
+
+    poetry run python -m tests.e2e.mock.server
+    poetry run python -m tests.e2e.mock.server --port 12345
 
 
 .. _poetry: https://python-poetry.org/
