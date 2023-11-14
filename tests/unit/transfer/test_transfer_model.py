@@ -1,8 +1,18 @@
 from unittest.mock import MagicMock, patch
 import pytest
+import logging
 
 from aioslsk.transfer.model import Transfer, TransferDirection
 from aioslsk.transfer.state import TransferState, QueuedState, InitializingState
+
+logger = logging.getLogger()
+
+@pytest.fixture
+def disable_logging():
+    prev_level = logger.getEffectiveLevel()
+    logger.setLevel(logging.WARNING)
+    yield
+    logger.setLevel(prev_level)
 
 
 class TestTransfer:
@@ -39,7 +49,7 @@ class TestTransfer:
     # make use of the time.time and take away the mocked values for its own use
     # resulting in a StopIteration error
     @pytest.mark.asyncio
-    async def test_getSpeed_transferComplete_returnAverageSpeed(self):
+    async def test_getSpeed_transferComplete_returnAverageSpeed(self, disable_logging):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state = InitializingState(transfer)
 
