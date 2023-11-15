@@ -771,9 +771,10 @@ class TransferManager(BaseManager):
         await self._upload_file(transfer, connection)
 
         # Send transfer speed
-        self._network.queue_server_messages(
-            SendUploadSpeed.Request(int(transfer.get_speed()))
-        )
+        if transfer.state.VALUE == TransferState.COMPLETE:
+            self._network.queue_server_messages(
+                SendUploadSpeed.Request(int(transfer.get_speed()))
+            )
 
     async def _upload_file(self, transfer: Transfer, connection: PeerConnection):
         """Uploads the transfer over the connection. This method will set the
@@ -1169,6 +1170,9 @@ class TransferManager(BaseManager):
             )
         except ValueError:
             logger.error(f"PeerUploadFailed : could not find transfer (download) for {message.filename} from {connection.username}")
+        else:
+            transfer.remotely_queued = False
+            await self.manage_transfers()
 
     @on_message(PeerTransferQueueFailed.Request)
     async def _on_peer_transfer_queue_failed(self, message: PeerTransferQueueFailed.Request, connection: PeerConnection):
