@@ -1070,8 +1070,20 @@ class TransferManager(BaseManager):
 
         else:
             # Download
+            reason = None
             if transfer is None:
                 # A download which we don't have in queue, assume we removed it
+                reason = Reasons.CANCELLED
+            if transfer.state.VALUE == TransferState.ABORTED:
+                reason = Reasons.CANCELLED
+            elif transfer.state.VALUE == TransferState.COMPLETE:
+                reason = Reasons.COMPLETE
+            elif transfer.is_processing():
+                # Needs investigation, currently don't do anything when the
+                # transfer is already being processed
+                return
+
+            if reason is not None:
                 await connection.send_message(
                     PeerTransferReply.Request(
                         ticket=message.ticket,
@@ -1081,9 +1093,9 @@ class TransferManager(BaseManager):
                 )
             else:
                 # All good to download
-                # Possibly needs a check to see if there's any inconsistencies
-                # normally we get this response when we were the one requesting
-                # to download so ideally all should be fine here.
+                # Check if there's any inconsistencies normally we get this
+                # response when we were the one requesting to download so
+                # ideally all should be fine here.
                 transfer._transfer_task = asyncio.create_task(
                     self._initialize_download(transfer, connection, message),
                     name=f'initialize-download-{task_counter()}'
@@ -1135,8 +1147,8 @@ class TransferManager(BaseManager):
     @on_message(PeerUploadFailed.Request)
     async def _on_peer_upload_failed(self, message: PeerUploadFailed.Request, connection: PeerConnection):
         """Called when there is a problem on their end uploading the file. This
-        is actually a common message that happens when we close the connection
-        before the upload is finished
+        is actually a common message that happens for example when we close the
+        connection before the upload is finished
         """
         if not connection.username:
             logger.warning(
