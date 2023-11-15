@@ -926,8 +926,14 @@ class TransferManager(BaseManager):
             )
         )
 
-        # If the transfer already existed in the queue we need to check if we
-        # didn't abort it otherwise send a fail message
+        # Only put the transfer in queue if in states:
+        # * FAILED: Re-attempt at downloader getting the file
+        # * COMPLETE: Re-download of a file
+        # In case the state is ABORTED:
+        # * Explicitly reply that the transfer has been cancelled
+        # In other cases where the message is not allowed (statuses=QUEUED, INITIALIZING, UPLOADING)
+        # do not respond with anything. This could otherwise abort the already
+        # processing transfer
         if transfer.state.VALUE == TransferState.ABORTED:
             await connection.queue_message(
                 PeerTransferQueueFailed.Request(
@@ -935,6 +941,12 @@ class TransferManager(BaseManager):
                     reason=Reasons.CANCELLED
                 )
             )
+            return
+        elif transfer.state.VALUE == TransferState.QUEUED:
+            logger.warning(f"ignoring queue request for transfer that is already being processed : {transfer}")
+            return
+        elif transfer.is_processing():
+            logger.warning(f"ignoring queue request for transfer that is already being processed : {transfer}")
             return
 
         # Check if the shared file exists
