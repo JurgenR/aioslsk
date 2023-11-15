@@ -1,10 +1,13 @@
 """Implementation of the state design pattern for transfers"""
 import asyncio
 from enum import Enum
+import logging
 from typing import Optional, Protocol, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .model import Transfer
+
+logger = logging.getLogger(__name__)
 
 
 class TransferStateListener(Protocol):
@@ -60,24 +63,38 @@ class TransferState:
         raise Exception(f"no state class for state : {state}")
 
     async def fail(self, reason: Optional[str] = None) -> bool:
+        logger.warning(
+            f"attempted to make undefined state transition from {self.VALUE.name} to {self.FAILED.name}")
         return False
 
     async def abort(self) -> bool:
+        logger.warning(
+            f"attempted to make undefined state transition from {self.VALUE.name} to {self.ABORTED.name}")
         return False
 
     async def queue(self) -> bool:
+        logger.warning(
+            f"attempted to make undefined state transition from {self.VALUE.name} to {self.QUEUED.name}")
         return False
 
     async def initialize(self) -> bool:
+        logger.warning(
+            f"attempted to make undefined state transition from {self.VALUE.name} to {self.INITIALIZING.name}")
         return False
 
     async def complete(self) -> bool:
+        logger.warning(
+            f"attempted to make undefined state transition from {self.VALUE.name} to {self.COMPLETE.name}")
         return False
 
     async def incomplete(self) -> bool:
+        logger.warning(
+            f"attempted to make undefined state transition from {self.VALUE.name} to {self.INCOMPLETE.name}")
         return False
 
     async def start_transferring(self) -> bool:
+        logger.warning(
+            f"attempted to make undefined state transition from {self.VALUE.name} to {self.TRANSFERRING.name}")
         return False
 
 
