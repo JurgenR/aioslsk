@@ -1151,8 +1151,6 @@ class TransferManager(BaseManager):
             )
         except ValueError:
             logger.error(f"PeerUploadFailed : could not find transfer (download) for {message.filename} from {connection.username}")
-        else:
-            await transfer.state.fail()
 
     @on_message(PeerTransferQueueFailed.Request)
     async def _on_peer_transfer_queue_failed(self, message: PeerTransferQueueFailed.Request, connection: PeerConnection):

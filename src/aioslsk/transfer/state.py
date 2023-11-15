@@ -264,6 +264,11 @@ class IncompleteState(TransferState):
         await self.transfer.transition(QueuedState(self.transfer))
         return True
 
+    async def initialize(self) -> bool:
+        self.transfer.reset_times()
+        await self.transfer.transition(InitializingState(self.transfer))
+        return True
+
     async def abort(self) -> bool:
         await self.transfer.transition(AbortedState(self.transfer))
         return True
