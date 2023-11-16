@@ -114,7 +114,7 @@ class TransferManager(BaseManager):
         """
         transfers: List[Transfer] = self.cache.read()
         for transfer in transfers:
-        # Analyze the current state of the stored transfers and set them to
+            # Analyze the current state of the stored transfers and set them to
             # the correct state
             # This needs to happen first: when calling _add_transfer the manager
             # will be registering itself as listener. `manage_transfers` should
@@ -1065,30 +1065,50 @@ class TransferManager(BaseManager):
                 transfer = await self.add(transfer)
                 await transfer.state.queue()
             else:
-                # The peer is asking us to upload.
-                # Possibly needs a check for state here, perhaps:
-                # - QUEUED : Queued
-                # - ABORTED : Aborted (or Cancelled?)
-                # - COMPLETE : Should go back to QUEUED (reset values for transfer)?
-                if transfer.state.VALUE == TransferState.ABORTED:
-                    reason = Reasons.CANCELLED
-                elif transfer.state.VALUE == TransferState.COMPLETE:
-                    # It's still possible to restart a transfer by going through
-                    # the PeerTransferQueue message first
-                    reason = Reasons.COMPLETE
-                else:
-                    reason = Reasons.QUEUED
+                # The peer is asking us to upload a file already in our list:
+                # this always leads to a refusal of the the request as it is up
+                # to us to let the downloader know when we are ready to upload
 
-                await connection.send_message(
-                    PeerTransferReply.Request(
-                        ticket=message.ticket,
-                        allowed=False,
-                        reason=reason
+                # If the state of transfer is ABORTED, COMPLETE, QUEUED: refuse
+                # the request with a specific message
+                # In other cases (INITIALIZING, UPLOADING, FAILED) the message
+                # simply gets ignored
+                # Additional notes:
+                # * COMPLETE / FAILED, in reality we could re-queue here
+                # * Other clients might abort the transfer when receiving this
+                #   message in (at least) UPLOADING state
+                fail_reason_map = {
+                    TransferState.ABORTED: Reasons.CANCELLED,
+                    TransferState.COMPLETE: Reasons.COMPLETE,
+                    TransferState.QUEUED: Reasons.QUEUED
+                }
+
+                reason = fail_reason_map.get(transfer.state.VALUE, None)
+
+                if reason:
+                    await connection.send_message(
+                        PeerTransferReply.Request(
+                            ticket=message.ticket,
+                            allowed=False,
+                            reason=reason
+                        )
                     )
-                )
 
         else:
-            # Download
+            # Request to download (other peer is offering to upload a file)
+            # If the transfer is not found, assume we aborted and let the
+            # uploader know
+            # If the transfer is ABORTED: let the uploader know
+            # If the transfer was already COMPLETE: let the upload know
+            # If the transfer is currently being processed, ignore the message
+            # altogether
+            # If the transfer is in FAILED state it needs to be re-queued first;
+            # somehow we got this message before being able to queue the
+            # transfer. Special note: because this message was received we
+            # already know the transfer is remotely queued and sety the flag
+            # accordingly
+            # Finally: if the transfer is in states QUEUED or INCOMPLETE
+            # continue with the transfer as we were expecting this message
             reason = None
             if transfer is None:
                 # A download which we don't have in queue, assume we removed it
@@ -1112,9 +1132,9 @@ class TransferManager(BaseManager):
                 )
             else:
                 # All good to download
-                # Check if there's any inconsistencies normally we get this
-                # response when we were the one requesting to download so
-                # ideally all should be fine here.
+                if transfer.state.VALUE == TransferState.FAILED:
+                    await transfer.state.queue(remotely=True)
+
                 transfer._transfer_task = asyncio.create_task(
                     self._initialize_download(transfer, connection, message),
                     name=f'initialize-download-{task_counter()}'

@@ -72,7 +72,7 @@ class TransferState:
             f"attempted to make undefined state transition from {self.VALUE.name} to {self.ABORTED.name}")
         return False
 
-    async def queue(self) -> bool:
+    async def queue(self, remotely: bool = False) -> bool:
         logger.warning(
             f"attempted to make undefined state transition from {self.VALUE.name} to {self.QUEUED.name}")
         return False
@@ -102,8 +102,8 @@ class VirginState(TransferState):
     """State representing a newly added transfer"""
     VALUE = TransferState.VIRGIN
 
-    async def queue(self) -> bool:
-        self.transfer.remotely_queued = False
+    async def queue(self, remotely: bool = False) -> bool:
+        self.transfer.remotely_queued = remotely
         await self.transfer.transition(QueuedState(self.transfer))
         return True
 
@@ -161,7 +161,8 @@ class InitializingState(TransferState):
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
-    async def queue(self):
+    async def queue(self, remotely: bool = False):
+        self.transfer.remotely_queued = remotely
         await self.transfer.transition(QueuedState(self.transfer))
         return True
 
@@ -254,7 +255,8 @@ class CompleteState(TransferState):
     """
     VALUE = TransferState.COMPLETE
 
-    async def queue(self) -> bool:
+    async def queue(self, remotely: bool = False) -> bool:
+        self.transfer.remotely_queued = remotely
         self.transfer.reset_times()
         await self.transfer.transition(QueuedState(self.transfer))
         return True
@@ -276,7 +278,8 @@ class IncompleteState(TransferState):
         await self.transfer.transition(FailedState(self.transfer))
         return True
 
-    async def queue(self) -> bool:
+    async def queue(self, remotely: bool = False) -> bool:
+        self.transfer.remotely_queued = remotely
         self.transfer.reset_times()
         await self.transfer.transition(QueuedState(self.transfer))
         return True
@@ -300,7 +303,8 @@ class FailedState(TransferState):
     """
     VALUE = TransferState.FAILED
 
-    async def queue(self) -> bool:
+    async def queue(self, remotely: bool = False) -> bool:
+        self.transfer.remotely_queued = remotely
         self.transfer.reset_times()
         await self.transfer.transition(QueuedState(self.transfer))
         return True
@@ -314,9 +318,10 @@ class AbortedState(TransferState):
     """
     VALUE = TransferState.ABORTED
 
-    async def queue(self) -> bool:
+    async def queue(self, remotely: bool = False) -> bool:
         # Reset all progress if the transfer is requeued after being aborted,
         # the file should be deleted anyway
+        self.transfer.remotely_queued = remotely
         self.transfer.reset_progress()
         await self.transfer.transition(QueuedState(self.transfer))
         return True
