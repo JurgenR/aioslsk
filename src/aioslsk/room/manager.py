@@ -349,7 +349,8 @@ class RoomManager(BaseManager):
 
         await self._event_bus.emit(
             RoomMembershipRevokedEvent(
-                room=room
+                room=room,
+                raw_message=message
             )
         )
 
@@ -405,26 +406,28 @@ class RoomManager(BaseManager):
 
     @on_message(PrivateRoomGrantOperator.Response)
     async def _on_user_operator_granted(self, message: PrivateRoomGrantOperator.Response, connection: ServerConnection):
+        user = self._user_manager.get_user_object(message.username)
         room = self.get_or_create_room(message.room, private=True)
         room.operators.add(message.username)
 
         await self._event_bus.emit(
             RoomOperatorGrantedEvent(
                 room=room,
-                member=message.username,
+                member=user,
                 raw_message=message
             )
         )
 
     @on_message(PrivateRoomRevokeOperator.Response)
     async def _on_user_operator_revoked(self, message: PrivateRoomRevokeOperator.Response, connection: ServerConnection):
+        user = self._user_manager.get_user_object(message.username)
         room = self.get_or_create_room(message.room, private=True)
         room.operators.discard(message.username)
 
         await self._event_bus.emit(
             RoomOperatorRevokedEvent(
                 room=room,
-                member=message.username,
+                member=user,
                 raw_message=message
             )
         )

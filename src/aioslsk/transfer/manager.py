@@ -1113,7 +1113,7 @@ class TransferManager(BaseManager):
             if transfer is None:
                 # A download which we don't have in queue, assume we removed it
                 reason = Reasons.CANCELLED
-            if transfer.state.VALUE == TransferState.ABORTED:
+            elif transfer.state.VALUE == TransferState.ABORTED:
                 reason = Reasons.CANCELLED
             elif transfer.state.VALUE == TransferState.COMPLETE:
                 reason = Reasons.COMPLETE

@@ -82,7 +82,8 @@ class InterestManager(BaseManager):
         await self._event_bus.emit(
             RecommendationsEvent(
                 recommendations=message.recommendations,
-                unrecommendations=message.unrecommendations
+                unrecommendations=message.unrecommendations,
+                raw_message=message
             )
         )
 
@@ -91,7 +92,8 @@ class InterestManager(BaseManager):
         await self._event_bus.emit(
             GlobalRecommendationsEvent(
                 recommendations=message.recommendations,
-                unrecommendations=message.unrecommendations
+                unrecommendations=message.unrecommendations,
+                raw_message=message
             )
         )
 
@@ -100,7 +102,8 @@ class InterestManager(BaseManager):
         await self._event_bus.emit(
             ItemRecommendationsEvent(
                 item=message.item,
-                recommendations=message.recommendations
+                recommendations=message.recommendations,
+                raw_message=message
             )
         )
 
@@ -110,7 +113,8 @@ class InterestManager(BaseManager):
             UserInterestsEvent(
                 user=self._user_manager.get_user_object(message.username),
                 interests=message.interests,
-                hated_interests=message.hated_interests
+                hated_interests=message.hated_interests,
+                raw_message=message
             )
         )
 
@@ -121,7 +125,8 @@ class InterestManager(BaseManager):
                 users=[
                     self._user_manager.get_user_object(user.username)
                     for user in message.users
-                ]
+                ],
+                raw_message=message
             )
         )
 
@@ -133,7 +138,8 @@ class InterestManager(BaseManager):
                 users=[
                     self._user_manager.get_user_object(username)
                     for username in message.usernames
-                ]
+                ],
+                raw_message=message
             )
         )
 
