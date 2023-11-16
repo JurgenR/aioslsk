@@ -147,7 +147,7 @@ class bytearr(bytes):
         return uint32(length).serialize() + bytes(self)
 
     @classmethod
-    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, str]:
+    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, bytes]:
         pos_after_len, length = uint32.deserialize(pos, data)
         value = data[pos_after_len:pos_after_len + length]
         return pos_after_len + length, value
