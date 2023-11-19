@@ -228,27 +228,11 @@ class DistributedNetwork(BaseManager):
         root, level = self._get_advertised_branch_values()
         logger.info(f"notifying server of our parent : level={level} root={root}")
 
-        messages = [
+        await self._network.send_server_messages(*[
             BranchLevel.Request(level),
-            BranchRoot.Request(root)
-        ]
-
-        if self.parent:
-            logger.info("notifying server we are not looking for parent")
-            messages.extend([
-                ToggleParentSearch.Request(False),
-                AcceptChildren.Request(True)
-            ])
-        else:
-            logger.info("notifying server we are looking for parent")
-            # The original Windows client sends out the child depth (=0) and the
-            # ParentIP
-            messages.extend([
-                ToggleParentSearch.Request(True),
-                AcceptChildren.Request(True)
-            ])
-
-        await self._network.send_server_messages(*messages)
+            BranchRoot.Request(root),
+            ToggleParentSearch.Request(False if self.parent else True)
+        ])
 
     async def _notify_children_of_branch_values(self):
         root, level = self._get_advertised_branch_values()
