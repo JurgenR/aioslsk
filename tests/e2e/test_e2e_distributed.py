@@ -5,6 +5,7 @@ from .utils import (
     wait_until_clients_initialized,
     wait_until_client_has_parent,
     wait_for_search_request,
+    wait_until_peer_has_parent,
 )
 import asyncio
 import pytest
@@ -47,6 +48,7 @@ class TestE2EDistributed:
         )
 
         await wait_until_client_has_parent(client1)
+        await wait_until_peer_has_parent(mock_server, client1_user, 0, client1_user)
 
         assert client1.distributed_network.parent is not None
         assert client1.distributed_network.parent.username == client1_user
@@ -76,10 +78,12 @@ class TestE2EDistributed:
         )
 
         await wait_until_client_has_parent(client1)
+        await wait_until_peer_has_parent(mock_server, client1_user, 0, client1_user)
 
         await mock_server.send_potential_parents(client2_user)
 
         await wait_until_client_has_parent(client2)
+        await wait_until_peer_has_parent(mock_server, client2_user, 1, client1_user)
 
         # Verify CLIENT 1
         assert len(client1.distributed_network.children) == 1
@@ -115,18 +119,21 @@ class TestE2EDistributed:
         )
 
         await wait_until_client_has_parent(client1)
+        await wait_until_peer_has_parent(mock_server, client2_user, 0, client1_user)
 
         ### Make CLIENT 1 parent of CLIENT 2
 
         await mock_server.send_potential_parents(client2_user)
 
         await wait_until_client_has_parent(client2)
+        await wait_until_peer_has_parent(mock_server, client2_user, 1, client1_user)
 
         ### Make CLIENT 2 parent of CLIENT 3
 
         await mock_server.send_potential_parents(client3_user)
 
         await wait_until_client_has_parent(client3)
+        await wait_until_peer_has_parent(mock_server, client3_user, 2, client2_user)
 
         # Verify CLIENT 1
         assert client1.distributed_network.parent is not None
@@ -181,16 +188,19 @@ class TestE2EDistributed:
             ticket=1
         )
         await wait_until_client_has_parent(client1)
+        await wait_until_peer_has_parent(mock_server, client1_user, 0, client1_user)
         # Remove the query made to make client1 root
         client1.searches.received_searches.clear()
 
         ### Make CLIENT 1 parent of CLIENT 2
         await mock_server.send_potential_parents(client2_user)
         await wait_until_client_has_parent(client2)
+        await wait_until_peer_has_parent(mock_server, client2_user, 1, client1_user)
 
         ### Make CLIENT 2 parent of CLIENT 3
         await mock_server.send_potential_parents(client3_user)
         await wait_until_client_has_parent(client3)
+        await wait_until_peer_has_parent(mock_server, client3_user, 2, client2_user)
 
         # Perform search
         await client4.searches.search('bogus')
