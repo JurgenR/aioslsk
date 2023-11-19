@@ -6,19 +6,22 @@ from .utils import (
     wait_until_client_has_parent,
     wait_for_search_request,
 )
+import asyncio
 import pytest
 from typing import List
 
 
-def set_upload_speed_for_client(mock_server: MockServer, client: SoulSeekClient, value: int = 10000):
+async def set_upload_speed_for_client(mock_server: MockServer, client: SoulSeekClient, value: int = 10000):
     username = client.settings.credentials.username
-    mock_server.set_upload_speed(username, uploads=10, speed=value)
+    await mock_server.set_upload_speed(username, uploads=10, speed=value)
 
 
-def set_upload_speed_for_clients(mock_server: MockServer, clients: List[SoulSeekClient], value: int = 10000):
+async def set_upload_speed_for_clients(mock_server: MockServer, clients: List[SoulSeekClient], value: int = 10000):
     """Sets a dummy upload speed on the mock server for all clients"""
+    tasks = []
     for client in clients:
-        set_upload_speed_for_client(mock_server, client, value=value)
+        tasks.append(set_upload_speed_for_client(mock_server, client, value=value))
+    await asyncio.gather(*tasks)
 
 
 class TestE2EDistributed:
@@ -57,7 +60,7 @@ class TestE2EDistributed:
         peer becomes root
         """
         mock_server.distributed_strategy = ChainParentsStrategy(mock_server.peers)
-        set_upload_speed_for_clients(mock_server, clients)
+        await set_upload_speed_for_clients(mock_server, clients)
         await wait_until_clients_initialized(mock_server, amount=len(clients))
 
         client1, client2 = clients
@@ -95,7 +98,7 @@ class TestE2EDistributed:
         peer becomes root
         """
         mock_server.distributed_strategy = ChainParentsStrategy(mock_server.peers)
-        set_upload_speed_for_clients(mock_server, clients)
+        await set_upload_speed_for_clients(mock_server, clients)
         await wait_until_clients_initialized(mock_server, amount=len(clients))
 
         client1, client2, client3 = clients
@@ -159,7 +162,7 @@ class TestE2EDistributed:
         request
         """
         mock_server.distributed_strategy = ChainParentsStrategy(mock_server.peers)
-        set_upload_speed_for_clients(mock_server, clients)
+        await set_upload_speed_for_clients(mock_server, clients)
         await wait_until_clients_initialized(mock_server, amount=len(clients))
 
         client1, client2, client3, client4 = clients
