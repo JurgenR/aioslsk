@@ -119,7 +119,7 @@ class TestE2EDistributed:
         )
 
         await wait_until_client_has_parent(client1)
-        await wait_until_peer_has_parent(mock_server, client2_user, 0, client1_user)
+        await wait_until_peer_has_parent(mock_server, client1_user, 0, client1_user)
 
         ### Make CLIENT 1 parent of CLIENT 2
 
