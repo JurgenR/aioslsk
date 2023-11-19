@@ -27,6 +27,7 @@ from .protocol.messages import (
     DistributedChildDepth,
     DistributedSearchRequest,
     DistributedServerSearchRequest,
+    GetUserStats,
     MessageDataclass,
     MinParentsInCache,
     ParentInactivityTimeout,
@@ -88,6 +89,8 @@ class DistributedNetwork(BaseManager):
         self.min_parents_in_cache: Optional[int] = None
         self.parent_inactivity_timeout: Optional[int] = None
         self.distributed_alive_interval: Optional[int] = None
+        self._max_children: int = 5
+        self._accept_children: bool = True
 
         self._MESSAGE_MAP = build_message_map(self)
 
@@ -260,6 +263,17 @@ class DistributedNetwork(BaseManager):
         if peer.username in self.potential_parents:
             return
 
+        if not self._accept_children:
+            logger.debug(f"not accepting children, rejecting peer as child: {peer}")
+            await peer.connection.disconnect(CloseReason.REQUESTED)
+            return
+
+        if len(self.children) >= self._max_children:
+            logger.debug(
+                f"maximum amount of children reached ({len(self.children)} / {self._max_children}), rejecting peer as child: {peer}")
+            await peer.connection.disconnect(CloseReason.REQUESTED)
+            return
+
         await self._add_child(peer)
 
     async def _add_child(self, peer: DistributedPeer):
@@ -299,10 +313,12 @@ class DistributedNetwork(BaseManager):
     @on_message(ParentMinSpeed.Response)
     async def _on_parent_min_speed(self, message: ParentMinSpeed.Response, connection: ServerConnection):
         self.parent_min_speed = message.speed
+        await self._request_user_stats()
 
     @on_message(ParentSpeedRatio.Response)
     async def _on_parent_speed_ratio(self, message: ParentSpeedRatio.Response, connection: ServerConnection):
         self.parent_speed_ratio = message.ratio
+        await self._request_user_stats()
 
     @on_message(MinParentsInCache.Response)
     async def _on_min_parents_in_cache(self, message: MinParentsInCache.Response, connection: ServerConnection):
@@ -443,6 +459,52 @@ class DistributedNetwork(BaseManager):
             query=message.query
         )
         await self.send_messages_to_children(dmessage)
+
+    @on_message(GetUserStats.Response)
+    async def _on_get_user_stats(self, message: GetUserStats.Response, connection: ServerConnection):
+        if self._session and message.username == self._session.user.name:
+            speed = message.user_stats.avg_speed
+
+            if self.parent_min_speed is None or self.parent_speed_ratio is None:
+                logger.debug("got user stats without having received ParentMinSpeed and ParentSpeedRatio from the server, using defaults")
+
+            elif speed < self.parent_min_speed * 1024:
+                self._accept_children = False
+                self._max_children = 0
+
+            else:
+                self._accept_children = True
+                self._max_children = self._calculate_max_children(speed)
+
+            logger.debug(f"adjusting distributed children values: accept={self._accept_children}, max_children={self._max_children}")
+            await self._network.send_server_messages(
+                AcceptChildren.Request(self._accept_children)
+            )
+
+    def _has_parent_speed_values(self) -> bool:
+        """Returns `True` if `ParentMinSpeed` and `ParentSpeedRatio` has been
+        received from the server
+        """
+        return self.parent_min_speed is not None and self.parent_speed_ratio is not None
+
+    async def _request_user_stats(self):
+        """Requests the user stats for the currently logged on user a valid
+        session is available and parent speed values have been received
+        """
+        if self._session is None:
+            return
+
+        if self._has_parent_speed_values():
+            await self._network.send_server_messages(
+                GetUserStats.Request(self._session.user.name)
+            )
+
+    def _calculate_max_children(self, upload_speed: int) -> int:
+        """Calculates the maximum number of children based on the given upload
+        speed
+        """
+        divider = (self.parent_speed_ratio / 10) * 1024
+        return int(upload_speed / divider)
 
     async def _on_peer_connection_initialized(self, event: PeerInitializedEvent):
         if event.connection.connection_type == PeerConnectionType.DISTRIBUTED:

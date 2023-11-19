@@ -240,8 +240,8 @@ After establishing a distributed connection with one of the potential parents th
 
 * :ref:`BranchLevel` : BranchLevel from the parent + 1
 * :ref:`BranchRoot` : The BranchRoot received from the parent as-is
-* :ref:`ToggleParentSearch` : Set to false to disable receiving :ref:`PotentialParents` commands
-* :ref:`AcceptChildren`: Ideally set to true
+* :ref:`ToggleParentSearch` : Setting to false disables receiving :ref:`PotentialParents` messages
+* :ref:`AcceptChildren`: See :ref:`max-children` setting
 
 Once the parent is set it will start sending us search requests or if we are branch root the server will send us search requests.
 
@@ -264,6 +264,38 @@ Obtaining children
 The :ref:`AcceptChildren` command tells the server whether we want to have any children, this is used in combination with the :ref:`ToggleParentSearch` command which enables searching for parents. Enabling it will cause us to be listed in :ref:`PotentialParents` commands sent to other peers. It is not mandatory to have a parent and to obtain children if we ourselves are the branch root (branch level is 0).
 
 The process is very similar to the one to obtain a parent except that this time we are in the role of the other peer; we need to advertise the branch level and branch root using the :ref:`DistributedBranchLevel` and :ref:`DistributedBranchRoot` commands as soon as another peer establishes.
+
+
+.. _max-children:
+
+Max children
+~~~~~~~~~~~~
+
+Clients limit the amount of children depending on the upload speed that is currently stored on the server. Whenever a :ref:`GetUserStats` message is received (for the logged in user) this limit is re-calculated and depends on the :ref:`ParentSpeedRatio` and :ref:`ParentMinSpeed` values the server sent after logon.
+
+When a client receives a :ref:`GetUserStats` message the client should determine whether to enable or disable accepting children and if enabled, calculate the amount of maximum children:
+
+1. If the ``avg_speed`` returned is smaller than the value received by :ref:`ParentMinSpeed` * 1024 : Send :ref:`AcceptChildren` (``accept = false``)
+2. If the ``avg_speed`` is greater or equal than the value received by :ref:`ParentMinSpeed` * 1024 :
+
+   1. Send :ref:`AcceptChildren` (``accept = true``)
+   2. Calculate the ``divider`` from the ``ratio`` returned by :ref:`ParentSpeedRatio`: (``ratio`` / 10) * 1024
+   3. Calculate the max number of children : floor(``avg_speed`` / ``divider``)
+
+
+Example calculation 1 (``ratio=50``, ``avg_speed=20480``):
+
+* (50 / 10) * 1024 = 5120
+* floor(20480 / 5120) = 4
+
+Example calculation 1 (``ratio=30``, ``avg_speed=20480``):
+
+* (30 / 10) * 1024 = 3072
+* floor(20480 / 3072) = 6 (floored from 6.66666666)
+
+
+.. note::
+   The formula for calculating the max amount of parents can be 0, clients still seem to enable :ref:`AcceptChildren` regardless
 
 
 Searches on the distributed network
