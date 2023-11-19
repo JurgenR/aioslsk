@@ -313,9 +313,17 @@ class MockServer:
         else:
             return roots
 
+    def set_upload_speed(self, username: str, uploads: int, speed: int):
+        """This is utility method for testing that sets the upload speed for the
+        given user
+        """
+        user = self.find_user_by_name(username)
+        user.avg_speed = speed
+        user.uploads = uploads
+
     async def send_search_request(self, username: str, sender: str, query: str, ticket: int):
-        """This a utility method for testing. To make a peer a root the server
-        has to send an initial search message to that user
+        """This is a utility method for testing. To make a peer a root the
+        server has to send an initial search message to that user
 
         :param username: Username to send the query to
         :param query: The query to send
@@ -646,6 +654,22 @@ class MockServer:
         """
         if not peer.user:
             return
+
+        #####
+        speed = int(message.message)
+        await peer.send_message(
+            GetUserStats.Response(
+                peer.user.name,
+                UserStats(
+                    uploads=0,
+                    avg_speed=speed,
+                    shared_file_count=1000,
+                    shared_folder_count=10000
+                )
+            )
+        )
+
+        #####
 
         # Do nothing when sending u user that does not exist
         if self.find_user_by_name(message.username) is None:
