@@ -133,7 +133,7 @@ class TestE2EDistributed:
         await mock_server.send_potential_parents(client3_user)
 
         await wait_until_client_has_parent(client3)
-        await wait_until_peer_has_parent(mock_server, client3_user, 2, client2_user)
+        await wait_until_peer_has_parent(mock_server, client3_user, 2, client1_user)
 
         # Verify CLIENT 1
         assert client1.distributed_network.parent is not None
@@ -200,7 +200,7 @@ class TestE2EDistributed:
         ### Make CLIENT 2 parent of CLIENT 3
         await mock_server.send_potential_parents(client3_user)
         await wait_until_client_has_parent(client3)
-        await wait_until_peer_has_parent(mock_server, client3_user, 2, client2_user)
+        await wait_until_peer_has_parent(mock_server, client3_user, 2, client1_user)
 
         # Perform search
         await client4.searches.search('bogus')
