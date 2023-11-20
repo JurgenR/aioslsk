@@ -147,6 +147,13 @@ class DistributedNetwork(BaseManager):
         await self._disconnect_children()
         await self._disconnect_parent()
 
+    def _reset_server_values(self):
+        self.parent_min_speed = None
+        self.parent_speed_ratio = None
+        self.distributed_alive_interval = None
+        self.min_parents_in_cache = None
+        self.parent_inactivity_timeout = None
+
     async def _set_parent(self, peer: DistributedPeer):
         """Sets the given peer to be our parent.
 
@@ -518,29 +525,30 @@ class DistributedNetwork(BaseManager):
         self._session = None
 
     async def _on_state_changed(self, event: ConnectionStateChangedEvent):
-        if not isinstance(event.connection, PeerConnection):
-            return
-
-        if event.connection.connection_type != PeerConnectionType.DISTRIBUTED:
-            return
-
-        if event.state == ConnectionState.CLOSED:
-            peer = self.get_distributed_peer(
-                event.connection.username, event.connection)
-            if not peer:
-                logger.warning(
-                    f"distributed connection was not registered with the network : {event.connection!r}")
+        connection = event.connection
+        if isinstance(connection, PeerConnection):
+            if connection.connection_type != PeerConnectionType.DISTRIBUTED:
                 return
 
-            # Check if it was the parent or child that was disconnected
-            if self.parent and peer == self.parent:
-                await self._unset_parent()
+            if event.state == ConnectionState.CLOSED:
+                peer = self.get_distributed_peer(connection.username, connection)
+                if not peer:
+                    logger.warning(
+                        f"connection was not registered with the distributed network : {connection!r}")
+                    return
 
-            if peer in self.children:
-                self._remove_child(peer)
+                # Check if it was the parent or child that was disconnected
+                if self.parent and peer == self.parent:
+                    await self._unset_parent()
 
-            # Remove from the distributed connections
-            self.distributed_peers.remove(peer)
+                if peer in self.children:
+                    self._remove_child(peer)
+
+                # Remove from the distributed connections
+                self.distributed_peers.remove(peer)
+
+        elif isinstance(connection, ServerConnection):
+            self._reset_server_values()
 
     async def send_messages_to_children(self, *messages: Union[MessageDataclass, bytes]):
         for child in self.children:
