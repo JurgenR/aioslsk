@@ -144,8 +144,8 @@ class DistributedNetwork(BaseManager):
 
     async def reset(self):
         """Disconnects all parent and child connections"""
-        await self._unset_children()
-        await self._unset_parent()
+        await self._disconnect_children()
+        await self._disconnect_parent()
 
     async def _set_parent(self, peer: DistributedPeer):
         """Sets the given peer to be our parent.
@@ -191,16 +191,21 @@ class DistributedNetwork(BaseManager):
                 if peer.connection:
                     await peer.connection.disconnect(reason=CloseReason.REQUESTED)
 
-    async def _unset_children(self):
+    async def _disconnect_children(self):
         await asyncio.gather(*[
-                self._unset_child(child) for child in self.children
+                self._disconnect_child(child) for child in self.children
             ],
             return_exceptions=True
         )
 
-    async def _unset_child(self, peer: DistributedPeer):
+    async def _disconnect_child(self, peer: DistributedPeer):
         if peer.connection:
             await peer.connection.disconnect(CloseReason.REQUESTED)
+
+    async def _disconnect_parent(self):
+        if self.parent:
+            if self.parent.connection:
+                await self.parent.connection.disconnect(CloseReason.REQUESTED)
 
     async def _unset_parent(self):
         logger.debug(f"unset parent {self.parent!r}")
