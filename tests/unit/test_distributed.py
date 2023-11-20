@@ -1,4 +1,5 @@
-from aioslsk.events import EventBus, MessageReceivedEvent
+from aioslsk.events import EventBus, MessageReceivedEvent, PeerInitializedEvent
+from aioslsk.network.connection import PeerConnection
 from aioslsk.protocol.messages import (
     AcceptChildren,
     GetUserStats,
@@ -8,14 +9,14 @@ from aioslsk.protocol.messages import (
 from aioslsk.protocol.primitives import UserStats
 from aioslsk.settings import Settings
 from aioslsk.session import Session
-from aioslsk.user.model import User, UserStatus
-from aioslsk.distributed import DistributedNetwork
+from aioslsk.user.model import User
+from aioslsk.distributed import DistributedNetwork, DistributedPeer
 
 import pytest
 from unittest.mock import AsyncMock
 
 
-DEFAULT_USERNAME = 'user0'
+DEFAULT_USERNAME = 'user1'
 DEFAULT_SETTINGS = {
     'credentials': {
         'username': DEFAULT_USERNAME,
@@ -161,3 +162,67 @@ class TestDistributedNetwork:
         distributed_network._network.send_server_messages.assert_awaited_once_with(
             AcceptChildren.Request(expected_accept)
         )
+
+    @pytest.mark.asyncio
+    async def test_newChild_maxChildrenReached_shouldDisconnect(self, distributed_network: DistributedNetwork):
+        distributed_network.parent_min_speed = 1
+        distributed_network.parent_speed_ratio = 50
+        distributed_network._max_children = 1
+        distributed_network._accept_children = True
+
+        parent = DistributedPeer(
+            username='user0',
+            connection=AsyncMock(),
+            branch_level=0,
+            branch_root='user0'
+        )
+
+        child = DistributedPeer(
+            username='user2',
+            connection=AsyncMock(),
+            branch_level=2,
+            branch_root='user0'
+        )
+        distributed_network.parent = parent
+        distributed_network.children = [child]
+        distributed_network.distributed_peers = [parent, child]
+
+        new_child_connection = AsyncMock()
+        new_child_connection.username = 'user02'
+        new_child_connection.connection_type = 'D'
+
+        await distributed_network._event_bus.emit(
+            PeerInitializedEvent(
+                connection=new_child_connection,
+                requested=False
+            )
+        )
+        new_child_connection.disconnect.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_newChild_notAcceptingChildren_shouldDisconnect(self, distributed_network: DistributedNetwork):
+        distributed_network.parent_min_speed = 1
+        distributed_network.parent_speed_ratio = 50
+        distributed_network._max_children = 1
+        distributed_network._accept_children = False
+
+        parent = DistributedPeer(
+            username='user0',
+            connection=AsyncMock(),
+            branch_level=0,
+            branch_root='user0'
+        )
+        distributed_network.parent = parent
+        distributed_network.distributed_peers = [parent]
+
+        new_child_connection = AsyncMock()
+        new_child_connection.username = 'user02'
+        new_child_connection.connection_type = 'D'
+
+        await distributed_network._event_bus.emit(
+            PeerInitializedEvent(
+                connection=new_child_connection,
+                requested=False
+            )
+        )
+        new_child_connection.disconnect.assert_awaited_once()
