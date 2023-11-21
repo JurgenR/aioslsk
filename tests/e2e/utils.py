@@ -51,6 +51,23 @@ async def wait_until_client_has_parent(client: SoulSeekClient, timeout: float = 
         raise Exception("timeout waiting for client to have parent")
 
 
+async def wait_until_peer_has_parent(
+        mock_server: MockServer, username: str, level: int, root: str,
+        timeout: float = 10):
+    """Waits until the peer with given `username` has reported its parent values
+    """
+    start_time = time.time()
+    peer = mock_server.find_peer_by_name(username)
+    expected = (level, root, False)
+    while time.time() < start_time + timeout:
+        if (peer.branch_level, peer.branch_root, peer.user.enable_parent_search) == expected:
+            break
+        else:
+            await asyncio.sleep(0.05)
+    else:
+        raise Exception(f"timeout waiting for peer ({username=}) to have parent values {expected=}")
+
+
 async def wait_until_clients_initialized(mock_server: MockServer, amount: int = 2):
     """Waits until the `amount` of peers is reached and the peers are all
     set with branch values on the server

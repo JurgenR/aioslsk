@@ -27,6 +27,7 @@ from .protocol.messages import (
     DistributedChildDepth,
     DistributedSearchRequest,
     DistributedServerSearchRequest,
+    GetUserStats,
     MessageDataclass,
     MinParentsInCache,
     ParentInactivityTimeout,
@@ -88,6 +89,8 @@ class DistributedNetwork(BaseManager):
         self.min_parents_in_cache: Optional[int] = None
         self.parent_inactivity_timeout: Optional[int] = None
         self.distributed_alive_interval: Optional[int] = None
+        self._max_children: int = 5
+        self._accept_children: bool = True
 
         self._MESSAGE_MAP = build_message_map(self)
 
@@ -141,8 +144,15 @@ class DistributedNetwork(BaseManager):
 
     async def reset(self):
         """Disconnects all parent and child connections"""
-        await self._unset_children()
-        await self._unset_parent()
+        await self._disconnect_children()
+        await self._disconnect_parent()
+
+    def _reset_server_values(self):
+        self.parent_min_speed = None
+        self.parent_speed_ratio = None
+        self.distributed_alive_interval = None
+        self.min_parents_in_cache = None
+        self.parent_inactivity_timeout = None
 
     async def _set_parent(self, peer: DistributedPeer):
         """Sets the given peer to be our parent.
@@ -188,16 +198,21 @@ class DistributedNetwork(BaseManager):
                 if peer.connection:
                     await peer.connection.disconnect(reason=CloseReason.REQUESTED)
 
-    async def _unset_children(self):
+    async def _disconnect_children(self):
         await asyncio.gather(*[
-                self._unset_child(child) for child in self.children
+                self._disconnect_child(child) for child in self.children
             ],
             return_exceptions=True
         )
 
-    async def _unset_child(self, peer: DistributedPeer):
+    async def _disconnect_child(self, peer: DistributedPeer):
         if peer.connection:
             await peer.connection.disconnect(CloseReason.REQUESTED)
+
+    async def _disconnect_parent(self):
+        if self.parent:
+            if self.parent.connection:
+                await self.parent.connection.disconnect(CloseReason.REQUESTED)
 
     async def _unset_parent(self):
         logger.debug(f"unset parent {self.parent!r}")
@@ -225,27 +240,11 @@ class DistributedNetwork(BaseManager):
         root, level = self._get_advertised_branch_values()
         logger.info(f"notifying server of our parent : level={level} root={root}")
 
-        messages = [
+        await self._network.send_server_messages(*[
             BranchLevel.Request(level),
-            BranchRoot.Request(root)
-        ]
-
-        if self.parent:
-            logger.info("notifying server we are not looking for parent")
-            messages.extend([
-                ToggleParentSearch.Request(False),
-                AcceptChildren.Request(True)
-            ])
-        else:
-            logger.info("notifying server we are looking for parent")
-            # The original Windows client sends out the child depth (=0) and the
-            # ParentIP
-            messages.extend([
-                ToggleParentSearch.Request(True),
-                AcceptChildren.Request(True)
-            ])
-
-        await self._network.send_server_messages(*messages)
+            BranchRoot.Request(root),
+            ToggleParentSearch.Request(False if self.parent else True)
+        ])
 
     async def _notify_children_of_branch_values(self):
         root, level = self._get_advertised_branch_values()
@@ -258,6 +257,17 @@ class DistributedNetwork(BaseManager):
         """Potentially adds a distributed connection to our list of children.
         """
         if peer.username in self.potential_parents:
+            return
+
+        if not self._accept_children:
+            logger.debug(f"not accepting children, rejecting peer as child: {peer}")
+            await peer.connection.disconnect(CloseReason.REQUESTED)
+            return
+
+        if len(self.children) >= self._max_children:
+            logger.debug(
+                f"maximum amount of children reached ({len(self.children)} / {self._max_children}), rejecting peer as child: {peer}")
+            await peer.connection.disconnect(CloseReason.REQUESTED)
             return
 
         await self._add_child(peer)
@@ -299,10 +309,12 @@ class DistributedNetwork(BaseManager):
     @on_message(ParentMinSpeed.Response)
     async def _on_parent_min_speed(self, message: ParentMinSpeed.Response, connection: ServerConnection):
         self.parent_min_speed = message.speed
+        await self._request_user_stats()
 
     @on_message(ParentSpeedRatio.Response)
     async def _on_parent_speed_ratio(self, message: ParentSpeedRatio.Response, connection: ServerConnection):
         self.parent_speed_ratio = message.ratio
+        await self._request_user_stats()
 
     @on_message(MinParentsInCache.Response)
     async def _on_min_parents_in_cache(self, message: MinParentsInCache.Response, connection: ServerConnection):
@@ -444,6 +456,52 @@ class DistributedNetwork(BaseManager):
         )
         await self.send_messages_to_children(dmessage)
 
+    @on_message(GetUserStats.Response)
+    async def _on_get_user_stats(self, message: GetUserStats.Response, connection: ServerConnection):
+        if self._session and message.username == self._session.user.name:
+            speed = message.user_stats.avg_speed
+
+            if self.parent_min_speed is None or self.parent_speed_ratio is None:
+                logger.debug("got user stats without having received ParentMinSpeed and ParentSpeedRatio from the server, using defaults")
+
+            elif speed < self.parent_min_speed * 1024:
+                self._accept_children = False
+                self._max_children = 0
+
+            else:
+                self._accept_children = True
+                self._max_children = self._calculate_max_children(speed)
+
+            logger.debug(f"adjusting distributed children values: accept={self._accept_children}, max_children={self._max_children}")
+            await self._network.send_server_messages(
+                AcceptChildren.Request(self._accept_children)
+            )
+
+    def _has_parent_speed_values(self) -> bool:
+        """Returns `True` if `ParentMinSpeed` and `ParentSpeedRatio` has been
+        received from the server
+        """
+        return self.parent_min_speed is not None and self.parent_speed_ratio is not None
+
+    async def _request_user_stats(self):
+        """Requests the user stats for the currently logged on user a valid
+        session is available and parent speed values have been received
+        """
+        if self._session is None:
+            return
+
+        if self._has_parent_speed_values():
+            await self._network.send_server_messages(
+                GetUserStats.Request(self._session.user.name)
+            )
+
+    def _calculate_max_children(self, upload_speed: int) -> int:
+        """Calculates the maximum number of children based on the given upload
+        speed
+        """
+        divider = (self.parent_speed_ratio / 10) * 1024
+        return int(upload_speed / divider)
+
     async def _on_peer_connection_initialized(self, event: PeerInitializedEvent):
         if event.connection.connection_type == PeerConnectionType.DISTRIBUTED:
             peer = DistributedPeer(event.connection.username, event.connection) # type: ignore
@@ -467,29 +525,30 @@ class DistributedNetwork(BaseManager):
         self._session = None
 
     async def _on_state_changed(self, event: ConnectionStateChangedEvent):
-        if not isinstance(event.connection, PeerConnection):
-            return
-
-        if event.connection.connection_type != PeerConnectionType.DISTRIBUTED:
-            return
-
-        if event.state == ConnectionState.CLOSED:
-            peer = self.get_distributed_peer(
-                event.connection.username, event.connection)
-            if not peer:
-                logger.warning(
-                    f"distributed connection was not registered with the network : {event.connection!r}")
+        connection = event.connection
+        if isinstance(connection, PeerConnection):
+            if connection.connection_type != PeerConnectionType.DISTRIBUTED:
                 return
 
-            # Check if it was the parent or child that was disconnected
-            if self.parent and peer == self.parent:
-                await self._unset_parent()
+            if event.state == ConnectionState.CLOSED:
+                peer = self.get_distributed_peer(connection.username, connection)
+                if not peer:
+                    logger.warning(
+                        f"connection was not registered with the distributed network : {connection!r}")
+                    return
 
-            if peer in self.children:
-                self._remove_child(peer)
+                # Check if it was the parent or child that was disconnected
+                if self.parent and peer == self.parent:
+                    await self._unset_parent()
 
-            # Remove from the distributed connections
-            self.distributed_peers.remove(peer)
+                if peer in self.children:
+                    self._remove_child(peer)
+
+                # Remove from the distributed connections
+                self.distributed_peers.remove(peer)
+
+        elif isinstance(connection, ServerConnection):
+            self._reset_server_values()
 
     async def send_messages_to_children(self, *messages: Union[MessageDataclass, bytes]):
         for child in self.children:
