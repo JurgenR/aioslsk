@@ -1,18 +1,31 @@
-from aioslsk.events import EventBus, MessageReceivedEvent, PeerInitializedEvent
+from aioslsk.distributed import DistributedNetwork, DistributedPeer
+from aioslsk.events import (
+    EventBus,
+    MessageReceivedEvent,
+    PeerInitializedEvent,
+    ConnectionStateChangedEvent,
+)
+from aioslsk.network.connection import (
+    ConnectionState,
+    PeerConnection,
+    ServerConnection,
+)
 from aioslsk.protocol.messages import (
     AcceptChildren,
+    BranchLevel,
+    BranchRoot,
     DistributedBranchLevel,
     DistributedBranchRoot,
-    ResetDistributed,
     GetUserStats,
     ParentMinSpeed,
     ParentSpeedRatio,
+    ResetDistributed,
+    ToggleParentSearch,
 )
 from aioslsk.protocol.primitives import UserStats
 from aioslsk.settings import Settings
 from aioslsk.session import Session
 from aioslsk.user.model import User
-from aioslsk.distributed import DistributedNetwork, DistributedPeer
 
 import pytest
 from unittest.mock import AsyncMock, call
@@ -297,3 +310,75 @@ class TestDistributedNetwork:
 
         parent.connection.disconnect.assert_awaited_once()
         child.connection.disconnect.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_serverDisconnected_shouldResetSpeedValues(self, distributed_network: DistributedNetwork):
+        network = AsyncMock()
+        server = ServerConnection(hostname='1.2.3.4', port=1234, network=network)
+        await distributed_network._event_bus.emit(
+            ConnectionStateChangedEvent(
+                connection=server,
+                state=ConnectionState.CLOSED
+            )
+        )
+        assert distributed_network.distributed_alive_interval is None
+        assert distributed_network.parent_min_speed is None
+        assert distributed_network.parent_speed_ratio is None
+        assert distributed_network.parent_inactivity_timeout is None
+        assert distributed_network.min_parents_in_cache is None
+
+    @pytest.mark.asyncio
+    async def test_parentDisconnected_shouldUnsetParent(self, distributed_network: DistributedNetwork):
+        parent_username = 'user0'
+        connection = PeerConnection(
+            hostname='1.2.3.4', port=1234, network=AsyncMock(),
+            username=parent_username, connection_type='D'
+        )
+        parent = DistributedPeer(
+            username=parent_username,
+            connection=connection,
+            branch_level=0,
+            branch_root=parent_username
+        )
+
+        distributed_network.parent = parent
+        distributed_network.distributed_peers = [parent]
+
+        await distributed_network._event_bus.emit(
+            ConnectionStateChangedEvent(
+                connection=connection,
+                state=ConnectionState.CLOSED
+            )
+        )
+
+        assert distributed_network.parent is None
+        distributed_network._network.send_server_messages.assert_has_awaits(
+            [call(BranchLevel.Request(level=0), BranchRoot.Request(username='user1'), ToggleParentSearch.Request(enable=True))]
+        )
+
+    @pytest.mark.asyncio
+    async def test_childDisconnected_shouldUnsetChild(self, distributed_network: DistributedNetwork):
+        child_username = 'user2'
+        connection = PeerConnection(
+            hostname='1.2.3.4', port=1234, network=AsyncMock(),
+            username=child_username, connection_type='D'
+        )
+
+        child = DistributedPeer(
+            username=child_username,
+            connection=connection,
+            branch_level=2,
+            branch_root='user0'
+        )
+
+        distributed_network.children = [child]
+        distributed_network.distributed_peers = [child]
+
+        await distributed_network._event_bus.emit(
+            ConnectionStateChangedEvent(
+                connection=connection,
+                state=ConnectionState.CLOSED
+            )
+        )
+
+        assert child not in  distributed_network.children
