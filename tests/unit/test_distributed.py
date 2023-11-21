@@ -14,19 +14,24 @@ from aioslsk.protocol.messages import (
     AcceptChildren,
     BranchLevel,
     BranchRoot,
+    DistributedAliveInterval,
     DistributedBranchLevel,
     DistributedBranchRoot,
     GetUserStats,
+    MinParentsInCache,
+    ParentInactivityTimeout,
     ParentMinSpeed,
     ParentSpeedRatio,
+    PotentialParents,
     ResetDistributed,
     ToggleParentSearch,
 )
-from aioslsk.protocol.primitives import UserStats
+from aioslsk.protocol.primitives import UserStats, PotentialParent
 from aioslsk.settings import Settings
 from aioslsk.session import Session
 from aioslsk.user.model import User
 
+import asyncio
 import pytest
 from unittest.mock import AsyncMock, call
 
@@ -74,6 +79,39 @@ def create_get_user_stats_response(speed: int) -> GetUserStats.Response:
 
 
 class TestDistributedNetwork:
+
+    @pytest.mark.asyncio
+    async def test_receiveParentInactivityTimeout_shouldSetValue(self, distributed_network: DistributedNetwork):
+        value = 10
+        await distributed_network._event_bus.emit(
+            MessageReceivedEvent(
+                message=ParentInactivityTimeout.Response(value),
+                connection=None
+            )
+        )
+        assert distributed_network.parent_inactivity_timeout == value
+
+    @pytest.mark.asyncio
+    async def test_receiveMinParentsInCache_shouldSetValue(self, distributed_network: DistributedNetwork):
+        value = 10
+        await distributed_network._event_bus.emit(
+            MessageReceivedEvent(
+                message=MinParentsInCache.Response(value),
+                connection=None
+            )
+        )
+        assert distributed_network.min_parents_in_cache == value
+
+    @pytest.mark.asyncio
+    async def test_receiveDistributedAliveInterval_shouldSetValue(self, distributed_network: DistributedNetwork):
+        value = 10
+        await distributed_network._event_bus.emit(
+            MessageReceivedEvent(
+                message=DistributedAliveInterval.Response(value),
+                connection=None
+            )
+        )
+        assert distributed_network.distributed_alive_interval == value
 
     @pytest.mark.asyncio
     async def test_receiveParentSpeedValues_shouldSendGetUserStats(self, distributed_network: DistributedNetwork):
@@ -427,4 +465,47 @@ class TestDistributedNetwork:
             )
         )
 
-        assert child not in  distributed_network.children
+        assert child not in distributed_network.children
+        assert child not in distributed_network.distributed_peers
+
+    @pytest.mark.asyncio
+    async def test_receivePotentialParents_shouldConnect(self, distributed_network: DistributedNetwork):
+        await distributed_network._event_bus.emit(
+            MessageReceivedEvent(
+                message=PotentialParents.Response(
+                    [
+                        PotentialParent('user111', '1.1.1.1', 1111),
+                        PotentialParent('user222', '2.2.2.2', 2222)
+                    ]
+                ),
+                connection=None
+            )
+        )
+
+        await asyncio.gather(*distributed_network._potential_parent_tasks)
+
+        distributed_network._network.create_peer_connection.assert_has_awaits([
+            call('user111', 'D', ip='1.1.1.1', port=1111),
+            call('user222', 'D', ip='2.2.2.2', port=2222)
+        ])
+        assert 'user111' in distributed_network.potential_parents
+        assert 'user222' in distributed_network.potential_parents
+
+    @pytest.mark.asyncio
+    async def test_receivePotentialParents_notEnabled_shouldNotConnect(self, distributed_network: DistributedNetwork):
+        distributed_network._settings.debug.search_for_parent = False
+        await distributed_network._event_bus.emit(
+            MessageReceivedEvent(
+                message=PotentialParents.Response(
+                    [
+                        PotentialParent('user111', '1.1.1.1', 1111),
+                    ]
+                ),
+                connection=None
+            )
+        )
+
+        await asyncio.gather(*distributed_network._potential_parent_tasks)
+
+        distributed_network._network.create_peer_connection.assert_not_awaited()
+        assert 'user111' not in distributed_network.potential_parents
