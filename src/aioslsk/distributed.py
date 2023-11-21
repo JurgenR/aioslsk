@@ -56,8 +56,12 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class DistributedPeer:
+    """Represents a distributed peer and its values in the distributed network"""
     username: str
     connection: Optional[PeerConnection] = None
+    """Distributed connection (type=D) associated with the peer. A `None` value
+    indicates the peer represents the current client
+    """
     branch_level: Optional[int] = None
     branch_root: Optional[str] = None
     child_depth: Optional[int] = None
@@ -199,9 +203,8 @@ class DistributedNetwork(BaseManager):
                     await peer.connection.disconnect(reason=CloseReason.REQUESTED)
 
     async def _disconnect_children(self):
-        await asyncio.gather(*[
-                self._disconnect_child(child) for child in self.children
-            ],
+        await asyncio.gather(
+            *[self._disconnect_child(child) for child in self.children],
             return_exceptions=True
         )
 
@@ -213,6 +216,8 @@ class DistributedNetwork(BaseManager):
         if self.parent:
             if self.parent.connection:
                 await self.parent.connection.disconnect(CloseReason.REQUESTED)
+            else:
+                await self._unset_parent()
 
     async def _unset_parent(self):
         logger.debug(f"unset parent {self.parent!r}")
@@ -548,6 +553,12 @@ class DistributedNetwork(BaseManager):
                 self.distributed_peers.remove(peer)
 
         elif isinstance(connection, ServerConnection):
+
+            # When the client itself is branch root it means that the server is
+            # our "parent" and must be unset here
+            if self.parent and self.parent.connection is None:
+                await self._unset_parent()
+
             self._reset_server_values()
 
     async def send_messages_to_children(self, *messages: Union[MessageDataclass, bytes]):
