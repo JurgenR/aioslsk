@@ -877,6 +877,7 @@ class TransferManager(BaseManager):
 
         except asyncio.CancelledError:
             # Aborted or program shut down
+            logger.debug(f"requested to cancel transfer: {transfer}")
             await connection.disconnect(CloseReason.REQUESTED)
             raise
 
