@@ -95,12 +95,12 @@ class Transfer:
         """Called when unpickling"""
         self.__dict__.update(obj_state)
 
+        self.__dict__['state'] = TransferState.init_from_state(obj_state['state'], self)
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
         self._remotely_queue_task = None
         self._transfer_task = None
         self.state_listeners = []
         self.progress_snapshot = self.take_progress_snapshot()
-        self.__dict__['state'] = TransferState.init_from_state(obj_state['state'], self)
 
     def __getstate__(self):
         """Called when pickling, removes unpickable fields from the fields to
