@@ -97,6 +97,9 @@ class TransferState:
             f"attempted to make undefined state transition from {self.VALUE.name} to {self.TRANSFERRING.name}")
         return False
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self.transfer!r})"
+
 
 class VirginState(TransferState):
     """State representing a newly added transfer"""
