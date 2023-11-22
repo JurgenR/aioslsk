@@ -258,6 +258,14 @@ class Transfer:
     def is_transfered(self) -> bool:
         return self.filesize == self.bytes_transfered
 
+    def get_tasks(self) -> List[asyncio.Task]:
+        tasks = []
+        if self._remotely_queue_task is not None:
+            tasks.append(self._remotely_queue_task)
+        if self._transfer_task is not None:
+            tasks.append(self._transfer_task)
+        return tasks
+
     def cancel_tasks(self) -> List[asyncio.Task]:
         """Cancels all tasks for the transfer, this method returns the tasks
         which have been cancelled
