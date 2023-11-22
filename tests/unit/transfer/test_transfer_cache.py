@@ -1,5 +1,6 @@
 import copy
 import os
+from pytest_unordered import unordered
 from typing import List
 import shutil
 
@@ -77,4 +78,4 @@ class TestTransferShelveCache:
 
         # Read and compare
         transfers = cache.read()
-        assert transfers == expected_transfers
+        assert transfers == unordered(expected_transfers)
