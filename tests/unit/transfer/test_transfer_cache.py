@@ -30,7 +30,7 @@ def create_transfers() -> List[Transfer]:
     upload.filesize = 100
     upload.bytes_transfered = 50
 
-    upload2 = Transfer('user1', '@abcdef\\file.flac', TransferDirection.UPLOAD)
+    upload2 = Transfer('user1', '@abcdef\\subdir\\file.flac', TransferDirection.UPLOAD)
     upload2.state = UploadingState(upload2)
     upload2.start_time = 1.0
     upload2.complete_time = None

@@ -301,9 +301,15 @@ class Transfer:
         own_vars = (self.remote_path, self.username, self.direction, )
         return other_vars == own_vars
 
-    def __repr__(self):  # pragma: no cover
+    def __str__(self) -> str:
         return (
-            f"Transfer(username={self.username!r}, remote_path={self.remote_path!r}, "
-            f"local_path={self.local_path!r}, direction={self.direction}, "
-            f"state={self.state})"
+            f"{self.__class__.__name__}(username={self.username!r}, "
+            f"remote_path={self.remote_path!r}, direction={self.direction}, "
+            f"local_path={self.local_path}, state={self.state})"
+        )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return (
+            f"{self.__class__.__name__}(username={self.username!r}, "
+            f"remote_path={self.remote_path!r}, direction={self.direction})"
         )
