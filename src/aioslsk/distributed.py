@@ -271,7 +271,9 @@ class DistributedNetwork(BaseManager):
 
         if len(self.children) >= self._max_children:
             logger.debug(
-                f"maximum amount of children reached ({len(self.children)} / {self._max_children}), rejecting peer as child: {peer}")
+                f"maximum amount of children reached ({len(self.children)} / {self._max_children}), "
+                f"rejecting peer as child: {peer}"
+            )
             await peer.connection.disconnect(CloseReason.REQUESTED)
             return
 
@@ -526,7 +528,7 @@ class DistributedNetwork(BaseManager):
 
     async def _on_peer_connection_initialized(self, event: PeerInitializedEvent):
         if event.connection.connection_type == PeerConnectionType.DISTRIBUTED:
-            peer = DistributedPeer(event.connection.username, event.connection) # type: ignore
+            peer = DistributedPeer(event.connection.username, event.connection)  # type: ignore
             self.distributed_peers.append(peer)
 
             # Only check if the peer is a potential child if the connection

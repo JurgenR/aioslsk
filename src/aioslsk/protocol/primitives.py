@@ -51,6 +51,7 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar('T', bound='Serializable')
 
+
 class Serializable(Protocol[T]):
 
     @classmethod
@@ -377,6 +378,7 @@ class MessageDataclass(ProtocolDataclass):
 
 
 _ATTR_STRUCT = struct.Struct('<II')
+
 
 @dataclass(frozen=True, order=True)
 class Attribute(ProtocolDataclass):

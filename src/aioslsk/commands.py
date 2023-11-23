@@ -934,5 +934,6 @@ class PeerGetDirectoryContentCommand(BaseCommand[PeerDirectoryContentsReply.Requ
             }
         )
 
-    def handle_response(self, client: SoulSeekClient, response: PeerDirectoryContentsReply.Request) -> List[DirectoryData]:
+    def handle_response(
+            self, client: SoulSeekClient, response: PeerDirectoryContentsReply.Request) -> List[DirectoryData]:
         return response.directories

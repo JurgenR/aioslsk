@@ -1149,7 +1149,8 @@ class TransferManager(BaseManager):
                 )
 
     @on_message(PeerPlaceInQueueRequest.Request)
-    async def _on_peer_place_in_queue_request(self, message: PeerPlaceInQueueRequest.Request, connection: PeerConnection):
+    async def _on_peer_place_in_queue_request(
+            self, message: PeerPlaceInQueueRequest.Request, connection: PeerConnection):
         if not connection.username:
             logger.warning(
                 "got PeerPlaceInQueueRequest for a connection that wasn't properly initialized")
@@ -1163,7 +1164,10 @@ class TransferManager(BaseManager):
                 TransferDirection.UPLOAD
             )
         except ValueError:
-            logger.error(f"PeerPlaceInQueueRequest : could not find transfer (upload) for {filename} from {connection.username}")
+            logger.error(
+                f"PeerPlaceInQueueRequest : could not find transfer (upload) for "
+                f"{filename} from {connection.username}"
+            )
         else:
             place = self.get_place_in_queue(transfer)
             if place:
@@ -1184,7 +1188,10 @@ class TransferManager(BaseManager):
                 TransferDirection.DOWNLOAD
             )
         except ValueError:
-            logger.error(f"PeerPlaceInQueueReply : could not find transfer (download) for {message.filename} from {connection.username}")
+            logger.error(
+                f"PeerPlaceInQueueReply : could not find transfer (download) for "
+                f"{message.filename} from {connection.username}"
+            )
         else:
             transfer.place_in_queue = message.place
 
@@ -1206,13 +1213,18 @@ class TransferManager(BaseManager):
                 TransferDirection.DOWNLOAD
             )
         except ValueError:
-            logger.error(f"PeerUploadFailed : could not find transfer (download) for {message.filename} from {connection.username}")
+            logger.error(
+                f"PeerUploadFailed : could not find transfer (download) for "
+                f"{message.filename} from {connection.username}"
+            )
         else:
             transfer.remotely_queued = False
             await self.manage_transfers()
 
     @on_message(PeerTransferQueueFailed.Request)
-    async def _on_peer_transfer_queue_failed(self, message: PeerTransferQueueFailed.Request, connection: PeerConnection):
+    async def _on_peer_transfer_queue_failed(
+            self, message: PeerTransferQueueFailed.Request, connection: PeerConnection):
+
         if not connection.username:
             logger.warning(
                 "got PeerTransferQueueFailed for a connection that wasn't properly initialized")
@@ -1224,6 +1236,9 @@ class TransferManager(BaseManager):
             transfer = self.get_transfer(
                 connection.username, filename, TransferDirection.DOWNLOAD)
         except ValueError:
-            logger.error(f"PeerTransferQueueFailed : could not find transfer for {filename} from {connection.username}")
+            logger.error(
+                f"PeerTransferQueueFailed : could not find transfer for "
+                f"{filename} from {connection.username}"
+            )
         else:
             await transfer.state.fail(reason=reason)
