@@ -596,6 +596,8 @@ class PeerConnection(DataConnection):
             if bytes_received >= filesize:
                 return
 
+            await asyncio.sleep(0)
+
     async def send_data(self, data: bytes):
         try:
             self._writer.write(data)
@@ -626,6 +628,8 @@ class PeerConnection(DataConnection):
             await self.send_data(data)
             if callback is not None:
                 callback(data)
+
+            await asyncio.sleep(0)
 
     def deserialize_message(self, message_data: bytes) -> MessageDataclass:
         if self.connection_state == PeerConnectionState.AWAITING_INIT:
