@@ -986,7 +986,11 @@ class TransferManager(BaseManager):
                 )
             except (ConnectionReadError, asyncio.TimeoutError) as exc:
                 # Connection should automatically be closed
-                logger.warning(f"failed to receive transfer ticket on file connection : {connection.hostname}:{connection.port}", exc_info=exc)
+                logger.warning(
+                    f"failed to receive transfer ticket on file connection : "
+                    f"{connection.hostname}:{connection.port}",
+                    exc_info=exc
+                )
                 return
 
             try:

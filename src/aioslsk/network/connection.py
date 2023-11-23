@@ -379,7 +379,8 @@ class DataConnection(Connection):
         except asyncio.IncompleteReadError as exc:
             if exc.partial:
                 await self.disconnect(CloseReason.READ_ERROR)
-                raise ConnectionReadError(f"{self.hostname}:{self.port} : incomplete read on connection : {exc.partial!r}") from exc
+                raise ConnectionReadError(
+                    f"{self.hostname}:{self.port} : incomplete read on connection : {exc.partial!r}") from exc
             else:
                 await self.disconnect(CloseReason.EOF)
                 return None
@@ -566,7 +567,8 @@ class PeerConnection(DataConnection):
             else:
                 return data
 
-    async def receive_file(self, file_handle: BinaryIO, filesize: int, callback: Optional[Callable[[bytes], None]] = None):
+    async def receive_file(
+            self, file_handle: BinaryIO, filesize: int, callback: Optional[Callable[[bytes], None]] = None):
         """Receives a file on the current connection and writes it to the given
         `file_handle`
 

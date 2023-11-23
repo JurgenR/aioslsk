@@ -39,9 +39,7 @@ class ServerManager(BaseManager):
         """Send ping to the server"""
         await self._network.send_server_messages(Ping.Request())
 
-
     # Job methods
-
     async def _ping_job(self):
         while True:
             await asyncio.sleep(SERVER_PING_INTERVAL)
