@@ -110,7 +110,7 @@ class SoulSeekClient:
         self.get_event_loop().set_exception_handler(self._exception_handler)
 
         # Allows creating client before actually calling asyncio.run(client.start())
-        # see https://stackoverflow.com/questions/55918048/asyncio-semaphore-runtimeerror-task-got-future-attached-to-a-different-loop
+        # see https://stackoverflow.com/questions/55918048/asyncio-semaphore-runtimeerror-task-got-future-attached-to-a-different-loop  # noqa: E501
         self._stop_event = asyncio.Event()
 
         await asyncio.gather(*[svc.load_data() for svc in self.services])

@@ -91,7 +91,8 @@ class ExpectedResponse(asyncio.Future):
     """Future for an expected response message"""
 
     def __init__(
-            self, connection_class: Type[Union[PeerConnection, ServerConnection]], message_class: Type[MessageDataclass],
+            self, connection_class: Type[Union[PeerConnection, ServerConnection]],
+            message_class: Type[MessageDataclass],
             peer: Optional[str] = None, fields: Optional[Dict[str, Any]] = None,
             loop: Optional[asyncio.AbstractEventLoop] = None):
         super().__init__(loop=loop)
@@ -642,7 +643,7 @@ class Network:
         """
         return list(
             filter(
-                lambda conn: conn.state == ConnectionState.CONNECTED and conn.connection_state == PeerConnectionState.ESTABLISHED,
+                lambda conn: conn.state == ConnectionState.CONNECTED and conn.connection_state == PeerConnectionState.ESTABLISHED,  # noqa: E501
                 self.get_peer_connections(username, typ)
             )
         )

@@ -78,7 +78,8 @@ class InterestManager(BaseManager):
 
     # Recommendations / interests
     @on_message(GetRecommendations.Response)
-    async def _on_get_recommendations(self, message: GetRecommendations.Response, connection: ServerConnection):
+    async def _on_get_recommendations(
+            self, message: GetRecommendations.Response, connection: ServerConnection):
         await self._event_bus.emit(
             RecommendationsEvent(
                 recommendations=message.recommendations,
@@ -88,7 +89,8 @@ class InterestManager(BaseManager):
         )
 
     @on_message(GetGlobalRecommendations.Response)
-    async def _on_get_global_recommendations(self, message: GetGlobalRecommendations.Response, connection: ServerConnection):
+    async def _on_get_global_recommendations(
+            self, message: GetGlobalRecommendations.Response, connection: ServerConnection):
         await self._event_bus.emit(
             GlobalRecommendationsEvent(
                 recommendations=message.recommendations,
@@ -98,7 +100,8 @@ class InterestManager(BaseManager):
         )
 
     @on_message(GetItemRecommendations.Response)
-    async def _on_get_item_recommendations(self, message: GetItemRecommendations.Response, connection: ServerConnection):
+    async def _on_get_item_recommendations(
+            self, message: GetItemRecommendations.Response, connection: ServerConnection):
         await self._event_bus.emit(
             ItemRecommendationsEvent(
                 item=message.item,
@@ -131,7 +134,8 @@ class InterestManager(BaseManager):
         )
 
     @on_message(GetItemSimilarUsers.Response)
-    async def _on_get_item_similar_users(self, message: GetItemSimilarUsers.Response, connection: ServerConnection):
+    async def _on_get_item_similar_users(
+            self, message: GetItemSimilarUsers.Response, connection: ServerConnection):
         await self._event_bus.emit(
             SimilarUsersEvent(
                 item=message.item,

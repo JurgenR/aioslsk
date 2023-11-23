@@ -79,7 +79,8 @@ class PeerManager(BaseManager):
                 "got PeerSharesRequest for a connection that wasn't properly initialized")
             return
 
-        logger.info(f"PeerSharesReply : from username {connection.username}, got {len(message.directories)} directories")
+        logger.info(
+            f"PeerSharesReply : from username {connection.username}, got {len(message.directories)} directories")
 
         user = self._user_manager.get_user_object(connection.username)
 
@@ -93,7 +94,8 @@ class PeerManager(BaseManager):
         )
 
     @on_message(PeerDirectoryContentsRequest.Request)
-    async def _on_peer_directory_contents_req(self, message: PeerDirectoryContentsRequest.Request, connection: PeerConnection):
+    async def _on_peer_directory_contents_req(
+            self, message: PeerDirectoryContentsRequest.Request, connection: PeerConnection):
         if not connection.username:
             logger.warning(
                 "got PeerDirectoryContentsRequest for a connection that wasn't properly initialized")
@@ -109,7 +111,8 @@ class PeerManager(BaseManager):
         )
 
     @on_message(PeerDirectoryContentsReply.Request)
-    async def _on_peer_directory_contents_reply(self, message: PeerDirectoryContentsReply.Request, connection: PeerConnection):
+    async def _on_peer_directory_contents_reply(
+            self, message: PeerDirectoryContentsReply.Request, connection: PeerConnection):
         if not connection.username:
             logger.warning(
                 "got PeerDirectoryContentsReply for a connection that wasn't properly initialized")

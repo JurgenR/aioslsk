@@ -271,7 +271,9 @@ class DistributedNetwork(BaseManager):
 
         if len(self.children) >= self._max_children:
             logger.debug(
-                f"maximum amount of children reached ({len(self.children)} / {self._max_children}), rejecting peer as child: {peer}")
+                f"maximum amount of children reached ({len(self.children)} / {self._max_children}), "
+                f"rejecting peer as child: {peer}"
+            )
             await peer.connection.disconnect(CloseReason.REQUESTED)
             return
 
@@ -312,29 +314,35 @@ class DistributedNetwork(BaseManager):
     # Server messages
 
     @on_message(ParentMinSpeed.Response)
-    async def _on_parent_min_speed(self, message: ParentMinSpeed.Response, connection: ServerConnection):
+    async def _on_parent_min_speed(
+            self, message: ParentMinSpeed.Response, connection: ServerConnection):
         self.parent_min_speed = message.speed
         await self._request_user_stats()
 
     @on_message(ParentSpeedRatio.Response)
-    async def _on_parent_speed_ratio(self, message: ParentSpeedRatio.Response, connection: ServerConnection):
+    async def _on_parent_speed_ratio(
+            self, message: ParentSpeedRatio.Response, connection: ServerConnection):
         self.parent_speed_ratio = message.ratio
         await self._request_user_stats()
 
     @on_message(MinParentsInCache.Response)
-    async def _on_min_parents_in_cache(self, message: MinParentsInCache.Response, connection: ServerConnection):
+    async def _on_min_parents_in_cache(
+            self, message: MinParentsInCache.Response, connection: ServerConnection):
         self.min_parents_in_cache = message.amount
 
     @on_message(DistributedAliveInterval.Response)
-    async def _on_ditributed_alive_interval(self, message: DistributedAliveInterval.Response, connection: ServerConnection):
+    async def _on_ditributed_alive_interval(
+            self, message: DistributedAliveInterval.Response, connection: ServerConnection):
         self.distributed_alive_interval = message.interval
 
     @on_message(ParentInactivityTimeout.Response)
-    async def _on_parent_inactivity_timeout(self, message: ParentInactivityTimeout.Response, connection: ServerConnection):
+    async def _on_parent_inactivity_timeout(
+            self, message: ParentInactivityTimeout.Response, connection: ServerConnection):
         self.parent_inactivity_timeout = message.timeout
 
     @on_message(PotentialParents.Response)
-    async def _on_potential_parents(self, message: PotentialParents.Response, connection: ServerConnection):
+    async def _on_potential_parents(
+            self, message: PotentialParents.Response, connection: ServerConnection):
         if not self._settings.debug.search_for_parent:
             logger.debug("ignoring PotentialParents message : searching for parent is disabled")
             return
@@ -387,7 +395,8 @@ class DistributedNetwork(BaseManager):
     # Distributed messages
 
     @on_message(DistributedBranchLevel.Request)
-    async def _on_distributed_branch_level(self, message: DistributedBranchLevel.Request, connection: PeerConnection):
+    async def _on_distributed_branch_level(
+            self, message: DistributedBranchLevel.Request, connection: PeerConnection):
         logger.info(f"branch level {message.level!r}: {connection!r}")
 
         if not connection.username:
@@ -410,7 +419,8 @@ class DistributedNetwork(BaseManager):
             await self._notify_children_of_branch_values()
 
     @on_message(DistributedBranchRoot.Request)
-    async def _on_distributed_branch_root(self, message: DistributedBranchRoot.Request, connection: PeerConnection):
+    async def _on_distributed_branch_root(
+            self, message: DistributedBranchRoot.Request, connection: PeerConnection):
         logger.info(f"branch root {message.username!r}: {connection!r}")
 
         if not connection.username:
@@ -434,7 +444,8 @@ class DistributedNetwork(BaseManager):
             await self._notify_children_of_branch_values()
 
     @on_message(DistributedChildDepth.Request)
-    async def _on_distributed_child_depth(self, message: DistributedChildDepth.Request, connection: PeerConnection):
+    async def _on_distributed_child_depth(
+            self, message: DistributedChildDepth.Request, connection: PeerConnection):
         if not connection.username:
             logger.warning(
                 "got DistributedChildDepth for a connection that wasn't properly initialized")
@@ -444,11 +455,13 @@ class DistributedNetwork(BaseManager):
         peer.child_depth = message.depth
 
     @on_message(DistributedSearchRequest.Request)
-    async def _on_distributed_search_request(self, message: DistributedSearchRequest.Request, connection: PeerConnection):
+    async def _on_distributed_search_request(
+            self, message: DistributedSearchRequest.Request, connection: PeerConnection):
         await self.send_messages_to_children(message)
 
     @on_message(DistributedServerSearchRequest.Request)
-    async def _on_distributed_server_search_request(self, message: DistributedServerSearchRequest.Request, connection: PeerConnection):
+    async def _on_distributed_server_search_request(
+            self, message: DistributedServerSearchRequest.Request, connection: PeerConnection):
         if message.distributed_code != DistributedSearchRequest.Request.MESSAGE_ID:
             logger.warning(f"no handling for server search request with code {message.distributed_code}")
             return
@@ -467,7 +480,10 @@ class DistributedNetwork(BaseManager):
             speed = message.user_stats.avg_speed
 
             if self.parent_min_speed is None or self.parent_speed_ratio is None:
-                logger.debug("got user stats without having received ParentMinSpeed and ParentSpeedRatio from the server, using defaults")
+                logger.debug(
+                    "got user stats without having received ParentMinSpeed and ParentSpeedRatio "
+                    "from the server, using defaults"
+                )
 
             elif speed < self.parent_min_speed * 1024:
                 self._accept_children = False
@@ -477,7 +493,10 @@ class DistributedNetwork(BaseManager):
                 self._accept_children = True
                 self._max_children = self._calculate_max_children(speed)
 
-            logger.debug(f"adjusting distributed children values: accept={self._accept_children}, max_children={self._max_children}")
+            logger.debug(
+                f"adjusting distributed children values: "
+                f"accept={self._accept_children}, max_children={self._max_children}"
+            )
             await self._network.send_server_messages(
                 AcceptChildren.Request(self._accept_children)
             )
@@ -509,7 +528,7 @@ class DistributedNetwork(BaseManager):
 
     async def _on_peer_connection_initialized(self, event: PeerInitializedEvent):
         if event.connection.connection_type == PeerConnectionType.DISTRIBUTED:
-            peer = DistributedPeer(event.connection.username, event.connection) # type: ignore
+            peer = DistributedPeer(event.connection.username, event.connection)  # type: ignore
             self.distributed_peers.append(peer)
 
             # Only check if the peer is a potential child if the connection

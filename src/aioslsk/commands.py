@@ -79,6 +79,7 @@ RT = TypeVar('RT')
 
 Recommendations = Tuple[List[Recommendation], List[Recommendation]]
 UserInterests = Tuple[List[str], List[str]]
+SharesReply = Tuple[List[DirectoryData], List[DirectoryData]]
 
 
 class UserStatusInfo(NamedTuple):
@@ -258,7 +259,8 @@ class GrantRoomMembershipCommand(BaseCommand[PrivateRoomGrantMembership.Response
             }
         )
 
-    def handle_response(self, client: SoulSeekClient, response: PrivateRoomGrantMembership.Response) -> Tuple[Room, User]:
+    def handle_response(
+            self, client: SoulSeekClient, response: PrivateRoomGrantMembership.Response) -> Tuple[Room, User]:
         return (
             client.rooms.get_or_create_room(response.room),
             client.users.get_user_object(response.username)
@@ -286,7 +288,8 @@ class RevokeRoomMembershipCommand(BaseCommand[PrivateRoomRevokeMembership.Respon
             }
         )
 
-    def handle_response(self, client: SoulSeekClient, response: PrivateRoomRevokeMembership.Response) -> Tuple[Room, User]:
+    def handle_response(
+            self, client: SoulSeekClient, response: PrivateRoomRevokeMembership.Response) -> Tuple[Room, User]:
         return (
             client.rooms.get_or_create_room(response.room),
             client.users.get_user_object(response.username)
@@ -348,7 +351,8 @@ class GetItemRecommendationsCommand(BaseCommand[GetItemRecommendations.Response,
             }
         )
 
-    def handle_response(self, client: SoulSeekClient, response: GetItemRecommendations.Response) -> List[Recommendation]:
+    def handle_response(
+            self, client: SoulSeekClient, response: GetItemRecommendations.Response) -> List[Recommendation]:
         return response.recommendations
 
 
@@ -883,7 +887,7 @@ class PeerGetUserInfoCommand(BaseCommand[PeerUserInfoReply.Request, UserInfo]):
         )
 
 
-class PeerGetSharesCommand(BaseCommand[PeerSharesReply.Request, Tuple[List[DirectoryData], List[DirectoryData]]]):
+class PeerGetSharesCommand(BaseCommand[PeerSharesReply.Request, SharesReply]):
 
     def __init__(self, username: str):
         self.username: str = username
@@ -901,7 +905,7 @@ class PeerGetSharesCommand(BaseCommand[PeerSharesReply.Request, Tuple[List[Direc
         )
 
     def handle_response(
-            self, client: SoulSeekClient, response: PeerSharesReply.Request) -> Tuple[List[DirectoryData], List[DirectoryData]]:
+            self, client: SoulSeekClient, response: PeerSharesReply.Request) -> SharesReply:
         locked_dirs = response.locked_directories or []
         return response.directories, locked_dirs
 
@@ -930,5 +934,6 @@ class PeerGetDirectoryContentCommand(BaseCommand[PeerDirectoryContentsReply.Requ
             }
         )
 
-    def handle_response(self, client: SoulSeekClient, response: PeerDirectoryContentsReply.Request) -> List[DirectoryData]:
+    def handle_response(
+            self, client: SoulSeekClient, response: PeerDirectoryContentsReply.Request) -> List[DirectoryData]:
         return response.directories
