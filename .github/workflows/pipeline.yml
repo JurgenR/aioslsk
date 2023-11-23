@@ -7,6 +7,17 @@ on:
     branches: [ "main" ]
 
 jobs:
+  linting:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+      - uses: snok/install-poetry@v1
+
+      - name: Run flake8
+        run: |
+          poetry run flake8 src/aioslsk
+
   tests:
     strategy:
       fail-fast: false
