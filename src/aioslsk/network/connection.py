@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+from async_timeout import timeout as atimeout
 from enum import auto, Enum
 from typing import BinaryIO, Callable, List, Optional, TYPE_CHECKING, Union
 import logging
@@ -208,8 +209,9 @@ class DataConnection(Connection):
         await self.set_state(ConnectionState.CONNECTING)
 
         try:
-            self._reader, self._writer = await asyncio.wait_for(
-                asyncio.open_connection(self.hostname, self.port), timeout)
+            async with atimeout(timeout):
+                self._reader, self._writer = await asyncio.open_connection(
+                    self.hostname, self.port)
 
         except (Exception, asyncio.TimeoutError) as exc:
             await self.disconnect(CloseReason.CONNECT_FAILED)
@@ -296,14 +298,15 @@ class DataConnection(Connection):
 
     async def _read_message(self):
         header_size = HEADER_SIZE_OBFUSCATED if self.obfuscated else HEADER_SIZE_UNOBFUSCATED
-        header = await asyncio.wait_for(
-            self._reader.readexactly(header_size), self.read_timeout)
+
+        async with atimeout(self.read_timeout):
+            header = await self._reader.readexactly(header_size)
 
         message_len_buf = obfuscation.decode(header) if self.obfuscated else header
         _, message_len = uint32.deserialize(0, message_len_buf)
 
-        message = await asyncio.wait_for(
-            self._reader.readexactly(message_len), self.read_timeout)
+        async with atimeout(self.read_timeout):
+            message = await self._reader.readexactly(message_len)
 
         return header + message
 
@@ -372,7 +375,8 @@ class DataConnection(Connection):
         """
         try:
             if timeout:
-                return await asyncio.wait_for(reader_func(), timeout)
+                async with atimeout(timeout):
+                    return await reader_func()
             else:
                 return await reader_func()
 
@@ -436,7 +440,8 @@ class DataConnection(Connection):
         # Perform actual send
         try:
             self._writer.write(data)
-            await asyncio.wait_for(self._writer.drain(), 10)
+            async with atimeout(10):
+                await self._writer.drain()
 
         except asyncio.TimeoutError as exc:
             await self.disconnect(CloseReason.TIMEOUT)
@@ -549,8 +554,8 @@ class PeerConnection(DataConnection):
         :return: `bytes` object containing the received data
         """
         try:
-            data = await asyncio.wait_for(
-                self._reader.read(n_bytes), timeout)
+            async with atimeout(timeout):
+                data = await self._reader.read(n_bytes)
 
         except asyncio.TimeoutError as exc:
             await self.disconnect(CloseReason.TIMEOUT)
@@ -596,12 +601,11 @@ class PeerConnection(DataConnection):
             if bytes_received >= filesize:
                 return
 
-            await asyncio.sleep(0)
-
     async def send_data(self, data: bytes):
         try:
             self._writer.write(data)
-            await asyncio.wait_for(self._writer.drain(), TRANSFER_TIMEOUT)
+            async with atimeout(TRANSFER_TIMEOUT):
+                await self._writer.drain()
 
         except asyncio.TimeoutError as exc:
             await self.disconnect(CloseReason.TIMEOUT)
@@ -628,8 +632,6 @@ class PeerConnection(DataConnection):
             await self.send_data(data)
             if callback is not None:
                 callback(data)
-
-            await asyncio.sleep(0)
 
     def deserialize_message(self, message_data: bytes) -> MessageDataclass:
         if self.connection_state == PeerConnectionState.AWAITING_INIT:

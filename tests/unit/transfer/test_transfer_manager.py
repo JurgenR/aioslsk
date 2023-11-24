@@ -370,7 +370,7 @@ class TestTransferManager:
         transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
 
         with pytest.raises(RequestPlaceFailedError):
-            with patch('asyncio.wait_for', side_effect=asyncio.TimeoutError()):
+            with patch('aioslsk.transfer.manager.atimeout', side_effect=asyncio.TimeoutError()):
                 await manager.request_place_in_queue(transfer)
 
         manager._network.send_peer_messages.assert_awaited_once_with(
