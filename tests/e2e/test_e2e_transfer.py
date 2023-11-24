@@ -213,7 +213,7 @@ class TestE2ETransfer:
         # Wait for the download to reach failed state. Internally the download
         # will first go into INCOMPLETE state and try again. The uploader should
         # reject the new queue request
-        await wait_for_transfer_state(download, TransferState.FAILED)
+        await wait_for_transfer_state(download, [TransferState.INCOMPLETE, TransferState.FAILED])
 
         assert TransferState.FAILED == download.state.VALUE
         assert TransferState.ABORTED == upload.state.VALUE

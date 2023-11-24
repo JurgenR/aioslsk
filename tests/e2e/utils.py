@@ -137,9 +137,12 @@ async def wait_for_transfer_added(client: SoulSeekClient, timeout: float = 3) ->
 async def wait_for_transfer_state(transfer: Transfer, state: TransferState.State, timeout: int = 15):
     start = time.time()
     current_state = transfer.state.VALUE
+    if not isinstance(state, list):
+        state = [state, ]
+
     while time.time() < start + timeout:
         current_state = transfer.state.VALUE
-        if current_state == state:
+        if current_state in state:
             break
         else:
             await asyncio.sleep(0.05)
