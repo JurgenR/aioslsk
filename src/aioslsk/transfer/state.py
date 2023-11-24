@@ -219,7 +219,11 @@ class DownloadingState(TransferState):
         import time
         start = time.time()
         while time.time() < start + 60:
-            if tasks and tasks[0].cancelled():
+            if not tasks:
+                logger.debug("no tasks to cancel")
+                break
+
+            if tasks[0].cancelled():
                 logger.debug("transfer is cancelled")
                 break
             else:
@@ -269,7 +273,11 @@ class UploadingState(TransferState):
         import time
         start = time.time()
         while time.time() < start + 60:
-            if tasks and tasks[0].cancelled():
+            if not tasks:
+                logger.debug("no tasks to cancel")
+                break
+
+            if tasks[0].cancelled():
                 logger.debug("transfer is cancelled")
                 break
             else:
