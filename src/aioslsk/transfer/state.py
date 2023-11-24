@@ -218,8 +218,11 @@ class DownloadingState(TransferState):
         start = time.time()
         while time.time() < start + 60:
             if tasks and tasks[0].cancelled():
-                logger.debug(f"waiting for transfer is cancelled")
-            await asyncio.sleep(0.25)
+                logger.debug("transfer is cancelled")
+                break
+            else:
+                logger.debug("waiting for transfer is cancelled")
+                await asyncio.sleep(0.25)
         logger.debug(
             f"aborting download: completed cancelling tasks : {tasks}")
         self.transfer.set_complete_time()
@@ -264,8 +267,11 @@ class UploadingState(TransferState):
         start = time.time()
         while time.time() < start + 60:
             if tasks and tasks[0].cancelled():
-                logger.debug(f"waiting for transfer is cancelled")
-            await asyncio.sleep(0.25)
+                logger.debug("transfer is cancelled")
+                break
+            else:
+                logger.debug("waiting for transfer is cancelled")
+                await asyncio.sleep(0.25)
         logger.debug(
             f"aborting download: completed cancelling tasks : {tasks}")
         self.transfer.set_complete_time()
