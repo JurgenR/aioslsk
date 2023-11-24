@@ -213,6 +213,8 @@ class DownloadingState(TransferState):
         tasks = self.transfer.get_tasks()
         logger.debug(
             f"aborting download: cancelling tasks : {tasks}")
+
+        self.transfer.cancel_tasks()
         # results = await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
         import time
         start = time.time()
@@ -262,6 +264,7 @@ class UploadingState(TransferState):
         tasks = self.transfer.get_tasks()
         logger.debug(
             f"aborting download: cancelling tasks : {tasks}")
+        self.transfer.cancel_tasks()
         # results = await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
         import time
         start = time.time()
