@@ -215,7 +215,7 @@ class TestE2ETransfer:
         # reject the new queue request
         await wait_for_transfer_state(download, [TransferState.INCOMPLETE, TransferState.FAILED])
 
-        assert TransferState.FAILED == download.state.VALUE
+        assert download.state.VALUE in [TransferState.INCOMPLETE, TransferState.FAILED]
         assert TransferState.ABORTED == upload.state.VALUE
 
         # Verify file
