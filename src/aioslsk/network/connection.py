@@ -230,10 +230,11 @@ class DataConnection(Connection):
         # disconnecting. This is necessary because during disconnecting the
         # reader task throw an EOF and attempt to call this method again.
         if self.state in (ConnectionState.CLOSED, ConnectionState.CLOSING):
+            logger.debug(f"{self.hostname}:{self.port} : already disconnecting")
             return
 
-        await self.set_state(ConnectionState.CLOSING, close_reason=reason)
         logger.debug(f"{self.hostname}:{self.port} : disconnecting : {reason.name}")
+        await self.set_state(ConnectionState.CLOSING, close_reason=reason)
         self._cancel_queued_messages()
         try:
             if self._writer is not None:
