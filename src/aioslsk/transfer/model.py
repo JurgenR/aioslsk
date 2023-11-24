@@ -277,7 +277,9 @@ class Transfer:
 
         if self._transfer_task is not None:
             tasks.append(self._transfer_task)
-            self._transfer_task.cancel()
+            cancel_result = self._transfer_task.cancel()
+            logger.debug(
+                f"cancel result : {cancel_result}, is_cancelled={self._transfer_task.cancelled()}")
 
         return tasks
 
