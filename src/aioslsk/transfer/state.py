@@ -213,9 +213,15 @@ class DownloadingState(TransferState):
         tasks = self.transfer.get_tasks()
         logger.debug(
             f"aborting download: cancelling tasks : {tasks}")
-        results = await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
+        # results = await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
+        import time
+        start = time.time()
+        while time.time() < start + 60:
+            if tasks and tasks[0].cancelled():
+                logger.debug(f"waiting for transfer is cancelled")
+            await asyncio.sleep(0.25)
         logger.debug(
-            f"aborting download: completed cancelling tasks : {tasks} : results : {results}")
+            f"aborting download: completed cancelling tasks : {tasks}")
         self.transfer.set_complete_time()
         await self.transfer.transition(AbortedState(self.transfer))
         return True
@@ -252,10 +258,16 @@ class UploadingState(TransferState):
     async def abort(self) -> bool:
         tasks = self.transfer.get_tasks()
         logger.debug(
-            f"aborting upload: cancelling tasks : {tasks}")
-        results = await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
+            f"aborting download: cancelling tasks : {tasks}")
+        # results = await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
+        import time
+        start = time.time()
+        while time.time() < start + 60:
+            if tasks and tasks[0].cancelled():
+                logger.debug(f"waiting for transfer is cancelled")
+            await asyncio.sleep(0.25)
         logger.debug(
-            f"aborting upload: completed cancelling tasks : {tasks} : results : {results}")
+            f"aborting download: completed cancelling tasks : {tasks}")
         self.transfer.set_complete_time()
         await self.transfer.transition(AbortedState(self.transfer))
         return True
