@@ -79,6 +79,7 @@ The package uses several dependencies:
 * aiofiles_ : asyncio library for filesystem management
 * async-upnp-client_ : library for managing UPnP configuration
 * pydantic-settings_ : library for managing settings
+* async-timeout_ : library providing timeout class
 
 
 Building the documentation
@@ -118,3 +119,4 @@ Running the mock server:
 .. _aiofiles: https://github.com/Tinche/aiofiles
 .. _async-upnp-client: https://github.com/StevenLooman/async_upnp_client
 .. _pydantic-settings: https://docs.pydantic.dev/latest/concepts/pydantic_settings/
+.. _async-timeout: https://github.com/aio-libs/async-timeout

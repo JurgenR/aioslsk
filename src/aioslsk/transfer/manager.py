@@ -2,6 +2,7 @@ from __future__ import annotations
 import aiofiles
 from aiofiles import os as asyncos
 import asyncio
+from async_timeout import timeout as atimeout
 import logging
 from operator import itemgetter
 import os
@@ -604,16 +605,14 @@ class TransferManager(BaseManager):
             raise RequestPlaceFailedError("failed to request place in queue")
 
         try:
-            _, response = await asyncio.wait_for(
-                self._network.create_peer_response_future(
+            async with atimeout(15):
+                _, response = await self._network.create_peer_response_future(
                     peer=transfer.username,
                     message_class=PeerPlaceInQueueReply.Request,
                     fields={
                         'filename': transfer.remote_path
                     }
-                ),
-                timeout=15
-            )
+                )
         except asyncio.TimeoutError:
             logger.info(f"timeout receiving response to place in queue for transfer : {transfer}")
             raise RequestPlaceFailedError("failed to request place in queue")
@@ -653,10 +652,8 @@ class TransferManager(BaseManager):
         self._file_connection_futures[request.ticket] = file_connection_future
 
         try:
-            file_connection: PeerConnection = await asyncio.wait_for(
-                file_connection_future,
-                timeout=60
-            )
+            async with atimeout(60):
+                file_connection: PeerConnection = await file_connection_future
 
         except asyncio.TimeoutError:
             await transfer.state.queue()
@@ -714,16 +711,15 @@ class TransferManager(BaseManager):
             return
 
         try:
-            connection, response = await asyncio.wait_for(
-                self._network.create_peer_response_future(
+            async with atimeout(TRANSFER_REPLY_TIMEOUT):
+                connection, response = await self._network.create_peer_response_future(
                     transfer.username,
                     PeerTransferReply.Request,
                     fields={
                         'ticket': ticket
                     }
-                ),
-                TRANSFER_REPLY_TIMEOUT
-            )
+                )
+
         except asyncio.TimeoutError:
             logger.debug(f"timeout waiting for transfer reply : {transfer}")
             await transfer.state.queue()
@@ -981,9 +977,9 @@ class TransferManager(BaseManager):
                 return
 
             try:
-                ticket = await asyncio.wait_for(
-                    connection.receive_transfer_ticket(), timeout=5
-                )
+                async with atimeout(5):
+                    ticket = await connection.receive_transfer_ticket()
+
             except (ConnectionReadError, asyncio.TimeoutError) as exc:
                 # Connection should automatically be closed
                 logger.warning(

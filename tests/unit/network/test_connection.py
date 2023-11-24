@@ -93,7 +93,7 @@ class TestDataConnection:
         connection = DataConnection('1.2.3.4', 1234, network)
         connection.disconnect = AsyncMock()
 
-        with patch('asyncio.wait_for', side_effect=TimeoutError):
+        with patch('aioslsk.network.connection.atimeout', side_effect=TimeoutError):
             with pytest.raises(ConnectionFailedError):
                 await connection.connect()
 
@@ -190,7 +190,7 @@ class TestDataConnection:
         connection._reader = Mock()
         connection.disconnect = AsyncMock()
 
-        with patch('asyncio.wait_for', side_effect=TimeoutError):
+        with patch('aioslsk.network.connection.atimeout', side_effect=TimeoutError):
             with pytest.raises(ConnectionReadError):
                 await connection.receive_message()
 
@@ -279,7 +279,7 @@ class TestDataConnection:
         connection._writer.drain = AsyncMock()
         connection.disconnect = AsyncMock()
 
-        with patch('asyncio.wait_for', side_effect=TimeoutError):
+        with patch('aioslsk.network.connection.atimeout', side_effect=TimeoutError):
             with pytest.raises(ConnectionWriteError):
                 await connection.send_message(expected_message)
 
@@ -443,7 +443,7 @@ class TestPeerConnection:
         connection._reader.read = AsyncMock(side_effect=OSError)
         connection.disconnect = AsyncMock()
 
-        with patch('asyncio.wait_for', side_effect=TimeoutError):
+        with patch('aioslsk.network.connection.atimeout', side_effect=TimeoutError):
             with pytest.raises(ConnectionReadError):
                 await connection.receive_data(to_read)
 
@@ -510,7 +510,7 @@ class TestPeerConnection:
         connection._writer = Mock()
         connection.disconnect = AsyncMock()
 
-        with patch('asyncio.wait_for', side_effect=TimeoutError):
+        with patch('aioslsk.network.connection.atimeout', side_effect=TimeoutError):
             with pytest.raises(ConnectionWriteError):
                 await connection.send_data(expected_data)
 

@@ -56,7 +56,8 @@ class TestPeer:
         settings_obj = Settings(**settings)
         user_manager = self._create_user_manager(settings_obj)
 
-        event_bus = AsyncMock()
+        event_bus = Mock()
+        event_bus.emit = AsyncMock()
         shares_manager = Mock()
         transfer_manager = Mock()
         network = AsyncMock()
@@ -113,7 +114,8 @@ class TestPeer:
                 upload_slots=UPLOAD_SLOTS,
                 queue_size=QUEUE_SIZE,
                 has_slots_free=HAS_SLOTS_FREE
-            ))
+            )
+        )
 
     @pytest.mark.asyncio
     async def test_whenDirectoryRequestReceived_shouldRespond(self):
@@ -155,3 +157,4 @@ class TestPeer:
         manager._event_bus.emit.assert_awaited_once_with(
             UserDirectoryEvent(user, DIRECTORY, DIRECTORIES, raw_message)
         )
+

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+from async_timeout import timeout as atimeout
 import logging
 from typing import List, Optional
 
@@ -263,8 +264,8 @@ class SoulSeekClient:
             raise
 
         if response and response_future:
-            _, response_obj = await asyncio.wait_for(
-                response_future, timeout=timeout)
+            async with atimeout(timeout):
+                _, response_obj = await response_future
             return command.handle_response(self, response_obj)
         return None
 

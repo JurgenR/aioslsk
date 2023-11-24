@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+from async_timeout import timeout as atimeout
 import enum
 from functools import partial
 import logging
@@ -574,7 +575,8 @@ class Network:
             fields=fields
         )
         try:
-            _, response = await asyncio.wait_for(future, timeout=timeout)
+            async with atimeout(timeout):
+                _, response = await future
         except TimeoutError as exc:
             future.set_exception(exc)
             raise
@@ -612,7 +614,8 @@ class Network:
             fields=fields
         )
         try:
-            _, response = await asyncio.wait_for(future, timeout=timeout)
+            async with atimeout(timeout):
+                _, response = await future
         except TimeoutError as exc:
             future.set_exception(exc)
             raise
