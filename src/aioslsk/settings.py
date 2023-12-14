@@ -4,6 +4,11 @@ from typing import Dict, List, Optional, Set
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 
+from .constants import (
+    UPNP_DEFAULT_CHECK_INTERVAL,
+    UPNP_DEFAULT_LEASE_DURATION,
+    UPNP_DEFAULT_SEARCH_TIMEOUT,
+)
 from .network.network import ListeningConnectionErrorMode
 from .shares.model import DirectoryShareMode
 
@@ -21,7 +26,9 @@ class WishlistSettingEntry(BaseModel, validate_assignment=True):
 
 class UpnpSettings(BaseModel, validate_assignment=True):
     enabled: bool = True
-    lease_duration: int = 0
+    lease_duration: int = UPNP_DEFAULT_LEASE_DURATION
+    check_interval: int = UPNP_DEFAULT_CHECK_INTERVAL
+    search_timeout: int = UPNP_DEFAULT_SEARCH_TIMEOUT
 
 
 class ReconnectSettings(BaseModel, validate_assignment=True):
@@ -71,6 +78,7 @@ class CredentialsSettings(BaseModel, validate_assignment=True):
     def are_configured(self) -> bool:
         """Returns whether the credentials are correctly configured"""
         return self.username and self.password is not None
+
 
 class SearchSettings(BaseModel, validate_assignment=True):
     wishlist: List[WishlistSettingEntry] = Field(default_factory=list)

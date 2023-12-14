@@ -1,7 +1,10 @@
 from __future__ import annotations
 import asyncio
+from async_timeout import timeout as atimeout
+from async_upnp_client.profiles.igd import PortMappingEntry
 import enum
 from functools import partial
+from ipaddress import IPv4Address
 import logging
 from typing import (
     Any,
@@ -91,7 +94,8 @@ class ExpectedResponse(asyncio.Future):
     """Future for an expected response message"""
 
     def __init__(
-            self, connection_class: Type[Union[PeerConnection, ServerConnection]], message_class: Type[MessageDataclass],
+            self, connection_class: Type[Union[PeerConnection, ServerConnection]],
+            message_class: Type[MessageDataclass],
             peer: Optional[str] = None, fields: Optional[Dict[str, Any]] = None,
             loop: Optional[asyncio.AbstractEventLoop] = None):
         super().__init__(loop=loop)
@@ -131,7 +135,7 @@ class Network:
     def __init__(self, settings: Settings, event_bus: EventBus):
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
-        self._upnp = upnp.UPNP(self._settings)
+        self._upnp = upnp.UPNP()
         self._ticket_generator = ticket_generator()
         self._expected_response_futures: List[ExpectedResponse] = []
         self._expected_connection_futures: Dict[int, asyncio.Future] = {}
@@ -385,25 +389,85 @@ class Network:
             logger.info(
                 f"currently {count} peer connections ({len(self._create_peer_connection_tasks)} tasks)")
 
-    async def map_upnp_ports(self):
-        """Maps the listening ports using UPNP on the gateway"""
-        ports = [port for port in self.get_listening_ports() if port]
-        ip_address = self.server_connection.get_connecting_ip()
+    async def start_upnp_job(self):
+        if self._upnp_task is None:
+            self._upnp_task = asyncio.create_task(
+                self._upnp_job(),
+                name=f'upnp-task-{task_counter()}'
+            )
 
-        devices = await self._upnp.search_igd_devices(ip_address)
-        for port in ports:
-            for device in devices:
-                await self._upnp.map_port(device, ip_address, port)
-
-    def _map_upnp_ports_callback(self, task: asyncio.Task):
-        try:
-            task.result()
-        except asyncio.CancelledError:
-            logger.warning("upnp: port mapping task cancelled")
-        except Exception:
-            logger.exception("upnp: failed to map ports")
-        finally:
+    def stop_upnp_job(self):
+        if self._upnp_task is not None:
+            self._upnp_task.cancel()
             self._upnp_task = None
+
+    async def _upnp_job(self):
+        """This job ensures the UPnP port mappings are maintained.
+
+        The interval that the mapping is checked is configured through the
+        `network.upnp.check_interval` setting. This setting represents the max
+        interval, the check interval could be shorter if the job detects that
+        the lease duration of a port is about to expire
+        """
+        def filter_mapped_port(mapped_ports: List[PortMappingEntry], internal_ip: str, port: int) -> PortMappingEntry:
+            expected_values = (True, 'TCP', IPv4Address(internal_ip), port)
+            for mapped_port in mapped_ports:
+                values = (
+                    mapped_port.enabled,
+                    mapped_port.protocol,
+                    mapped_port.internal_client,
+                    mapped_port.internal_port
+                )
+                if values == expected_values:
+                    return mapped_port
+
+            raise ValueError(
+                f"port {internal_ip}:{port} was not mapped on device {device.name}")
+
+        while True:
+            ports = [port for port in self.get_listening_ports() if port]
+            ip_address = self.server_connection.get_connecting_ip()
+
+            devices = await self._upnp.search_igd_devices(
+                ip_address, timeout=self._settings.network.upnp.search_timeout
+            )
+            logger.info(f"found {len(devices)} devices for UPnP port mapping")
+            lease_expirations = []
+
+            for device in devices:
+                device_mapped_ports = await self._upnp.get_mapped_ports(device)
+                for port in ports:
+                    try:
+                        mapping = filter_mapped_port(
+                            device_mapped_ports, ip_address, port)
+                    except ValueError:
+                        try:
+                            logger.info(f"UPnP: mapping port {ip_address}:{port} on device {device.name}")
+                            await self._upnp.map_port(
+                                device, ip_address, port,
+                                lease_duration=self._settings.network.upnp.lease_duration
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                f"UPnP: failed to map port {ip_address}:{port} on device {device.name}",
+                                exc_info=exc
+                            )
+                        else:
+                            logger.info(f"UPnP: mapped port {ip_address}:{port} on device {device.name}")
+
+                    except Exception as exc:
+                        logger.warning(
+                            f"UPnP: failed to get port mapping {ip_address}:{port} on device {device.name}",
+                            exc_info=exc
+                        )
+                    else:
+                        if lease_duration := mapping.lease_duration:
+                            lease_expirations.append(lease_duration.total_seconds())
+
+            next_check = min(
+                lease_expirations + [self._settings.network.upnp.check_interval])
+            logger.debug(f"UPnP: rechecking port mapping in {next_check} seconds")
+            await asyncio.sleep(next_check)
 
     def select_port(self, port, obfuscated_port) -> Tuple[int, bool]:
         """Selects the port used for making a connection. This attempts to take
@@ -573,7 +637,8 @@ class Network:
             fields=fields
         )
         try:
-            _, response = await asyncio.wait_for(future, timeout=timeout)
+            async with atimeout(timeout):
+                _, response = await future
         except TimeoutError as exc:
             future.set_exception(exc)
             raise
@@ -611,7 +676,8 @@ class Network:
             fields=fields
         )
         try:
-            _, response = await asyncio.wait_for(future, timeout=timeout)
+            async with atimeout(timeout):
+                _, response = await future
         except TimeoutError as exc:
             future.set_exception(exc)
             raise
@@ -642,7 +708,7 @@ class Network:
         """
         return list(
             filter(
-                lambda conn: conn.state == ConnectionState.CONNECTED and conn.connection_state == PeerConnectionState.ESTABLISHED,
+                lambda conn: conn.state == ConnectionState.CONNECTED and conn.connection_state == PeerConnectionState.ESTABLISHED,  # noqa: E501
                 self.get_peer_connections(username, typ)
             )
         )
@@ -878,11 +944,7 @@ class Network:
             # get this from the server connection but we first need to be
             # fully connected to it before we can request a valid IP
             if self._settings.network.upnp.enabled:
-                self._upnp_task = asyncio.create_task(
-                    self.map_upnp_ports(),
-                    name=f'enable-upnp-{task_counter()}'
-                )
-                self._upnp_task.add_done_callback(self._map_upnp_ports_callback)
+                await self.start_upnp_job()
 
             # Register server connection watchdog
             if self._settings.network.server.reconnect.auto:
@@ -890,6 +952,7 @@ class Network:
 
         elif state == ConnectionState.CLOSING:
 
+            self.stop_upnp_job()
             # When `disconnect` is called on the connection it will always first
             # go into the CLOSING state. The watchdog will only attempt to
             # reconnect if the server is in CLOSED state. So the code needs to

@@ -1,5 +1,6 @@
 from __future__ import annotations
 import asyncio
+from async_timeout import timeout as atimeout
 import logging
 from typing import List, Optional
 
@@ -110,7 +111,7 @@ class SoulSeekClient:
         self.get_event_loop().set_exception_handler(self._exception_handler)
 
         # Allows creating client before actually calling asyncio.run(client.start())
-        # see https://stackoverflow.com/questions/55918048/asyncio-semaphore-runtimeerror-task-got-future-attached-to-a-different-loop
+        # see https://stackoverflow.com/questions/55918048/asyncio-semaphore-runtimeerror-task-got-future-attached-to-a-different-loop  # noqa: E501
         self._stop_event = asyncio.Event()
 
         await asyncio.gather(*[svc.load_data() for svc in self.services])
@@ -263,8 +264,8 @@ class SoulSeekClient:
             raise
 
         if response and response_future:
-            _, response_obj = await asyncio.wait_for(
-                response_future, timeout=timeout)
+            async with atimeout(timeout):
+                _, response_obj = await response_future
             return command.handle_response(self, response_obj)
         return None
 

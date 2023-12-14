@@ -56,7 +56,9 @@ _QUERY_CLEAN_PATTERN = re.compile(r"[\W_]")
 """Pattern to remove all non-word/digit characters from a string"""
 
 
-def scan_directory(shared_directory: SharedDirectory, children: Optional[List[SharedDirectory]] = None) -> Set[SharedItem]:
+def scan_directory(
+        shared_directory: SharedDirectory,
+        children: Optional[List[SharedDirectory]] = None) -> Set[SharedItem]:
     """Scans the directory for items to share
 
     :param shared_directory: `SharedDirectory` instance
@@ -288,7 +290,8 @@ class SharesManager(BaseManager):
 
     def add_shared_directory(
             self, shared_directory: str,
-            share_mode: DirectoryShareMode = DirectoryShareMode.EVERYONE, users: Optional[List[str]] = None) -> SharedDirectory:
+            share_mode: DirectoryShareMode = DirectoryShareMode.EVERYONE,
+            users: Optional[List[str]] = None) -> SharedDirectory:
         """Adds a shared directory. This method will call `generate_alias` and
         add the directory to the directory map.
 
@@ -423,7 +426,7 @@ class SharesManager(BaseManager):
             try:
                 item, attributes = await future
             except Exception:
-                logger.warning(f"exception fetching shared item attributes")
+                logger.warning("exception fetching shared item attributes")
             else:
                 item.attributes = attributes
 
@@ -459,7 +462,9 @@ class SharesManager(BaseManager):
     async def get_filesize(self, shared_item: SharedItem) -> int:
         return await asyncos.path.getsize(shared_item.get_absolute_path())
 
-    def query(self, query: Union[str, SearchQuery], username: Optional[str] = None) -> Tuple[List[SharedItem], List[SharedItem]]:
+    def query(
+            self, query: Union[str, SearchQuery],
+            username: Optional[str] = None) -> Tuple[List[SharedItem], List[SharedItem]]:
         """Performs a query on the `shared_directories` returning the matching
         items. If `username` is passed this method will return a list of
         visible results and list of locked results. If `None` the second list

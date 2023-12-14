@@ -78,29 +78,35 @@ class InterestManager(BaseManager):
 
     # Recommendations / interests
     @on_message(GetRecommendations.Response)
-    async def _on_get_recommendations(self, message: GetRecommendations.Response, connection: ServerConnection):
+    async def _on_get_recommendations(
+            self, message: GetRecommendations.Response, connection: ServerConnection):
         await self._event_bus.emit(
             RecommendationsEvent(
                 recommendations=message.recommendations,
-                unrecommendations=message.unrecommendations
+                unrecommendations=message.unrecommendations,
+                raw_message=message
             )
         )
 
     @on_message(GetGlobalRecommendations.Response)
-    async def _on_get_global_recommendations(self, message: GetGlobalRecommendations.Response, connection: ServerConnection):
+    async def _on_get_global_recommendations(
+            self, message: GetGlobalRecommendations.Response, connection: ServerConnection):
         await self._event_bus.emit(
             GlobalRecommendationsEvent(
                 recommendations=message.recommendations,
-                unrecommendations=message.unrecommendations
+                unrecommendations=message.unrecommendations,
+                raw_message=message
             )
         )
 
     @on_message(GetItemRecommendations.Response)
-    async def _on_get_item_recommendations(self, message: GetItemRecommendations.Response, connection: ServerConnection):
+    async def _on_get_item_recommendations(
+            self, message: GetItemRecommendations.Response, connection: ServerConnection):
         await self._event_bus.emit(
             ItemRecommendationsEvent(
                 item=message.item,
-                recommendations=message.recommendations
+                recommendations=message.recommendations,
+                raw_message=message
             )
         )
 
@@ -110,7 +116,8 @@ class InterestManager(BaseManager):
             UserInterestsEvent(
                 user=self._user_manager.get_user_object(message.username),
                 interests=message.interests,
-                hated_interests=message.hated_interests
+                hated_interests=message.hated_interests,
+                raw_message=message
             )
         )
 
@@ -121,19 +128,22 @@ class InterestManager(BaseManager):
                 users=[
                     self._user_manager.get_user_object(user.username)
                     for user in message.users
-                ]
+                ],
+                raw_message=message
             )
         )
 
     @on_message(GetItemSimilarUsers.Response)
-    async def _on_get_item_similar_users(self, message: GetItemSimilarUsers.Response, connection: ServerConnection):
+    async def _on_get_item_similar_users(
+            self, message: GetItemSimilarUsers.Response, connection: ServerConnection):
         await self._event_bus.emit(
             SimilarUsersEvent(
                 item=message.item,
                 users=[
                     self._user_manager.get_user_object(username)
                     for username in message.usernames
-                ]
+                ],
+                raw_message=message
             )
         )
 

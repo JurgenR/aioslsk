@@ -51,6 +51,7 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar('T', bound='Serializable')
 
+
 class Serializable(Protocol[T]):
 
     @classmethod
@@ -147,7 +148,7 @@ class bytearr(bytes):
         return uint32(length).serialize() + bytes(self)
 
     @classmethod
-    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, str]:
+    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, bytes]:
         pos_after_len, length = uint32.deserialize(pos, data)
         value = data[pos_after_len:pos_after_len + length]
         return pos_after_len + length, value
@@ -377,6 +378,7 @@ class MessageDataclass(ProtocolDataclass):
 
 
 _ATTR_STRUCT = struct.Struct('<II')
+
 
 @dataclass(frozen=True, order=True)
 class Attribute(ProtocolDataclass):

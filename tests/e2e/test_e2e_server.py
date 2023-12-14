@@ -25,6 +25,7 @@ from .utils import (
     wait_for_listener_awaited,
     wait_for_listener_awaited_events,
 )
+import asyncio
 import pytest
 from typing import Tuple
 from unittest.mock import AsyncMock
@@ -39,10 +40,12 @@ class TestE2EServer:
         username = client_1.settings.credentials.username
 
         await client_1.execute(AddInterestCommand('interest0'), response=True)
+        await asyncio.sleep(0.5)
 
         assert mock_server.find_user_by_name(username).interests == {'interest0'}
 
         await client_1.execute(RemoveInterestCommand('interest0'), response=True)
+        await asyncio.sleep(0.5)
 
         assert len(mock_server.find_user_by_name(username).interests) == 0
 
@@ -53,10 +56,12 @@ class TestE2EServer:
         username = client_1.settings.credentials.username
 
         await client_1.execute(AddHatedInterestCommand('hinterest0'), response=True)
+        await asyncio.sleep(0.5)
 
         assert mock_server.find_user_by_name(username).hated_interests == {'hinterest0'}
 
         await client_1.execute(RemoveHatedInterestCommand('hinterest0'), response=True)
+        await asyncio.sleep(0.5)
 
         assert len(mock_server.find_user_by_name(username).hated_interests) == 0
 

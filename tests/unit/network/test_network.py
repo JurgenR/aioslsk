@@ -23,9 +23,6 @@ DEFAULT_SETTINGS = {
             'port': 10000,
             'obfuscated_port': 10001
         },
-        'upnp': {
-            'enabled': False
-        },
         'peer': {
             'obfuscate': False
         },

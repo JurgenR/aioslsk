@@ -95,12 +95,12 @@ class Transfer:
         """Called when unpickling"""
         self.__dict__.update(obj_state)
 
+        self.__dict__['state'] = TransferState.init_from_state(obj_state['state'], self)
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
         self._remotely_queue_task = None
         self._transfer_task = None
         self.state_listeners = []
         self.progress_snapshot = self.take_progress_snapshot()
-        self.__dict__['state'] = TransferState.init_from_state(obj_state['state'], self)
 
     def __getstate__(self):
         """Called when pickling, removes unpickable fields from the fields to
@@ -258,6 +258,14 @@ class Transfer:
     def is_transfered(self) -> bool:
         return self.filesize == self.bytes_transfered
 
+    def get_tasks(self) -> List[asyncio.Task]:
+        tasks = []
+        if self._remotely_queue_task is not None:
+            tasks.append(self._remotely_queue_task)
+        if self._transfer_task is not None:
+            tasks.append(self._transfer_task)
+        return tasks
+
     def cancel_tasks(self) -> List[asyncio.Task]:
         """Cancels all tasks for the transfer, this method returns the tasks
         which have been cancelled
@@ -301,9 +309,15 @@ class Transfer:
         own_vars = (self.remote_path, self.username, self.direction, )
         return other_vars == own_vars
 
-    def __repr__(self):  # pragma: no cover
+    def __str__(self) -> str:
         return (
-            f"Transfer(username={self.username!r}, remote_path={self.remote_path!r}, "
-            f"local_path={self.local_path!r}, direction={self.direction}, "
-            f"state={self.state})"
+            f"{self.__class__.__name__}(username={self.username!r}, "
+            f"remote_path={self.remote_path!r}, direction={self.direction}, "
+            f"local_path={self.local_path}, state={self.state})"
+        )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return (
+            f"{self.__class__.__name__}(username={self.username!r}, "
+            f"remote_path={self.remote_path!r}, direction={self.direction})"
         )
