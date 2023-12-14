@@ -4,7 +4,7 @@ import logging
 import re
 import socket
 import time
-from typing import Dict, List, Tuple, Set
+from typing import Dict, List, Optional, Tuple, Set
 import typing
 
 from aioslsk.events import on_message, build_message_map
@@ -14,6 +14,7 @@ from aioslsk.protocol.primitives import (
     PotentialParent,
     Recommendation,
     RoomTicker,
+    SimilarUser,
     UserStats,
 )
 from aioslsk.protocol.messages import (
@@ -35,11 +36,13 @@ from aioslsk.protocol.messages import (
     GetRelatedSearches,
     GetGlobalRecommendations,
     GetItemRecommendations,
+    GetItemSimilarUsers,
     GetPeerAddress,
     GetRecommendations,
     GetSimilarUsers,
     GetUserStats,
     GetUserStatus,
+    GetUserInterests,
     JoinRoom,
     Kicked,
     LeaveRoom,
@@ -275,30 +278,23 @@ class MockServer:
             peer for peer in self.peers if peer.user
         ]
 
-    def find_peer_by_name(self, username: str) -> Peer:
+    def find_peer_by_name(self, username: str) -> Optional[Peer]:
         for peer in self.peers:
             if peer.user and peer.user.name == username:
                 return peer
 
-    def find_user_by_name(self, username: str) -> User:
+    def find_user_by_name(self, username: str) -> Optional[User]:
         for user in self.users:
             if user.name == username:
                 return user
 
-    def find_room_by_name(self, name: str) -> Room:
+    def find_room_by_name(self, name: str) -> Optional[Room]:
         for room in self.rooms:
             if room.name == name:
                 return room
 
     def get_joined_rooms(self, user: User) -> List[Room]:
         return [room for room in self.rooms if user in room.joined_users]
-
-    def get_user(self, name: str) -> User:
-        for user in self.users:
-            if user.name == name:
-                return user
-        else:
-            raise ValueError('user does not exist')
 
     def get_distributed_roots(self) -> List[Peer]:
         roots = [
@@ -1032,43 +1028,100 @@ class MockServer:
             )
         )
 
+    @on_message(GetItemSimilarUsers.Request)
+    async def on_get_item_similar_users(self, message: GetItemSimilarUsers.Request, peer: Peer):
+        """
+        TODO:
+        * What's the max?
+
+        Behaviour:
+        * Includes self
+        """
+        similar_users = []
+        for other_peer in self.get_valid_peers():
+            if message.item in other_peer.user.interests:
+                similar_users.append(other_peer.user.name)
+
+        await peer.send_message(
+            GetItemSimilarUsers.Response(
+                message.item,
+                usernames=[similar_user for similar_user in similar_users]
+            )
+        )
+
     @on_message(GetSimilarUsers.Request)
     async def on_get_similar_users(self, message: GetSimilarUsers.Request, peer: Peer):
         """
         * Only online / away users
 
         TODO:
-        * Implementation
-        * What's the max?
+        * What's the max? (at least >= 224)
+        * Hated interests do not seem to be taken into account but this might
+          need some more investigation. Example: if a user has 1 similar
+          interest to you, but you have 2 hated interests that the other user's
+          interests then this user will still be in the list
+        * There appears to be no sorting (user with more similar interests does
+          not go on top of the list). This also needs more investigation
+
+        Behaviour:
+        * Excludes self
         """
+        similar_users = []
+        for other_peer in self.get_valid_peers():
+            if other_peer == peer:
+                continue
+
+            overlap = peer.user.interests.intersection(other_peer.user.interests)
+            if overlap:
+                similar_users.append((other_peer.user.name, len(overlap), ))
+
         await peer.send_message(
             GetSimilarUsers.Response(
-                users=[]
+                users=[
+                    SimilarUser(similar_user, overlap_amount)
+                    for similar_user, overlap_amount in similar_users
+                ]
             )
         )
+
+    @on_message(GetUserInterests.Request)
+    async def on_get_user_interests(self, message: GetUserInterests.Request, peer: Peer):
+        """
+        Behaviour:
+        * Empty string is accepted
+        * No whitespace trimming is done
+        * Non-existing user returns empty recommendations
+        """
+        if user := self.find_user_by_name(message.username):
+            await peer.send_message(
+                GetUserInterests.Response(list(user.interests), list(user.hated_interests)))
+        else:
+            await peer.send_message(GetUserInterests.Response([], []))
 
     @on_message(AddInterest.Request)
     async def on_add_interest(self, message: AddInterest.Request, peer: Peer):
         """
+        Behaviour:
+        - Returns nothing when accepted
+        - Empty string is accepted and returned through GetUserInterests
+        - Duplicates are ignored (GetUserInterests will only return 1)
+
         To investigate:
-        - does this return something?
-        - input errors
-        - duplicate
+        - Input error: Longest possible?
         """
         peer.user.interests.add(message.interest)
 
     @on_message(RemoveInterest.Request)
     async def on_remove_interest(self, message: RemoveInterest.Request, peer: Peer):
         """
+        Behaviour:
+        - Returns nothing when accepted
+        - Removing an interest that is not an interest does nothing (no error)
+
         To investigate:
-        - does this return something?
-        - input errors
-        - not an interest
+        - Input error: Longest possible?
         """
-        try:
-            peer.user.interests.remove(message.interest)
-        except KeyError:
-            pass
+        peer.user.interests.discard(message.interest)
 
     @on_message(AddHatedInterest.Request)
     async def on_add_hated_interest(self, message: AddHatedInterest.Request, peer: Peer):
@@ -1076,10 +1129,7 @@ class MockServer:
 
     @on_message(RemoveHatedInterest.Request)
     async def on_remove_hated_interest(self, message: RemoveHatedInterest.Request, peer: Peer):
-        try:
-            peer.user.hated_interests.remove(message.hated_interest)
-        except KeyError:
-            pass
+        peer.user.hated_interests.discard(message.hated_interest)
 
     @on_message(SendUploadSpeed.Request)
     async def on_send_upload_speed(self, message: SendUploadSpeed.Request, peer: Peer):
@@ -1222,8 +1272,6 @@ class MockServer:
             return
         if room.owner != peer.user:
             return
-
-
 
         self.rooms.remove(room)
 

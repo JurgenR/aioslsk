@@ -55,6 +55,9 @@ class User:
         self.enable_parent_search = False
         self.enable_private_rooms = False
 
+        self.interests = set()
+        self.hated_interests = set()
+
 
 @dataclass
 class Room:
