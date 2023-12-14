@@ -28,7 +28,7 @@ class UpnpSettings(BaseModel, validate_assignment=True):
     enabled: bool = True
     lease_duration: int = UPNP_DEFAULT_LEASE_DURATION
     check_interval: int = UPNP_DEFAULT_CHECK_INTERVAL
-    search_timeout: int = UPNP
+    search_timeout: int = UPNP_DEFAULT_SEARCH_TIMEOUT
 
 
 class ReconnectSettings(BaseModel, validate_assignment=True):

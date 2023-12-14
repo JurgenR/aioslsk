@@ -133,7 +133,7 @@ class UPNP:
 async def _main(args):
     upnp = UPNP()
     if args.subcommand == 'list':
-        devices = await upnp.search_igd_devices(args.internal_ip, timeout=5)
+        devices = await upnp.search_igd_devices(args.internal_ip, timeout=args.st)
         if not devices:
             print("No devices found")
 
@@ -144,7 +144,7 @@ async def _main(args):
                 print(mapped_port)
 
     if args.subcommand == 'map':
-        devices = await upnp.search_igd_devices(args.internal_ip, timeout=5)
+        devices = await upnp.search_igd_devices(args.internal_ip, timeout=args.st)
         if not devices:
             print("No devices found")
 
@@ -152,14 +152,17 @@ async def _main(args):
             await upnp.map_port(device, args.internal_ip, args.port)
 
     elif args.subcommand == 'unmap':
-        devices = await upnp.search_igd_devices(args.internal_ip, timeout=5)
-        await upnp.unmap_port(device, args.port)
+        devices = await upnp.search_igd_devices(args.internal_ip, timeout=args.st)
+        if not devices:
+            print("No devices found")
+
+        for device in devices:
+            await upnp.unmap_port(device, args.port)
 
 
 if __name__ == '__main__':
     import asyncio
     import argparse
-
     import logging
 
     logging.basicConfig(level=logging.DEBUG)
@@ -169,14 +172,29 @@ if __name__ == '__main__':
 
     list_parser = subparsers.add_parser('list', help="List port mappings")
     list_parser.add_argument('internal_ip')
+    list_parser.add_argument(
+        '-st', '--search-timeout',
+        type=int, default=5,
+        help="UPnP Device search timeout"
+    )
 
     map_parser = subparsers.add_parser('map', help="Add port mapping")
     map_parser.add_argument('internal_ip')
     map_parser.add_argument('port', type=int)
+    map_parser.add_argument(
+        '-st', '--search-timeout',
+        type=int, default=5,
+        help="UPnP Device search timeout"
+    )
 
     unmap_parser = subparsers.add_parser('unmap', help="Remove port mapping")
     unmap_parser.add_argument('internal_ip')
     unmap_parser.add_argument('port', type=int)
+    unmap_parser.add_argument(
+        '-st', '--search-timeout',
+        type=int, default=5,
+        help="UPnP Device search timeout"
+    )
 
     args = parser.parse_args()
     asyncio.run(_main(args))
