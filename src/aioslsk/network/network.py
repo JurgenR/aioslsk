@@ -455,7 +455,7 @@ class Network:
                         else:
                             logger.info(f"UPnP: mapped port {ip_address}:{port} on device {device.name}")
 
-                    except Exception:
+                    except Exception as exc:
                         logger.warning(
                             f"UPnP: failed to get port mapping {ip_address}:{port} on device {device.name}",
                             exc_info=exc
