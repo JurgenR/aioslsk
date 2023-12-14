@@ -556,6 +556,11 @@ class DistributedNetwork(BaseManager):
 
             if event.state == ConnectionState.CLOSED:
                 peer = self.get_distributed_peer(connection.username, connection)
+                # Check if there is a distributed peer registered for this
+                # connection. A distributed peer is only registered once the
+                # full connection initialization has been complete. When the
+                # connection fails before this completion this situation could
+                # occur
                 if not peer:
                     logger.warning(
                         f"connection was not registered with the distributed network : {connection!r}")

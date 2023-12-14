@@ -1,30 +1,30 @@
 from __future__ import annotations
 from functools import partial
 from ipaddress import IPv4Address
-from typing import List, TYPE_CHECKING
+from typing import List
 import logging
 from async_upnp_client.aiohttp import AiohttpRequester
 from async_upnp_client.client_factory import UpnpFactory
 from async_upnp_client.exceptions import UpnpActionResponseError
-from async_upnp_client.profiles.igd import IgdDevice
+from async_upnp_client.profiles.igd import IgdDevice, PortMappingEntry
 from async_upnp_client.search import async_search
 from async_upnp_client.ssdp import SSDP_IP_V4, SSDP_PORT
 
-from ..constants import UPNP_SEARCH_TIMEOUT
-
-if TYPE_CHECKING:
-    from ..settings import Settings
+from ..constants import (
+    UPNP_DEFAULT_SEARCH_TIMEOUT,
+    UPNP_MAPPING_SERVICES,
+    UPNP_DEFAULT_LEASE_DURATION,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class UPNP:
 
-    def __init__(self, settings: Settings):
-        self._settings: Settings = settings
+    def __init__(self):
         self._factory: UpnpFactory = UpnpFactory(AiohttpRequester())
 
-    async def search_igd_devices(self, source_ip: str, timeout: int = UPNP_SEARCH_TIMEOUT) -> List[IgdDevice]:
+    async def search_igd_devices(self, source_ip: str, timeout: int = UPNP_DEFAULT_SEARCH_TIMEOUT) -> List[IgdDevice]:
         devices: List[IgdDevice] = []
         logger.info("starting search for IGD devices")
         await async_search(
@@ -45,7 +45,7 @@ class UPNP:
 
         devices.append(IgdDevice(device, None))
 
-    async def get_mapped_ports(self, device: IgdDevice):
+    async def get_mapped_ports(self, device: IgdDevice) -> List[PortMappingEntry]:
         entry_count = await device.async_get_port_mapping_number_of_entries()
         if entry_count:
             logger.debug(f"found {entry_count} mapped ports on device {device.name!r}")
@@ -53,7 +53,7 @@ class UPNP:
         else:
             return await self._get_mapped_ports_unknown(device)
 
-    async def _get_mapped_ports_known(self, device: IgdDevice, count: int):
+    async def _get_mapped_ports_known(self, device: IgdDevice, count: int) -> List[PortMappingEntry]:
         entries = []
         for idx in range(count):
             logger.debug(f"getting port map with index {idx} on device {device.name!r}")
@@ -68,7 +68,7 @@ class UPNP:
 
         return entries
 
-    async def _get_mapped_ports_unknown(self, device: IgdDevice):
+    async def _get_mapped_ports_unknown(self, device: IgdDevice) -> List[PortMappingEntry]:
         """Gets all mapped port entries for the given device when the length of
         the total amount of ports is not known.
         """
@@ -100,37 +100,83 @@ class UPNP:
 
         return entries
 
-    async def remove_port_mapping(self, device: IgdDevice, remote_host: str, port: int, protocol: str = 'TCP'):
-        try:
-            await device.async_delete_port_mapping(
-                remote_host=IPv4Address(remote_host),
-                external_port=port,
-                protocol=protocol
-            )
-        except Exception as exc:
-            logger.warning(
-                f"failed to remove port mapping {remote_host}:{port} from device : {device.name!r}",
-                exc_info=exc)
+    async def map_port(
+            self, device: IgdDevice, internal_ip: str, port: int,
+            lease_duration: int = UPNP_DEFAULT_LEASE_DURATION):
+        action = device._any_action(UPNP_MAPPING_SERVICES, "AddPortMapping")
+        if not action:
+            raise ValueError(f"device {device.name} has no 'AddPortMapping' service")
 
-    async def map_port(self, device: IgdDevice, source_ip: str, port: int):
-        logger.info(f"mapping port {source_ip}:{port} on device {device.name!r}")
-        try:
-            await device.async_add_port_mapping(
-                protocol='TCP',
-                remote_host=None,
-                external_port=port,
-                internal_client=IPv4Address(source_ip),
-                internal_port=port,
-                enabled=True,
-                description='AioSlsk',
-                lease_duration=self._settings.network.upnp.lease_duration
-            )
-        except UpnpActionResponseError as exc:
-            logger.warning(f"failed to map port {port} device : {device.name!r}", exc_info=exc)
-
-    async def unmap_port(self, device: IgdDevice, source_ip: str, port: int):
-        await device.async_delete_port_mapping(
-            remote_host=source_ip,
-            external_port=port,
-            protocol='TCP'
+        await action.async_call(
+            NewRemoteHost='',
+            NewExternalPort=port,
+            NewProtocol='TCP',
+            NewInternalPort=port,
+            NewInternalClient=IPv4Address(internal_ip).exploded,
+            NewEnabled=True,
+            NewPortMappingDescription='AioSlsk',
+            NewLeaseDuration=lease_duration
         )
+
+    async def unmap_port(self, device: IgdDevice, port: int):
+        action = device._any_action(UPNP_MAPPING_SERVICES, "DeletePortMapping")
+        if not action:
+            raise ValueError(f"device {device.name} has no 'DeletePortMapping' service")
+
+        await action.async_call(
+            NewRemoteHost='',
+            NewExternalPort=port,
+            NewProtocol='TCP'
+        )
+
+
+async def _main(args):
+    upnp = UPNP()
+    if args.subcommand == 'list':
+        devices = await upnp.search_igd_devices(args.internal_ip, timeout=5)
+        if not devices:
+            print("No devices found")
+
+        for device in devices:
+            print(f"device : {device.name}")
+            mapped_ports = await upnp.get_mapped_ports(device)
+            for mapped_port in mapped_ports:
+                print(mapped_port)
+
+    if args.subcommand == 'map':
+        devices = await upnp.search_igd_devices(args.internal_ip, timeout=5)
+        if not devices:
+            print("No devices found")
+
+        for device in devices:
+            await upnp.map_port(device, args.internal_ip, args.port)
+
+    elif args.subcommand == 'unmap':
+        devices = await upnp.search_igd_devices(args.internal_ip, timeout=5)
+        await upnp.unmap_port(device, args.port)
+
+
+if __name__ == '__main__':
+    import asyncio
+    import argparse
+
+    import logging
+
+    logging.basicConfig(level=logging.DEBUG)
+
+    parser = argparse.ArgumentParser(description="Utility for mapping and unmapping ports to UPnP")
+    subparsers = parser.add_subparsers(dest='subcommand')
+
+    list_parser = subparsers.add_parser('list', help="List port mappings")
+    list_parser.add_argument('internal_ip')
+
+    map_parser = subparsers.add_parser('map', help="Add port mapping")
+    map_parser.add_argument('internal_ip')
+    map_parser.add_argument('port', type=int)
+
+    unmap_parser = subparsers.add_parser('unmap', help="Remove port mapping")
+    unmap_parser.add_argument('internal_ip')
+    unmap_parser.add_argument('port', type=int)
+
+    args = parser.parse_args()
+    asyncio.run(_main(args))
