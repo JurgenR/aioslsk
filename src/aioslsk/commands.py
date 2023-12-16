@@ -432,7 +432,7 @@ class GetSimilarUsersCommand(BaseCommand[GetSimilarUsers.Response, List[Tuple[Us
             similar_users.append(
                 (
                     client.users.get_user_object(similar_user.username),
-                    similar_user.similar_interests_amount
+                    similar_user.score
                 )
             )
 

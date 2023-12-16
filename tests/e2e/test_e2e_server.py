@@ -3,7 +3,9 @@ from aioslsk.commands import (
     AddInterestCommand,
     AddHatedInterestCommand,
     GrantRoomMembershipCommand,
+    GetItemSimilarUsersCommand,
     GetUserStatusCommand,
+    GetUserInterestsCommand,
     JoinRoomCommand,
     RemoveHatedInterestCommand,
     RemoveInterestCommand,
@@ -11,10 +13,13 @@ from aioslsk.commands import (
     SetRoomTickerCommand,
 )
 from aioslsk.events import (
+    ItemSimilarUsersEvent,
     RoomMembershipGrantedEvent,
     RoomJoinedEvent,
     RoomTickerAddedEvent,
     RoomTickerRemovedEvent,
+    SimilarUsersEvent,
+    UserInterestsEvent,
 )
 from aioslsk.user.model import UserStatus
 from aioslsk.room.model import Room
@@ -64,6 +69,55 @@ class TestE2EServer:
         await asyncio.sleep(0.5)
 
         assert len(mock_server.find_user_by_name(username).hated_interests) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_user_interests(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        listener = AsyncMock()
+        client_1.events.register(UserInterestsEvent, listener)
+
+        await wait_until_clients_initialized(mock_server, amount=2)
+
+        username2 = client_2.settings.credentials.username
+
+        user_2 = mock_server.find_user_by_name(username2)
+        user_2.interests = {'interest0'}
+        user_2.hated_interests = {'hinterest0'}
+
+        actual_interests, actual_hinterests = await client_1(
+            GetUserInterestsCommand(username2), response=True)
+
+        assert actual_interests == ['interest0']
+        assert actual_hinterests == ['hinterest0']
+
+        event: UserInterestsEvent = await wait_for_listener_awaited(listener)
+
+        assert event.user.name == username2
+        assert event.interests == ['interest0']
+        assert event.hated_interests == ['hinterest0']
+
+    @pytest.mark.asyncio
+    async def test_get_item_similar_users(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        listener = AsyncMock()
+        client_1.events.register(ItemSimilarUsersEvent, listener)
+
+        await wait_until_clients_initialized(mock_server, amount=2)
+
+        username2 = client_2.settings.credentials.username
+
+        user_2 = mock_server.find_user_by_name(username2)
+        user_2.interests = {'interest0'}
+
+        actual_users = await client_1(
+            GetItemSimilarUsersCommand('interest0'), response=True)
+
+        assert len(actual_users) == 1
+        assert actual_users[0].name == username2
+
+        event: ItemSimilarUsersEvent = await wait_for_listener_awaited(listener)
+
+        assert event.item == 'interest0'
+        assert len(event.users) == 1
+        assert event.users[0].name == username2
 
     @pytest.mark.asyncio
     async def test_set_get_user_status(self, mock_server: MockServer, client_1: SoulSeekClient):

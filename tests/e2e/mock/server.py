@@ -4,7 +4,7 @@ import logging
 import re
 import socket
 import time
-from typing import Dict, List, Optional, Tuple, Set
+from typing import Dict, List, Optional, Set
 import typing
 
 from aioslsk.events import on_message, build_message_map
@@ -90,7 +90,11 @@ from aioslsk.protocol.messages import (
     UserSearch,
     WishlistInterval,
 )
-from tests.e2e.mock.constants import MAX_RECOMMENDATIONS
+from tests.e2e.mock.constants import (
+    MAX_ITEM_RECOMMENDATIONS,
+    MAX_RECOMMENDATIONS,
+    MAX_GLOBAL_RECOMMENDATIONS,
+)
 from tests.e2e.mock.messages import AdminMessage
 from tests.e2e.mock.model import User, Room, Settings
 from tests.e2e.mock.peer import Peer
@@ -107,6 +111,14 @@ def chat_id_generator(initial: int = 1) -> int:
         if idx > 0xFFFFFFFF:
             idx = initial
         yield idx
+
+
+def remove_0_values(counter: typing.Counter[str]):
+    recommendations_to_remove = [
+        key for key, value in counter.items() if value == 0
+    ]
+    for to_remove in recommendations_to_remove:
+        del counter[to_remove]
 
 
 class DistributedStrategy:
@@ -979,11 +991,11 @@ class MockServer:
         rec_counter = self.get_global_recommendations()
         recommendations = [
             Recommendation(rec, score)
-            for rec, score in rec_counter.most_common(MAX_RECOMMENDATIONS)
+            for rec, score in rec_counter.most_common(MAX_ITEM_RECOMMENDATIONS)
         ]
         unrecommendations = [
             Recommendation(rec, score)
-            for rec, score in rec_counter.most_common()[:-MAX_RECOMMENDATIONS-1:-1]
+            for rec, score in rec_counter.most_common()[:-MAX_ITEM_RECOMMENDATIONS-1:-1]
         ]
 
         await peer.send_message(
@@ -995,13 +1007,31 @@ class MockServer:
 
     @on_message(GetRecommendations.Request)
     async def on_get_recommendations(self, message: GetRecommendations.Request, peer: Peer):
+        """The following implementation makes a lot of assumptions based on some
+        small tests:
+
+        * Add all interests from users who share the same interests as you into
+          a counter. Subtract all hated interests from the counter
+        * Do the opposite where one of your interests is in the hated interests
+          Add all hated interests and subtract all interests
+        * Drop all interests where the counter is 0
+
+
         """
-        TODO: Implementation
-        """
+        rec_counter = self.get_recommendations_for_user(peer.user)
+        recommendations = [
+            Recommendation(rec, score)
+            for rec, score in rec_counter.most_common(MAX_RECOMMENDATIONS)
+        ]
+        unrecommendations = [
+            Recommendation(rec, score)
+            for rec, score in rec_counter.most_common()[:-MAX_RECOMMENDATIONS-1:-1]
+        ]
+
         await peer.send_message(
             GetRecommendations.Response(
-                recommendations=[],
-                unrecommendations=[]
+                recommendations=recommendations,
+                unrecommendations=unrecommendations
             )
         )
 
@@ -1053,18 +1083,13 @@ class MockServer:
     async def on_get_similar_users(self, message: GetSimilarUsers.Request, peer: Peer):
         """
         * Only online / away users
+        * List is returned unsorted
+        * Excludes self
 
         TODO:
-        * What's the max? (at least >= 224)
-        * Hated interests do not seem to be taken into account but this might
-          need some more investigation. Example: if a user has 1 similar
-          interest to you, but you have 2 hated interests that the other user's
-          interests then this user will still be in the list
+        * What's the max? (at least >= 452)
         * There appears to be no sorting (user with more similar interests does
           not go on top of the list). This also needs more investigation
-
-        Behaviour:
-        * Excludes self
         """
         similar_users = []
         for other_peer in self.get_valid_peers():
@@ -1092,11 +1117,19 @@ class MockServer:
         * No whitespace trimming is done
         * Non-existing user returns empty recommendations
         """
+        interests = []
+        hated_interests = []
         if user := self.find_user_by_name(message.username):
-            await peer.send_message(
-                GetUserInterests.Response(list(user.interests), list(user.hated_interests)))
-        else:
-            await peer.send_message(GetUserInterests.Response([], []))
+            interests = list(user.interests)
+            hated_interests = list(user.hated_interests)
+
+        await peer.send_message(
+            GetUserInterests.Response(
+                message.username,
+                interests,
+                hated_interests
+            )
+        )
 
     @on_message(AddInterest.Request)
     async def on_add_interest(self, message: AddInterest.Request, peer: Peer):
@@ -1647,15 +1680,23 @@ class MockServer:
         )
 
     def get_global_recommendations(self) -> typing.Counter[str]:
+        """Gets global recommendations
+
+        :return: List of global recommendations for this item. This still needs
+            to be split into recommendations and unrecommendations
+        """
         recommendations = Counter()
         for peer in self.get_valid_peers():
-            recommendations += Counter(peer.user.interests)
+            recommendations.update(peer.user.interests)
             recommendations.subtract(peer.user.hated_interests)
+
+        # Unverified
+        remove_0_values(recommendations)
 
         return recommendations
 
     def get_recommendations_for_item(self, item: str) -> typing.Counter[str]:
-        """Gets global recommendations for a given item
+        """Gets item recommendations
 
         :return: List of recommendations for this item. This still includes
             the item itself and needs still needs to be split into
@@ -1664,15 +1705,41 @@ class MockServer:
         recommendations = Counter()
         for peer in self.get_valid_peers():
             if item in peer.user.interests:
-                recommendations += Counter(peer.user.interests)
+                recommendations.update(peer.user.interests)
                 recommendations.subtract(peer.user.hated_interests)
+
+        remove_0_values(recommendations)
 
         return recommendations
 
-    def get_recommendations_for_user(self, user: User) -> Tuple[Dict[str, int], Dict[str, int]]:
+    def get_recommendations_for_user(self, user: User) -> typing.Counter[str]:
         """Gets all recommendations of a user based on his interests"""
-        recommendations = Counter()
-        interests = user.interests
+        counter = Counter()
+        for other_peer in self.get_valid_peers():
+            if other_peer.user == user:
+                continue
+
+            for interest in user.interests:
+                if interest in other_peer.user.interests:
+                    counter.update(other_peer.user.interests)
+                    counter.subtract(other_peer.user.hated_interests)
+
+                if interest in other_peer.user.hated_interests:
+                    counter.subtract(other_peer.user.interests)
+
+
+            for hated_interest in user.hated_interests:
+                if hated_interest in other_peer.user.interests:
+                    counter.subtract(other_peer.user.interests)
+
+        # Remove
+        for to_remove in user.interests | user.hated_interests:
+            del counter[to_remove]
+
+        # Remove 0 values
+        remove_0_values(counter)
+
+        return counter
 
 
 async def main(args):

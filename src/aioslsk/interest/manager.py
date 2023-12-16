@@ -8,6 +8,7 @@ from ..events import (
     EventBus,
     GlobalRecommendationsEvent,
     ItemRecommendationsEvent,
+    ItemSimilarUsersEvent,
     MessageReceivedEvent,
     RecommendationsEvent,
     SessionInitializedEvent,
@@ -126,7 +127,7 @@ class InterestManager(BaseManager):
         await self._event_bus.emit(
             SimilarUsersEvent(
                 users=[
-                    self._user_manager.get_user_object(user.username)
+                    (self._user_manager.get_user_object(user.username), user.score, )
                     for user in message.users
                 ],
                 raw_message=message
@@ -137,7 +138,7 @@ class InterestManager(BaseManager):
     async def _on_get_item_similar_users(
             self, message: GetItemSimilarUsers.Response, connection: ServerConnection):
         await self._event_bus.emit(
-            SimilarUsersEvent(
+            ItemSimilarUsersEvent(
                 item=message.item,
                 users=[
                     self._user_manager.get_user_object(username)

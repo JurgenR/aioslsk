@@ -399,7 +399,7 @@ class Attribute(ProtocolDataclass):
 @dataclass(frozen=True, order=True)
 class SimilarUser(ProtocolDataclass):
     username: str = field(metadata={'type': string})
-    similar_interests_amount: int = field(metadata={'type': uint32})
+    score: int = field(metadata={'type': uint32})
 
 
 @dataclass(frozen=True, order=True)
