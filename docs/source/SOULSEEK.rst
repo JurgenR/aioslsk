@@ -916,10 +916,9 @@ Keep a ``counter`` (initially empty) to keep track of a ``score`` for each of th
    b. Decrease the ``score`` for all of the ``hated_interests`` of the other user by 1
 
 3. Keep only recommendations where the ``score`` is not 0
-4. The returned message will contain 2 lists:
+4. The returned message will contain 1 lists:
 
    a. The recommendations sorted by score descending (limit to 100)
-   b. The unrecommendations sorted by score ascending (limit to 100)
 
 
 Get Recommendations
