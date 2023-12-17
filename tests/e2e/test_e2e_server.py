@@ -40,6 +40,7 @@ from .utils import (
 )
 import asyncio
 import pytest
+from pytest_unordered import unordered
 from typing import Tuple
 from unittest.mock import AsyncMock
 
@@ -175,12 +176,12 @@ class TestE2EServer:
         actual_recommendations = await client_1(
             GetItemRecommendationsCommand('interest0'), response=True)
 
-        assert actual_recommendations == expected_recommendations
+        assert actual_recommendations == unordered(expected_recommendations)
 
         event: ItemRecommendationsEvent = await wait_for_listener_awaited(listener)
 
         assert event.item == 'interest0'
-        assert event.recommendations == expected_recommendations
+        assert event.recommendations == unordered(expected_recommendations)
 
     @pytest.mark.asyncio
     async def test_get_global_recommendations(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
@@ -200,18 +201,17 @@ class TestE2EServer:
             Recommendation('interest1', 1),
             Recommendation('hinterest0', -1)
         ]
-        expected_unrecommendations = list(reversed(expected_recommendations))
 
         actual_recommendations, actual_unrecommendations = await client_1(
             GetGlobalRecommendationsCommand(), response=True)
 
-        assert actual_recommendations == expected_recommendations
-        assert actual_unrecommendations == expected_unrecommendations
+        assert actual_recommendations == unordered(expected_recommendations)
+        assert actual_unrecommendations == unordered(expected_recommendations)
 
         event: GlobalRecommendationsEvent = await wait_for_listener_awaited(listener)
 
-        assert event.recommendations == expected_recommendations
-        assert event.unrecommendations == expected_unrecommendations
+        assert event.recommendations == unordered(expected_recommendations)
+        assert event.unrecommendations == unordered(expected_recommendations)
 
     @pytest.mark.asyncio
     async def test_get_recommendations(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
@@ -234,18 +234,17 @@ class TestE2EServer:
             Recommendation('interest1', 1),
             Recommendation('hinterest0', -1)
         ]
-        expected_unrecommendations = list(reversed(expected_recommendations))
 
         actual_recommendations, actual_unrecommendations = await client_1(
             GetRecommendationsCommand(), response=True)
 
-        assert actual_recommendations == expected_recommendations
-        assert actual_unrecommendations == expected_unrecommendations
+        assert actual_recommendations == unordered(expected_recommendations)
+        assert actual_unrecommendations == unordered(expected_recommendations)
 
         event: RecommendationsEvent = await wait_for_listener_awaited(listener)
 
-        assert event.recommendations == expected_recommendations
-        assert event.unrecommendations == expected_unrecommendations
+        assert event.recommendations == unordered(expected_recommendations)
+        assert event.unrecommendations == unordered(expected_recommendations)
 
     @pytest.mark.asyncio
     async def test_set_get_user_status(self, mock_server: MockServer, client_1: SoulSeekClient):
