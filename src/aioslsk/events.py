@@ -369,9 +369,15 @@ class SearchRequestReceivedEvent(Event):
 
 @dataclass(frozen=True)
 class SimilarUsersEvent(Event):
+    users: List[Tuple[User, int]]
+    raw_message: GetSimilarUsers.Response
+
+
+@dataclass(frozen=True)
+class ItemSimilarUsersEvent(Event):
+    item: str
     users: List[User]
-    raw_message: Union[GetSimilarUsers.Response, GetItemSimilarUsers.Response]
-    item: Optional[str] = None
+    raw_message: GetItemSimilarUsers.Response
 
 
 @dataclass(frozen=True)

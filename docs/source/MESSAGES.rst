@@ -1061,7 +1061,7 @@ GetSimilarUsers (Code 110)
    1. Array of similar users:
 
       1. **string**: username
-      2. **uint32**: status
+      2. **uint32**: similar_interests_amount
 
 
 .. _GetItemRecommendations:

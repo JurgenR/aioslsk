@@ -3,7 +3,13 @@ from aioslsk.commands import (
     AddInterestCommand,
     AddHatedInterestCommand,
     GrantRoomMembershipCommand,
+    GetGlobalRecommendationsCommand,
+    GetItemSimilarUsersCommand,
+    GetItemRecommendationsCommand,
+    GetRecommendationsCommand,
+    GetSimilarUsersCommand,
     GetUserStatusCommand,
+    GetUserInterestsCommand,
     JoinRoomCommand,
     RemoveHatedInterestCommand,
     RemoveInterestCommand,
@@ -11,13 +17,20 @@ from aioslsk.commands import (
     SetRoomTickerCommand,
 )
 from aioslsk.events import (
-    RoomMembershipGrantedEvent,
+    GlobalRecommendationsEvent,
+    ItemRecommendationsEvent,
+    ItemSimilarUsersEvent,
+    RecommendationsEvent,
     RoomJoinedEvent,
+    RoomMembershipGrantedEvent,
     RoomTickerAddedEvent,
     RoomTickerRemovedEvent,
+    SimilarUsersEvent,
+    UserInterestsEvent,
 )
 from aioslsk.user.model import UserStatus
 from aioslsk.room.model import Room
+from aioslsk.protocol.primitives import Recommendation
 from .mock.server import MockServer
 from .fixtures import mock_server, client_1, client_2
 from .utils import (
@@ -27,6 +40,7 @@ from .utils import (
 )
 import asyncio
 import pytest
+from pytest_unordered import unordered
 from typing import Tuple
 from unittest.mock import AsyncMock
 
@@ -64,6 +78,173 @@ class TestE2EServer:
         await asyncio.sleep(0.5)
 
         assert len(mock_server.find_user_by_name(username).hated_interests) == 0
+
+    @pytest.mark.asyncio
+    async def test_get_user_interests(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        listener = AsyncMock()
+        client_1.events.register(UserInterestsEvent, listener)
+
+        await wait_until_clients_initialized(mock_server, amount=2)
+
+        username2 = client_2.settings.credentials.username
+
+        user_2 = mock_server.find_user_by_name(username2)
+        user_2.interests = {'interest0'}
+        user_2.hated_interests = {'hinterest0'}
+
+        actual_interests, actual_hinterests = await client_1(
+            GetUserInterestsCommand(username2), response=True)
+
+        assert actual_interests == ['interest0']
+        assert actual_hinterests == ['hinterest0']
+
+        event: UserInterestsEvent = await wait_for_listener_awaited(listener)
+
+        assert event.user.name == username2
+        assert event.interests == ['interest0']
+        assert event.hated_interests == ['hinterest0']
+
+    @pytest.mark.asyncio
+    async def test_get_item_similar_users(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        listener = AsyncMock()
+        client_1.events.register(ItemSimilarUsersEvent, listener)
+
+        await wait_until_clients_initialized(mock_server, amount=2)
+
+        username2 = client_2.settings.credentials.username
+
+        user_2 = mock_server.find_user_by_name(username2)
+        user_2.interests = {'interest0'}
+
+        actual_users = await client_1(
+            GetItemSimilarUsersCommand('interest0'), response=True)
+
+        assert len(actual_users) == 1
+        assert actual_users[0].name == username2
+
+        event: ItemSimilarUsersEvent = await wait_for_listener_awaited(listener)
+
+        assert event.item == 'interest0'
+        assert len(event.users) == 1
+        assert event.users[0].name == username2
+
+    @pytest.mark.asyncio
+    async def test_get_similar_users(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        listener = AsyncMock()
+        client_1.events.register(SimilarUsersEvent, listener)
+
+        await wait_until_clients_initialized(mock_server, amount=2)
+
+        username1 = client_1.settings.credentials.username
+        username2 = client_2.settings.credentials.username
+
+        user_1 = mock_server.find_user_by_name(username1)
+        user_1.interests = {'interest0'}
+        user_2 = mock_server.find_user_by_name(username2)
+        user_2.interests = {'interest0'}
+
+        actual_users = await client_1(GetSimilarUsersCommand(), response=True)
+
+        assert len(actual_users) == 1
+        assert actual_users[0][0].name == username2
+        assert actual_users[0][1] == 1
+
+        event: SimilarUsersEvent = await wait_for_listener_awaited(listener)
+
+        assert len(event.users) == 1
+        assert event.users[0][0].name == username2
+        assert event.users[0][1] == 1
+
+    @pytest.mark.asyncio
+    async def test_get_item_recommendations(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        listener = AsyncMock()
+        client_1.events.register(ItemRecommendationsEvent, listener)
+
+        await wait_until_clients_initialized(mock_server, amount=2)
+
+        username2 = client_2.settings.credentials.username
+
+        user_2 = mock_server.find_user_by_name(username2)
+        user_2.interests = {'interest0', 'interest1'}
+        user_2.hated_interests = {'hinterest0'}
+
+        expected_recommendations = [
+            Recommendation('interest1', 1),
+            Recommendation('hinterest0', -1)
+        ]
+
+        actual_recommendations = await client_1(
+            GetItemRecommendationsCommand('interest0'), response=True)
+
+        assert actual_recommendations == unordered(expected_recommendations)
+
+        event: ItemRecommendationsEvent = await wait_for_listener_awaited(listener)
+
+        assert event.item == 'interest0'
+        assert event.recommendations == unordered(expected_recommendations)
+
+    @pytest.mark.asyncio
+    async def test_get_global_recommendations(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        listener = AsyncMock()
+        client_1.events.register(GlobalRecommendationsEvent, listener)
+
+        await wait_until_clients_initialized(mock_server, amount=2)
+
+        username2 = client_2.settings.credentials.username
+
+        user_2 = mock_server.find_user_by_name(username2)
+        user_2.interests = {'interest0', 'interest1'}
+        user_2.hated_interests = {'hinterest0'}
+
+        expected_recommendations = [
+            Recommendation('interest0', 1),
+            Recommendation('interest1', 1),
+            Recommendation('hinterest0', -1)
+        ]
+
+        actual_recommendations, actual_unrecommendations = await client_1(
+            GetGlobalRecommendationsCommand(), response=True)
+
+        assert actual_recommendations == unordered(expected_recommendations)
+        assert actual_unrecommendations == unordered(expected_recommendations)
+
+        event: GlobalRecommendationsEvent = await wait_for_listener_awaited(listener)
+
+        assert event.recommendations == unordered(expected_recommendations)
+        assert event.unrecommendations == unordered(expected_recommendations)
+
+    @pytest.mark.asyncio
+    async def test_get_recommendations(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        listener = AsyncMock()
+        client_1.events.register(RecommendationsEvent, listener)
+
+        await wait_until_clients_initialized(mock_server, amount=2)
+
+        username1 = client_1.settings.credentials.username
+        username2 = client_2.settings.credentials.username
+
+        user_1 = mock_server.find_user_by_name(username1)
+        user_1.interests = {'interest0'}
+
+        user_2 = mock_server.find_user_by_name(username2)
+        user_2.interests = {'interest0', 'interest1'}
+        user_2.hated_interests = {'hinterest0'}
+
+        expected_recommendations = [
+            Recommendation('interest1', 1),
+            Recommendation('hinterest0', -1)
+        ]
+
+        actual_recommendations, actual_unrecommendations = await client_1(
+            GetRecommendationsCommand(), response=True)
+
+        assert actual_recommendations == unordered(expected_recommendations)
+        assert actual_unrecommendations == unordered(expected_recommendations)
+
+        event: RecommendationsEvent = await wait_for_listener_awaited(listener)
+
+        assert event.recommendations == unordered(expected_recommendations)
+        assert event.unrecommendations == unordered(expected_recommendations)
 
     @pytest.mark.asyncio
     async def test_set_get_user_status(self, mock_server: MockServer, client_1: SoulSeekClient):

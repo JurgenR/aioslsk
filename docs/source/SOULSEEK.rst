@@ -859,3 +859,314 @@ Exception cases
 * Add User to Room: Adding a user who does not have private rooms enabled
 
   * Server message: user <user_name> hasn't enabled private room add. please message them and ask them to do so before trying to add them again.
+
+
+Interests / Recommendations
+===========================
+
+The protocol implements a recommendation system: you can add interests and hated interests and the server can return recommendations for those interests based on what other users have.
+
+
+Getting / Adding / Removing Interests
+-------------------------------------
+
+There are 4 messages for managing your own interests:
+
+* :ref:`AddInterest`
+* :ref:`RemoveInterest`
+* :ref:`AddHatedInterest`
+* :ref:`RemoveHatedInterest`
+
+Using the :ref:`GetUserInterests` message the interests of a user can be retrieved
+
+.. note::
+   The server does not persist interests or hated interests after disconnect
+
+
+Get Global Recommendations
+--------------------------
+
+Through the :ref:`GetGlobalRecommendations` message the global recommendations can be returned.
+
+Keep a ``counter`` (initially empty) to keep track of a ``score`` for each of the recommendations:
+
+1. Loop over all currently active users (including the current user)
+
+   a. Increase the ``score`` for all of the ``interests`` of the other user by 1
+   b. Decrease the ``score`` for all of the ``hated_interests`` of the other user by 1
+
+2. Unverified: Keep only recommendations where the ``score`` is not 0
+3. The returned message will contain 2 lists:
+
+   a. The recommendations sorted by score descending (limit to 200)
+   b. The unrecommendations sorted by score ascending (limit to 200)
+
+
+Get Item Recommendations
+------------------------
+
+Through the :ref:`GetItemRecommendations` message a set of recommendations can be returned based on the specified item.
+
+Keep a ``counter`` (initially empty) to keep track of a ``score`` for each of the recommendations:
+
+1. Loop over all currently active users (excluding the current user)
+2. If the ``item`` is in the user's interests:
+
+   a. Increase the ``score`` for all of the ``interests`` of the other user by 1
+   b. Decrease the ``score`` for all of the ``hated_interests`` of the other user by 1
+
+3. Keep only recommendations where the ``score`` is not 0
+4. The returned message will contain 1 lists:
+
+   a. The recommendations sorted by score descending (limit to 100)
+
+
+Get Recommendations
+-------------------
+
+Through the :ref:`GetRecommendations` message a personalized set of recommendations can be returned based on the interests and hated interests.
+
+Keep a ``counter`` (initially empty) to keep track of a ``score`` for each of the recommendations:
+
+1. Loop over all currently active users (excluding the current user)
+2. Loop over all the current user's ``interests``
+
+   1. If the current interest is in the ``interests`` of the other user:
+
+      a. Increase the ``score`` for all of the ``interests`` of the other user by 1
+      b. Decrease the ``score`` for all of the ``hated_interests`` of the other user by 1
+
+   2. If the current interest is in the ``hated_interests`` of the other user
+
+      a. Decrease the ``score`` for all of the ``interests`` of the other user by 1
+
+3. Loop over all the current user's ``hated_interests``
+
+   1. If the current hated interest is in the ``interests`` of the other user:
+
+      a. Decrease the ``score`` for all of the ``interests`` of the other user by 1
+
+4. Keep only recommendations that are not in the current user's ``interests`` or ``hated_interests``
+5. Keep only recommendations where the ``score`` is not 0
+6. The returned message will contain 2 lists:
+
+   a. The recommendations sorted by score descending (limit to 100)
+   b. The unrecommendations sorted by score ascending (limit to 100)
+
+
+.. note::
+   Keep in mind that the recommendations list can (partially) match the unrecommendations list and vice versa if the limit is not reached. Example: if there are 5 items returned those 5 items will be in both lists
+
+
+Examples
+~~~~~~~~
+
+Following examples are to illustrate how the algorithm works:
+
+**Example 1**
+
++-----------------+-------+-------+
+|                 |  You  | Other |
++=================+=======+=======+
+| Interests       | item1 | item1 |
++-----------------+-------+-------+
+|                 |       | item2 |
++-----------------+-------+-------+
+| Hated interests |       |       |
++-----------------+-------+-------+
+
+Recommendations:
+
+* item2 (score = 1)
+
+
+**Example 2**
+
++-----------------+-------+-------+
+|                 |  You  | Other |
++=================+=======+=======+
+| Interests       |       | item1 |
++-----------------+-------+-------+
+|                 |       | item2 |
++-----------------+-------+-------+
+| Hated interests | item1 | item3 |
++-----------------+-------+-------+
+
+Recommendations:
+
+* item2 (score = -1)
+
+
+**Example 3**
+
++-----------------+-------+-------+
+|                 |  You  | Other |
++=================+=======+=======+
+| Interests       | item1 | item1 |
++-----------------+-------+-------+
+|                 |       | item2 |
++-----------------+-------+-------+
+| Hated interests | item1 | item3 |
++-----------------+-------+-------+
+
+Recommendations:
+
+* item2 (score = -1)
+
+
+**Example 4**
+
++-----------------+-------+-------+
+|                 |  You  | Other |
++=================+=======+=======+
+| Interests       | item1 | item1 |
++-----------------+-------+-------+
+|                 | item2 | item2 |
++-----------------+-------+-------+
+| Hated interests |       | item3 |
++-----------------+-------+-------+
+|                 |       | item4 |
++-----------------+-------+-------+
+
+Recommendations:
+
+* item3 (score = -2)
+* item4 (score = -2)
+
+
+**Example 5**
+
++-----------------+-------+-------+
+|                 |  You  | Other |
++=================+=======+=======+
+| Interests       |       | item1 |
++-----------------+-------+-------+
+|                 |       | item2 |
++-----------------+-------+-------+
+| Hated interests | item3 | item3 |
++-----------------+-------+-------+
+|                 |       | item4 |
++-----------------+-------+-------+
+
+Recommendations: Empty list
+
+
+**Example 6**
+
++-----------------+-------+-------+
+|                 |  You  | Other |
++=================+=======+=======+
+| Interests       | item3 | item1 |
++-----------------+-------+-------+
+|                 |       | item2 |
++-----------------+-------+-------+
+| Hated interests |       | item3 |
++-----------------+-------+-------+
+|                 |       | item4 |
++-----------------+-------+-------+
+
+Recommendations:
+
+* item1 (score = -1)
+* item2 (score = -1)
+
+
+**Example 7**
+
++-----------------+-------+-------+
+|                 |  You  | Other |
++=================+=======+=======+
+| Interests       |       | item1 |
++-----------------+-------+-------+
+|                 |       | item2 |
++-----------------+-------+-------+
+| Hated interests | item1 | item3 |
++-----------------+-------+-------+
+|                 |       | item4 |
++-----------------+-------+-------+
+
+Recommendations:
+
+* item2 (score = -1)
+
+
+**Example 8**
+
++-----------------+-------+-------+
+|                 |  You  | Other |
++=================+=======+=======+
+| Interests       | item3 | item1 |
++-----------------+-------+-------+
+|                 |       | item2 |
++-----------------+-------+-------+
+| Hated interests | item1 | item3 |
++-----------------+-------+-------+
+|                 |       | item4 |
++-----------------+-------+-------+
+
+Recommendations:
+
+* item2 (score = -2)
+
+
+**Example 9**
+
++-----------------+-------+-------+
+|                 |  You  | Other |
++=================+=======+=======+
+| Interests       | item1 | item1 |
++-----------------+-------+-------+
+|                 | item2 | item2 |
++-----------------+-------+-------+
+|                 |       | item5 |
++-----------------+-------+-------+
+| Hated interests |       | item3 |
++-----------------+-------+-------+
+|                 |       | item4 |
++-----------------+-------+-------+
+
+Recommendations:
+
+* item5 (score = 2)
+* item3 (score = -2)
+* item4 (score = -2)
+
+
+**Example 10**
+
++-----------------+-------+-------+
+|                 |  You  | Other |
++=================+=======+=======+
+| Interests       | item1 | item1 |
++-----------------+-------+-------+
+|                 |       | item2 |
++-----------------+-------+-------+
+| Hated interests |       | item2 |
++-----------------+-------+-------+
+
+Recommendations: Empty list
+
+
+Get Similar Users
+-----------------
+
+The :ref:`GetSimilarUsers` message returns users that have similar interests to you.
+
+Create an empty list for storing similar users:
+
+1. Loop over all currently active users (excluding the current user)
+2. Calculate the amount of ``interests`` in common between the current user and those of the other user
+3. If the overlap is greater than 1, add it to the list of similar users
+4. Return the list of similar users and the amount of interests in common with that user (limit is unknown)
+
+
+Get Item Similar Users
+----------------------
+
+The :ref:`GetItemSimilarUsers` message returns users that have the interest as provided in the request message (``item``).
+
+Create an empty list for storing similar users:
+
+1. Loop over all currently active users (including the current user)
+2. If the ``item`` is in the ``interests`` of the user add it to the list of similar users
+3. Return the list of similar users (limit is unknown)

@@ -74,7 +74,7 @@ async def mock_server():
 
 @pytest_asyncio.fixture
 async def client_1(tmp_path):
-    client = create_client(tmp_path, 'user0', 60000)
+    client = create_client(tmp_path, 'user0', 40000)
 
     try:
         await client.start()
@@ -91,7 +91,7 @@ async def client_1(tmp_path):
 
 @pytest_asyncio.fixture
 async def client_2(tmp_path):
-    client = create_client(tmp_path, 'user1', 61000)
+    client = create_client(tmp_path, 'user1', 41000)
 
     try:
         await client.start()
@@ -117,7 +117,7 @@ async def clients(tmp_path, request) -> List[SoulSeekClient]:
 
     for idx in range(request.param):
         username = 'user' + str(idx).zfill(3)
-        port = 60000 + (idx * 10)
+        port = 40000 + (idx * 10)
         clients.append(
             create_client(tmp_path, username, port)
         )

@@ -413,7 +413,7 @@ class GetItemSimilarUsersCommand(BaseCommand[GetItemSimilarUsers.Response, List[
         return list(map(client.users.get_user_object, response.usernames))
 
 
-class GetSimilarUsersCommand(BaseCommand[GetSimilarUsers.Response, List[User]]):
+class GetSimilarUsersCommand(BaseCommand[GetSimilarUsers.Response, List[Tuple[User, int]]]):
 
     async def send(self, client: SoulSeekClient):
         await client.network.send_server_messages(
@@ -426,11 +426,17 @@ class GetSimilarUsersCommand(BaseCommand[GetSimilarUsers.Response, List[User]]):
             GetSimilarUsers.Response
         )
 
-    def handle_response(self, client: SoulSeekClient, response: GetSimilarUsers.Response) -> List[User]:
-        return [
-            client.users.get_user_object(user.username)
-            for user in response.users
-        ]
+    def handle_response(self, client: SoulSeekClient, response: GetSimilarUsers.Response) -> List[Tuple[User, int]]:
+        similar_users = []
+        for similar_user in response.users:
+            similar_users.append(
+                (
+                    client.users.get_user_object(similar_user.username),
+                    similar_user.score
+                )
+            )
+
+        return similar_users
 
 
 class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, Tuple[str, int, int]]):
