@@ -15,6 +15,7 @@ from aioslsk.transfer.state import (
     CompleteState,
     DownloadingState,
     InitializingState,
+    QueuedState,
     TransferState,
     UploadingState,
 )
@@ -264,7 +265,40 @@ class TestTransferManager:
 
         assert manager.get_downloads() == [transfer2, ]
 
-    def test_rankingUploads_userOnline_shouldSortUploads(self, manager: TransferManager):
+    @pytest.mark.parametrize('init_state', [(InitializingState), (UploadingState)])
+    def test_getQueuedTransfers_alreadyUploading_shouldNotQueue(
+            self, manager: TransferManager, init_state):
+        transfer1 = Transfer('user0', 'user/file1', TransferDirection.UPLOAD)
+        transfer1.state = init_state(transfer1)
+        transfer2 = Transfer('user0', 'user/file2', TransferDirection.UPLOAD)
+        transfer2.state = QueuedState(transfer2)
+        transfer3 = Transfer('user0', 'user/file3', TransferDirection.UPLOAD)
+        transfer3.state = QueuedState(transfer3)
+        manager._transfers = [transfer1, transfer2, transfer3]
+
+        _, uploads = manager._get_queued_transfers()
+
+        assert len(uploads) == 0
+
+    def test_getQueuedTransfers_multipleQueued_shouldQueueOnlyOne(self, manager: TransferManager):
+        transfer1 = Transfer('user0', None, TransferDirection.UPLOAD)
+        transfer1.state = QueuedState(transfer1)
+        transfer2 = Transfer('user0', None, TransferDirection.UPLOAD)
+        transfer2.state = QueuedState(transfer2)
+
+        transfer3 = Transfer('user1', None, TransferDirection.UPLOAD)
+        transfer3.state = QueuedState(transfer3)
+
+        manager._transfers = [transfer1, transfer2, transfer3, ]
+
+        _, uploads = manager._get_queued_transfers()
+
+        # During prioritization the transfers get ranked, the list is reversed
+        # to prioritize the uploads. Because both have equal ranking they will
+        # be in reversed order
+        assert uploads == [transfer3, transfer1]
+
+    def test_prioritizeUploads_userOnline_shouldSortUploads(self, manager: TransferManager):
         USER = 'user0'
         USER2 = 'user1'
 
@@ -278,7 +312,7 @@ class TestTransferManager:
 
         assert manager._prioritize_uploads([transfer, transfer2]) == [transfer2, transfer]
 
-    def test_rankingUploads_privileged_shouldSortUploads(self, manager: TransferManager):
+    def test_prioritizeUploads_privileged_shouldSortUploads(self, manager: TransferManager):
         USER = 'user0'
         USER2 = 'user1'
 
@@ -292,7 +326,7 @@ class TestTransferManager:
 
         assert manager._prioritize_uploads([transfer, transfer2]) == [transfer2, transfer]
 
-    def test_rankingUploads_isFriend_shouldSortUploads(self, manager: TransferManager):
+    def test_prioritizeUploads_isFriend_shouldSortUploads(self, manager: TransferManager):
         USER = 'user0'
         USER2 = FRIEND
 

@@ -6,7 +6,7 @@ from async_timeout import timeout as atimeout
 import logging
 from operator import itemgetter
 import os
-from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
 
 from ..base_manager import BaseManager
 from .cache import TransferNullCache, TransferCache
@@ -467,7 +467,7 @@ class TransferManager(BaseManager):
                 download._remotely_queue_task_complete
             )
 
-        # Uploads should be initialized and transfered if possible
+        # Uploads should be initialized and uploaded if possible
         for upload in uploads[:free_upload_slots]:
             if not upload._transfer_task:
                 upload._transfer_task = asyncio.create_task(
@@ -484,8 +484,14 @@ class TransferManager(BaseManager):
         :return: a tuple containing 2 lists: the eligable downloads and eligable
             uploads
         """
-        queued_downloads = []
-        queued_uploads = []
+        uploading_users: Set[str] = {
+            transfer.username for transfer in self._transfers
+            if transfer.is_upload() and transfer.is_processing()
+        }
+        users_with_queued_upload: Set[str] = set()
+
+        queued_downloads: List[Transfer] = []
+        queued_uploads: List[Transfer] = []
         for transfer in self._transfers:
             # Get the user object from the user manager, if the user is tracked
             # this user object will be returned. Otherwise a new user object is
@@ -497,7 +503,16 @@ class TransferManager(BaseManager):
                 continue
 
             if transfer.direction == TransferDirection.UPLOAD:
+                # Do not add the user if the user is already uploading or a
+                # transfer was already added to the queud upload list (only
+                # allow 1 transfer per user)
+                if transfer.username in uploading_users:
+                    continue
+                if transfer.username in users_with_queued_upload:
+                    continue
+
                 if transfer.state.VALUE == TransferState.QUEUED:
+                    users_with_queued_upload.add(transfer.username)
                     queued_uploads.append(transfer)
 
             else:
