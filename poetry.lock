@@ -170,19 +170,19 @@ files = [
 
 [[package]]
 name = "async-upnp-client"
-version = "0.36.2"
+version = "0.38.0"
 description = "Async UPnP Client"
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "async_upnp_client-0.36.2.tar.gz", hash = "sha256:0ba5d0b2560ed81b9cbb2960ecef20a9b560d65d75b36f9ccfe4ac0090c10323"},
+    {file = "async_upnp_client-0.38.0.tar.gz", hash = "sha256:a7b6b45f4fb39ce988a6e0420ee5ed3ef1d34fb18254d96a239557ea3c1f7487"},
 ]
 
 [package.dependencies]
-aiohttp = ">=3.8.1"
+aiohttp = ">=3.9.1,<3.10.0"
 async-timeout = ">=3.0,<5.0"
 defusedxml = ">=0.6.0"
-python-didl-lite = ">=1.3.2,<1.4.0"
+python-didl-lite = ">=1.4.0,<1.5.0"
 voluptuous = ">=0.12.1"
 
 [[package]]
@@ -1305,12 +1305,12 @@ pytest = ">=6.0.0"
 
 [[package]]
 name = "python-didl-lite"
-version = "1.3.2"
+version = "1.4.0"
 description = "DIDL-Lite (Digital Item Declaration Language) tools for Python"
 optional = false
-python-versions = "*"
+python-versions = ">=3.8"
 files = [
-    {file = "python-didl-lite-1.3.2.tar.gz", hash = "sha256:88c0641d3140f7b05f1efd93f7c481fc62aa50d1e05e17f0e0a15bee025c4af1"},
+    {file = "python-didl-lite-1.4.0.tar.gz", hash = "sha256:54585ad41bee6d34f00adbdaa3e00a56547c7b6930b6d4280b887437e6c6666e"},
 ]
 
 [package.dependencies]
@@ -1828,4 +1828,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<3.13"
-content-hash = "f65c4906defc2edb7bbbcffe1c4c52ac5a6f7e3a36c87cf8f72604c7ef07bfe2"
+content-hash = "262f6554c54bca378d4a58e6130d052d092ee5e0730c618eb0540b03a8997b7c"
