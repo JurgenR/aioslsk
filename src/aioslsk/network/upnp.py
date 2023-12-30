@@ -133,7 +133,8 @@ class UPNP:
 async def _main(args):
     upnp = UPNP()
     if args.subcommand == 'list':
-        devices = await upnp.search_igd_devices(args.internal_ip, timeout=args.st)
+        devices = await upnp.search_igd_devices(
+            args.internal_ip, timeout=args.search_timeout)
         if not devices:
             print("No devices found")
 
@@ -144,7 +145,8 @@ async def _main(args):
                 print(mapped_port)
 
     if args.subcommand == 'map':
-        devices = await upnp.search_igd_devices(args.internal_ip, timeout=args.st)
+        devices = await upnp.search_igd_devices(
+            args.internal_ip, timeout=args.search_timeout)
         if not devices:
             print("No devices found")
 
@@ -152,7 +154,8 @@ async def _main(args):
             await upnp.map_port(device, args.internal_ip, args.port)
 
     elif args.subcommand == 'unmap':
-        devices = await upnp.search_igd_devices(args.internal_ip, timeout=args.st)
+        devices = await upnp.search_igd_devices(
+            args.internal_ip, timeout=args.search_timeout)
         if not devices:
             print("No devices found")
 

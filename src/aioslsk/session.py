@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
+from functools import partial
 from .user.model import User
 
 
@@ -10,7 +11,7 @@ class Session:
     greeting: str
     client_version: int
     minor_version: int
-    logged_in_at: datetime = field(default_factory=datetime.utcnow)
+    logged_in_at: datetime = field(default_factory=partial(datetime.now, timezone.utc))
     privileges_time_left: int = 0
 
     @property
