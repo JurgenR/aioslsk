@@ -101,12 +101,15 @@ class SoulSeekClient:
         self.events.register(
             ServerReconnectedEvent, self._on_server_reconnected)
 
-    async def start(self):
+    async def start(self, connect: bool = True):
         """Performs a start up of the client consisting of:
 
-        * Calling `load_data` on all defined services
-        * Optionally starts a scan of the defined shares
-        * Connecting to the server and opening listening ports
+        * Calls `load_data` on all defined services
+        * Calls `start` on all defined services
+        * Optionally: Starts a scan of the defined shares
+        * Optionally: Connecting to the server and opening listening ports
+
+        :param connect: Whether to connect the network after start up
         """
         self.get_event_loop().set_exception_handler(self._exception_handler)
 
@@ -120,7 +123,8 @@ class SoulSeekClient:
         if self.settings.shares.scan_on_start:
             asyncio.create_task(self.shares.scan())
 
-        await self.connect()
+        if connect:
+            await self.connect()
 
     async def run_until_stopped(self):
         await self._stop_event.wait()
