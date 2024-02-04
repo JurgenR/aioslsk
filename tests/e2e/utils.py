@@ -1,6 +1,7 @@
 import asyncio
 from unittest.mock import AsyncMock
 import time
+from typing import Optional
 from aioslsk.client import SoulSeekClient
 from aioslsk.transfer.model import Transfer, TransferState
 from aioslsk.search.model import SearchRequest
@@ -66,6 +67,22 @@ async def wait_until_peer_has_parent(
             await asyncio.sleep(0.05)
     else:
         raise Exception(f"timeout waiting for peer ({username=}) to have parent values {expected=}")
+
+
+async def wait_for_room_owner(
+        mock_server: MockServer, room_name: str, owner: Optional[str] = None,
+        timeout: float = 10):
+
+    room = mock_server.find_room_by_name(room_name)
+    if not room:
+        raise Exception(f"no room on the server with name {room_name!r}")
+
+    start = time.time()
+    while time.time() < start + timeout:
+        if room.owner == owner:
+            return
+        await asyncio.sleep(0.1)
+    raise Exception(f'timeout waiting for server room {room_name!r} to have owner {owner}')
 
 
 async def wait_until_clients_initialized(mock_server: MockServer, amount: int = 2):
