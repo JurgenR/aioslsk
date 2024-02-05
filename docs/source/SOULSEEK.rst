@@ -531,12 +531,12 @@ Chat
 Private Chat Message
 --------------------
 
-Actors:
+**Actors:**
 
 * ``sender`` : User sending a private message
 * ``receiver`` : User receiving the private message
 
-Actions:
+**Actions:**
 
 1. Sender -> Server: Send :ref:`PrivateChatMessage`
 
@@ -650,12 +650,12 @@ Room Joining / Creation
 
 To join a room a :ref:`JoinRoom` message is sent to the server, containing the ``name`` of the room and whether the room is ``private``. If the room does not exist it is created.
 
-Actors:
+**Actors:**
 
 * ``joiner`` : user requesting to join the room
 
 
-Input Checks:
+**Input Checks:**
 
 * If room ``name`` is empty:
 
@@ -665,7 +665,7 @@ Input Checks:
 
   * :ref:`server-info-message` : message : "Could not create room. Reason: Room name ``name`` contains leading or trailing spaces."
 
-* If room ``name`` contains multiple subsequent white spaces (eg.: "my  room"):
+* If room ``name`` contains multiple subsequent white spaces (eg.: "my<2 or more spaces>room"):
 
   * :ref:`server-info-message` : message : "Could not create room. Reason: Room name ``name`` contains multiple following spaces."
 
@@ -674,7 +674,7 @@ Input Checks:
   * :ref:`server-info-message` : message : "Could not create room. Reason: Room name ``name`` contains invalid characters."
 
 
-Checks:
+**Checks:**
 
 * If room exists and ``joiner`` is in the ``joined_users`` list (user already joined):
 
@@ -686,7 +686,7 @@ Checks:
   * :ref:`server-info-message` : message : "The room you are trying to enter (``name``) is registered as private."
 
 
-Actions:
+**Actions:**
 
 1. If the room does not exist (or room is unclaimed) and the request is to join a public room (``private=false``):
 
@@ -718,12 +718,12 @@ Grant Membership in Private Room
 
 Operators and owners of a private room can grant membership to a user allowing that user to join the room. This can be done using the :ref:`PrivateRoomGrantMembership` message, the message contains the ``name`` of the room and the ``username`` of the user that should be given membership.
 
-Actors:
+**Actors:**
 
 * ``granter`` : User granting membership
 * ``grantee`` : User being granted membership
 
-Checks:
+**Checks:**
 
 * If the room ``name`` is not a valid room (public) : Do nothing
 * If the room ``name`` is not a valid room (does not exist) : Do nothing
@@ -746,7 +746,7 @@ Checks:
   * :ref:`server-info-message` : message : "user ``grantee`` is already a member of room ``name``"
 
 
-Actions:
+**Actions:**
 
 1. :ref:`function-private-room-grant-membership`
 
@@ -756,19 +756,19 @@ Revoke Membership from Private Room
 
 Removes a member from a private room. The owner can remove operators and members, operators can only remove members. This can be done using the :ref:`PrivateRoomRevokeMembership` message, the message contains the ``name`` of the room and the ``username`` of the user that should be revoked membership.
 
-Actors:
+**Actors:**
 
 * ``revoker`` : User revoking membership
 * ``revokee`` : User being revoked membership
 
-Checks:
+**Checks:**
 
 * If the ``revoker`` and ``revokee`` are the same user : Do nothing
 * If the ``revokee`` is not in the ``members`` list : Do nothing
 * If the ``revoker`` is in the ``operators`` list and the ``revokee`` is the ``owner`` : Do nothing
 * If the ``revoker`` and ``revokee`` are both in the ``operators`` list : Do nothing
 
-Actions:
+**Actions:**
 
 1. :ref:`function-private-room-revoke-membership`
 
@@ -778,12 +778,12 @@ Granting Operator Privileges in a Private Room
 
 Room owners can grant operator privileges to members of a private room by using the :ref:`PrivateRoomGrantOperator` message, the message contains the ``name`` of the room and the ``username`` of the member that should be granted operator privileges.
 
-Actors:
+**Actors:**
 
 * ``granter`` : User granting the operator privileges
 * ``grantee`` : User having operator privileges granted
 
-Checks:
+**Checks:**
 
 * If ``granter`` is not the ``owner`` : Do nothing
 * If user does not exist or is offline (even in ``members`` list):
@@ -799,7 +799,7 @@ Checks:
   * :ref:`server-info-message` : message : "user ``grantee`` is already an operator of room ``name``"
 
 
-Actions:
+**Actions:**
 
 1. :ref:`function-private-room-grant-operator`
 
@@ -809,19 +809,19 @@ Revoking Operator Privileges in a Private Room
 
 Room owners can revoke operator privileges from operator of a private room by using the :ref:`PrivateRoomRevokeOperator` message, the message contains the ``name`` of the room and the ``username`` of the member that should have his operator privileges revoked.
 
-Actors:
+**Actors:**
 
 * ``revoker`` : User revoking the operator privileges
 * ``revokee`` : User having operator privileges revoked
 
-Checks:
+**Checks:**
 
 * If user does not exist: Do nothing
 * If ``revoker`` is not the ``owner`` : Do nothing
 * If ``revokee`` is not in the ``members`` list: Do nothing
 * If ``revokee`` is not in the ``operators`` list: Do nothing
 
-Actions:
+**Actions:**
 
 1. :ref:`function-private-room-revoke-operator`
 
@@ -831,11 +831,11 @@ Dropping Membership
 
 Members themselves can drop their membership by using the :ref:`PrivateRoomDropMembership` message.
 
-Checks:
+**Checks:**
 
 * If the user is not in the ``members`` list : Do nothing
 
-Actions:
+**Actions:**
 
 1. :ref:`function-private-room-revoke-membership`
 2. If the user is in the ``operators`` list:
@@ -848,13 +848,13 @@ Dropping Ownership
 
 Owners can drop ownership of a private room, this will disband the private room. This is done through the :ref:`PrivateRoomDropOwnership` message.
 
-Checks:
+**Checks:**
 
 * If the user tries to drop ownership for a room that does not exist: Do nothing
 * If the user tries to drop ownership of a public room: Do nothing
-* TODO: If the member is not the ``owner``
+* If the member is not the ``owner``
 
-Actions:
+**Actions:**
 
 1. Reset the ``owner``
 2. Empty the ``operators`` list of the room
@@ -877,18 +877,18 @@ Room tickers are a sort of room wall, where users can place a single message tha
 
 A room ticker can be set with the :ref:`SetRoomTicker` message for which the actions are described in this section.
 
-Actors:
+**Actors:**
 
 * ``user`` : User that requests to set a room ticker
 
-Checks:
+**Checks:**
 
 * If the room does not exist : Do nothing
 * If ``user`` is not in the ``joined_users`` list (public) : Do nothing
 * If the length of the ``ticker`` is greater than 1024 : Do nothing
 * TODO: Any characters not allowed?
 
-Actions:
+**Actions:**
 
 1. If the ``user`` has an entry in ``tickers``
 
@@ -916,7 +916,7 @@ Function: Notify room owner
 
 Function to notify the room owner. This short function sends a server chat ``message`` to the ``owner`` of a room if the room has an owner.
 
-Actions:
+**Actions:**
 
 1. If the room has its ``owner`` value set:
 
@@ -930,11 +930,11 @@ Function: Join room
 
 Function to join the room, checks should already be performed.
 
-Actors:
+**Actors:**
 
 * ``joiner`` : user requesting to join the room
 
-Actions:
+**Actions:**
 
 1. Add the user to the list of ``joined_users``
 2. For each user in the list of ``joined_users``:
@@ -964,11 +964,11 @@ Function: Leave Room
 
 Function to leave a room
 
-Actors:
+**Actors:**
 
 * ``leaver`` : user requesting or being removed from the room
 
-Actions:
+**Actions:**
 
 1. Remove the user from the list of ``joined_users``
 2. For each user in the list of ``joined_users``:
@@ -987,12 +987,12 @@ Function: Grant Membership to Private Room
 
 Function to grant membership to a user from a private room
 
-Actors:
+**Actors:**
 
 * ``granter`` : User granting membership
 * ``grantee`` : User being granted membership
 
-Actions:
+**Actions:**
 
 1. Add new member to the ``members`` list
 2. For each member in the ``members`` list:
@@ -1020,11 +1020,11 @@ Function: Revoke Membership from Private Room
 
 Function to revoke membership from a user from a private room
 
-Actors:
+**Actors:**
 
 * ``revokee`` : User having membership revoked
 
-Actions:
+**Actions:**
 
 1. Remove user from the ``members`` list
 2. For each member in the ``members`` list:
@@ -1059,12 +1059,12 @@ Function: Grant Operator to Private Room
 
 Function to grant operator privileges to a member of a private room
 
-Actors:
+**Actors:**
 
 * ``granter`` : User granting the operator privileges
 * ``grantee`` : User having operator privileges granted
 
-Actions:
+**Actions:**
 
 1. Add the member to the ``operators`` list:
 2. For each member in the ``members`` list:
@@ -1096,12 +1096,12 @@ Function: Revoke Operator from Private Room
 
 Function to revoke operator privileges from a member of a private room
 
-Actors:
+**Actors:**
 
 * ``revoker`` : User revoking the operator privileges
 * ``revokee`` : User having operator privileges revoked
 
-Actions:
+**Actions:**
 
 1. Remove the member from the ``operators`` list:
 2. For each member in the ``members`` list:

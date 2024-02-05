@@ -1,5 +1,5 @@
 import asyncio
-from collections import Counter, OrderedDict
+from collections import Counter
 import logging
 import re
 import socket
