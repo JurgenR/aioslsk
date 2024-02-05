@@ -17,11 +17,11 @@ Establishing a connection and logging on:
 
 1. Open a TCP connection to the server
 2. Open up at least one listening connection (see :ref:`peer-connections` for more info)
-3. Send the :ref:`Login`: command on the server socket
+3. Send the :ref:`Login`: message on the server socket
 
-A login response will be received which determines whether the login was successful along with the following commands providing some information:
+A login response will be received which determines whether the login was successful along with the following messages:
 
-* :ref:`RoomList`
+* :ref:`function-room-list-update`
 * :ref:`ParentMinSpeed`
 * :ref:`ParentSpeedRatio`
 * :ref:`WishlistInterval`
@@ -115,10 +115,10 @@ We cannot connect to them, they cannot connect to us:
 5. Receive :ref:`CannotConnect` from server (ticket)
 
 .. note::
-   Other clients don't seem to adhere to this flow: they don't actually wait for the connection to be established and just fires a :ref:`ConnectToPeer` message to the server at the same time as it tries to establish a connection to the peer.
+  Other clients don't seem to adhere to this flow: they don't actually wait for the connection to be established and just fires a :ref:`ConnectToPeer` message to the server at the same time as it tries to establish a connection to the peer.
 
 .. note::
-   Question 1: Why do we need a ticket number for :ref:`PeerInit` ? -> most clients seem to just send ``0``
+  Question 1: Why do we need a ticket number for :ref:`PeerInit` ? -> most clients seem to just send ``0``
 
 
 Obfuscation
@@ -278,9 +278,9 @@ When a client receives a :ref:`GetUserStats` message the client should determine
 1. If the ``avg_speed`` returned is smaller than the value received by :ref:`ParentMinSpeed` * 1024 : Send :ref:`AcceptChildren` (``accept = false``)
 2. If the ``avg_speed`` is greater or equal than the value received by :ref:`ParentMinSpeed` * 1024 :
 
-   1. Send :ref:`AcceptChildren` (``accept = true``)
-   2. Calculate the ``divider`` from the ``ratio`` returned by :ref:`ParentSpeedRatio`: (``ratio`` / 10) * 1024
-   3. Calculate the max number of children : floor(``avg_speed`` / ``divider``)
+  1. Send :ref:`AcceptChildren` (``accept = true``)
+  2. Calculate the ``divider`` from the ``ratio`` returned by :ref:`ParentSpeedRatio`: (``ratio`` / 10) * 1024
+  3. Calculate the max number of children : floor(``avg_speed`` / ``divider``)
 
 
 Example calculation 1 (``ratio=50``, ``avg_speed=20480``):
@@ -295,7 +295,7 @@ Example calculation 1 (``ratio=30``, ``avg_speed=20480``):
 
 
 .. note::
-   The formula for calculating the max amount of parents can be 0, clients still seem to enable :ref:`AcceptChildren` regardless
+  The formula for calculating the max amount of parents can be 0, clients still seem to enable :ref:`AcceptChildren` regardless
 
 
 Searches on the distributed network
@@ -304,9 +304,9 @@ Searches on the distributed network
 Searches for the branch root (level = 0) will come from the server in the form of a :ref:`ServerSearchRequest` message. The branch root forwards this message as-is directly to its children (level = 1). The children will then convert this message into a :ref:`DistributedSearchRequest` and pass it on to its children (level = 2). It is up to the peer to perform the query on the local filesystem and report the results the peer making the query.
 
 .. note::
-   The reason why it is done this way is not clear. The branch root could perfectly convert it into a :ref:`DistributedSearchRequest` itself before passing it on. This would in fact be cleaner as right now the :ref:`DistributedServerSearchRequest` is just a copy of :ref:`ServerSearchRequest`, otherwise this wouldn't parse.
+  The reason why it is done this way is not clear. The branch root could perfectly convert it into a :ref:`DistributedSearchRequest` itself before passing it on. This would in fact be cleaner as right now the :ref:`DistributedServerSearchRequest` is just a copy of :ref:`ServerSearchRequest`, otherwise this wouldn't parse.
 
-   The naming of these messages is probably incorrect as the ``distributed_code`` parameter of the :ref:`ServerSearchRequest` holds the distributed message ID. Possibly the server could send any distributed command through this that needs to be broadcast over the distributed network.
+  The naming of these messages is probably incorrect as the ``distributed_code`` parameter of the :ref:`ServerSearchRequest` holds the distributed message ID. Possibly the server could send any distributed command through this that needs to be broadcast over the distributed network.
 
 
 Transfers
@@ -342,7 +342,7 @@ Queue a file download (peer does not have any free upload slots):
 4. Receive: :ref:`PeerPlaceInQueueReply` which contains the filename and place in queue
 
 .. warning::
-   It is up to the downloader to close the file connection, the downloader confirms he has received all bytes by closing. If the uploader closes the connection as soon as all data is sent the file will be incomplete on the downloader side.
+  It is up to the downloader to close the file connection, the downloader confirms he has received all bytes by closing. If the uploader closes the connection as soon as all data is sent the file will be incomplete on the downloader side.
 
 
 Uploads
@@ -362,7 +362,7 @@ Uploader opens a new peer connection (``P``):
 Uploader opens a new file connection (``F``) and proceeds with uploading
 
 .. note::
-   It seems like the :ref:`PeerUploadQueueNotification` is stored as subsequent uploads do not require this message to be sent
+  It seems like the :ref:`PeerUploadQueueNotification` is stored as subsequent uploads do not require this message to be sent
 
 
 Upload not allowed
@@ -373,7 +373,7 @@ Uploader opens a new peer connection (``P``):
 1. Uploader send: :ref:`PeerUploadQueueNotification`
 2. Uploader send: :ref:`PeerTransferRequest` : direction=1, filename=<local path>, filesize=<set>
 3. Receiver send: :ref:`PeerTransferReply`: allowed=false, reason='Cancelled'
-3. Uploader send: :ref:`PeerUploadFailed`: filename=<local path>
+4. Uploader send: :ref:`PeerUploadFailed`: filename=<local path>
 
 
 Searching
@@ -437,10 +437,10 @@ Attribute table:
 
 
 .. note::
-   The ``extension`` parameter is empty for anything but mp3 and flac
+  The ``extension`` parameter is empty for anything but mp3 and flac
 
 .. note::
-   Couldn't find any other than these. Number 3 seems to be missing, could this be something used in the past or maybe for video? Theoretically we could invent new attributes here, like something for video, images, extra metadata for music files. The official clients don't seem to do anything with the extra attributes
+  Couldn't find any other than these. Number 3 seems to be missing, could this be something used in the past or maybe for video? Theoretically we could invent new attributes here, like something for video, images, extra metadata for music files. The official clients don't seem to do anything with the extra attributes
 
 
 Global Search
@@ -480,8 +480,8 @@ Delivery of search results is the same process for all kinds of search messages:
 1. Receive :ref:`FileSearch`. Containing `ticket` and `username`
 2. If the query matches:
 
-   1. Initialize peer connection (``P``) for the `username` from the request
-   2. Send :ref:`PeerSearchReply` : `ticket` from the original search request and query matches
+  1. Initialize peer connection (``P``) for the `username` from the request
+  2. Send :ref:`PeerSearchReply` : `ticket` from the original search request and query matches
 
 
 Users
@@ -501,38 +501,125 @@ The following describes the behaviour when another user modifies his status / st
 
 * User logs in:
 
-   * TODO
+  * TODO
 
-* User send :ref:`SetUserStatus`
+* User send :ref:`SetStatus`
 
-   * Server send: :ref:`GetUserStatus` to all users in all rooms the user has joined (includes the user sending the update)
-   * Server send: :ref:`GetUserStatus` to all users that have sent an :ref:`AddUser` message
+  * Server send: :ref:`GetUserStatus` to all users in all rooms the user has joined (includes the user sending the update)
+  * Server send: :ref:`GetUserStatus` to all users that have sent an :ref:`AddUser` message
 
 * User disconnects (offline)
 
-   * Presumably a :ref:`GetUserStatus` is sent to all users in the rooms the user had joined. But the user is removed from all rooms before the update is sent
-   * Server send: :ref:`GetUserStatus` to all users that have sent an :ref:`AddUser` message
+  * Presumably a :ref:`GetUserStatus` is sent to all users in the rooms the user had joined. But the user is removed from all rooms before the update is sent
+  * Server send: :ref:`GetUserStatus` to all users that have sent an :ref:`AddUser` message
 
 * User send :ref:`SharedFoldersFiles`
 
-   * Server send: :ref:`GetUserStats` to all users in all rooms the user has joined (includes the user sending the update)
+  * Server send: :ref:`GetUserStats` to all users in all rooms the user has joined (includes the user sending the update)
 
 * User send :ref:`SendUploadSpeed`
 
-   * No updates sent
+  * No updates sent
 
 * Adding privileges to a user
 
-   * TODO
+  * TODO
+
+Chat
+====
+
+Private Chat Message
+--------------------
+
+**Actors:**
+
+* ``sender`` : User sending a private message
+* ``receiver`` : User receiving the private message
+
+**Actions:**
+
+1. ``sender`` to server:
+
+  * :ref:`PrivateChatMessage` (username = ``receiver``, message = ``message``)
+
+2. Server to ``receiver``
+
+  * :ref:`PrivateChatMessage` (username = ``sender``, chat_id = ``<generated>``, message = ``message``)
+
+3. ``receiver`` to server:
+
+  * :ref:`PrivateChatMessageAck` (chat_id = ``<chat_id from received message>``)
+
+
+.. _server-info-message:
+
+Server Notification Message
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The server will send private chat messages to report errors and information back to the client:
+
+**Actors:**
+
+* ``receiver`` : User receiving a server notification message
+
+**Actions:**
+
+1. Server to ``receiver``:
+
+  * Send :ref:`PrivateChatMessage` (username = ``server``, is_admin = ``true``, chat_id = ``<generated>``, message = ``message``)
+
+2. ``receiver`` to server:
+
+  * :ref:`PrivateChatMessageAck` (chat_id = ``<chat_id from received message>``)
 
 
 Rooms
 =====
 
-After joining a room, we will automatically be receiving :ref:`GetUserStatus` updates from the server.
+After joining a room, we will automatically be receiving :ref:`GetUserStatus` and :ref:`GetUserStats` updates from the server for users in the room.
 
-Only private rooms have an owner, operators and members.
+A room can be described as having the following structure:
 
++----------------------+---------------------+-------------------------------------------------------------------+
+|        Field         |        Type         |                            Description                            |
++======================+=====================+===================================================================+
+| name                 | string              | Name of the room                                                  |
++----------------------+---------------------+-------------------------------------------------------------------+
+| tickers              | map[string, string] | Ordered map of room tickers. Key=username, value=ticker           |
++----------------------+---------------------+-------------------------------------------------------------------+
+| joined_users         | array[string]       | List of users currently in the room                               |
++----------------------+---------------------+-------------------------------------------------------------------+
+| registered_as_public | boolean             | Tracks if the room was ever registered as public (default: false) |
++----------------------+---------------------+-------------------------------------------------------------------+
+| owner                | array[string]       | [Optional] Private Rooms. Owner of the room                       |
++----------------------+---------------------+-------------------------------------------------------------------+
+| members              | array[string]       | [Optional] Private Rooms. Members of the room (excludes owner)    |
++----------------------+---------------------+-------------------------------------------------------------------+
+| operators            | array[string]       | [Optional] Private Rooms. Users with operator privileges          |
++----------------------+---------------------+-------------------------------------------------------------------+
+
+Calculated values:
+
++-------------+---------------+--------------------------------------------------------------------------------------------+
+|    Field    |     Type      |                                        Description                                         |
++=============+===============+============================================================================================+
+| status      | RoomStatus    | Returns the current status of the room with 3 possible values:                             |
+|             |               | * RoomStatus.PRIVATE : If ``owner`` value is set                                           |
+|             |               | * RoomStatus.PUBLIC : If ``owner`` value is not set and ``joined_users`` list is not empty |
+|             |               | * RoomStatus.UNCLAIMED : If ``owner`` value is not set and ``joined_users`` list is empty  |
++-------------+---------------+--------------------------------------------------------------------------------------------+
+| all_members | array[string] | Returns the list of members including the owner (if there is any)                          |
++-------------+---------------+--------------------------------------------------------------------------------------------+
+
+.. warning::
+  It's important to understand that rooms never get immediately destroyed (possibly they do get cleaned up after some time has passed without activity).
+
+  If a room was public it cannot be claimed as a private room
+
+  If ownership is dropped for a private room the ``owner``, ``members`` and ``operators`` values simply get reset and all ``joined_users`` except for the ``owner`` get kicked. This effectively makes the private room a public room until the ``owner`` leaves, at which point the room becomes unclaimed and can be claimed again as a private or public room.
+
+
+.. _room-list:
 
 Room List
 ---------
@@ -540,325 +627,549 @@ Room List
 The room list is received after login but can be refreshed by sending another :ref:`RoomList` request. The :ref:`RoomList` message consists of lists of rooms categorized by room type:
 
 * ``rooms`` : public rooms
-* ``rooms_private_owned`` : private rooms which we own
-* ``rooms_private`` : private rooms which we are part of. this excludes the rooms in rooms_private_owned
-* ``rooms_private_operated`` : private rooms in which we are operator
+* ``rooms_private_owned`` : private rooms for which we are ``owner``
+* ``rooms_private`` : private rooms for which we are in the ``members`` list
+* ``rooms_private_operated`` : private rooms for which we are in the ``operators`` list
 
 .. note::
-   Not all public rooms are listed in the initial :ref:`RoomList` message after login; only rooms with 5 or more joined users
+  Not all public rooms are listed in the initial :ref:`RoomList` message after login; only rooms with 5 or more ``joined_users``.
+
+  It's not clear where this limit comes from, and possibly if the total amount of public rooms is low those rooms are included anyway (and perhaps if it's high the minimum amount of members increases as well)
+
+
+.. _function-room-list-update:
+
+Function: Send Room List Update
+-------------------------------
+
+This is a collection of messages commonly called after performing an action on a private room or after logging on:
+
+1. Server: Send :ref:`room-list`
+2. Server: For each private room where the user is ``owner`` or in the list of ``members``
+
+  * :ref:`PrivateRoomMembers` with room_name and list of ``members``
+
+3. Server: For each private room where the user is ``owner`` or in the list of ``members``
+
+  * :ref:`PrivateRoomOperators` with room_name and list of ``operators``
 
 
 Room Joining / Creation
 -----------------------
 
-To join a public room a :ref:`JoinRoom` message is sent to the server, containing the name of the room and whether the room is private. If the room does not yet exist it is created.
+To join a room a :ref:`JoinRoom` message is sent to the server, containing the ``name`` of the room and whether the room is ``private``. If the room does not exist it is created.
 
-Creating a public room:
+**Actors:**
 
-1. Send :ref:`JoinRoom` (is_private=0)
-2. Receive:
-
-  * :ref:`UserJoinedRoom`
-  * :ref:`JoinRoom` : with our own username
-  * :ref:`RoomTickers`
-
-Creating a private room:
-
-1. Send :ref:`JoinRoom` (is_private=1)
-2. Receive:
-
-  * :ref:`RoomList` : updated list of rooms. See 'Room List' section on what would be expected here
-  * :ref:`PrivateRoomMembers` : list of users in the room (exluding ourself)
-  * :ref:`PrivateRoomOperators` : list of operators
-  * :ref:`UserJoinedRoom` : with our own username
-  * :ref:`JoinRoom` : with our own username
-  * :ref:`RoomTickers`
-
-.. note::
-   Messages :ref:`PrivateRoomMembers`, :ref:`PrivateRoomOperators` seems to be repeated for private rooms we are already part of
-
-.. note::
-   Possibly on the server side the joining happens after some of these messages are sent. In the :ref:`RoomList` message the `rooms_private_owned_user_count` is 0, in the PrivateRoomsUsers message the list of users is empty. The
-
-.. note::
-   :ref:`PrivateRoomMembers` returns the users which are part of the room (excluding the owner) while :ref:`RoomList` rooms_private_user_count only return the amount of online users
+* ``joiner`` : user requesting to join the room
 
 
-Room Leaving
-------------
+**Input Checks:**
 
-From the user leaving the room:
+* If room ``name`` is empty:
 
-1. Send: :ref:`LeaveRoom` : with room name
-2. Receive:
+  * :ref:`server-info-message` : message : "Could not create room. Reason: Room name empty."
 
-   * :ref:`LeaveRoom` : with room name
+* If room ``name`` contains leading or trailing white spaces:
 
-Other users in the room:
+  * :ref:`server-info-message` : message : "Could not create room. Reason: Room name ``name`` contains leading or trailing spaces."
 
-1. Receive:
+* If room ``name`` contains multiple subsequent white spaces (eg.: "my<2 or more spaces>room"):
 
-   * :ref:`UserLeftRoom` : with room name and user name
+  * :ref:`server-info-message` : message : "Could not create room. Reason: Room name ``name`` contains multiple following spaces."
 
+* If room ``name`` contains non-ascii characters:
 
-Add User to Private Room
-------------------------
-
-Owners and operators can add users to rooms.
-
-User adding another user:
-
-1. Send: :ref:`PrivateRoomGrantMembership` : with room name and user name
-2. Receive:
-
-   * :ref:`PrivateRoomGrantMembership` : with room name and user name
-   * Server message: User <user_name> is now a member of room <room_name>
-
-The added user:
-
-1. Receive:
-
-   * :ref:`PrivateRoomGrantMembership` : with room name and user name
-   * :ref:`PrivateRoomMembershipGranted` : with room name
-   * :ref:`RoomList`
-   * :ref:`PrivateRoomMembers` : users of the room (excluding the owner?)
-   * :ref:`PrivateRoomOperators`
-
-The owner of the room:
-
-1. Receive:
-
-   * :ref:`PrivateRoomGrantMembership` : with room name and user name
-   * Server message: User [<user_name>] was added as a member of room [<room_name>] by operator [<operator_name>]
-
-Other members in room:
-
-TODO
-
-Other members not in room:
-
-TODO
+  * :ref:`server-info-message` : message : "Could not create room. Reason: Room name ``name`` contains invalid characters."
 
 
-Removing User from Private Room
--------------------------------
+**Checks:**
 
-Owners can remove operators and members, operators can only remove members.
+* If room exists and ``joiner`` is in the ``joined_users`` list (user already joined):
 
-User removing another user (owner):
+  * Do nothing
 
-1. Send: :ref:`PrivateRoomRevokeMembership` : with room name and user name
-2. Receive:
+* If room exists and ``joiner`` is not in the ``all_members`` list:
 
-   * :ref:`PrivateRoomRevokeMembership` : with room name and user name
-   * Server message: User <user_name> is no longer a member of room <room_name>
-
-User being removed:
-
-1. Receive:
-
-   * :ref:`PrivateRoomMembershipRevoked` : with room name
-   * :ref:`LeaveRoom` : with room name
-   * :ref:`RoomList`
-
-The owner of the room:
-
-1. Receive:
-
-   * :ref:`PrivateRoomRevokeMembership` : with room name and user name
-   * Server message: User <user_name> is no longer a member of room <room_name>
-
-Other members in room:
-
-TODO
-
-Other members not in room:
-
-TODO
+  * Send :ref:`CannotCreateRoom`
+  * :ref:`server-info-message` : message : "The room you are trying to enter (``name``) is registered as private."
 
 
-Granting Operator to Private Room
----------------------------------
+**Actions:**
 
-User granting operator:
+1. If the room does not exist (or room is unclaimed) and the request is to join a public room (``private=false``):
 
-1. Send: :ref:`PrivateRoomGrantOperator` : with room name and user name
-2. Receive:
+  1. Create new room or claim the unclaimed room
 
-   * :ref:`PrivateRoomGrantOperator` : with room name and user name (got this twice for some reason, perhaps a bug in the server? Should probably be :ref:`PrivateRoomOperatorGranted`)
-   * Server message: User <user_name> is now an operator of room <room_name>
+    * ``name`` : set to desired name
+    * ``owner`` : leave empty
+    * ``registered_as_public`` : true
 
-User receiving operator:
+2. If the room is unclaimed, is registered as public room (``registered_as_public=true``) and the request is to join a private room (``private=true``):
 
-TODO
+  * :ref:`server-info-message` : message to ``joiner`` : "Room (``name``) is registered as public."
 
-Other members in the room:
+3. If the room does not exist (or room is unclaimed), is not registered as public room (``registered_as_public=false``) and the request is to join a private room (``private=true``):
 
-TODO
+  1. Create new room or claim the unclaimed room
 
-Other members not in the room:
+    * ``name`` : set to desired name
+    * ``owner`` : set to room creator
+    * ``registered_as_public`` : false
 
-TODO
+  2. :ref:`function-room-list-update`
+
+4. :ref:`function-join-room`
 
 
-Revoking Operator from Private Room
+Grant Membership in Private Room
+--------------------------------
+
+Operators and owners of a private room can grant membership to a user allowing that user to join the room. This can be done using the :ref:`PrivateRoomGrantMembership` message, the message contains the ``name`` of the room and the ``username`` of the user that should be given membership.
+
+**Actors:**
+
+* ``granter`` : User granting membership
+* ``grantee`` : User being granted membership
+
+**Checks:**
+
+* If the room ``name`` is not a valid room (public) : Do nothing
+* If the room ``name`` is not a valid room (does not exist) : Do nothing
+* If the ``grantee`` and ``granter`` are the same : Do nothing
+* If the ``granter`` is not the ``owner`` or in the ``operators`` list : Do nothing
+* If the ``grantee`` is offline or does not exist:
+
+  * :ref:`server-info-message` : message : "user ``grantee`` is not logged in."
+
+* If the ``grantee`` is not accepting private room invites:
+
+  * :ref:`server-info-message` : message : "user ``grantee`` hasn't enabled private room add. please message them and ask them to do so before trying to add them again."
+
+* If the ``granter`` is in ``operators`` list and tries to add the ``owner``
+
+  * :ref:`server-info-message` : message : "user ``grantee`` is the owner of room ``name``"
+
+* If the ``grantee`` is already in the ``members`` list:
+
+  * :ref:`server-info-message` : message : "user ``grantee`` is already a member of room ``name``"
+
+
+**Actions:**
+
+1. :ref:`function-private-room-grant-membership`
+
+
+Revoke Membership from Private Room
 -----------------------------------
 
-User revoking operator:
+Removes a member from a private room. The owner can remove operators and members, operators can only remove members. This can be done using the :ref:`PrivateRoomRevokeMembership` message, the message contains the ``name`` of the room and the ``username`` of the user that should be revoked membership.
 
-1. Send: :ref:`PrivateRoomRevokeOperator` : with room name and user name
-2. Receive:
+**Actors:**
 
-   * :ref:`PrivateRoomRevokeOperator` : with room name and user name (got this twice for some reason, perhaps a bug in the server? Should probably be :ref:`PrivateRoomRevokeOperator`)
-   * Server message: User <user_name> is no longer an operator of room <room_name>
+* ``revoker`` : User revoking membership
+* ``revokee`` : User being revoked membership
 
-User for which operator was revoked:
+**Checks:**
 
-1. Receive:
+* If the ``revoker`` and ``revokee`` are the same user : Do nothing
+* If the ``revokee`` is not in the ``members`` list : Do nothing
+* If the ``revoker`` is in the ``operators`` list and the ``revokee`` is the ``owner`` : Do nothing
+* If the ``revoker`` and ``revokee`` are both in the ``operators`` list : Do nothing
 
-   * :ref:`PrivateRoomRevokeOperator` : with room name and user name (got this twice)
-   * :ref:`PrivateRoomOperatorRevoked` : with room name
-   * :ref:`RoomList`
-   * :ref:`PrivateRoomMembers` : for all private rooms we are part of
-   * :ref:`PrivateRoomOperators` : for all private rooms we are part of
+**Actions:**
+
+1. :ref:`function-private-room-revoke-membership`
+
+
+Granting Operator Privileges in a Private Room
+----------------------------------------------
+
+Room owners can grant operator privileges to members of a private room by using the :ref:`PrivateRoomGrantOperator` message, the message contains the ``name`` of the room and the ``username`` of the member that should be granted operator privileges.
+
+**Actors:**
+
+* ``granter`` : User granting the operator privileges
+* ``grantee`` : User having operator privileges granted
+
+**Checks:**
+
+* If ``granter`` is not the ``owner`` : Do nothing
+* If user does not exist or is offline (even in ``members`` list):
+
+  * :ref:`server-info-message` : message : "user ``grantee`` is not logged in."
+
+* If ``grantee`` is not in the ``members`` list:
+
+  * :ref:`server-info-message` : message : "user ``grantee`` must first be a member of room ``name``"
+
+* If ``grantee`` is already in the ``operators`` list:
+
+  * :ref:`server-info-message` : message : "user ``grantee`` is already an operator of room ``name``"
+
+
+**Actions:**
+
+1. :ref:`function-private-room-grant-operator`
+
+
+Revoking Operator Privileges in a Private Room
+----------------------------------------------
+
+Room owners can revoke operator privileges from operator of a private room by using the :ref:`PrivateRoomRevokeOperator` message, the message contains the ``name`` of the room and the ``username`` of the member that should have his operator privileges revoked.
+
+**Actors:**
+
+* ``revoker`` : User revoking the operator privileges
+* ``revokee`` : User having operator privileges revoked
+
+**Checks:**
+
+* If user does not exist: Do nothing
+* If ``revoker`` is not the ``owner`` : Do nothing
+* If ``revokee`` is not in the ``members`` list: Do nothing
+* If ``revokee`` is not in the ``operators`` list: Do nothing
+
+**Actions:**
+
+1. :ref:`function-private-room-revoke-operator`
 
 
 Dropping Membership
 -------------------
 
-Dropping membership can only be done for a private room. This function does nothing for the owner, he needs to drop ownership.
+Members themselves can drop their membership by using the :ref:`PrivateRoomDropMembership` message.
 
-As regular member
-~~~~~~~~~~~~~~~~~
+**Checks:**
 
-Member dropping membership:
+* If the user is not in the ``members`` list : Do nothing
 
-1. Send: PrivateRoomDropMembership : with room name
-2. Receive:
+**Actions:**
 
-   * :ref:`PrivateRoomMembershipRevoked` : with room name
-   * :ref:`LeaveRoom` : with room name
-   * :ref:`RoomList`
+1. :ref:`function-private-room-revoke-membership`
+2. If the user is in the ``operators`` list:
 
-
-Received by owner:
-
-1. Receive:
-
-   * :ref:`PrivateRoomRevokeMembership` : with room name and user name
-   * Server message: User <user_name> is no longer a member of room <room_name>
-   * :ref:`UserLeftRoom` : with room name and user name
-
-Received by operator:
-
-1. Receive:
-
-   * :ref:`PrivateRoomRevokeMembership` : with room name and user name
-   * :ref:`UserLeftRoom` : with room name and user name
-
-
-As operator
-~~~~~~~~~~~
-
-Operator dropping membership:
-
-1. Send: PrivateRoomDropMembership : with room name
-2. Receive:
-
-   * :ref:`PrivateRoomMembershipRevoked` : with room name
-   * :ref:`LeaveRoom` : with room name
-   * :ref:`RoomList`
-   * :ref:`PrivateRoomMembers` : for private rooms we are still part of
-   * :ref:`PrivateRoomOperators` : for private rooms we are still part of
-   * :ref:`PrivateRoomOperatorRevoked`
-   * :ref:`RoomList`
-   * :ref:`PrivateRoomMembers` : for private rooms
-   * :ref:`PrivateRoomOperators` : for private rooms
-
-Received by owner:
-
-1. Receive:
-
-   * :ref:`PrivateRoomRevokeMembership`
-   * Server message: User <user_name> is no longer a member of room <room_name>
-   * :ref:`UserLeftRoom`
-   * :ref:`PrivateRoomRevokeOperator` (twice)
-   * Server message: User <user_name> is no longer an operator of room <room_name>
-
-Received by member:
-
-1. Receive:
-
-   * :ref:`PrivateRoomRevokeMembership`
-   * :ref:`UserLeftRoom`
-   * :ref:`PrivateRoomRevokeOperator` (twice)
+  * :ref:`function-private-room-revoke-operator`
 
 
 Dropping Ownership
 ------------------
 
-Owner dropping ownership:
+Owners can drop ownership of a private room, this will disband the private room. This is done through the :ref:`PrivateRoomDropOwnership` message.
 
-1. Send: PrivateRoomDropOwnership : with room name
-2. Receive:
+**Checks:**
 
-   * :ref:`UserLeftRoom` : with room name and user name for all other users in the room
-   * :ref:`RoomList`
-   * :ref:`PrivateRoomMembers` : for private rooms we are still part of
-   * :ref:`PrivateRoomOperators` : for private rooms we are still part of
+* If the user tries to drop ownership for a room that does not exist: Do nothing
+* If the user tries to drop ownership of a public room: Do nothing
+* If the member is not the ``owner``
 
-Received by operator:
+**Actions:**
 
-1. Receive:
+1. Reset the ``owner``
+2. Empty the ``operators`` list of the room
+3. Empty the ``members`` list of the room **but keep a reference to this list**
+4. For each member in the stored list:
 
-   * :ref:`PrivateRoomMembershipRevoked` : with room name
-   * :ref:`LeaveRoom` : with room name
-   * :ref:`RoomList`
-   * :ref:`PrivateRoomMembers` : for private rooms we are still part of
-   * :ref:`PrivateRoomOperators` : for private rooms we are still part of
-   * :ref:`PrivateRoomOperatorRevoked`
-   * :ref:`RoomList`
-   * :ref:`PrivateRoomMembers` : for private rooms
-   * :ref:`PrivateRoomOperators` : for private rooms
+  * :ref:`function-private-room-revoke-membership`
 
-Received by member:
+5. :ref:`function-room-list-update`
 
-1. Receive:
-
-   * :ref:`UserLeftRoom` : for the operator that was in the room
-   * :ref:`PrivateRoomRevokeOperator` : for the operator that was in the room
-   * :ref:`PrivateRoomMembershipRevoked`
-   * :ref:`LeaveRoom`
-   * :ref:`RoomList`
+.. warning::
+  The server will not remove the the owner from the ``joined_users``. The owner should send a second command to leave the room after sending this command. This seems like a mistake that was corrected in the client itself instead of on the server side.
 
 
-Exception cases
----------------
+Room Messages
+-------------
 
-* Joining/creating: a room that exists as a private room
+Sending a chat message to a room is done through the :ref:`RoomChatMessage`, the same message is also received by the client when another user sends a message to room.
 
-  * CannotCreateRoom: with the room name
-  * Server message: The room you are trying to enter (<room_name>) is registered as private.
+This message will also be sent to all users who have enabled public chat if the room is a public room (see :ref:`EnablePublicChat` / :ref:`DisablePublicChat`) in the form of a :ref:`PublicChatMessage` message.
 
-* Joining/creating: Multiple spaces in between words ("my   room")
+**Actors:**
 
-  * Server message: Could not create room. Reason: Room name <room_name> contains multiple following spaces.
+* ``sender`` : User sending a chat message to the room
 
-* Joining/creating: Spaces between or after room name ("room ", " room")
+**Checks:**
 
-  * Server message: Could not create room. Reason: Room name <room_name> contains leading or trailing spaces.
+* If the room does not exist : Do nothing
+* If the user is not in the ``joined_users`` list : Do nothing
 
-* Joining/creating: Non-ascii characters in room name
+**Actions:**
 
-  * Server message: Could not create room. Reason: Room name <room_name> contains invalid characters.
+1. For each user in the ``joined_users`` list:
 
-* Joining/creating: Empty room name
+  * :ref:`RoomChatMessage` : with ``sender``, ``message`` and room ``name``
 
-  * Server message: Could not create room. Reason: Room name empty.
+2. If the room is public (``is_private=false``):
 
-* Add User to Room: Adding a user who does not have private rooms enabled
+  * For each user currently online and has public chat enabled:
 
-  * Server message: user <user_name> hasn't enabled private room add. please message them and ask them to do so before trying to add them again.
+    * :ref:`PublicChatMessage` : with ``sender``, ``message`` and room ``name``
+
+.. note::
+  Empty message is allowed
+
+
+Room Tickers
+------------
+
+Room tickers are a sort of room wall, where users can place a single message that is visible to everyone in the room. They are sent after the user joins a room using the :ref:`RoomTickers` message and users will be notified of updates through the :ref:`RoomTickerAdded` and :ref:`RoomTickerRemoved` messages.
+
+A room ticker can be set with the :ref:`SetRoomTicker` message for which the actions are described in this section.
+
+**Actors:**
+
+* ``user`` : User that requests to set a room ticker
+
+
+**Input Checks:**
+
+* If the length of the ``ticker`` is greater than 1024 : Do nothing
+* TODO: Any characters not allowed?
+
+
+**Checks:**
+
+* If the room does not exist : Do nothing
+* If ``user`` is not in the ``joined_users`` list (public) : Do nothing
+
+
+**Actions:**
+
+1. If the ``user`` has an entry in ``tickers``
+
+  * Remove the entry of the ``user`` from the ``tickers``
+  * For each user in the ``joined_users`` list:
+
+    * :ref:`RoomTickerRemoved` : with room ``name`` and the ``user`` for which the ticker was removed
+
+2. If the ``ticker`` in the :ref:`SetRoomTicker` message is not empty:
+
+  * Add an entry for the ``user`` to the ``tickers``
+  * For each user in the ``joined_users`` list:
+
+    * :ref:`RoomTickerAdded` : with room ``name``, ``user`` and the ``ticker``
+
+
+.. note::
+  Tickers are retained even when ownership is dropped for a private room
+
+
+.. _function-notify-room-owner:
+
+Function: Notify room owner
+---------------------------
+
+Function to notify the room owner. This short function sends a server chat ``message`` to the ``owner`` of a room if the room has an owner.
+
+**Actions:**
+
+1. If the room has its ``owner`` value set:
+
+  * :ref:`server-info-message` : to ``owner`` : ``message``
+
+
+.. _function-join-room:
+
+Function: Join room
+-------------------
+
+Function to join the room, checks should already be performed.
+
+**Actors:**
+
+* ``joiner`` : user requesting to join the room
+
+**Actions:**
+
+1. Add the user to the list of ``joined_users``
+2. For each user in the ``joined_users`` list:
+
+  * :ref:`UserJoinedRoom` : with room ``name`` (+ stats) of ``joiner`` of the room
+
+3. Send to ``joiner``:
+
+  * :ref:`JoinRoom`
+
+    * ``room`` : name of joined room
+    * ``usernames`` : list of room ``joined_users``
+    * user stats, online status, etc
+    * ``owner`` : ``owner`` if ``is_private=true`` for the room
+    * ``operators`` : ``owner`` if ``is_private=true`` for the room
+
+  * :ref:`RoomTickers`
+
+    * ``room`` : name of joined room
+    * ``tickers`` : array of room ``tickers``
+
+
+.. _function-leave-room:
+
+Function: Leave Room
+--------------------
+
+Function to leave a room
+
+**Actors:**
+
+* ``leaver`` : user requesting or being removed from the room
+
+**Actions:**
+
+1. Remove the user from the list of ``joined_users``
+2. For each user in the ``joined_users`` list:
+
+  * :ref:`UserLeftRoom` : with room ``name`` and list (+ stats) of ``leaver`` of the room
+
+3. Send to ``leaver``:
+
+  * :ref:`LeaveRoom` : with room ``name``
+
+
+.. _function-private-room-grant-membership:
+
+Function: Grant Membership to Private Room
+------------------------------------------
+
+Function to grant membership to a user from a private room
+
+**Actors:**
+
+* ``granter`` : User granting membership
+* ``grantee`` : User being granted membership
+
+**Actions:**
+
+1. Add new member to the ``members`` list
+2. For each member in the ``members`` list:
+
+  * Send :ref:`PrivateRoomGrantMembership` with room name and new member name
+
+3. For the ``grantee``:
+
+  * Send :ref:`PrivateRoomMembershipGranted` with the room name
+  * :ref:`function-room-list-update`
+
+4. If the ``granter`` is in the list of room ``operators``:
+
+  * :ref:`function-notify-room-owner` : "User [``grantee``] was added as a member of room [``name``] by operator [``granter``]"
+
+5. If the ``granter`` is the room ``owner``:
+
+  * :ref:`function-notify-room-owner` : "User ``granter`` is now a member of room ``name``"
+
+
+.. _function-private-room-revoke-membership:
+
+Function: Revoke Membership from Private Room
+---------------------------------------------
+
+Function to revoke membership from a user from a private room
+
+**Actors:**
+
+* ``revokee`` : User having membership revoked
+
+**Actions:**
+
+1. Remove user from the ``members`` list
+2. For each member in the ``members`` list:
+
+  * Send :ref:`PrivateRoomRevokeMembership` with room name and removed member name
+
+3. For the room ``owner``:
+
+  * :ref:`function-notify-room-owner` : "User ``revokee`` is no longer a member of room ``name``"
+
+4. For the ``revokee``:
+
+  * Send :ref:`PrivateRoomMembershipRevoked` with the room name
+
+5. If the ``revokee`` is in the ``joined_users`` list:
+
+  * :ref:`function-leave-room` : for the ``revokee``
+
+6. For the ``revokee``:
+
+  * :ref:`function-room-list-update`
+
+
+.. note::
+  No specialized message is sent to the owner if an operator removes a member unlike when adding a member
+
+
+.. _function-private-room-grant-operator:
+
+Function: Grant Operator to Private Room
+----------------------------------------
+
+Function to grant operator privileges to a member of a private room
+
+**Actors:**
+
+* ``granter`` : User granting the operator privileges
+* ``grantee`` : User having operator privileges granted
+
+**Actions:**
+
+1. Add the member to the ``operators`` list:
+2. For each member in the ``members`` list:
+
+  * Send :ref:`PrivateRoomGrantOperator` with room name and the name of the new operator
+
+3. For each user in the ``joined_users`` list:
+
+  * Send :ref:`PrivateRoomGrantOperator` with room name and the name of the new operator
+
+4. For the ``grantee``:
+
+  * Send :ref:`PrivateRoomOperatorGranted` with the room name
+  * :ref:`function-room-list-update`
+
+5. For the room ``owner``:
+
+  * :ref:`function-notify-room-owner` : "User ``grantee`` is now an operator of room ``name``"
+
+
+.. note::
+  It is not a mistake that the :ref:`PrivateRoomGrantOperator` message gets sent twice to both the joined users and the members
+
+
+.. _function-private-room-revoke-operator:
+
+Function: Revoke Operator from Private Room
+-------------------------------------------
+
+Function to revoke operator privileges from a member of a private room
+
+**Actors:**
+
+* ``revoker`` : User revoking the operator privileges
+* ``revokee`` : User having operator privileges revoked
+
+**Actions:**
+
+1. Remove the member from the ``operators`` list:
+2. For each member in the ``members`` list:
+
+  * Send :ref:`PrivateRoomRevokeOperator` with room name and the name of the removed operator
+
+3. For each user in the ``joined_users`` list:
+
+  * Send :ref:`PrivateRoomRevokeOperator` with room name and the name of the removed operator
+
+4. For the ``revokee``:
+
+  * Send :ref:`PrivateRoomOperatorRevoked` with the room name
+  * :ref:`function-room-list-update`
+
+5. For the room ``owner``:
+
+  * :ref:`function-notify-room-owner` : "User ``revokee`` is no longer an operator of room ``name``"
+
+
+.. note::
+  It is not a mistake that the :ref:`PrivateRoomRevokeOperator` message gets sent twice to both the joined users and the members
 
 
 Interests / Recommendations
@@ -880,7 +1191,7 @@ There are 4 messages for managing your own interests:
 Using the :ref:`GetUserInterests` message the interests of a user can be retrieved
 
 .. note::
-   The server does not persist interests or hated interests after disconnect
+  The server does not persist interests or hated interests after disconnect
 
 
 Get Global Recommendations
@@ -892,14 +1203,14 @@ Keep a ``counter`` (initially empty) to keep track of a ``score`` for each of th
 
 1. Loop over all currently active users (including the current user)
 
-   a. Increase the ``score`` for all of the ``interests`` of the other user by 1
-   b. Decrease the ``score`` for all of the ``hated_interests`` of the other user by 1
+  a. Increase the ``score`` for all of the ``interests`` of the other user by 1
+  b. Decrease the ``score`` for all of the ``hated_interests`` of the other user by 1
 
 2. Unverified: Keep only recommendations where the ``score`` is not 0
 3. The returned message will contain 2 lists:
 
-   a. The recommendations sorted by score descending (limit to 200)
-   b. The unrecommendations sorted by score ascending (limit to 200)
+  a. The recommendations sorted by score descending (limit to 200)
+  b. The unrecommendations sorted by score ascending (limit to 200)
 
 
 Get Item Recommendations
@@ -931,31 +1242,31 @@ Keep a ``counter`` (initially empty) to keep track of a ``score`` for each of th
 1. Loop over all currently active users (excluding the current user)
 2. Loop over all the current user's ``interests``
 
-   1. If the current interest is in the ``interests`` of the other user:
+  1. If the current interest is in the ``interests`` of the other user:
 
-      a. Increase the ``score`` for all of the ``interests`` of the other user by 1
-      b. Decrease the ``score`` for all of the ``hated_interests`` of the other user by 1
+    a. Increase the ``score`` for all of the ``interests`` of the other user by 1
+    b. Decrease the ``score`` for all of the ``hated_interests`` of the other user by 1
 
-   2. If the current interest is in the ``hated_interests`` of the other user
+  2. If the current interest is in the ``hated_interests`` of the other user
 
-      a. Decrease the ``score`` for all of the ``interests`` of the other user by 1
+    a. Decrease the ``score`` for all of the ``interests`` of the other user by 1
 
 3. Loop over all the current user's ``hated_interests``
 
-   1. If the current hated interest is in the ``interests`` of the other user:
+  1. If the current hated interest is in the ``interests`` of the other user:
 
-      a. Decrease the ``score`` for all of the ``interests`` of the other user by 1
+  a. Decrease the ``score`` for all of the ``interests`` of the other user by 1
 
 4. Keep only recommendations that are not in the current user's ``interests`` or ``hated_interests``
 5. Keep only recommendations where the ``score`` is not 0
 6. The returned message will contain 2 lists:
 
-   a. The recommendations sorted by score descending (limit to 100)
-   b. The unrecommendations sorted by score ascending (limit to 100)
+  a. The recommendations sorted by score descending (limit to 100)
+  b. The unrecommendations sorted by score ascending (limit to 100)
 
 
 .. note::
-   Keep in mind that the recommendations list can (partially) match the unrecommendations list and vice versa if the limit is not reached. Example: if there are 5 items returned those 5 items will be in both lists
+  Keep in mind that the recommendations list can (partially) match the unrecommendations list and vice versa if the limit is not reached. Example: if there are 5 items returned those 5 items will be in both lists
 
 
 Examples

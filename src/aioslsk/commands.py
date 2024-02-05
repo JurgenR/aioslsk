@@ -311,10 +311,7 @@ class DropRoomMembershipCommand(BaseCommand[PrivateRoomMembershipRevoked.Respons
         return ExpectedResponse(
             ServerConnection,
             PrivateRoomMembershipRevoked.Response,
-            fields={
-                'room': self.room,
-                'username': client.session.user.name
-            }
+            fields={'room': self.room}
         )
 
     def handle_response(self, client: SoulSeekClient, response: PrivateRoomMembershipRevoked.Response) -> Room:

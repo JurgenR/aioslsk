@@ -443,7 +443,7 @@ class RoomManager(BaseManager):
         )
 
     @on_message(RoomList.Response)
-    async def _on_room_list(self, message: RoomList.Response, connection):
+    async def _on_room_list(self, message: RoomList.Response, connection: ServerConnection):
         me = self._user_manager.get_self()
         for idx, room_name in enumerate(message.rooms):
             room = self.get_or_create_room(room_name, private=False)
@@ -464,9 +464,24 @@ class RoomManager(BaseManager):
             room.operators.add(me.name)
 
         # Remove all rooms no longer tracked
-        unknown_rooms = set(self._rooms.keys()) - set(message.rooms)
+        all_rooms = set(message.rooms) | set(message.rooms_private) | set(message.rooms_private_owned)
+        unknown_rooms = set(self._rooms.keys()) - all_rooms
         for unknown_room in unknown_rooms:
             del self._rooms[unknown_room]
+
+        # For the remaining rooms update owner, operators, members, private
+        for room_name, room in self._rooms.items():
+            if room_name not in message.rooms_private_owned:
+                if room.owner == me.name:
+                    room.owner = None
+
+            if room_name not in message.rooms_private_operated:
+                room.operators.discard(me.name)
+
+            if room_name not in message.rooms_private:
+                room.members.discard(me.name)
+
+            room.private = room_name not in message.rooms
 
         await self._event_bus.emit(
             RoomListEvent(
