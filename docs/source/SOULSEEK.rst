@@ -26,6 +26,7 @@ A login response will be received which determines whether the login was success
 * :ref:`ParentSpeedRatio`
 * :ref:`WishlistInterval`
 * :ref:`PrivilegedUsers`
+* :ref:`ExcludedSearchPhrases`
 
 After the response we send the following messages back to the server with some information about us:
 

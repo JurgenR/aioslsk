@@ -464,7 +464,8 @@ class SharesManager(BaseManager):
 
     def query(
             self, query: Union[str, SearchQuery],
-            username: Optional[str] = None) -> Tuple[List[SharedItem], List[SharedItem]]:
+            username: Optional[str] = None,
+            excluded_search_phrases: Optional[List[str]] = None) -> Tuple[List[SharedItem], List[SharedItem]]:
         """Performs a query on the `shared_directories` returning the matching
         items. If `username` is passed this method will return a list of
         visible results and list of locked results. If `None` the second list
@@ -477,6 +478,8 @@ class SharesManager(BaseManager):
         :param username: optionally the username of the user making the query.
             This is used to determine locked results, if not given the locked
             results list will be empty
+        :param excluded_search_phrases: optional list of search phrases that
+            should be excluded from the search results
         :return: two lists of visible results and locked results
         """
         if not isinstance(query, SearchQuery):
@@ -550,6 +553,18 @@ class SharesManager(BaseManager):
             for item in found_items:
                 pattern = create_term_pattern(exclude_term, wildcard=False)
                 if re.search(pattern, item.get_query_path()):
+                    to_remove.add(item)
+            found_items -= to_remove
+
+        # Excluded search phrases
+        for excluded_search_phrase in excluded_search_phrases or []:
+            to_remove = set()
+            for item in found_items:
+                if excluded_search_phrase in item.get_query_path().lower():
+                    logger.debug(
+                        f"removing search result '{item.get_absolute_path()}' due to "
+                        f"excluded phrase '{excluded_search_phrase}'"
+                    )
                     to_remove.add(item)
             found_items -= to_remove
 

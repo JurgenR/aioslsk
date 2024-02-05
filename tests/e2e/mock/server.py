@@ -32,6 +32,7 @@ from aioslsk.protocol.messages import (
     DisablePublicChat,
     EnablePublicChat,
     ExactFileSearch,
+    ExcludedSearchPhrases,
     FileSearch,
     GetRelatedSearches,
     GetGlobalRecommendations,
@@ -91,7 +92,7 @@ from aioslsk.protocol.messages import (
     WishlistInterval,
 )
 from tests.e2e.mock.constants import (
-    MAX_ITEM_RECOMMENDATIONS,
+    DEFAULT_EXCLUDED_SEARCH_PHRASES,
     MAX_RECOMMENDATIONS,
     MAX_GLOBAL_RECOMMENDATIONS,
 )
@@ -202,7 +203,8 @@ class MockServer:
 
     def __init__(
             self, hostname: str = '0.0.0.0', port: int = 2416,
-            distributed_strategy: DistributedStrategy = None):
+            excluded_search_phrases: List[str] = DEFAULT_EXCLUDED_SEARCH_PHRASES,
+            distributed_strategy: Optional[DistributedStrategy] = None):
         self.hostname: str = hostname
         self.port: int = port
         self.connection: asyncio.Server = None
@@ -212,6 +214,7 @@ class MockServer:
         self.rooms: List[Room] = []
         self.peers: List[Peer] = []
         self.track_map: Dict[str, Set[str]] = {}
+        self.excluded_search_phrases: List[str] = excluded_search_phrases
         self.distributed_strategy: DistributedStrategy = distributed_strategy or DistributedStrategy(self.peers)
 
         self.chat_id_gen = chat_id_generator()
@@ -576,6 +579,8 @@ class MockServer:
             WishlistInterval.Response(self.settings.wishlist_interval))
         await peer.send_message(
             PrivilegedUsers.Response([user.name for user in self.users if user.privileged]))
+        await peer.send_message(
+            ExcludedSearchPhrases.Response(self.excluded_search_phrases))
 
     @on_message(SetListenPort.Request)
     async def on_listen_port(self, message: SetListenPort.Request, peer: Peer):

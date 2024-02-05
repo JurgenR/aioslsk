@@ -239,6 +239,15 @@ class TestSharesManagerQuery:
         assert expected_items == unordered(actual_items)
         assert locked_items == []
 
+    def test_queryExcludedSearchPhrases(self, manager_query: SharesManager):
+        expected_items = [SHARED_ITEMS[item_name] for item_name in ['item3']]
+        actual_items, locked_items = manager_query.query(
+            'song',
+            excluded_search_phrases=['simple band']
+        )
+        assert expected_items == unordered(actual_items)
+        assert locked_items == []
+
     @pytest.mark.parametrize(
         'query,expected_items',
         [

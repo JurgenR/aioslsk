@@ -1557,6 +1557,20 @@ Usually this is sent by the client right after the :ref:`FileSearch` message usi
       1. **string**: related_searches
 
 
+ExcludedSearchPhrases (Code 160)
+--------------------------------
+
+Optionally sent by the server after logging on. Search results containing at least one of the phrases (exact match, case insensitive) should be filtered out before being sent.
+
+It is highly recommended to take this filtering into account as not doing so could jeopardize the network.
+
+:Code: 160 (0xA0)
+:Receive:
+   1. Array of excluded search phrases:
+
+      1. **string**: phrases
+
+
 .. _CannotConnect:
 
 CannotConnect (Code 1001)
