@@ -2,7 +2,10 @@ from aioslsk.client import SoulSeekClient
 from aioslsk.commands import (
     AddInterestCommand,
     AddHatedInterestCommand,
+    DropRoomMembershipCommand,
+    DropRoomOwnershipCommand,
     GrantRoomMembershipCommand,
+    GrantRoomOperatorCommand,
     GetGlobalRecommendationsCommand,
     GetItemSimilarUsersCommand,
     GetItemRecommendationsCommand,
@@ -13,6 +16,8 @@ from aioslsk.commands import (
     JoinRoomCommand,
     RemoveHatedInterestCommand,
     RemoveInterestCommand,
+    RevokeRoomMembershipCommand,
+    RevokeRoomOperatorCommand,
     SetStatusCommand,
     SetRoomTickerCommand,
 )
@@ -22,7 +27,10 @@ from aioslsk.events import (
     ItemSimilarUsersEvent,
     RecommendationsEvent,
     RoomJoinedEvent,
+    RoomOperatorGrantedEvent,
+    RoomOperatorRevokedEvent,
     RoomMembershipGrantedEvent,
+    RoomMembershipRevokedEvent,
     RoomTickerAddedEvent,
     RoomTickerRemovedEvent,
     SimilarUsersEvent,
@@ -37,6 +45,7 @@ from .utils import (
     wait_until_clients_initialized,
     wait_for_listener_awaited,
     wait_for_listener_awaited_events,
+    wait_for_room_owner,
 )
 import asyncio
 import pytest
@@ -305,12 +314,55 @@ class TestE2EServer:
         assert event.room.name == room_name
 
     @pytest.mark.asyncio
-    async def test_join_private_room(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
-        user_added_listener1 = AsyncMock()
-        client_1.events.register(RoomMembershipGrantedEvent, user_added_listener1)
+    async def test_join_private_room(self, mock_server: MockServer, client_1: SoulSeekClient):
+        listener = AsyncMock()
+        client_1.events.register(RoomJoinedEvent, listener)
 
-        user_added_listener2 = AsyncMock()
-        client_2.events.register(RoomMembershipGrantedEvent, user_added_listener2)
+        await wait_until_clients_initialized(mock_server, amount=1)
+
+        room_name = 'privroom'
+
+        username1 = client_1.settings.credentials.username
+
+        # Create private room
+
+        await client_1.execute(JoinRoomCommand(room_name, private=True), response=True)
+
+        await wait_for_listener_awaited_events(listener, 2)
+
+        assert client_1.rooms.rooms[room_name].owner == username1
+        assert client_1.rooms.rooms[room_name].private is True
+        assert username1 in [user.name for user in client_1.rooms.rooms[room_name].users]
+
+    @pytest.mark.asyncio
+    async def test_join_public_room(self, mock_server: MockServer, client_1: SoulSeekClient):
+        listener = AsyncMock()
+        client_1.events.register(RoomJoinedEvent, listener)
+        await wait_until_clients_initialized(mock_server, amount=1)
+
+        room_name = 'pubroom'
+
+        username1 = client_1.settings.credentials.username
+
+        # First user joins / creates room
+
+        room: Room = await client_1.execute(
+            JoinRoomCommand(room_name, private=False), response=True)
+
+        await wait_for_listener_awaited_events(listener, 2)
+
+        assert room.name == room_name
+        assert room.private is False
+        assert len(room.users) == 1
+        assert room.users[0].name == username1
+
+    @pytest.mark.asyncio
+    async def test_private_room_grant_membership(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        member_granted_listener1 = AsyncMock()
+        client_1.events.register(RoomMembershipGrantedEvent, member_granted_listener1)
+
+        member_granted_listener2 = AsyncMock()
+        client_2.events.register(RoomMembershipGrantedEvent, member_granted_listener2)
 
         await wait_until_clients_initialized(mock_server, amount=2)
 
@@ -321,31 +373,15 @@ class TestE2EServer:
 
         # First user joins / creates room
 
-        room: Room = await client_1.execute(JoinRoomCommand(room_name, private=True), response=True)
+        await client_1.execute(JoinRoomCommand(room_name, private=True), response=True)
 
-        # Check if room is created
-        assert room.name == room_name
-        assert room.private is True
-        # Check if user joined the room
-        assert len(room.users) == 1
-        assert room.users[0].name == username1
-        # Check room owner and members (should not be in the list of members but
-        # should be the owner)
-        assert room.owner == username1
-        assert len(room.members) == 0
-
-        # Add second user as a member
-        add_room, add_user = await client_1.execute(
+        # Grant membership to second user
+        await client_1.execute(
             GrantRoomMembershipCommand(room_name, username2), response=True)
 
-        assert add_room.name == room_name
-        assert add_user.name == username2
-        assert len(add_room.members) == 1
-        assert username2 in add_room.members
-
-        event1: RoomMembershipGrantedEvent = await wait_for_listener_awaited(user_added_listener1)
+        event1: RoomMembershipGrantedEvent = await wait_for_listener_awaited(member_granted_listener1)
         events2: Tuple[RoomMembershipGrantedEvent] = await wait_for_listener_awaited_events(
-            user_added_listener2, amount=2
+            member_granted_listener2, amount=2
         )
 
         assert event1.room.name == room_name
@@ -358,23 +394,223 @@ class TestE2EServer:
         join_listener = AsyncMock()
         client_1.events.register(RoomJoinedEvent, join_listener)
 
-        room2: Room = await client_2.execute(JoinRoomCommand(room_name, private=True), response=True)
+        await client_2.execute(JoinRoomCommand(room_name, private=True), response=True)
 
-        assert room2.name == room_name
-        assert room2.private is True
-        assert room2.owner == username1
-        assert len(room2.members) == 1
-        assert username2 in room2.members
-        room2_joined_usernames = sorted(user.name for user in room2.users)
-        assert sorted([username1, username2]) == room2_joined_usernames
+        await wait_for_listener_awaited(join_listener)
 
-        ## Assert event on the first client
+        # Check rooms for user 1 and 2
+        assert username2 in client_1.rooms.rooms[room_name].members
+        assert username2 in [user.name for user in client_1.rooms.rooms[room_name].users]
 
-        # Take index 1, index 0 should be the initial joining
-        event: RoomJoinedEvent = await wait_for_listener_awaited(join_listener)
+        assert username2 in client_2.rooms.rooms[room_name].members
+        assert client_2.rooms.rooms[room_name].owner == username1
+        assert client_2.rooms.rooms[room_name].private is True
+        assert username1 in [user.name for user in client_2.rooms.rooms[room_name].users]
+        assert username2 in [user.name for user in client_2.rooms.rooms[room_name].users]
 
-        assert event.user.name == username2
-        assert event.room.name == room_name
+    @pytest.mark.asyncio
+    async def test_private_room_revoke_membership(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        member_granted_listener1 = AsyncMock()
+        client_1.events.register(RoomMembershipGrantedEvent, member_granted_listener1)
+
+        member_granted_listener2 = AsyncMock()
+        client_2.events.register(RoomMembershipGrantedEvent, member_granted_listener2)
+
+        await wait_until_clients_initialized(mock_server, amount=2)
+
+        room_name = 'privroom'
+
+        username2 = client_2.settings.credentials.username
+
+        # First user joins / creates room and grants membership to second user
+        await client_1.execute(JoinRoomCommand(room_name, private=True), response=True)
+        await client_1.execute(GrantRoomMembershipCommand(room_name, username2), response=True)
+
+        await wait_for_listener_awaited(member_granted_listener1)
+        await wait_for_listener_awaited_events(member_granted_listener2, amount=2)
+        await client_2.execute(JoinRoomCommand(room_name, private=True), response=True)
+
+        # Register listeners
+        member_revoked_listener1 = AsyncMock()
+        client_1.events.register(RoomMembershipRevokedEvent, member_revoked_listener1)
+
+        member_revoked_listener2 = AsyncMock()
+        client_2.events.register(RoomMembershipRevokedEvent, member_revoked_listener2)
+
+        # Revoke membership
+        await client_1(RevokeRoomMembershipCommand(room_name, username2), response=True)
+
+        revoked_event1 = await wait_for_listener_awaited(member_revoked_listener1)
+        revoked_event2 = await wait_for_listener_awaited(member_revoked_listener2)
+
+        revoked_event1.room.name == room_name
+        revoked_event2.room.name == room_name
+
+        revoked_event1.member.name == username2
+        revoked_event2.member is None
+
+        assert username2 not in client_1.rooms.rooms[room_name].members
+        assert username2 not in client_2.rooms.rooms[room_name].members
+
+    @pytest.mark.asyncio
+    async def test_private_room_grant_operator(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        member_granted_listener1 = AsyncMock()
+        client_1.events.register(RoomMembershipGrantedEvent, member_granted_listener1)
+
+        member_granted_listener2 = AsyncMock()
+        client_2.events.register(RoomMembershipGrantedEvent, member_granted_listener2)
+
+        await wait_until_clients_initialized(mock_server, amount=2)
+
+        room_name = 'privroom'
+
+        username1 = client_1.settings.credentials.username
+        username2 = client_2.settings.credentials.username
+
+        # First user joins / creates room and grants membership to second user
+        await client_1.execute(JoinRoomCommand(room_name, private=True), response=True)
+        await client_1.execute(GrantRoomMembershipCommand(room_name, username2), response=True)
+
+        await wait_for_listener_awaited(member_granted_listener1)
+        await wait_for_listener_awaited_events(member_granted_listener2, amount=2)
+        await client_2.execute(JoinRoomCommand(room_name, private=True), response=True)
+
+        # Register listeners
+        op_granted_listener1 = AsyncMock()
+        client_1.events.register(RoomOperatorGrantedEvent, op_granted_listener1)
+
+        op_granted_listener2 = AsyncMock()
+        client_2.events.register(RoomOperatorGrantedEvent, op_granted_listener2)
+
+        # Grant operator
+        await client_1(GrantRoomOperatorCommand(room_name, username2), response=True)
+
+        granted_event1 = await wait_for_listener_awaited(op_granted_listener1)
+        granted_event2 = await wait_for_listener_awaited(op_granted_listener2)
+
+        granted_event1.room.name == room_name
+        granted_event2.room.name == room_name
+
+        granted_event1.member.name == username2
+        granted_event2.member.name == username2
+
+        assert username2 in client_1.rooms.rooms[room_name].members
+        assert username2 in client_2.rooms.rooms[room_name].members
+        assert username2 in client_1.rooms.rooms[room_name].operators
+        assert username2 in client_2.rooms.rooms[room_name].operators
+
+    @pytest.mark.asyncio
+    async def test_private_room_revoke_operator(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        member_granted_listener1 = AsyncMock()
+        client_1.events.register(RoomMembershipGrantedEvent, member_granted_listener1)
+
+        member_granted_listener2 = AsyncMock()
+        client_2.events.register(RoomMembershipGrantedEvent, member_granted_listener2)
+
+        await wait_until_clients_initialized(mock_server, amount=2)
+
+        room_name = 'privroom'
+
+        username2 = client_2.settings.credentials.username
+
+        # First user joins / creates room and grants membership to second user
+        await client_1.execute(JoinRoomCommand(room_name, private=True), response=True)
+        await client_1.execute(GrantRoomMembershipCommand(room_name, username2), response=True)
+
+        await wait_for_listener_awaited(member_granted_listener1)
+        await wait_for_listener_awaited_events(member_granted_listener2, amount=2)
+        await client_2.execute(JoinRoomCommand(room_name, private=True), response=True)
+
+        # Register granting listeners and grant operator
+        op_granted_listener1 = AsyncMock()
+        client_1.events.register(RoomOperatorGrantedEvent, op_granted_listener1)
+        op_granted_listener2 = AsyncMock()
+        client_2.events.register(RoomOperatorGrantedEvent, op_granted_listener2)
+
+        await client_1(GrantRoomOperatorCommand(room_name, username2), response=True)
+
+        await wait_for_listener_awaited(op_granted_listener1)
+        await wait_for_listener_awaited(op_granted_listener2)
+
+        # Revoke operator
+        op_revoked_listener1 = AsyncMock()
+        client_1.events.register(RoomOperatorRevokedEvent, op_revoked_listener1)
+        op_revoked_listener2 = AsyncMock()
+        client_2.events.register(RoomOperatorRevokedEvent, op_revoked_listener2)
+
+        await client_1(RevokeRoomOperatorCommand(room_name, username2), response=True)
+
+        revoked_event1 = await wait_for_listener_awaited(op_revoked_listener1)
+        revoked_event2 = await wait_for_listener_awaited(op_revoked_listener2)
+
+        revoked_event1.room.name == room_name
+        revoked_event2.room.name == room_name
+
+        revoked_event1.member.name == username2
+        revoked_event2.member.name == username2
+
+        assert username2 in client_1.rooms.rooms[room_name].members
+        assert username2 in client_2.rooms.rooms[room_name].members
+        assert username2 not in client_1.rooms.rooms[room_name].operators
+        assert username2 not in client_2.rooms.rooms[room_name].operators
+
+    @pytest.mark.asyncio
+    async def test_private_room_drop_membership(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        member_granted_listener1 = AsyncMock()
+        client_1.events.register(RoomMembershipGrantedEvent, member_granted_listener1)
+
+        member_granted_listener2 = AsyncMock()
+        client_2.events.register(RoomMembershipGrantedEvent, member_granted_listener2)
+
+        await wait_until_clients_initialized(mock_server, amount=2)
+
+        room_name = 'privroom'
+
+        username2 = client_2.settings.credentials.username
+
+        # First user joins / creates room and grants membership to second user
+        await client_1.execute(JoinRoomCommand(room_name, private=True), response=True)
+        await client_1.execute(GrantRoomMembershipCommand(room_name, username2), response=True)
+
+        await wait_for_listener_awaited(member_granted_listener1)
+        await wait_for_listener_awaited_events(member_granted_listener2, amount=2)
+        await client_2.execute(JoinRoomCommand(room_name, private=True), response=True)
+
+        # Revoke operator
+        member_revoked_listener1 = AsyncMock()
+        client_1.events.register(RoomMembershipRevokedEvent, member_revoked_listener1)
+
+        member_revoked_listener2 = AsyncMock()
+        client_2.events.register(RoomMembershipRevokedEvent, member_revoked_listener2)
+
+        # Drop membership
+        await client_2(DropRoomMembershipCommand(room_name), response=True)
+
+        revoked_event1 = await wait_for_listener_awaited(member_revoked_listener1)
+        revoked_event2 = await wait_for_listener_awaited(member_revoked_listener2)
+
+        revoked_event1.room.name == room_name
+        revoked_event2.room.name == room_name
+
+        revoked_event1.member.name == username2
+        revoked_event2.member is None
+
+        assert username2 not in client_1.rooms.rooms[room_name].members
+        # assert username2 not in client_2.rooms.rooms[room_name].members
+        assert room_name not in client_2.rooms.rooms
+
+    @pytest.mark.asyncio
+    async def test_private_room_drop_ownership(self, mock_server: MockServer, client_1: SoulSeekClient):
+        await wait_until_clients_initialized(mock_server, amount=1)
+
+        room_name = 'privroom'
+
+        # First user joins
+        await client_1.execute(JoinRoomCommand(room_name, private=True), response=True)
+
+        await client_1.execute(DropRoomOwnershipCommand(room_name), response=True)
+
+        await wait_for_room_owner(mock_server, room_name, None)
 
     @pytest.mark.asyncio
     async def test_set_room_ticker(self, mock_server: MockServer, client_1: SoulSeekClient):

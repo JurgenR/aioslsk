@@ -1,6 +1,9 @@
+from collections import OrderedDict
 from dataclasses import dataclass, field
+from enum import auto, Enum
 from aioslsk.user.model import UserStatus
-from typing import Dict, List, Set
+import typing
+from typing import List, Set, Optional
 
 
 @dataclass
@@ -59,29 +62,41 @@ class User:
         self.hated_interests = set()
 
 
+class RoomStatus(Enum):
+    PUBLIC = auto()
+    PRIVATE = auto()
+    UNCLAIMED = auto()
+
+
 @dataclass
 class Room:
     name: str
     joined_users: List[User] = field(default_factory=list)
-    is_private: bool = False
-    tickers: Dict[str, str] = field(default_factory=dict)
+    tickers: typing.OrderedDict[str, str] = field(default_factory=OrderedDict)
+    registered_as_public: bool = False
 
     # Only for private rooms
-    owner: User = None
+    owner: Optional[User] = None
     members: List[User] = field(default_factory=list)
     operators: List[User] = field(default_factory=list)
 
-    def get_members(self, exclude_owner: bool = True, exclude_operators: bool = True) -> List[User]:
-        """Returns non-owner and non-operator members"""
-        exlusions = [self.owner, ] if exclude_owner else []
-        exlusions += self.operators if exclude_operators else []
+    @property
+    def status(self) -> RoomStatus:
+        if self.owner:
+            return RoomStatus.PRIVATE
+        elif self.joined_users:
+            return RoomStatus.PUBLIC
+        else:
+            return RoomStatus.UNCLAIMED
 
-        return [
-            member for member in self.members
-            if member not in exlusions
-        ]
+    @property
+    def all_members(self) -> List[User]:
+        return self.members + [self.owner, ] if self.owner else []
 
-    def can_add(self, user: User):
+    def can_join(self, user: User) -> bool:
+        return user in self.members or self.owner == user
+
+    def can_add(self, user: User) -> bool:
         """Checks if given `user` can add another user to this room"""
         return user == self.owner or user in self.operators
 

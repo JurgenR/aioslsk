@@ -97,7 +97,7 @@ from tests.e2e.mock.constants import (
     MAX_GLOBAL_RECOMMENDATIONS,
 )
 from tests.e2e.mock.messages import AdminMessage
-from tests.e2e.mock.model import User, Room, Settings
+from tests.e2e.mock.model import User, Room, RoomStatus, Settings
 from tests.e2e.mock.peer import Peer
 
 
@@ -308,6 +308,9 @@ class MockServer:
             if room.name == name:
                 return room
 
+    def get_user_private_rooms(self, user: User) -> List[Room]:
+        return [room for room in self.rooms if user in room.all_members]
+
     def get_joined_rooms(self, user: User) -> List[Room]:
         return [room for room in self.rooms if user in room.joined_users]
 
@@ -397,22 +400,34 @@ class MockServer:
             )
         )
 
-    async def send_room_list(self, peer: Peer):
-        """Send the room list for the user"""
+    async def send_room_list(self, peer: Peer, min_users: Optional[int] = None):
+        """Send the room list for the user
+
+        :param min_users: Optional minimum amount of joined users for public
+            rooms. Public rooms with less joined users will be filtered out
+        """
         public_rooms: List[Room] = []
         private_rooms: List[Room] = []
         private_rooms_owned: List[Room] = []
         private_rooms_operated: List[Room] = []
         for room in self.rooms:
-            if room.is_private:
+            if room.status == RoomStatus.PRIVATE:
                 if room.owner == peer.user:
                     private_rooms_owned.append(room)
-                else:
-                    if peer.user in room.operators:
-                        private_rooms_operated.append(room)
+
+                if peer.user in room.operators:
+                    private_rooms_operated.append(room)
+
+                if peer.user in room.members:
                     private_rooms.append(room)
-            else:
-                public_rooms.append(room)
+
+            elif room.status == RoomStatus.PUBLIC:
+
+                if min_users:
+                    if len(room.joined_users) >= min_users:
+                        public_rooms.append(room)
+                else:
+                    public_rooms.append(room)
 
         await peer.send_message(
             RoomList.Response(
@@ -426,8 +441,8 @@ class MockServer:
             )
         )
 
-    async def send_all_private_room_info(self, user: User):
-        """Sends a user the info on the private rooms he is in
+    async def send_room_list_update(self, user: User, min_users: Optional[int] = None):
+        """Sends a user an updated room list
 
         * RoomList
         * PrivateRoomMembers for each private room joined
@@ -442,30 +457,25 @@ class MockServer:
         """
         peer = self.find_peer_by_name(user.name)
 
-        await self.send_room_list(peer)
+        await self.send_room_list(peer, min_users=min_users)
 
         # Following is done in 2 loops deliberatly
         # PrivateRoomMembers (excludes owner, includes operators)
-        for room in self.rooms:
-            if peer.user not in room.members:
-                continue
-
+        user_private_rooms = self.get_user_private_rooms(peer.user)
+        for room in user_private_rooms:
             await peer.send_message(
                 PrivateRoomMembers.Response(
                     room=room.name,
-                    usernames=[member.name for member in room.members if member != room.owner]
+                    usernames=[member.name for member in room.members]
                 )
             )
 
         # RoomOperators (only operators)
-        for room in self.rooms:
-            if peer.user not in room.members:
-                continue
-
+        for room in user_private_rooms:
             await peer.send_message(
                 PrivateRoomOperators.Response(
                     room=room.name,
-                    usernames=[member.name for member in room.operators]
+                    usernames=[operator.name for operator in room.operators]
                 )
             )
 
@@ -548,10 +558,7 @@ class MockServer:
                 await other_peer.disconnect()
         else:
             # Create a new user if we did not have it yet
-            user = User(
-                message.username,
-                password=message.password
-            )
+            user = User(message.username, password=message.password)
             self.users.append(user)
 
         # Send success response and set user/peer
@@ -570,7 +577,10 @@ class MockServer:
         ))
 
         # Send all post login messages
-        await self.send_room_list(peer)
+        # NOTE: the room list should only contain rooms with 5 or more joined
+        # users after login. Ignoring for now since there won't be much rooms
+        # during testing
+        await self.send_room_list_update(peer)
         await peer.send_message(
             ParentMinSpeed.Response(self.settings.parent_min_speed))
         await peer.send_message(
@@ -701,16 +711,7 @@ class MockServer:
 
     @on_message(RoomChatMessage.Request)
     async def on_chat_room_message(self, message: RoomChatMessage.Request, peer: Peer):
-        """
-
-        TODO:
-        * Check if users who joined a public room and have the public chat
-            enabled receive it twice (also the order)
-        """
         if not peer.user:
-            return
-
-        if not message.message:
             return
 
         if (room := self.find_room_by_name(message.room)) is None:
@@ -725,15 +726,18 @@ class MockServer:
             message=message.message
         )
 
-
         # Send to joined users
-        futures = []
+        room_futures = []
         for peer in self.get_valid_peers():
             if peer.user in room.joined_users:
-                futures.append(peer.send_message(room_message))
+                room_futures.append(peer.send_message(room_message))
+
+        if room_futures:
+            await asyncio.gather(*room_futures, return_exceptions=True)
 
         # Send to public chat
-        if not room.is_private:
+        public_futures = []
+        if room.status == RoomStatus.PUBLIC:
             public_message = PublicChatMessage.Response(
                 room=room.name,
                 username=peer.user.name,
@@ -741,9 +745,10 @@ class MockServer:
             )
             for peer in self.get_valid_peers():
                 if peer.user.enable_public_chat:
-                    futures.append(public_message)
+                    public_futures.append(public_message)
 
-        await asyncio.gather(*futures, return_exceptions=True)
+        if public_futures:
+            await asyncio.gather(*public_futures, return_exceptions=True)
 
     @on_message(RemoveUser.Request)
     async def on_remove_user(self, message: RemoveUser.Request, peer: Peer):
@@ -884,7 +889,7 @@ class MockServer:
         if (room := self.find_room_by_name(message.room)) is None:
             return
 
-        if peer.user not in room.members:
+        if peer.user not in room.all_members:
             return
 
         message = FileSearch(
@@ -946,22 +951,19 @@ class MockServer:
 
     @on_message(SetRoomTicker.Request)
     async def on_room_ticker_set(self, message: SetRoomTicker.Request, peer: Peer):
-        logger.debug("in ticker set")
-        if (room := self.find_room_by_name(message.room)) is None:
-            logger.debug("did not find room")
+        if peer.user is None:
             return
 
-        if peer.user is None:
-            logger.debug("user was not set for peer")
+        if (room := self.find_room_by_name(message.room)) is None:
             return
 
         if peer.user not in room.joined_users:
-            logger.debug(f"user has not joined the room : {room.joined_users}")
             return
 
-        # TODO: Other validations (empty message...)
+        if len(message.ticker) > 1024:
+            return
 
-        # Remove the ticker if it was set
+        # Remove the ticker if user had a ticker set
         if peer.user.name in room.tickers:
             del room.tickers[peer.user.name]
             remove_message = RoomTickerRemoved.Response(
@@ -970,14 +972,15 @@ class MockServer:
             )
             await self.notify_room_users(room, remove_message)
 
-        logger.debug(f"setting ticker : {peer.user.name} : {message.ticker}")
-        room.tickers[peer.user.name] = message.ticker
+        # Only set the ticker if it was not an empty string (pure spaces is fine)
+        if message.ticker:
+            room.tickers[peer.user.name] = message.ticker
 
-        add_message = RoomTickerAdded.Response(
-            room=room.name,
-            username=peer.user.name,
-            ticker=message.ticker
-        )
+            add_message = RoomTickerAdded.Response(
+                room=room.name,
+                username=peer.user.name,
+                ticker=message.ticker
+            )
 
         await self.notify_room_users(room, add_message)
 
@@ -1246,45 +1249,53 @@ class MockServer:
             return
 
         existing_room = self.find_room_by_name(message.room)
+        room = existing_room if existing_room else Room(name=message.room)
+
         is_private = bool(message.is_private)
 
-        if existing_room:
-            if peer.user in existing_room.joined_users:
-                # Already in room, do nothing
+        if room.status == RoomStatus.PRIVATE:
+
+            # Check if the user is a member and can join
+            if not existing_room.can_join(peer.user):
+                await peer.send_message(
+                    CannotCreateRoom.Response(message.room)
+                )
+                await self.send_admin_message(
+                    AdminMessage.ROOM_CANNOT_ENTER_PRIVATE_ROOM.format(message.room),
+                    peer
+                )
                 return
 
-            # Attempt to join the room
-            # We do not need to check if the is_private parameter matches the
-            # room's is_private
-            if existing_room.is_private:
-                if peer.user in existing_room.members:
-                    await self.join_room(existing_room, peer)
-                else:
-                    await peer.send_message(
-                        CannotCreateRoom.Response(message.room)
-                    )
-                    await self.send_admin_message(
-                        AdminMessage.ROOM_CANNOT_ENTER_PRIVATE_ROOM.format(message.room),
-                        peer
-                    )
-            else:
-                # We get a message when the room is public and we attempt to
-                # create it as private (and nobody is inside). It's odd that
-                # this is under the joining block but the logic server side
-                # might be a little different
-                if message.is_private and len(existing_room.joined_users) == 0:
-                    await self.send_admin_message(
-                        AdminMessage.ROOM_CANNOT_CREATE_PUBLIC.format(message.room)
-                    )
-                await self.join_room(existing_room, peer)
+        elif room.status == RoomStatus.PUBLIC:
+
+            # User request to join a room: regardless on whether he requested
+            # it as private or not, the room should be joined if it is a public
+            # room
+            pass
 
         else:
-            # Create a new room
-            if is_private:
-                new_room = await self.create_private_room(message.room, peer)
+            if room.registered_as_public and is_private:
+                # Prevent a public room from becoming a private room if it was
+                # registered as public. This results in simply a warning and
+                # joining the room anyway
+
+                await self.send_admin_message(
+                    AdminMessage.ROOM_CANNOT_CREATE_PUBLIC.format(message.room)
+                )
+
             else:
-                new_room = await self.create_public_room(message.room, peer)
-            await self.join_room(new_room, peer)
+                # Unclaimed or non-existent room
+                room.owner = peer.user if is_private else None
+                room.registered_as_public = not is_private
+                if room not in self.rooms:
+                    self.rooms.append(room)
+
+                if is_private:
+                    await self.send_room_list_update(peer.user)
+
+        # Join the user to the room
+        if peer.user not in room.joined_users:
+            await self.join_room(room, peer)
 
     @on_message(LeaveRoom.Request)
     async def on_chat_leave_room(self, message: LeaveRoom.Request, peer: Peer):
@@ -1299,16 +1310,12 @@ class MockServer:
 
         if not room:
             return
-        # This covers 2 cases. Not a user of private room and drop membership
-        # of public room (since members should be empty for public rooms)
-        if peer.user not in room.members:
-            return
-        # Owner cannot drop membership, he needs to drop ownership
-        if peer.user == room.owner:
-            return
 
-        await self.remove_from_private_room(room, peer)
-        await self.revoke_operator(room, peer.user)
+        # Handles: public rooms (empty members), owner (not part of members),
+        # user not a member
+        if peer.user in room.members:
+            await self.revoke_membership(room, peer.user)
+            await self.revoke_operator(room, peer.user)
 
     @on_message(PrivateRoomDropOwnership.Request)
     async def on_private_room_drop_ownership(self, message: PrivateRoomDropOwnership.Request, peer: Peer):
@@ -1316,21 +1323,49 @@ class MockServer:
 
         if not room:
             return
-        if room.owner != peer.user:
+
+        if peer.user != room.owner:
             return
 
-        self.rooms.remove(room)
+        # Keep a reference to all the current members (excludes owner) then
+        # reset all private room related values. Resetting the values will
+        # ensure that some messages do not get sent when `revoke_membership` is
+        # called for that member.
+        # Messages that should be sent:
+        # * Send PrivateRoomMembershipRevoked to the member
+        # * Execute room leave function -> Because joined_users is not reset
+        #   everyone will be informed that the user left the room
+        # * The member should get a room list update, because the members list
+        #   is reset he will no longer see the room in the list
+        # Messages that should not be sent:
+        # * members should not get a notification that the member is removed
+        #   (PrivateRoomRevokeMembership) because the members list for the room is empty
+        # * owner should not get a server notification because owner variable no longer set)
+        members = room.members
+
+        room.owner = None
+        # TODO: Might need to check if operators actually get reset
+        room.operators = []
+        room.members = []
+
+        for member in members:
+            await self.revoke_membership(room, member)
 
     @on_message(PrivateRoomGrantMembership.Request)
-    async def on_private_room_add_user(self, message: PrivateRoomGrantMembership.Request, peer: Peer):
+    async def on_private_room_grant_membership(self, message: PrivateRoomGrantMembership.Request, peer: Peer):
         room = self.find_room_by_name(message.room)
         user = self.find_user_by_name(message.username)
         peer_to_add = self.find_peer_by_name(message.username)
 
         if not room:
             return
-        # Permissions
+
+        # Permissions check + also handles attempting to add member to public room
         if not room.can_add(peer.user):
+            return
+
+        # Cannot add self
+        if peer.user.name == message.username:
             return
 
         if not user or user.status == UserStatus.OFFLINE:
@@ -1354,6 +1389,13 @@ class MockServer:
             )
             return
 
+        if room.owner.name == message.username:
+            await self.send_admin_message(
+                AdminMessage.PRIVATE_ROOM_ADD_USER_IS_OWNER.format(message.username, message.room),
+                peer
+            )
+            return
+
         if user in room.members:
             await self.send_admin_message(
                 AdminMessage.PRIVATE_ROOM_ADD_USER_ALREADY_MEMBER.format(message.username, message.room),
@@ -1361,42 +1403,76 @@ class MockServer:
             )
             return
 
-        await self.add_to_private_room(room, user, peer.user)
+        await self.grant_membership(room, user, peer.user)
 
     @on_message(PrivateRoomRevokeMembership.Request)
-    async def on_private_room_remove_user(self, message: PrivateRoomRevokeMembership.Request, peer: Peer):
+    async def on_private_room_revoke_membership(self, message: PrivateRoomRevokeMembership.Request, peer: Peer):
         room = self.find_room_by_name(message.room)
         user = self.find_user_by_name(message.username)
 
         if not user:
             return
+
         if not room:
             return
+
+        if message.username == peer.user.name:
+            return
+
+        if user not in room.all_members:
+            return
+
         if not room.can_remove(peer.user, user):
             return
-        if user not in room.members:
-            return
 
-        await self.remove_from_private_room(room, user)
+        await self.revoke_membership(room, user)
 
     @on_message(PrivateRoomGrantOperator.Request)
-    async def on_private_room_add_operator(self, message: PrivateRoomGrantOperator.Request, peer: Peer):
+    async def on_private_room_grant_operator(self, message: PrivateRoomGrantOperator.Request, peer: Peer):
         room = self.find_room_by_name(message.room)
         user = self.find_user_by_name(message.username)
+        peer_to_add = self.find_peer_by_name(message.username)
 
         if not user:
             return
+
         if not room:
             return
+
+        if not user or user.status == UserStatus.OFFLINE:
+            await self.send_admin_message(
+                AdminMessage.PRIVATE_ROOM_ADD_USER_OFFLINE.format(message.username),
+                peer
+            )
+            return
+
+        if not peer_to_add:
+            await self.send_admin_message(
+                AdminMessage.PRIVATE_ROOM_ADD_USER_OFFLINE.format(message.username),
+                peer
+            )
+            return
+
         if peer.user != room.owner:
             return
-        if user not in room.members:
+
+        if user in room.operators:
+            await self.send_admin_message(
+                AdminMessage.PRIVATE_ROOM_OPERATOR_ALREADY_OPERATOR.format(user.name, room.name),
+                peer
+            )
             return
+
+        if user not in room.members:
+            await self.send_admin_message(
+                AdminMessage.PRIVATE_ROOM_OPERATOR_USER_IS_NOT_MEMBER.format(user.name, room.name),
+                peer
+            )
 
         await self.grant_operator(room, user)
 
     @on_message(PrivateRoomRevokeOperator.Request)
-    async def on_private_room_remove_operator(self, message: PrivateRoomRevokeOperator.Request, peer: Peer):
+    async def on_private_room_revoke_operator(self, message: PrivateRoomRevokeOperator.Request, peer: Peer):
         room = self.find_room_by_name(message.room)
         user = self.find_user_by_name(message.username)
 
@@ -1406,7 +1482,8 @@ class MockServer:
             return
         if peer.user != room.owner:
             return
-        if user not in room.members:
+
+        if user not in room.all_members:
             return
 
         await self.revoke_operator(room, user)
@@ -1435,32 +1512,24 @@ class MockServer:
         for room in self.get_joined_rooms(user):
             await self.notify_room_users(room, stats_message)
 
-    async def create_public_room(self, name: str, peer: Peer) -> Room:
+    async def create_public_room(self, name: str) -> Room:
         """Creates a new private room, should be called when all checks are
         complete
         """
         logger.info(f"creating public room {name}")
-        room = Room(
-            name=name,
-            is_private=False
-        )
+        room = Room(name=name)
         self.rooms.append(room)
         return room
 
-    async def create_private_room(self, name: str, peer: Peer) -> Room:
+    async def create_private_room(self, name: str, user: User) -> Room:
         """Creates a new private room, should be called when all checks are
         complete
         """
-        logger.info(f"creating new private room {name} with owner {peer.user.name}")
-        room = Room(
-            name=name,
-            members=[peer.user, ],
-            owner=peer.user,
-            is_private=True
-        )
+        logger.info(f"creating new private room {name} with owner {user.name}")
+        room = Room(name=name, owner=user)
         self.rooms.append(room)
 
-        await self.send_all_private_room_info(peer.user)
+        await self.send_room_list_update(user)
         return room
 
     async def send_room_tickers(self, room: Room, peer: Peer):
@@ -1526,8 +1595,8 @@ class MockServer:
                     user.country
                     for user in room.joined_users
                 ],
-                owner=room.owner.name if room.is_private else None,
-                operators=[operator.name for operator in room.operators] if room.is_private else None
+                owner=room.owner.name if room.status == RoomStatus.PRIVATE else None,
+                operators=[operator.name for operator in room.operators] if room.status == RoomStatus.PRIVATE else None
             )
         )
         await self.send_room_tickers(room, peer)
@@ -1554,6 +1623,9 @@ class MockServer:
 
     async def notify_room_owner(self, room: Room, message: str):
         """Sends an admin message to the room owner"""
+        if not room.owner:
+            return
+
         peer = self.find_peer_by_name(room.owner.name)
         if peer:
             await self.send_admin_message(message, peer)
@@ -1561,7 +1633,7 @@ class MockServer:
     async def notify_room_members(self, room: Room, message: MessageDataclass):
         """Sends a protocol message to all members in the given private room"""
         tasks = []
-        for user in room.members:
+        for user in room.all_members:
             peer = self.find_peer_by_name(user.name)
             if peer:
                 tasks.append(peer.send_message(message))
@@ -1576,12 +1648,12 @@ class MockServer:
                 tasks.append(peer.send_message(message))
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def add_to_private_room(self, room: Room, user: User, user_adding: User):
+    async def grant_membership(self, room: Room, user: User, granting_user: User):
         """Adds a user to a private room
 
         :param room: The private room to add the user to
         :param user: The user to add to the private room
-        :param user_adding: The user adding the other user
+        :param granting_user: The user adding the other user
         """
         # Add user to room
         room.members.append(user)
@@ -1593,12 +1665,12 @@ class MockServer:
         target_peer = self.find_peer_by_name(user.name)
         if target_peer:
             await target_peer.send_message(PrivateRoomMembershipGranted.Response(room.name))
-            await self.send_all_private_room_info(target_peer.user)
+            await self.send_room_list_update(target_peer.user)
 
         # Notify owner
-        if user_adding in room.operators:
+        if granting_user in room.operators:
             msg = AdminMessage.PRIVATE_ROOM_USER_ADDED_BY_OPERATOR.format(
-                user.name, room.name, user_adding.name
+                user.name, room.name, granting_user.name
             )
         else:
             msg = AdminMessage.PRIVATE_ROOM_USER_ADDED.format(
@@ -1606,7 +1678,7 @@ class MockServer:
             )
         await self.notify_room_owner(room, msg)
 
-    async def remove_from_private_room(self, room: Room, user: User):
+    async def revoke_membership(self, room: Room, user: User):
         """Removes a user from a private room
 
         * Send PrivateRoomMembershipRevoked to the removed user
@@ -1628,7 +1700,7 @@ class MockServer:
         await self.notify_room_members(room, message)
 
         # Notify the owner
-        # TODO: Check if same message if operator removes
+        # No specialized message for operator (unlike during granting)
         await self.notify_room_owner(
             room,
             AdminMessage.PRIVATE_ROOM_USER_REMOVED.format(user.name, room.name)
@@ -1637,7 +1709,7 @@ class MockServer:
         # Leave the room if the user is joined and send private room updates
         if target_peer:
             await self.leave_room(room, target_peer)
-            await self.send_all_private_room_info(user)
+            await self.send_room_list_update(user)
 
     async def grant_operator(self, room: Room, user: User):
         """Grants operator privileges to a user in a private room"""
@@ -1655,7 +1727,7 @@ class MockServer:
         target_peer = self.find_peer_by_name(user.name)
         if target_peer:
             await target_peer.send_message(PrivateRoomOperatorGranted.Response(room.name))
-            await self.send_all_private_room_info(target_peer.user)
+            await self.send_room_list_update(target_peer.user)
 
         # Notify the owner
         await self.notify_room_owner(
@@ -1684,7 +1756,7 @@ class MockServer:
         target_peer = self.find_peer_by_name(user.name)
         if target_peer:
             await target_peer.send_message(PrivateRoomOperatorRevoked.Response(room.name))
-            await self.send_all_private_room_info(target_peer.user)
+            await self.send_room_list_update(target_peer.user)
 
         # Notify the owner
         await self.notify_room_owner(
