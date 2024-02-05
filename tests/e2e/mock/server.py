@@ -1,5 +1,5 @@
 import asyncio
-from collections import Counter
+from collections import Counter, OrderedDict
 import logging
 import re
 import socket
@@ -950,22 +950,19 @@ class MockServer:
 
     @on_message(SetRoomTicker.Request)
     async def on_room_ticker_set(self, message: SetRoomTicker.Request, peer: Peer):
-        logger.debug("in ticker set")
-        if (room := self.find_room_by_name(message.room)) is None:
-            logger.debug("did not find room")
+        if peer.user is None:
             return
 
-        if peer.user is None:
-            logger.debug("user was not set for peer")
+        if (room := self.find_room_by_name(message.room)) is None:
             return
 
         if peer.user not in room.joined_users:
-            logger.debug(f"user has not joined the room : {room.joined_users}")
             return
 
-        # TODO: Other validations (empty message...)
+        if len(message.ticker) > 1024:
+            return
 
-        # Remove the ticker if it was set
+        # Remove the ticker if user had a ticker set
         if peer.user.name in room.tickers:
             del room.tickers[peer.user.name]
             remove_message = RoomTickerRemoved.Response(
@@ -974,14 +971,15 @@ class MockServer:
             )
             await self.notify_room_users(room, remove_message)
 
-        logger.debug(f"setting ticker : {peer.user.name} : {message.ticker}")
-        room.tickers[peer.user.name] = message.ticker
+        # Only set the ticker if it was not an empty string (pure spaces is fine)
+        if message.ticker:
+            room.tickers[peer.user.name] = message.ticker
 
-        add_message = RoomTickerAdded.Response(
-            room=room.name,
-            username=peer.user.name,
-            ticker=message.ticker
-        )
+            add_message = RoomTickerAdded.Response(
+                room=room.name,
+                username=peer.user.name,
+                ticker=message.ticker
+            )
 
         await self.notify_room_users(room, add_message)
 

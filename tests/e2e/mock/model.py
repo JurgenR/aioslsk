@@ -1,3 +1,4 @@
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import auto, Enum
 from aioslsk.user.model import UserStatus
@@ -70,7 +71,7 @@ class RoomStatus(Enum):
 class Room:
     name: str
     joined_users: List[User] = field(default_factory=list)
-    tickers: Dict[str, str] = field(default_factory=dict)
+    tickers: OrderedDict[str, str] = field(default_factory=OrderedDict)
     registered_as_public: bool = False
 
     # Only for private rooms

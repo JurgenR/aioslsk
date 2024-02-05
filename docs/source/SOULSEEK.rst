@@ -17,9 +17,9 @@ Establishing a connection and logging on:
 
 1. Open a TCP connection to the server
 2. Open up at least one listening connection (see :ref:`peer-connections` for more info)
-3. Send the :ref:`Login`: command on the server socket
+3. Send the :ref:`Login`: message on the server socket
 
-A login response will be received which determines whether the login was successful along with the following commands providing some information:
+A login response will be received which determines whether the login was successful along with the following messages:
 
 * :ref:`function-room-list-update`
 * :ref:`ParentMinSpeed`
@@ -576,7 +576,7 @@ A room can be described as having the following structure:
 +======================+=====================+===================================================================+
 | name                 | string              | Name of the room                                                  |
 +----------------------+---------------------+-------------------------------------------------------------------+
-| tickers              | map[string, string] | Map of room tickers. Key=username, value=ticker                   |
+| tickers              | map[string, string] | Ordered map of room tickers. Key=username, value=ticker           |
 +----------------------+---------------------+-------------------------------------------------------------------+
 | joined_users         | array[string]       | List of users currently in the room                               |
 +----------------------+---------------------+-------------------------------------------------------------------+
@@ -630,10 +630,10 @@ The room list is received after login but can be refreshed by sending another :r
 
 .. _function-room-list-update:
 
-Function: Send Private Room List Update
----------------------------------------
+Function: Send Room List Update
+-------------------------------
 
-This is a collection of messages commonly called after performing an action on a private room:
+This is a collection of messages commonly called after performing an action on a private room or after logging on:
 
 1. Server: Send :ref:`room-list`
 2. Server: For each private room where the user is ``owner`` or in the list of ``members``
@@ -868,6 +868,46 @@ Actions:
 
 .. warning::
   The server will not automatically notify the owner himself that he has left the room. The owner should send a second command to leave the room after sending this command. This seems like a mistake that was corrected in the client itself instead of on the server side.
+
+
+Room Tickers
+------------
+
+Room tickers are a sort of room wall, where users can place a single message that is visible to everyone in the room. They are sent after the user joins a room using the :ref:`RoomTickers` message and users will be notified of updates through the :ref:`RoomTickerAdded` and :ref:`RoomTickerRemoved` messages.
+
+A room ticker can be set with the :ref:`SetRoomTicker` message for which the actions are described in this section.
+
+Actors:
+
+* ``user`` : User that requests to set a room ticker
+
+Checks:
+
+* If the room does not exist : Do nothing
+* If ``user`` is not in the ``joined_users`` list (public) : Do nothing
+* If the length of the ``ticker`` is greater than 1024 : Do nothing
+* TODO: Any characters not allowed?
+
+Actions:
+
+1. If the ``user`` has an entry in ``tickers``
+
+  * Remove the entry of the ``user`` from the ``tickers``
+  * For each user in the list of ``joined_users``:
+
+    * :ref:`RoomTickerRemoved` : with room ``name`` and the ``user`` for which the ticker was removed
+
+2. If the ``ticker`` in the :ref:`SetRoomTicker` message is not empty:
+
+  * Add an entry for the ``user`` to the ``tickers``
+  * For each user in the list of ``joined_users``:
+
+    * :ref:`RoomTickerAdded` : with room ``name``, ``user`` and the ``ticker``
+
+
+.. note::
+  Tickers are retained even when ownership is dropped for a private room
+
 
 .. _function-notify-room-owner:
 
