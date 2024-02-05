@@ -21,7 +21,7 @@ Establishing a connection and logging on:
 
 A login response will be received which determines whether the login was successful along with the following commands providing some information:
 
-* :ref:`RoomList`
+* :ref:`function-room-list-update`
 * :ref:`ParentMinSpeed`
 * :ref:`ParentSpeedRatio`
 * :ref:`WishlistInterval`
@@ -628,7 +628,7 @@ The room list is received after login but can be refreshed by sending another :r
   It's not clear where this limit comes from, and possibly if the total amount of public rooms is low those rooms are included anyway (and perhaps if it's high the minimum amount of members increases as well)
 
 
-.. _function-private-room-list-update:
+.. _function-room-list-update:
 
 Function: Send Private Room List Update
 ---------------------------------------
@@ -708,7 +708,7 @@ Actions:
     * ``owner`` : set to room creator
     * ``registered_as_public`` : false
 
-  2. :ref:`function-private-room-list-update`
+  2. :ref:`function-room-list-update`
 
 4. :ref:`function-join-room`
 
@@ -863,7 +863,7 @@ Actions:
 
   * :ref:`function-private-room-revoke-membership`
 
-5. :ref:`function-private-room-list-update`
+5. :ref:`function-room-list-update`
 
 
 .. warning::
@@ -962,7 +962,7 @@ Actions:
 3. For the ``grantee``:
 
   * Send :ref:`PrivateRoomMembershipGranted` with the room name
-  * :ref:`function-private-room-list-update`
+  * :ref:`function-room-list-update`
 
 4. If the ``granter`` is in the list of room ``operators``:
 
@@ -1005,7 +1005,7 @@ Actions:
 
 6. For the ``revokee``:
 
-  * :ref:`function-private-room-list-update`
+  * :ref:`function-room-list-update`
 
 
 .. note::
@@ -1038,7 +1038,7 @@ Actions:
 4. For the ``grantee``:
 
   * Send :ref:`PrivateRoomOperatorGranted` with the room name
-  * :ref:`function-private-room-list-update`
+  * :ref:`function-room-list-update`
 
 5. For the room ``owner``:
 
@@ -1075,7 +1075,7 @@ Actions:
 4. For the ``revokee``:
 
   * Send :ref:`PrivateRoomOperatorRevoked` with the room name
-  * :ref:`function-private-room-list-update`
+  * :ref:`function-room-list-update`
 
 5. For the room ``owner``:
 

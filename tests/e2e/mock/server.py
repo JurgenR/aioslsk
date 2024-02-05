@@ -396,8 +396,12 @@ class MockServer:
             )
         )
 
-    async def send_room_list(self, peer: Peer):
-        """Send the room list for the user"""
+    async def send_room_list(self, peer: Peer, min_users: Optional[int] = None):
+        """Send the room list for the user
+
+        :param min_users: Optional minimum amount of joined users for public
+            rooms. Public rooms with less joined users will be filtered out
+        """
         public_rooms: List[Room] = []
         private_rooms: List[Room] = []
         private_rooms_owned: List[Room] = []
@@ -414,7 +418,12 @@ class MockServer:
                     private_rooms.append(room)
 
             elif room.status == RoomStatus.PUBLIC:
-                public_rooms.append(room)
+
+                if min_users:
+                    if len(room.joined_users) >= min_users:
+                        public_rooms.append(room)
+                else:
+                    public_rooms.append(room)
 
         await peer.send_message(
             RoomList.Response(
@@ -428,8 +437,8 @@ class MockServer:
             )
         )
 
-    async def send_all_private_room_info(self, user: User):
-        """Sends a user the info on the private rooms he is in
+    async def send_room_list_update(self, user: User, min_users: Optional[int] = None):
+        """Sends a user an updated room list
 
         * RoomList
         * PrivateRoomMembers for each private room joined
@@ -444,7 +453,7 @@ class MockServer:
         """
         peer = self.find_peer_by_name(user.name)
 
-        await self.send_room_list(peer)
+        await self.send_room_list(peer, min_users=min_users)
 
         # Following is done in 2 loops deliberatly
         # PrivateRoomMembers (excludes owner, includes operators)
@@ -545,10 +554,7 @@ class MockServer:
                 await other_peer.disconnect()
         else:
             # Create a new user if we did not have it yet
-            user = User(
-                message.username,
-                password=message.password
-            )
+            user = User(message.username, password=message.password)
             self.users.append(user)
 
         # Send success response and set user/peer
@@ -567,7 +573,10 @@ class MockServer:
         ))
 
         # Send all post login messages
-        await self.send_room_list(peer)
+        # NOTE: the room list should only contain rooms with 5 or more joined
+        # users after login. Ignoring for now since there won't be much rooms
+        # during testing
+        await self.send_room_list_update(peer)
         await peer.send_message(
             ParentMinSpeed.Response(self.settings.parent_min_speed))
         await peer.send_message(
@@ -1283,7 +1292,7 @@ class MockServer:
                     self.rooms.append(room)
 
                 if is_private:
-                    await self.send_all_private_room_info(peer.user)
+                    await self.send_room_list_update(peer.user)
 
         # Join the user to the room
         if peer.user not in room.joined_users:
@@ -1521,7 +1530,7 @@ class MockServer:
         room = Room(name=name, owner=user)
         self.rooms.append(room)
 
-        await self.send_all_private_room_info(user)
+        await self.send_room_list_update(user)
         return room
 
     async def send_room_tickers(self, room: Room, peer: Peer):
@@ -1657,7 +1666,7 @@ class MockServer:
         target_peer = self.find_peer_by_name(user.name)
         if target_peer:
             await target_peer.send_message(PrivateRoomMembershipGranted.Response(room.name))
-            await self.send_all_private_room_info(target_peer.user)
+            await self.send_room_list_update(target_peer.user)
 
         # Notify owner
         if granting_user in room.operators:
@@ -1701,7 +1710,7 @@ class MockServer:
         # Leave the room if the user is joined and send private room updates
         if target_peer:
             await self.leave_room(room, target_peer)
-            await self.send_all_private_room_info(user)
+            await self.send_room_list_update(user)
 
     async def grant_operator(self, room: Room, user: User):
         """Grants operator privileges to a user in a private room"""
@@ -1719,7 +1728,7 @@ class MockServer:
         target_peer = self.find_peer_by_name(user.name)
         if target_peer:
             await target_peer.send_message(PrivateRoomOperatorGranted.Response(room.name))
-            await self.send_all_private_room_info(target_peer.user)
+            await self.send_room_list_update(target_peer.user)
 
         # Notify the owner
         await self.notify_room_owner(
@@ -1748,7 +1757,7 @@ class MockServer:
         target_peer = self.find_peer_by_name(user.name)
         if target_peer:
             await target_peer.send_message(PrivateRoomOperatorRevoked.Response(room.name))
-            await self.send_all_private_room_info(target_peer.user)
+            await self.send_room_list_update(target_peer.user)
 
         # Notify the owner
         await self.notify_room_owner(
