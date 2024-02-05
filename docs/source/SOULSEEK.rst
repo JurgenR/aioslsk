@@ -538,12 +538,18 @@ Private Chat Message
 
 **Actions:**
 
-1. Sender -> Server: Send :ref:`PrivateChatMessage`
+1. ``sender`` to server:
 
-  * username = ``receiver``
+  * :ref:`PrivateChatMessage` (username = ``receiver``, message = ``message``)
 
-2. Server -> Client 2: Send :ref:`PrivateChatMessage` with username of sender (Client 1) and automatically generated ``chat_id``
-3. Client 2 -> Server: Send :ref:`PrivateChatMessageAck` with automatically generated ``chat_id``
+2. Server to ``receiver``
+
+  * :ref:`PrivateChatMessage` (username = ``sender``, chat_id = ``<generated>``, message = ``message``)
+
+3. ``receiver`` to server:
+
+  * :ref:`PrivateChatMessageAck` (chat_id = ``<chat_id from received message>``)
+
 
 .. _server-info-message:
 
@@ -552,16 +558,19 @@ Server Notification Message
 
 The server will send private chat messages to report errors and information back to the client:
 
-1. Server -> Client: Send :ref:`PrivateChatMessage`
+**Actors:**
 
-  * username = ``server``
-  * is_admin = ``true``
-  * chat_id = ``<generated>``
-  * message = ``<desired_message>``)
+* ``receiver`` : User receiving a server notification message
 
-2. Client -> Server: Send :ref:`PrivateChatMessageAck`
+**Actions:**
 
-  * chat_id ``<chat_id from received message>``
+1. Server to ``receiver``:
+
+  * Send :ref:`PrivateChatMessage` (username = ``server``, is_admin = ``true``, chat_id = ``<generated>``, message = ``message``)
+
+2. ``receiver`` to server:
+
+  * :ref:`PrivateChatMessageAck` (chat_id = ``<chat_id from received message>``)
 
 
 Rooms
@@ -869,10 +878,10 @@ Owners can drop ownership of a private room, this will disband the private room.
   The server will not remove the the owner from the ``joined_users``. The owner should send a second command to leave the room after sending this command. This seems like a mistake that was corrected in the client itself instead of on the server side.
 
 
-Send Room Message
------------------
+Room Messages
+-------------
 
-Sending a chat message to a room is done through the :ref:`RoomChatMessage`, the same message is also recived by the client when another user sends a message to room.
+Sending a chat message to a room is done through the :ref:`RoomChatMessage`, the same message is also received by the client when another user sends a message to room.
 
 This message will also be sent to all users who have enabled public chat if the room is a public room (see :ref:`EnablePublicChat` / :ref:`DisablePublicChat`) in the form of a :ref:`PublicChatMessage` message.
 
