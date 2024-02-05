@@ -463,7 +463,6 @@ class RoomManager(BaseManager):
             room = self.get_or_create_room(room_name, private=True)
             room.operators.add(me.name)
 
-
         # Remove all rooms no longer tracked
         all_rooms = set(message.rooms) | set(message.rooms_private) | set(message.rooms_private_owned)
         unknown_rooms = set(self._rooms.keys()) - all_rooms
@@ -473,7 +472,8 @@ class RoomManager(BaseManager):
         # For the remaining rooms update owner, operators, members, private
         for room_name, room in self._rooms.items():
             if room_name not in message.rooms_private_owned:
-                room.owner = None
+                if room.owner == me.name:
+                    room.owner = None
 
             if room_name not in message.rooms_private_operated:
                 room.operators.discard(me.name)

@@ -705,16 +705,7 @@ class MockServer:
 
     @on_message(RoomChatMessage.Request)
     async def on_chat_room_message(self, message: RoomChatMessage.Request, peer: Peer):
-        """
-
-        TODO:
-        * Check if users who joined a public room and have the public chat
-            enabled receive it twice (also the order)
-        """
         if not peer.user:
-            return
-
-        if not message.message:
             return
 
         if (room := self.find_room_by_name(message.room)) is None:
@@ -729,14 +720,17 @@ class MockServer:
             message=message.message
         )
 
-
         # Send to joined users
-        futures = []
+        room_futures = []
         for peer in self.get_valid_peers():
             if peer.user in room.joined_users:
-                futures.append(peer.send_message(room_message))
+                room_futures.append(peer.send_message(room_message))
+
+        if room_futures:
+            await asyncio.gather(*room_futures, return_exceptions=True)
 
         # Send to public chat
+        public_futures = []
         if room.status == RoomStatus.PUBLIC:
             public_message = PublicChatMessage.Response(
                 room=room.name,
@@ -745,9 +739,10 @@ class MockServer:
             )
             for peer in self.get_valid_peers():
                 if peer.user.enable_public_chat:
-                    futures.append(public_message)
+                    public_futures.append(public_message)
 
-        await asyncio.gather(*futures, return_exceptions=True)
+        if public_futures:
+            await asyncio.gather(*public_futures, return_exceptions=True)
 
     @on_message(RemoveUser.Request)
     async def on_remove_user(self, message: RemoveUser.Request, peer: Peer):

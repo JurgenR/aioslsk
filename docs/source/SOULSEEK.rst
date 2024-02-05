@@ -858,16 +858,47 @@ Owners can drop ownership of a private room, this will disband the private room.
 
 1. Reset the ``owner``
 2. Empty the ``operators`` list of the room
-3. Empty the ``members`` list of the room but keep a reference to this list
-4. For each member in the list:
+3. Empty the ``members`` list of the room **but keep a reference to this list**
+4. For each member in the stored list:
 
   * :ref:`function-private-room-revoke-membership`
 
 5. :ref:`function-room-list-update`
 
-
 .. warning::
-  The server will not automatically notify the owner himself that he has left the room. The owner should send a second command to leave the room after sending this command. This seems like a mistake that was corrected in the client itself instead of on the server side.
+  The server will not remove the the owner from the ``joined_users``. The owner should send a second command to leave the room after sending this command. This seems like a mistake that was corrected in the client itself instead of on the server side.
+
+
+Send Room Message
+-----------------
+
+Sending a chat message to a room is done through the :ref:`RoomChatMessage`, the same message is also recived by the client when another user sends a message to room.
+
+This message will also be sent to all users who have enabled public chat if the room is a public room (see :ref:`EnablePublicChat` / :ref:`DisablePublicChat`) in the form of a :ref:`PublicChatMessage` message.
+
+**Actors:**
+
+* ``sender`` : User sending a chat message to the room
+
+**Checks:**
+
+* If the room does not exist : Do nothing
+* If the user is not in the ``joined_users`` list : Do nothing
+
+**Actions:**
+
+1. For each user in the ``joined_users`` list:
+
+  * :ref:`RoomChatMessage` : with ``sender``, ``message`` and room ``name``
+
+2. If the room is public (``is_private=false``):
+
+  * For each user currently online and has public chat enabled:
+
+    * :ref:`PublicChatMessage` : with ``sender``, ``message`` and room ``name``
+
+.. note::
+  Empty message is allowed
 
 
 Room Tickers
@@ -881,26 +912,32 @@ A room ticker can be set with the :ref:`SetRoomTicker` message for which the act
 
 * ``user`` : User that requests to set a room ticker
 
+
+**Input Checks:**
+
+* If the length of the ``ticker`` is greater than 1024 : Do nothing
+* TODO: Any characters not allowed?
+
+
 **Checks:**
 
 * If the room does not exist : Do nothing
 * If ``user`` is not in the ``joined_users`` list (public) : Do nothing
-* If the length of the ``ticker`` is greater than 1024 : Do nothing
-* TODO: Any characters not allowed?
+
 
 **Actions:**
 
 1. If the ``user`` has an entry in ``tickers``
 
   * Remove the entry of the ``user`` from the ``tickers``
-  * For each user in the list of ``joined_users``:
+  * For each user in the ``joined_users`` list:
 
     * :ref:`RoomTickerRemoved` : with room ``name`` and the ``user`` for which the ticker was removed
 
 2. If the ``ticker`` in the :ref:`SetRoomTicker` message is not empty:
 
   * Add an entry for the ``user`` to the ``tickers``
-  * For each user in the list of ``joined_users``:
+  * For each user in the ``joined_users`` list:
 
     * :ref:`RoomTickerAdded` : with room ``name``, ``user`` and the ``ticker``
 
@@ -937,7 +974,7 @@ Function to join the room, checks should already be performed.
 **Actions:**
 
 1. Add the user to the list of ``joined_users``
-2. For each user in the list of ``joined_users``:
+2. For each user in the ``joined_users`` list:
 
   * :ref:`UserJoinedRoom` : with room ``name`` (+ stats) of ``joiner`` of the room
 
@@ -971,7 +1008,7 @@ Function to leave a room
 **Actions:**
 
 1. Remove the user from the list of ``joined_users``
-2. For each user in the list of ``joined_users``:
+2. For each user in the ``joined_users`` list:
 
   * :ref:`UserLeftRoom` : with room ``name`` and list (+ stats) of ``leaver`` of the room
 
