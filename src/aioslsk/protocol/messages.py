@@ -1131,6 +1131,14 @@ class GetRelatedSearches(ServerMessage):
         related_searches: List[str] = field(metadata={'type': array, 'subtype': string})
 
 
+class ExcludedSearchPhrases(ServerMessage):
+
+    @dataclass
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0xA0)
+        phrases: List[str] = field(metadata={'type': array, 'subtype': string})
+
+
 class CannotConnect(ServerMessage):
 
     @dataclass

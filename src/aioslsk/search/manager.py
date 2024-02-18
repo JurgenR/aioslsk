@@ -17,11 +17,12 @@ from ..events import (
     SessionInitializedEvent,
 )
 from ..protocol.messages import (
-    RoomSearch,
     DistributedSearchRequest,
     DistributedServerSearchRequest,
+    ExcludedSearchPhrases,
     FileSearch,
     PeerSearchReply,
+    RoomSearch,
     SearchInactivityTimeout,
     ServerSearchRequest,
     UserSearch,
@@ -70,6 +71,7 @@ class SearchManager(BaseManager):
         # Server variables
         self.search_inactivity_timeout: Optional[int] = None
         self.wishlist_interval: Optional[int] = None
+        self.excluded_search_phrases: List[str] = []
 
         self.register_listeners()
 
@@ -170,7 +172,11 @@ class SearchManager(BaseManager):
             logger.warning("not returning search results : no valid session was set")
             return
 
-        visible, locked = self._shares_manager.query(query, username=username)
+        visible, locked = self._shares_manager.query(
+            query,
+            username=username,
+            excluded_search_phrases=self.excluded_search_phrases
+        )
 
         result_count = len(visible) + len(locked)
         self.received_searches.append(
@@ -325,7 +331,7 @@ class SearchManager(BaseManager):
         await connection.disconnect(reason=CloseReason.REQUESTED)
 
     @on_message(WishlistInterval.Response)
-    async def _on_wish_list_interval(self, message: WishlistInterval.Response, connection):
+    async def _on_wish_list_interval(self, message: WishlistInterval.Response, connection: ServerConnection):
         self.wishlist_interval = message.interval
         self._cancel_wishlist_task()
 
@@ -333,6 +339,10 @@ class SearchManager(BaseManager):
             self._wishlist_job(message.interval),
             name=f'wishlist-job-{task_counter()}'
         )
+
+    @on_message(ExcludedSearchPhrases.Response)
+    async def _on_excluded_search_phrases(self, message: ExcludedSearchPhrases.Response, connection: ServerConnection):
+        self.excluded_search_phrases = message.phrases
 
     async def _on_state_changed(self, event: ConnectionStateChangedEvent):
         if not isinstance(event.connection, ServerConnection):
