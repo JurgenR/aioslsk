@@ -966,8 +966,6 @@ class TransferManager(BaseManager):
         try:
             item = await self._shares_manager.get_shared_item(
                 message.filename, connection.username)
-            transfer.local_path = item.get_absolute_path()
-            transfer.filesize = await self._shares_manager.get_filesize(item)
 
         except (FileNotFoundError, FileNotSharedError):
             await transfer.state.fail(reason=Reasons.FILE_NOT_SHARED)
@@ -979,6 +977,8 @@ class TransferManager(BaseManager):
             )
 
         else:
+            transfer.local_path = item.get_absolute_path()
+            transfer.filesize = await self._shares_manager.get_filesize(item)
             await transfer.state.queue()
 
     async def _on_peer_initialized(self, event: PeerInitializedEvent):

@@ -6,10 +6,15 @@ import pytest
 
 from aioslsk.exceptions import ConnectionWriteError, RequestPlaceFailedError
 from aioslsk.user.model import UserStatus, TrackingFlag
-from aioslsk.protocol.messages import PeerPlaceInQueueRequest, PeerPlaceInQueueReply
+from aioslsk.protocol.messages import (
+    PeerPlaceInQueueRequest,
+    PeerPlaceInQueueReply,
+    PeerTransferRequest,
+    PeerTransferReply,
+)
 from aioslsk.transfer.cache import TransferShelveCache
 from aioslsk.transfer.model import Transfer, TransferDirection
-from aioslsk.transfer.manager import TransferManager
+from aioslsk.transfer.manager import Reasons, TransferManager
 from aioslsk.transfer.state import (
     AbortedState,
     CompleteState,
@@ -20,6 +25,7 @@ from aioslsk.transfer.state import (
     UploadingState,
 )
 from aioslsk.settings import Settings
+from aioslsk.shares.model import SharedDirectory, SharedItem
 from aioslsk.user.manager import UserManager
 
 
@@ -61,6 +67,7 @@ def manager(tmpdir, user_manager: UserManager) -> TransferManager:
     event_bus.emit = AsyncMock()
     event_bus.register = Mock()
     shares_manager = Mock()
+    shares_manager = AsyncMock()
 
     return TransferManager(
         Settings(**DEFAULT_SETTINGS),
@@ -410,4 +417,48 @@ class TestTransferManager:
         manager._network.send_peer_messages.assert_awaited_once_with(
             DEFAULT_USERNAME,
             PeerPlaceInQueueRequest.Request(DEFAULT_FILENAME)
+        )
+
+    @pytest.mark.asyncio
+    async def test_whenReceivePeerTransferRequest_nonExistingUpload_shouldQueue(self, manager: TransferManager):
+        manager.on_transfer_state_changed = AsyncMock()
+        connection = AsyncMock()
+        ticket = 123
+
+        abs_dir_path = os.path.join('testdir', 'music')
+        file_subdir = 'someband'
+        shared_directory = SharedDirectory(
+            directory='testdir',
+            absolute_path=abs_dir_path,
+            alias='abcdef'
+        )
+        shared_item = SharedItem(
+            shared_directory=shared_directory,
+            subdir=file_subdir,
+            filename=DEFAULT_FILENAME,
+            modified=1.0
+        )
+        manager._shares_manager.get_shared_item = AsyncMock(return_value=shared_item)
+
+        message = PeerTransferRequest.Request(
+            direction=TransferDirection.UPLOAD,
+            ticket=ticket,
+            filename=DEFAULT_FILENAME
+        )
+        await manager._on_peer_transfer_request(message, connection)
+
+        assert len(manager.transfers) == 1
+        upload = manager.transfers[0]
+        assert upload.direction == TransferDirection.UPLOAD
+        assert upload.local_path == os.path.join(
+            abs_dir_path, file_subdir, DEFAULT_FILENAME
+        )
+        assert upload.state.VALUE == TransferState.QUEUED
+
+        connection.send_message.assert_awaited_once_with(
+            PeerTransferReply.Request(
+                ticket=message.ticket,
+                allowed=False,
+                reason=Reasons.QUEUED
+            )
         )
