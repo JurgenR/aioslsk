@@ -118,9 +118,11 @@ The protocol implements 3 types of search: network, room and user.
 
 .. code-block:: python
 
-    global_search_request = await client.searches.search('my query')
-    user_search_request = await client.searches.search_user('my user query', 'other_user')
-    room_search_request = await client.searches.search_room('my room query', 'cool_room')
+    from aioslsk.search.model import SearchRequest
+
+    global_request: SearchRequest = await client.searches.search('my query')
+    room_request: SearchRequest = await client.searches.search_room('cool_room', 'my room query')
+    user_request: SearchRequest = await client.searches.search_user('other_user', 'my user query')
 
 
 Listen to the ``SearchResultEvent`` to receive search results:
@@ -140,7 +142,7 @@ Full list of search results can always be accessed through the returned object o
 .. code-block:: python
 
     import asyncio
-    from aioslsk.search.model import SearchRequest, SearchResult
+    from aioslsk.search.model import SearchRequest
 
     request: SearchRequest = await client.searches.search('my query')
 
