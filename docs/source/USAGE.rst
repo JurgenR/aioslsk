@@ -118,9 +118,11 @@ The protocol implements 3 types of search: network, room and user.
 
 .. code-block:: python
 
-    global_search_request = await client.search('my query')
-    user_search_request = await client.search_user('my user query', 'other user')
-    room_search_request = await client.search_room('my room query', 'cool room')
+    from aioslsk.search.model import SearchRequest
+
+    global_request: SearchRequest = await client.searches.search('my query')
+    room_request: SearchRequest = await client.searches.search_room('cool_room', 'my room query')
+    user_request: SearchRequest = await client.searches.search_user('other_user', 'my user query')
 
 
 Listen to the ``SearchResultEvent`` to receive search results:
@@ -130,8 +132,7 @@ Listen to the ``SearchResultEvent`` to receive search results:
     from aioslsk.events import SearchResultEvent
 
     async def search_result_listener(event: SearchResultEvent):
-        print(f"got a search result for query: {event.}")
-        print(f"message from {event.message.user.name} in room {event.message.room.name}: {event.message.message}")
+        print(f"got a search result for query: {event.query.query} : {event.query.result}")
 
     client.register(SearchResultEvent, search_result_listener)
 
@@ -140,13 +141,15 @@ Full list of search results can always be accessed through the returned object o
 
 .. code-block:: python
 
-    from aioslsk.search import SearchRequest, SearchResult
+    import asyncio
+    from aioslsk.search.model import SearchRequest
 
-    search_request: SearchRequest = await client.search('my query')
-    print(f"results: {search_request.results}")
+    request: SearchRequest = await client.searches.search('my query')
 
-    results = client.get_search_results_for_ticket(search_request.ticket)
-    print(f"results: {search_request.results}")
+    # Wait a bit for search results
+    await asyncio.sleep(5)
+
+    print(f"results: {request.results}")
 
 
 Transfers
@@ -158,9 +161,9 @@ To start downloading a file:
 
     from aioslsk.transfer.model import Transfer
 
-    search_request: SearchRequest = await client.search('my query')
+    search_request: SearchRequest = await client.searches.search('my query')
     search_result: SearchResult = search_request.results[0]
-    transfer: Transfer = await client.download(search_result.user, search_result.shared_items[0].filename)
+    transfer: Transfer = await client.download(search_result.username, search_result.shared_items[0].filename)
 
 
 Retrieving the transfers:
@@ -172,6 +175,7 @@ Retrieving the transfers:
     all_transfers = List[Transfer] = client.transfers.transfers
     downloads: List[Transfer] = client.transfers.get_downloads()
     uploads: List[Transfer] = client.transfers.get_uploads()
+
 
 Events are available to listen for the transfer progress:
 
@@ -304,11 +308,6 @@ Adding / Removing Directories
 The client provides a mechanism for scanning and caching the files you want to share. Since it's possible to share millions of files the file information is stored in memory as well as in a cache on disk. When starting the client through `client.start()` the cache will be read and the files configured in the settings will be scanned.
 
 It is possible to add or remove shared directories on the fly.
-
-.. code-block:: python
-
-    client.shares_manager.add_shared_directory()
-    client.shares_manager.remove_shared_directory()
 
 
 File naming
