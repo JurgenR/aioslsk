@@ -580,7 +580,7 @@ class MockServer:
         # NOTE: the room list should only contain rooms with 5 or more joined
         # users after login. Ignoring for now since there won't be much rooms
         # during testing
-        await self.send_room_list_update(peer)
+        await self.send_room_list_update(peer.user)
         await peer.send_message(
             ParentMinSpeed.Response(self.settings.parent_min_speed))
         await peer.send_message(
