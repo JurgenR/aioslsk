@@ -140,16 +140,16 @@ Example
 ~~~~~~~
 
 * Original message :   ``08000000 79000000 e8030000``
-* Obfuscated message : ``1494ee4a 2028dd95 2850ba2b 4aa37457``
+* Obfuscated message : ``1494ee4a 2028dd95 2850ba2b 4aa37457`` (first 4 bytes are the key)
 
-**First 4 bytes**
+**De-obfuscated first 4 bytes of the message**
 
-Convert to big-endian: ``14 94 ee 4a`` -> ``4a ee 94 14``
+Convert the key to big-endian: ``14 94 ee 4a`` -> ``4a ee 94 14``
 
 Original key:
 
-Hex: ``4a ee 94 14``
-Bin: ``0100 1010 1110 1110 1001 0100 0001 0100``
+* Hex: ``4a ee 94 14``
+* Bin: ``0100 1010 1110 1110 1001 0100 0001 0100``
 
 Key shifted 31 bits to the right:
 
@@ -158,7 +158,7 @@ Key shifted 31 bits to the right:
 
 Convert to little-endian: ``95 dd 28 28`` -> ``28 28 dd 95``
 
-XOR the first 4 bytes (``20 28 dd 95``) with the rotated key:
+XOR the first 4 bytes of the message (``20 28 dd 95``) with the rotated key:
 
 +-----+----+----+----+----+
 |     | b3 | b2 | b1 | b0 |
@@ -171,9 +171,9 @@ XOR the first 4 bytes (``20 28 dd 95``) with the rotated key:
 +-----+----+----+----+----+
 
 
-**Second 4 bytes**
+**De-obfuscated second 4 bytes of the message**
 
-Convert to big-endian: ``28 28 dd 95`` -> ``95 dd 28 28``
+Convert the key to big-endian: ``28 28 dd 95`` -> ``95 dd 28 28``
 
 Original key:
 
@@ -187,7 +187,7 @@ Key shifted 31 bits to the right:
 
 Convert to little-endian: ``2b ba 50 51`` -> ``51 50 ba 2b``
 
-XOR the second 4 bytes (``28 50 ba 2b``) with the rotated key:
+XOR the second 4 bytes of the message (``28 50 ba 2b``) with the rotated key:
 
 +-----+----+----+----+----+
 |     | b3 | b2 | b1 | b0 |
@@ -202,7 +202,7 @@ XOR the second 4 bytes (``28 50 ba 2b``) with the rotated key:
 
 **Third 4 bytes**
 
-Convert to big-endian: ``51 50 ba 2b`` -> ``2b ba 50 51``
+Convert the key to big-endian: ``51 50 ba 2b`` -> ``2b ba 50 51``
 
 Original key:
 
@@ -216,7 +216,7 @@ Key shifted 31 bits to the right:
 
 Convert to little-endian: ``57 74 a0 a2`` -> ``a2 a0 74 57``
 
-XOR the third 4 bytes (``4a a3 74 57``) with the rotated key:
+XOR the third 4 bytes of the message (``4a a3 74 57``) with the rotated key:
 
 +-----+----+----+----+----+
 |     | b3 | b2 | b1 | b0 |
@@ -274,9 +274,11 @@ Max children
 
 Clients limit the amount of children depending on the upload speed that is currently stored on the server. Whenever a :ref:`GetUserStats` message is received (for the logged in user) this limit is re-calculated and depends on the :ref:`ParentSpeedRatio` and :ref:`ParentMinSpeed` values the server sent after logon.
 
-When a client receives a :ref:`GetUserStats` message the client should determine whether to enable or disable accepting children and if enabled, calculate the amount of maximum children:
+When a client receives a :ref:`GetUserStats` message the client should determine whether to enable or disable accepting children and if enabled, calculate the amount of maximum children.
 
-1. If the ``avg_speed`` returned is smaller than the value received by :ref:`ParentMinSpeed` * 1024 : Send :ref:`AcceptChildren` (``accept = false``)
+1. If the ``avg_speed`` returned is smaller than the value received by :ref:`ParentMinSpeed` * 1024 :
+  1. Send :ref:`AcceptChildren` (``accept = false``)
+
 2. If the ``avg_speed`` is greater or equal than the value received by :ref:`ParentMinSpeed` * 1024 :
 
   1. Send :ref:`AcceptChildren` (``accept = true``)
@@ -284,19 +286,36 @@ When a client receives a :ref:`GetUserStats` message the client should determine
   3. Calculate the max number of children : floor(``avg_speed`` / ``divider``)
 
 
-Example calculation 1 (``ratio=50``, ``avg_speed=20480``):
+Example calculations
+++++++++++++++++++++
+
+**Calculation 1**
+
+Values:
+
+* ratio=50
+* avg_speed=20480
+
+Calculation:
 
 * (50 / 10) * 1024 = 5120
 * floor(20480 / 5120) = 4
 
-Example calculation 1 (``ratio=30``, ``avg_speed=20480``):
+**Calculation 2**
+
+Values:
+
+* ratio=30
+* avg_speed=20480
+
+Calculation:
 
 * (30 / 10) * 1024 = 3072
 * floor(20480 / 3072) = 6 (floored from 6.66666666)
 
 
 .. note::
-  The formula for calculating the max amount of parents can be 0, clients still seem to enable :ref:`AcceptChildren` regardless
+  With this formula there is a possibility that even when the ``avg_speed`` is greater than the ``min_speed_ratio`` the max amount of children calculated is 0. In this case the :ref:`AcceptChildren` is sent with ``accept=true``, despite the client not accepting any children.
 
 
 Searches on the distributed network

@@ -1,6 +1,6 @@
-========
-Messages
-========
+=================
+Protocol Messages
+=================
 
 .. contents:
    :local

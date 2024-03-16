@@ -37,6 +37,7 @@ pytest = ">=7.4.2,<9.0.0"
 pytest-cov = "^4.1.0"
 pytest-unordered = ">=0.5.2,<0.7.0"
 pytest-asyncio = ">=0.21.1,<0.24.0"
+sphinx-rtd-theme = "^2.0.0"
 
 [tool.poetry.group.tools]
 optional = true
