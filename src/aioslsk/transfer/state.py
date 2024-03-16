@@ -35,7 +35,6 @@ class TransferState:
         COMPLETE = 7
         FAILED = 8
         ABORTED = 9
-        TRANSFERRING = 10
 
     UNSET = State.UNSET
     VIRGIN = State.VIRGIN
@@ -47,7 +46,6 @@ class TransferState:
     COMPLETE = State.COMPLETE
     FAILED = State.FAILED
     ABORTED = State.ABORTED
-    TRANSFERRING = State.TRANSFERRING
 
     VALUE = UNSET
 
@@ -93,8 +91,9 @@ class TransferState:
         return False
 
     async def start_transferring(self) -> bool:
+        new_state = self.UPLOADING if self.transfer.is_upload() else self.DOWNLOADING
         logger.warning(
-            f"attempted to make undefined state transition from {self.VALUE.name} to {self.TRANSFERRING.name}")
+            f"attempted to make undefined state transition from {self.VALUE.name} to {new_state.name}")
         return False
 
     def __repr__(self) -> str:

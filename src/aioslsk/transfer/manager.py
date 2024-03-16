@@ -887,7 +887,8 @@ class TransferManager(BaseManager):
             await transfer.state.incomplete()
 
         except asyncio.CancelledError:
-            # Aborted or program shut down
+            # Aborted or program shut down. The state does not need to be set
+            # here as this usually occurs during a state transition (aborting)
             logger.debug(f"requested to cancel transfer: {transfer}")
             await connection.disconnect(CloseReason.REQUESTED)
             raise
@@ -965,12 +966,10 @@ class TransferManager(BaseManager):
         try:
             item = await self._shares_manager.get_shared_item(
                 message.filename, connection.username)
-            transfer.local_path = item.get_absolute_path()
-            transfer.filesize = await self._shares_manager.get_filesize(item)
 
         except (FileNotFoundError, FileNotSharedError):
             await transfer.state.fail(reason=Reasons.FILE_NOT_SHARED)
-            await connection.queue_message(
+            connection.queue_message(
                 PeerTransferQueueFailed.Request(
                     filename=message.filename,
                     reason=Reasons.FILE_NOT_SHARED
@@ -978,6 +977,8 @@ class TransferManager(BaseManager):
             )
 
         else:
+            transfer.local_path = item.get_absolute_path()
+            transfer.filesize = await self._shares_manager.get_filesize(item)
             await transfer.state.queue()
 
     async def _on_peer_initialized(self, event: PeerInitializedEvent):
@@ -1043,12 +1044,15 @@ class TransferManager(BaseManager):
         # in our queue
         if TransferDirection(message.direction) == TransferDirection.UPLOAD:
             # The other peer is asking us to upload a file. Check if this is not
-            # a locked file for the given user
+            # a locked file for the given user and if the item even exists
             try:
-                await self._shares_manager.get_shared_item(
+                shared_item = await self._shares_manager.get_shared_item(
                     message.filename, username=connection.username)
 
             except (FileNotFoundError, FileNotSharedError):
+                if transfer:
+                    await transfer.state.fail(Reasons.FILE_NOT_SHARED)
+
                 connection.queue_message(
                     PeerTransferReply.Request(
                         ticket=message.ticket,
@@ -1056,9 +1060,8 @@ class TransferManager(BaseManager):
                         reason=Reasons.FILE_NOT_SHARED
                     )
                 )
-                if transfer:
-                    await transfer.state.fail(Reasons.FILE_NOT_SHARED)
-                    return
+
+                return
 
             if transfer is None:
                 # Got a request to upload, possibly without prior PeerTransferQueue
@@ -1068,6 +1071,8 @@ class TransferManager(BaseManager):
                     message.filename,
                     TransferDirection.UPLOAD
                 )
+                transfer.local_path = shared_item.get_absolute_path()
+                transfer.filesize = await self._shares_manager.get_filesize(shared_item)
                 # Send before queueing: queueing will trigger the transfer
                 # manager to re-asses the tranfers and possibly immediatly start
                 # the upload
@@ -1143,7 +1148,7 @@ class TransferManager(BaseManager):
                     PeerTransferReply.Request(
                         ticket=message.ticket,
                         allowed=False,
-                        reason=Reasons.CANCELLED
+                        reason=reason
                     )
                 )
             else:
