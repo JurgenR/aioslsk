@@ -8,6 +8,7 @@ import socket
 import struct
 
 from ..constants import (
+    DISCONNECT_TIMEOUT,
     PEER_CONNECT_TIMEOUT,
     PEER_READ_TIMEOUT,
     SERVER_CONNECT_TIMEOUT,
@@ -241,7 +242,9 @@ class DataConnection(Connection):
             if self._writer is not None:
                 if not self._writer.is_closing():
                     self._writer.close()
-                await self._writer.wait_closed()
+
+                async with atimeout(DISCONNECT_TIMEOUT):
+                    await self._writer.wait_closed()
 
         except Exception as exc:
             logger.warning(f"{self.hostname}:{self.port} : exception while disconnecting : {exc}")
