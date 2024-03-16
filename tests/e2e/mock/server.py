@@ -32,6 +32,7 @@ from aioslsk.protocol.messages import (
     DisablePublicChat,
     EnablePublicChat,
     ExactFileSearch,
+    ExcludedSearchPhrases,
     FileSearch,
     GetRelatedSearches,
     GetGlobalRecommendations,
@@ -91,6 +92,7 @@ from aioslsk.protocol.messages import (
     WishlistInterval,
 )
 from tests.e2e.mock.constants import (
+    DEFAULT_EXCLUDED_SEARCH_PHRASES,
     MAX_RECOMMENDATIONS,
     MAX_GLOBAL_RECOMMENDATIONS,
 )
@@ -201,7 +203,8 @@ class MockServer:
 
     def __init__(
             self, hostname: str = '0.0.0.0', port: int = 2416,
-            distributed_strategy: DistributedStrategy = None):
+            excluded_search_phrases: List[str] = DEFAULT_EXCLUDED_SEARCH_PHRASES,
+            distributed_strategy: Optional[DistributedStrategy] = None):
         self.hostname: str = hostname
         self.port: int = port
         self.connection: asyncio.Server = None
@@ -211,6 +214,7 @@ class MockServer:
         self.rooms: List[Room] = []
         self.peers: List[Peer] = []
         self.track_map: Dict[str, Set[str]] = {}
+        self.excluded_search_phrases: List[str] = excluded_search_phrases
         self.distributed_strategy: DistributedStrategy = distributed_strategy or DistributedStrategy(self.peers)
 
         self.chat_id_gen = chat_id_generator()
@@ -396,25 +400,20 @@ class MockServer:
             )
         )
 
-    async def send_room_list(self, peer: Peer, min_users: Optional[int] = None):
-        """Send the room list for the user
-
-        :param min_users: Optional minimum amount of joined users for public
-            rooms. Public rooms with less joined users will be filtered out
-        """
+    def _create_room_list_message(self, user: User, min_users: Optional[int] = None):
         public_rooms: List[Room] = []
         private_rooms: List[Room] = []
         private_rooms_owned: List[Room] = []
         private_rooms_operated: List[Room] = []
         for room in self.rooms:
             if room.status == RoomStatus.PRIVATE:
-                if room.owner == peer.user:
+                if room.owner == user:
                     private_rooms_owned.append(room)
 
-                if peer.user in room.operators:
+                if user in room.operators:
                     private_rooms_operated.append(room)
 
-                if peer.user in room.members:
+                if user in room.members:
                     private_rooms.append(room)
 
             elif room.status == RoomStatus.PUBLIC:
@@ -425,16 +424,24 @@ class MockServer:
                 else:
                     public_rooms.append(room)
 
+        return RoomList.Response(
+            rooms=[room.name for room in public_rooms],
+            rooms_user_count=[len(room.joined_users) for room in public_rooms],
+            rooms_private=[room.name for room in private_rooms],
+            rooms_private_user_count=[len(room.joined_users) for room in private_rooms],
+            rooms_private_owned=[room.name for room in private_rooms_owned],
+            rooms_private_owned_user_count=[len(room.joined_users) for room in private_rooms_owned],
+            rooms_private_operated=[room.name for room in private_rooms_operated]
+        )
+
+    async def send_room_list(self, peer: Peer, min_users: Optional[int] = None):
+        """Send the room list for the user
+
+        :param min_users: Optional minimum amount of joined users for public
+            rooms. Public rooms with less joined users will be filtered out
+        """
         await peer.send_message(
-            RoomList.Response(
-                rooms=[room.name for room in public_rooms],
-                rooms_user_count=[len(room.joined_users) for room in public_rooms],
-                rooms_private=[room.name for room in private_rooms],
-                rooms_private_user_count=[len(room.joined_users) for room in private_rooms],
-                rooms_private_owned=[room.name for room in private_rooms_owned],
-                rooms_private_owned_user_count=[len(room.joined_users) for room in private_rooms_owned],
-                rooms_private_operated=[room.name for room in private_rooms_operated]
-            )
+            self._create_room_list_message(peer.user, min_users=min_users)
         )
 
     async def send_room_list_update(self, user: User, min_users: Optional[int] = None):
@@ -453,13 +460,15 @@ class MockServer:
         """
         peer = self.find_peer_by_name(user.name)
 
-        await self.send_room_list(peer, min_users=min_users)
+        messages = [
+            self._create_room_list_message(user, min_users=min_users)
+        ]
 
         # Following is done in 2 loops deliberatly
         # PrivateRoomMembers (excludes owner, includes operators)
-        user_private_rooms = self.get_user_private_rooms(peer.user)
+        user_private_rooms = self.get_user_private_rooms(user)
         for room in user_private_rooms:
-            await peer.send_message(
+            messages.append(
                 PrivateRoomMembers.Response(
                     room=room.name,
                     usernames=[member.name for member in room.members]
@@ -468,12 +477,15 @@ class MockServer:
 
         # RoomOperators (only operators)
         for room in user_private_rooms:
-            await peer.send_message(
+            messages.append(
                 PrivateRoomOperators.Response(
                     room=room.name,
                     usernames=[operator.name for operator in room.operators]
                 )
             )
+
+        for message in messages:
+            await peer.send_message(message)
 
     async def notify_trackers_status(self, user: User):
         """Notify the peers tracking the given user of status changes"""
@@ -576,7 +588,7 @@ class MockServer:
         # NOTE: the room list should only contain rooms with 5 or more joined
         # users after login. Ignoring for now since there won't be much rooms
         # during testing
-        await self.send_room_list_update(peer)
+        await self.send_room_list_update(peer.user)
         await peer.send_message(
             ParentMinSpeed.Response(self.settings.parent_min_speed))
         await peer.send_message(
@@ -585,6 +597,8 @@ class MockServer:
             WishlistInterval.Response(self.settings.wishlist_interval))
         await peer.send_message(
             PrivilegedUsers.Response([user.name for user in self.users if user.privileged]))
+        await peer.send_message(
+            ExcludedSearchPhrases.Response(self.excluded_search_phrases))
 
     @on_message(SetListenPort.Request)
     async def on_listen_port(self, message: SetListenPort.Request, peer: Peer):

@@ -46,6 +46,7 @@ from aioslsk.protocol.messages import (
     DistributedPing,
     DistributedSearchRequest,
     ExactFileSearch,
+    ExcludedSearchPhrases,
     ExecuteCommand,
     FileSearch,
     GetRelatedSearches,
@@ -2277,6 +2278,19 @@ class TestGetRelatedSearches:
         )
         data = bytes.fromhex('22000000990000000500000051756572790200000004000000736f6d65050000007468696e67')
         assert GetRelatedSearches.Response.deserialize(data) == message
+
+
+class TestExcludedSearchPhrases:
+
+    def test_ExcludedSearchPhrases_Response_serialize(self):
+        message = ExcludedSearchPhrases.Response(phrases=['banned phrase'])
+        data = bytes.fromhex('19000000a0000000010000000d00000062616e6e656420706872617365')
+        assert message.serialize() == data
+
+    def test_ExcludedSearchPhrases_Response_deserialize(self):
+        message = ExcludedSearchPhrases.Response(phrases=['banned phrase'])
+        data = bytes.fromhex('19000000a0000000010000000d00000062616e6e656420706872617365')
+        assert ExcludedSearchPhrases.Response.deserialize(data) == message
 
 
 class TestCannotConnect:
