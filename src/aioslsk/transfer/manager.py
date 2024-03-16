@@ -969,7 +969,7 @@ class TransferManager(BaseManager):
 
         except (FileNotFoundError, FileNotSharedError):
             await transfer.state.fail(reason=Reasons.FILE_NOT_SHARED)
-            await connection.queue_message(
+            connection.queue_message(
                 PeerTransferQueueFailed.Request(
                     filename=message.filename,
                     reason=Reasons.FILE_NOT_SHARED
@@ -1050,6 +1050,9 @@ class TransferManager(BaseManager):
                     message.filename, username=connection.username)
 
             except (FileNotFoundError, FileNotSharedError):
+                if transfer:
+                    await transfer.state.fail(Reasons.FILE_NOT_SHARED)
+
                 connection.queue_message(
                     PeerTransferReply.Request(
                         ticket=message.ticket,
@@ -1057,8 +1060,6 @@ class TransferManager(BaseManager):
                         reason=Reasons.FILE_NOT_SHARED
                     )
                 )
-                if transfer:
-                    await transfer.state.fail(Reasons.FILE_NOT_SHARED)
 
                 return
 

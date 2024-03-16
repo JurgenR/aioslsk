@@ -1,11 +1,18 @@
 import asyncio
 import os
+from typing import Optional
 from unittest.mock import AsyncMock, Mock, MagicMock, patch
 
 import pytest
 
-from aioslsk.exceptions import ConnectionWriteError, RequestPlaceFailedError
+from aioslsk.exceptions import (
+    ConnectionWriteError,
+    RequestPlaceFailedError,
+    FileNotFoundError,
+    FileNotSharedError,
+)
 from aioslsk.user.model import UserStatus, TrackingFlag
+from aioslsk.network.connection import PeerConnection, PeerConnectionType
 from aioslsk.protocol.messages import (
     PeerPlaceInQueueRequest,
     PeerPlaceInQueueReply,
@@ -419,12 +426,8 @@ class TestTransferManager:
             PeerPlaceInQueueRequest.Request(DEFAULT_FILENAME)
         )
 
-    @pytest.mark.asyncio
-    async def test_whenReceivePeerTransferRequest_nonExistingUpload_shouldQueue(self, manager: TransferManager):
-        manager.on_transfer_state_changed = AsyncMock()
-        connection = AsyncMock()
-        ticket = 123
-
+    def _create_shared_item(self) -> SharedItem:
+        """Creates a dummy shared item"""
         abs_dir_path = os.path.join('testdir', 'music')
         file_subdir = 'someband'
         shared_directory = SharedDirectory(
@@ -432,18 +435,26 @@ class TestTransferManager:
             absolute_path=abs_dir_path,
             alias='abcdef'
         )
-        shared_item = SharedItem(
+        return SharedItem(
             shared_directory=shared_directory,
             subdir=file_subdir,
             filename=DEFAULT_FILENAME,
             modified=1.0
         )
+
+    @pytest.mark.asyncio
+    async def test_whenReceivePeerTransferRequest_nonExistingUpload_shouldQueue(self, manager: TransferManager):
+        manager.on_transfer_state_changed = AsyncMock()
+        connection = AsyncMock()
+        ticket = 123
+
+        shared_item = self._create_shared_item()
         manager._shares_manager.get_shared_item = AsyncMock(return_value=shared_item)
 
         message = PeerTransferRequest.Request(
-            direction=TransferDirection.UPLOAD,
+            direction=TransferDirection.UPLOAD.value,
             ticket=ticket,
-            filename=DEFAULT_FILENAME
+            filename=shared_item.get_remote_path()
         )
         await manager._on_peer_transfer_request(message, connection)
 
@@ -451,7 +462,9 @@ class TestTransferManager:
         upload = manager.transfers[0]
         assert upload.direction == TransferDirection.UPLOAD
         assert upload.local_path == os.path.join(
-            abs_dir_path, file_subdir, DEFAULT_FILENAME
+            shared_item.shared_directory.absolute_path,
+            shared_item.subdir,
+            shared_item.filename
         )
         assert upload.state.VALUE == TransferState.QUEUED
 
@@ -460,5 +473,148 @@ class TestTransferManager:
                 ticket=message.ticket,
                 allowed=False,
                 reason=Reasons.QUEUED
+            )
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "state,expected_reason",
+        [
+            # Possible states with reason response
+            (TransferState.ABORTED, Reasons.CANCELLED),
+            (TransferState.COMPLETE, Reasons.COMPLETE),
+            (TransferState.QUEUED, Reasons.QUEUED),
+            # Possible states with no response
+            (TransferState.INITIALIZING, None),
+            (TransferState.FAILED, None),
+            (TransferState.UPLOADING, None),
+            # Exotic states that should not be reached
+            (TransferState.VIRGIN, None),
+            (TransferState.DOWNLOADING, None),
+            (TransferState.INCOMPLETE, None),
+        ]
+    )
+    async def test_whenReceivePeerTransferRequest_existingUpload_shouldDoNothing(
+            self, manager: TransferManager, state: TransferState.State, expected_reason: Optional[str]):
+        manager.on_transfer_state_changed = AsyncMock()
+        username = 'downloader0'
+        ticket = 123
+
+        # Setup peer connection, shared item and transfer mocks
+        connection = PeerConnection(
+            '1.2.3.4', 1234, manager._network,
+            username=username, connection_type=PeerConnectionType.PEER
+        )
+        connection.send_message = AsyncMock()
+
+        shared_item = self._create_shared_item()
+        manager._shares_manager.get_shared_item = AsyncMock(return_value=shared_item)
+        upload = Transfer(
+            username=username,
+            remote_path=shared_item.get_remote_path(),
+            direction=TransferDirection.UPLOAD
+        )
+        upload.state = TransferState.init_from_state(state, upload)
+        manager._transfers = [upload, ]
+
+        # Execute request and verify
+        message = PeerTransferRequest.Request(
+            direction=TransferDirection.UPLOAD.value,
+            ticket=ticket,
+            filename=shared_item.get_remote_path()
+        )
+        await manager._on_peer_transfer_request(message, connection)
+
+        if expected_reason:
+            connection.send_message.assert_awaited_once_with(
+                PeerTransferReply.Request(
+                    ticket=ticket,
+                    allowed=False,
+                    reason=expected_reason
+                )
+            )
+        else:
+            connection.send_message.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "exception_type", [(FileNotSharedError, FileNotFoundError)]
+    )
+    async def test_whenReceivePeerTransferRequest_nonExistingUpload_fileNotSharedOrFound_shouldDoNothing(
+            self, manager: TransferManager, exception_type):
+        username = 'downloader0'
+        ticket = 123
+
+        # Setup peer connection, shared item and transfer mocks
+        connection = PeerConnection(
+            '1.2.3.4', 1234, manager._network,
+            username=username, connection_type=PeerConnectionType.PEER
+        )
+        connection.queue_message = Mock()
+
+        manager._shares_manager.get_shared_item = AsyncMock(side_effect=exception_type)
+
+        # Execute request and verify
+        message = PeerTransferRequest.Request(
+            direction=TransferDirection.UPLOAD.value,
+            ticket=ticket,
+            filename=DEFAULT_FILENAME
+        )
+        await manager._on_peer_transfer_request(message, connection)
+
+        connection.queue_message.assert_called_once_with(
+            PeerTransferReply.Request(
+                ticket=ticket,
+                allowed=False,
+                reason=Reasons.FILE_NOT_SHARED
+            )
+        )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "exception_type", [(FileNotSharedError, FileNotFoundError)]
+    )
+    async def test_whenReceivePeerTransferRequest_existingUpload_fileNotSharedOrFound_shouldFailTransfer(
+            self, manager: TransferManager, exception_type):
+        manager.on_transfer_state_changed = AsyncMock()
+        username = 'downloader0'
+        ticket = 123
+
+        # Setup peer connection, shared item and transfer mocks
+        connection = PeerConnection(
+            '1.2.3.4', 1234, manager._network,
+            username=username, connection_type=PeerConnectionType.PEER
+        )
+        connection.queue_message = Mock()
+
+        shared_item = self._create_shared_item()
+        manager._shares_manager.get_shared_item = AsyncMock(side_effect=exception_type)
+        upload = Transfer(
+            username=username,
+            remote_path=shared_item.get_remote_path(),
+            direction=TransferDirection.UPLOAD
+        )
+        upload.state = TransferState.init_from_state(TransferState.QUEUED, upload)
+        upload.state_listeners.append(manager)
+        manager._transfers = [upload, ]
+
+        # Execute request and verify
+        message = PeerTransferRequest.Request(
+            direction=TransferDirection.UPLOAD.value,
+            ticket=ticket,
+            filename=shared_item.get_remote_path()
+        )
+        await manager._on_peer_transfer_request(message, connection)
+
+        manager.on_transfer_state_changed.assert_awaited_once_with(
+            upload,
+            TransferState.QUEUED,
+            TransferState.FAILED
+        )
+        connection.queue_message.assert_called_once_with(
+            PeerTransferReply.Request(
+                ticket=ticket,
+                allowed=False,
+                reason=Reasons.FILE_NOT_SHARED
             )
         )
