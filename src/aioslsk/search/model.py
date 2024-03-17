@@ -71,7 +71,7 @@ class SearchQuery:
 
         for exclude_term in self.exclude_terms:
             pattern = create_term_pattern(exclude_term, wildcard=False)
-            yield lambda fn: not(pattern.search(fn))
+            yield lambda fn: not pattern.search(fn)
 
     def has_inclusion_terms(self) -> bool:
         """Return whether this query has any valid inclusion terms"""
