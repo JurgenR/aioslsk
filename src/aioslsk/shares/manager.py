@@ -37,7 +37,7 @@ from ..protocol.primitives import DirectoryData
 from ..search.model import SearchQuery
 from ..session import Session
 from ..settings import Settings
-from .utils import create_term_pattern, convert_items_to_file_data
+from .utils import convert_items_to_file_data
 
 logger = logging.getLogger(__name__)
 
@@ -541,9 +541,6 @@ class SharesManager(BaseManager):
 
             if not all(matcher(found_item.get_query_path()) for matcher in search_query.matchers_iter()):
                 continue
-
-            if query == 'simple -mp3 -contributer' and found_item.filename == 'simple band(contrib. singer) - isn\'t easy song.mp3':
-                import pdb; pdb.set_trace()
 
             # Excluded search phrases
             for excl_phrase in excl_phrases:
