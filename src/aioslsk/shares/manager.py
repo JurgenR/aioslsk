@@ -530,43 +530,31 @@ class SharesManager(BaseManager):
         for include_term in include_terms:
             found_items &= set(self._term_map[include_term])
 
-        # Regular expressions on the remnants
+        # Regular expressions on the remaining items
 
-        for include_term in search_query.include_terms:
-            to_remove = set()
-            for item in found_items:
-                pattern = create_term_pattern(include_term, wildcard=False)
-                if not re.search(pattern, item.get_query_path()):
-                    to_remove.add(item)
-            found_items -= to_remove
+        to_keep = set()
+        excl_phrases = excluded_search_phrases or []
+        for found_item in found_items:
 
-        for wildcard_term in search_query.wildcard_terms:
-            to_remove = set()
-            for item in found_items:
-                pattern = create_term_pattern(wildcard_term, wildcard=True)
-                if not re.search(pattern, item.get_query_path()):
-                    to_remove.add(item)
-            found_items -= to_remove
+            if not all(matcher(found_item.get_query_path()) for matcher in search_query.matchers_iter()):
+                continue
 
-        for exclude_term in search_query.exclude_terms:
-            to_remove = set()
-            for item in found_items:
-                pattern = create_term_pattern(exclude_term, wildcard=False)
-                if re.search(pattern, item.get_query_path()):
-                    to_remove.add(item)
-            found_items -= to_remove
-
-        # Excluded search phrases
-        for excluded_search_phrase in excluded_search_phrases or []:
-            to_remove = set()
-            for item in found_items:
-                if excluded_search_phrase in item.get_query_path().lower():
+            # Excluded search phrases
+            for excl_phrase in excl_phrases:
+                if excl_phrase in found_item.get_query_path().lower():
                     logger.debug(
-                        f"removing search result '{item.get_absolute_path()}' due to "
-                        f"excluded phrase '{excluded_search_phrase}'"
+                        f"removing search result '{found_item.get_absolute_path()}' due to "
+                        f"excluded phrase '{excl_phrase}'"
                     )
-                    to_remove.add(item)
-            found_items -= to_remove
+                    break
+
+            else:
+                to_keep.add(found_item)
+
+            if len(to_keep) >= self._settings.searches.max_results:
+                break
+
+        found_items = to_keep
 
         # Order by visible and locked results when username is given
         if username:
