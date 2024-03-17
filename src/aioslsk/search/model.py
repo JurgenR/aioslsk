@@ -1,11 +1,15 @@
 from dataclasses import dataclass, field
 import datetime
 from enum import auto, Enum
+import logging
 import re
-from typing import Callable, Dict, Generator, List, Optional, Set
+from typing import Callable, Generator, List, Optional, Set
 
 from ..protocol.primitives import FileData
 from ..shares.utils import create_term_pattern
+
+
+logger = logging.getLogger(__name__)
 
 
 class SearchType(Enum):
@@ -31,8 +35,6 @@ class SearchQuery:
     include_terms: Set[str] = field(default_factory=set)
     exclude_terms: Set[str] = field(default_factory=set)
     wildcard_terms: Set[str] = field(default_factory=set)
-    _matchers: Dict[str, Callable[[str], bool]] = field(default_factory=dict)
-    _matchers_complete: bool = False
 
     @classmethod
     def parse(cls, query: str) -> 'SearchQuery':
@@ -61,41 +63,17 @@ class SearchQuery:
         """Generator for matching terms that caches the regular patterns
         matchers
         """
-        # If all matchers are calculated simply return from the stored dict
-        if self._matchers_complete:
-            for matcher in self._matchers.values():
-                yield matcher
-
-        # Calculate the matchers on the fly
         for include_term in self.include_terms:
-            if include_term not in self._matchers:
-                self._matchers[include_term] = lambda fn: bool(
-                    re.search(create_term_pattern(include_term, wildcard=False), fn)
-                )
-
-            yield self._matchers[include_term]
+            pattern = create_term_pattern(include_term, wildcard=False)
+            yield lambda fn: bool(pattern.search(fn))
 
         for wildcard_term in self.wildcard_terms:
-            wterm = '*' + wildcard_term
-
-            if wterm not in self._matchers:
-                self._matchers[wterm] = lambda fn: bool(
-                    re.search(create_term_pattern(wildcard_term, wildcard=True), fn)
-                )
-
-            yield self._matchers[wterm]
+            pattern = create_term_pattern(wildcard_term, wildcard=True)
+            yield lambda fn: bool(pattern.search(fn))
 
         for exclude_term in self.exclude_terms:
-            exterm = '-' + exclude_term
-
-            if exterm not in self._matchers:
-                self._matchers[exterm] = lambda fn: not re.search(
-                    create_term_pattern(exclude_term, wildcard=False), fn
-                )
-
-            yield self._matchers[exterm]
-
-        self._matchers_complete = True
+            pattern = create_term_pattern(exclude_term, wildcard=False)
+            yield lambda fn: not(pattern.search(fn))
 
     def has_inclusion_terms(self) -> bool:
         """Return whether this query has any valid inclusion terms"""
