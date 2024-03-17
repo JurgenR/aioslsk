@@ -81,6 +81,7 @@ class CredentialsSettings(BaseModel, validate_assignment=True):
 
 
 class SearchSettings(BaseModel, validate_assignment=True):
+    max_results: int = 100
     wishlist: List[WishlistSettingEntry] = Field(default_factory=list)
 
 

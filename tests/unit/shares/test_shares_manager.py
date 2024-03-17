@@ -265,6 +265,20 @@ class TestSharesManagerQuery:
         assert expected_items == unordered(actual_items)
         assert locked_items == []
 
+    def test_maxResults(self, manager_query: SharesManager):
+        # Get the results without any limit, this is simply to ensure that if
+        # the test data is changed that this testcase doesn't become bogus
+        actual_items, locked_items = manager_query.query('simple')
+        unlimited_results_len = len(actual_items) + len(locked_items)
+
+        max_results = 2
+        manager_query._settings.searches.max_results = max_results
+
+        actual_items, locked_items = manager_query.query('simple')
+        limited_results_len = len(actual_items) + len(locked_items)
+        assert limited_results_len == max_results
+        assert unlimited_results_len > limited_results_len
+
 
 class TestSharesManagerSharedDirectoryManagement:
 

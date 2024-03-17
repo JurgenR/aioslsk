@@ -1,10 +1,15 @@
 from dataclasses import dataclass, field
 import datetime
 from enum import auto, Enum
+import logging
 import re
-from typing import List, Optional
+from typing import Callable, Generator, List, Optional, Set
 
 from ..protocol.primitives import FileData
+from ..shares.utils import create_term_pattern
+
+
+logger = logging.getLogger(__name__)
 
 
 class SearchType(Enum):
@@ -27,9 +32,9 @@ class ReceivedSearch:
 @dataclass
 class SearchQuery:
     query: str
-    include_terms: List[str] = field(default_factory=list)
-    exclude_terms: List[str] = field(default_factory=list)
-    wildcard_terms: List[str] = field(default_factory=list)
+    include_terms: Set[str] = field(default_factory=set)
+    exclude_terms: Set[str] = field(default_factory=set)
+    wildcard_terms: Set[str] = field(default_factory=set)
 
     @classmethod
     def parse(cls, query: str) -> 'SearchQuery':
@@ -46,13 +51,27 @@ class SearchQuery:
                 continue
 
             if term.startswith('*'):
-                obj.wildcard_terms.append(l_term[1:])
+                obj.wildcard_terms.add(l_term[1:])
             elif term.startswith('-'):
-                obj.exclude_terms.append(l_term[1:])
+                obj.exclude_terms.add(l_term[1:])
             else:
-                obj.include_terms.append(l_term)
+                obj.include_terms.add(l_term)
 
         return obj
+
+    def matchers_iter(self) -> Generator[Callable[[str], bool], None, None]:
+        """Generator for term matchers"""
+        for include_term in self.include_terms:
+            pattern = create_term_pattern(include_term, wildcard=False)
+            yield lambda fn: bool(pattern.search(fn))
+
+        for wildcard_term in self.wildcard_terms:
+            pattern = create_term_pattern(wildcard_term, wildcard=True)
+            yield lambda fn: bool(pattern.search(fn))
+
+        for exclude_term in self.exclude_terms:
+            pattern = create_term_pattern(exclude_term, wildcard=False)
+            yield lambda fn: not pattern.search(fn)
 
     def has_inclusion_terms(self) -> bool:
         """Return whether this query has any valid inclusion terms"""
