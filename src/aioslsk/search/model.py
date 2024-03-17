@@ -60,9 +60,7 @@ class SearchQuery:
         return obj
 
     def matchers_iter(self) -> Generator[Callable[[str], bool], None, None]:
-        """Generator for matching terms that caches the regular patterns
-        matchers
-        """
+        """Generator for term matchers"""
         for include_term in self.include_terms:
             pattern = create_term_pattern(include_term, wildcard=False)
             yield lambda fn: bool(pattern.search(fn))
