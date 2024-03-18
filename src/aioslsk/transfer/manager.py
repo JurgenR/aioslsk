@@ -948,7 +948,7 @@ class TransferManager(BaseManager):
         # do not respond with anything. This could otherwise abort the already
         # processing transfer
         if transfer.state.VALUE == TransferState.ABORTED:
-            await connection.queue_message(
+            connection.queue_message(
                 PeerTransferQueueFailed.Request(
                     filename=message.filename,
                     reason=Reasons.CANCELLED
@@ -1053,7 +1053,7 @@ class TransferManager(BaseManager):
                 if transfer:
                     await transfer.state.fail(Reasons.FILE_NOT_SHARED)
 
-                connection.queue_message(
+                await connection.send_message(
                     PeerTransferReply.Request(
                         ticket=message.ticket,
                         allowed=False,
@@ -1126,7 +1126,7 @@ class TransferManager(BaseManager):
             # If the transfer is in FAILED state it needs to be re-queued first;
             # somehow we got this message before being able to queue the
             # transfer. Special note: because this message was received we
-            # already know the transfer is remotely queued and sety the flag
+            # already know the transfer is remotely queued and set the flag
             # accordingly
             # Finally: if the transfer is in states QUEUED or INCOMPLETE
             # continue with the transfer as we were expecting this message
@@ -1151,7 +1151,9 @@ class TransferManager(BaseManager):
                         reason=reason
                     )
                 )
-            else:
+
+            # Explicit check to satisfy type checker
+            elif transfer:
                 # All good to download
                 if transfer.state.VALUE == TransferState.FAILED:
                     await transfer.state.queue(remotely=True)
