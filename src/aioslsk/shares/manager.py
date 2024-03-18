@@ -536,9 +536,6 @@ class SharesManager(BaseManager):
         excl_phrases = excluded_search_phrases or []
         for found_item in found_items:
 
-            # if query == 'simple -mp3 -contributer':
-            #     import pdb; pdb.set_trace()
-
             if not all(matcher(found_item.get_query_path()) for matcher in search_query.matchers_iter()):
                 continue
 
