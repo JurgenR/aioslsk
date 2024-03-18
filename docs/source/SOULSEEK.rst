@@ -277,6 +277,7 @@ Clients limit the amount of children depending on the upload speed that is curre
 When a client receives a :ref:`GetUserStats` message the client should determine whether to enable or disable accepting children and if enabled, calculate the amount of maximum children.
 
 1. If the ``avg_speed`` returned is smaller than the value received by :ref:`ParentMinSpeed` * 1024 :
+
   1. Send :ref:`AcceptChildren` (``accept = false``)
 
 2. If the ``avg_speed`` is greater or equal than the value received by :ref:`ParentMinSpeed` * 1024 :
