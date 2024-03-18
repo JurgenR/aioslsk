@@ -1,6 +1,6 @@
-===================
-Settings Parameters
-===================
+========
+Settings
+========
 
 This is a full list of settings used by the library
 
