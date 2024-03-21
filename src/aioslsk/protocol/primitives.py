@@ -9,23 +9,27 @@ function to control how to perform (de)serialization. See
 These metadata keys are implemented:
 
 * 'type': <type_class>
-** defines the primary type of the data
+
+    * defines the primary type of the data
 
 * 'subtype': <type_class>
-** used for arrays : the type of the elements contained in the array
+
+    * used for arrays : the type of the elements contained in the array
 
 * 'if_true': <field_name>
-** serialization : only pack this field if the value of field with name <field_name> evaluates to True
-** deserialization : only parse this field if the value of field with name <field_name> evaluates to True
+
+    * serialization : only pack this field if the value of field with name <field_name> evaluates to True
+    * deserialization : only parse this field if the value of field with name <field_name> evaluates to True
 
 * 'if_false': <field_name>
-** serialization : only pack this field if the value of field with name <field_name> evaluates to False
-** deserialization : only parse this field if the value of field with name <field_name> evaluates to False
+
+    * serialization : only pack this field if the value of field with name <field_name> evaluates to False
+    * deserialization : only parse this field if the value of field with name <field_name> evaluates to False
 
 * 'optional': True
-** serialization : only pack this field if its value is anything other than None
-** deserialization : during deserialization the code will determine if the message
-    has been fully parsed. If not it will parse this field
+    * serialization : only pack this field if its value is anything other than None
+    * deserialization : during deserialization the code will determine if the message
+      has been fully parsed. If not it will parse this field
 """
 from dataclasses import dataclass, field, Field, fields, is_dataclass
 import hashlib
@@ -209,11 +213,13 @@ class ProtocolDataclass:
 
     Example definition:
 
-    @dataclass(order=True)
-    class CustomDataclass(ProtocolDataclass):
-        username: str = field(metadata={'type': string})
-        password: str = field(metadata={'type': string})
-        has_privileges: bool = field(metadata={'type': boolean})
+    .. code-block:: python
+
+        @dataclass(order=True)
+        class CustomDataclass(ProtocolDataclass):
+            username: str = field(metadata={'type': string})
+            password: str = field(metadata={'type': string})
+            has_privileges: bool = field(metadata={'type': boolean})
     """
     _CACHED_FIELDS: Optional[Tuple[Field]] = None
     """Cache version of the `dataclasses.fields` return for the current class

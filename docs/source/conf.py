@@ -30,3 +30,11 @@ exclude_patterns = []
 
 html_theme = 'sphinx_rtd_theme'
 html_static_path = ['_static']
+
+# Autodoc settings
+# autodoc_class_signature = 'seperated'
+autodoc_member_order = 'bysource'
+autodoc_typehints = 'description'
+autodoc_default_options = {
+    'undoc-members': True
+}

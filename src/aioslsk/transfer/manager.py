@@ -68,6 +68,9 @@ logger = logging.getLogger(__name__)
 
 
 class Reasons:
+    """Definition of reasons for which an transfer queue request or transfer
+    request was rejected
+    """
     CANCELLED = 'Cancelled'
     COMPLETE = 'Complete'
     QUEUED = 'Queued'
@@ -76,6 +79,9 @@ class Reasons:
 
 
 class TransferManager(BaseManager):
+    """Class responsible for transfer related functionality. This class stores
+    transfer objects and handles related events.
+    """
 
     def __init__(
             self, settings: Settings, event_bus: EventBus,
@@ -135,7 +141,7 @@ class TransferManager(BaseManager):
             await self._add_transfer(transfer)
 
     def write_cache(self):
-        """Write all current transfers to the cache"""
+        """Write all currently stored transfers to the cache"""
         self.cache.write(self._transfers)
 
     async def load_data(self):
@@ -164,6 +170,11 @@ class TransferManager(BaseManager):
         return cancelled_tasks
 
     async def start_progress_reporting_task(self):
+        """Start the transfer progress reporting background task which will emit
+        :class:`aioslsk.events.TransferProgressEvent` events at an interval
+        defined in the settings. This method is called automatically when
+        starting the client
+        """
         if not self._progress_reporting_task:
             self._progress_reporting_task = asyncio.create_task(
                 self._progress_reporting_job(),
@@ -171,6 +182,7 @@ class TransferManager(BaseManager):
             )
 
     def stop_progress_reporting_task(self):
+        """Start the transfer progress reporting task"""
         if self._progress_reporting_task:
             self._progress_reporting_task.cancel()
             self._progress_reporting_task = None
@@ -276,10 +288,11 @@ class TransferManager(BaseManager):
     async def add(self, transfer: Transfer) -> Transfer:
         """Adds a transfer if it does not already exist, otherwise it returns
         the already existing transfer. This method will emit a
-        `TransferAddedEvent` only if the transfer did not exist
+        :class:`~aioslsk.events.TransferAddedEvent` only if the transfer did not
+        exist.
 
         This method only adds a transfer and does not automatically start it. To
-        do call `.queue` on the manager
+        do so call :func:`queue` on the manager
 
         :param transfer: Transfer to be added
         :return: either the transfer we have passed or the already existing
