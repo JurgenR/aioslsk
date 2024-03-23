@@ -46,3 +46,6 @@ autodoc_mock_imports = [
     'async_timeout',
     'mutagen'
 ]
+
+autodoc_pydantic_model_show_json = False
+autodoc_pydantic_settings_show_json = False
