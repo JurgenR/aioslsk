@@ -27,7 +27,7 @@ Before starting the client, ensure you create a settings object where you have c
 It's also recommended to configure a listening port and a downloads directory. For the full list of configuration options see:
 
 
-Next create and start the client. Calling `.start()` will connect the listening ports and to the server. Next perform a login and, for example, send a private message:
+Next create and start the client. Calling :func:`SoulSeekClient.start` will connect the listening ports and to the server. Next perform a login and, for example, send a private message:
 
 .. code-block:: python
 
@@ -71,7 +71,7 @@ Commands and Events
 
 Command objects are used to send requests to the server. Waiting for a response is optional because the protocol does not have a proper error handling, sometimes error messages will be returned as a private message from the ``server`` user, sometimes no error will be returned at all (eg.: when joining a room).
 
-The list of built-in commands can be found in the `aioslsk.commands` module but it is of course possible to create your own commands by extending `BaseCommand`. Commands can be used with the client's `.execute()` command or simply by calling the client itself. An example of setting the user status:
+The list of built-in commands can be found in the :mod:`aioslsk.commands` module but it is of course possible to create your own commands by extending :class:`.BaseCommand`. Commands can be used with the client's :func:`.SoulSeekClient.execute` command or simply by calling the client itself. An example of setting the user status:
 
 .. code-block:: python
 
@@ -96,7 +96,7 @@ Example getting a response:
         GetUserStatusCommand('someone'), response=True)
 
 
-The library also has an array of events to listen for in the `aioslsk.events` module, callbacks can be registered through `client.events.register()` providing the event to listen for and the callback:
+The library also has an array of events to listen for in the :mod:`aioslsk.events` module, callbacks can be registered through :func:`.SoulSeekClient.events.register` providing the event to listen for and the callback:
 
 .. code-block:: python
 
@@ -125,7 +125,7 @@ The protocol implements 3 types of search: network, room and user.
     user_request: SearchRequest = await client.searches.search_user('other_user', 'my user query')
 
 
-Listen to the ``SearchResultEvent`` to receive search results:
+Listen to the :class:`.SearchResultEvent` to receive search results:
 
 .. code-block:: python
 
@@ -229,7 +229,7 @@ The initial limits will be read from the settings. When lowering for example `sh
 Room Management
 ===============
 
-The `RoomManager` is responsible for `Room` object storage and management. All rooms are stored returned by the server are accessible through the object instance:
+The :class:`.RoomManager` is responsible for :class:`.Room` object storage and management. All rooms are stored returned by the server are accessible through the object instance:
 
 .. code-block:: python
 
@@ -266,7 +266,7 @@ Sending a message to a room:
 
     await client(RoomMessageCommand('my room', 'Hello there!'))
 
-To receive room messages listen to the ``RoomMessageEvent``:
+To receive room messages listen to the :class:`.RoomMessageEvent`:
 
 .. code-block:: python
 
@@ -287,7 +287,7 @@ A private message can be sent using the API by calling:
 
     await client.send_private_message('other user', "Hello there!")
 
-To receive private message listen for the ``PrivateMessageEvent``:
+To receive private message listen for the :class:`.PrivateMessageEvent`:
 
 .. code-block:: python
 
@@ -305,7 +305,7 @@ Sharing
 Adding / Removing Directories
 -----------------------------
 
-The client provides a mechanism for scanning and caching the files you want to share. Since it's possible to share millions of files the file information is stored in memory as well as in a cache on disk. When starting the client through `client.start()` the cache will be read and the files configured in the settings will be scanned.
+The client provides a mechanism for scanning and caching the files you want to share. Since it's possible to share millions of files the file information is stored in memory as well as in a cache on disk. When starting the client through :func:`.SoulSeekClient.start` the cache will be read and the files configured in the settings will be scanned.
 
 It is possible to add or remove shared directories on the fly.
 
@@ -313,7 +313,7 @@ It is possible to add or remove shared directories on the fly.
 File naming
 -----------
 
-The `SharesManager` is also responsible for figuring out where downloads should be stored to and what to do with duplicate file names. By default the original filename will be used for the local file, when a file already exists a number will be added to name, for example: `my song.mp3` to `my song (1).mp3`. It is possible to implement your own naming strategies.
+The :class:`.SharesManager` is also responsible for figuring out where downloads should be stored to and what to do with duplicate file names. By default the original filename will be used for the local file, when a file already exists a number will be added to name, for example: `my song.mp3` to `my song (1).mp3`. It is possible to implement your own naming strategies.
 
 Example a strategy that places files in a directory containing the current date:
 
@@ -340,7 +340,7 @@ Example a strategy that places files in a directory containing the current date:
 User Management
 ===============
 
-The `UserManager` is responsible for `User` object storage and management. The library holds a weak reference to user objects and will update that object with incoming data, thus in order to keep a user a reference can be maintained for it.
+The :class:`.UserManager` is responsible for :class:`.User` object storage and management. The library holds a weak reference to user objects and will update that object with incoming data, thus in order to keep a user a reference can be maintained for it.
 
 .. code-block:: python
 
@@ -377,7 +377,7 @@ User Tracking
 
 The server will automatically send updates for users in the following situations:
 
-1. A user has been added with the `AddUser` message
+1. A user has been added with the :class:`.AddUser` message
 
     * Automatic user status / privileges updates
 
@@ -392,13 +392,13 @@ Internally, the library will automatically track users as well:
 * Users for which we have open transfers. Tracked to make decisions on which transfers to start next and prioritization
 * Users in the same room
 
-If a user is tracked it holds a reference to the `User` object.
+If a user is tracked it holds a reference to the :class:`.User` object.
 
 
 Protocol Messages
 =================
 
-It is possible to send messages directly to the server or a peer instead of using the shorthand methods. For this the `network` parameter of the client can be used, example for sending the `GetUserStatus` message to the server:
+It is possible to send messages directly to the server or a peer instead of using the shorthand methods. For this the :attr:`.SoulSeekClient.network` parameter of the client can be used, example for sending the :class:`.GetUserStatus` message to the server:
 
 .. code-block:: python
 
@@ -426,4 +426,4 @@ For peers it works the same way, except you need to provide the username as the 
         PeerUserInfoRequest.Request()
     )
 
-Keep in mind that sending a messages to peers is more unreliable than sending to the server. The `send_peer_messages` method will raise an exception if a connection to the peer failed. Both `send_peer_messages` and `send_server_messages` have an parameter called `raise_on_error`, when set to `True` an exception will be raised otherwise the methods will return a list containing tuples containing the message and the result of the message attempted to send, `None` in case of success and an `Exception` object in case of failure.
+Keep in mind that sending a messages to peers is more unreliable than sending to the server. The :meth:`.Network.send_peer_messages` method will raise an exception if a connection to the peer failed. Both :meth:`.Network.send_peer_messages` and :method:`.Network.send_server_messages` have an parameter called `raise_on_error`, when set to `True` an exception will be raised otherwise the methods will return a list containing tuples containing the message and the result of the message attempted to send, `None` in case of success and an `Exception` object in case of failure.

@@ -155,8 +155,8 @@ class UserManager(BaseManager):
         return not had_tracking_flag
 
     def unset_tracking_flag(self, user: User, flag: TrackingFlag) -> bool:
-        """Unset given tracking flag. This method return `True` if the user has
-        not tracking flags left
+        """Unset given tracking flag. This method returns `True` if the user has
+        no tracking flags left
         """
         tracked_user = self._tracked_users[user.name]
         tracked_user.flags &= ~flag

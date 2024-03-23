@@ -23,10 +23,24 @@ aioslsk.events
     :members:
 
 
+aioslsk.naming
+==============
+
+.. automodule:: aioslsk.naming
+    :members:
+
+
 aioslsk.exceptions
 ==================
 
 .. automodule:: aioslsk.exceptions
+    :members:
+
+
+aioslsk.distributed
+===================
+
+.. automodule:: aioslsk.distributed
     :members:
 
 
@@ -48,6 +62,55 @@ aioslsk.transfer.cache
 ======================
 
 .. automodule:: aioslsk.transfer.cache
+    :members:
+
+
+aioslsk.shares.cache
+====================
+
+.. automodule:: aioslsk.shares.cache
+    :members:
+
+
+aioslsk.shares.model
+====================
+
+.. automodule:: aioslsk.shares.model
+    :members:
+
+
+aioslsk.shares.manager
+======================
+
+.. automodule:: aioslsk.shares.manager
+    :members:
+
+
+aioslsk.user.model
+==================
+
+.. automodule:: aioslsk.user.model
+    :members:
+
+
+aioslsk.user.manager
+====================
+
+.. automodule:: aioslsk.user.manager
+    :members:
+
+
+aioslsk.room.model
+==================
+
+.. automodule:: aioslsk.room.model
+    :members:
+
+
+aioslsk.room.manager
+====================
+
+.. automodule:: aioslsk.room.manager
     :members:
 
 

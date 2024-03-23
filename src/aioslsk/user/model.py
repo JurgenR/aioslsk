@@ -110,6 +110,7 @@ class User:
 
 @dataclass
 class ChatMessage:
+    """Represents a private chat message"""
     id: int
     timestamp: int
     user: User
