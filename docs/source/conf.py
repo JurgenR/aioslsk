@@ -44,5 +44,6 @@ autodoc_mock_imports = [
     'async_upnp_client',
     'async_timeout',
     'mutagen',
-    'pydantic'
+    'pydantic',
+    'pydantic_settings'
 ]
