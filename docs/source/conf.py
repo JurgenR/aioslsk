@@ -40,7 +40,9 @@ autodoc_default_options = {
     'undoc-members': True
 }
 autodoc_mock_imports = [
-    'async_timeout',
     'aiofiles',
-    'mutagen'
+    'async_upnp_client',
+    'async_timeout',
+    'mutagen',
+    'pydantic'
 ]
