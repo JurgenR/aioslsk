@@ -5,8 +5,9 @@
 
 import os
 import sys
-print(os.getcwd())
+print('Current work dir' + os.getcwd())
 sys.path.insert(0, os.path.abspath('../../src/aioslsk'))
+sys.path.insert(0, os.path.abspath('../../src/'))
 sys.path.insert(0, os.path.abspath('../src/aioslsk'))
 
 # -- Project information -----------------------------------------------------
