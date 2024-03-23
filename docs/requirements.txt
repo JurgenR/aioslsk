@@ -1,1 +1,3 @@
 sphinx-rtd-theme
+pydantic
+pydantic_settings
