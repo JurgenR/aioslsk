@@ -7,43 +7,43 @@ Client Initialization
 
 The client consists of several services (or managers) that each have their own responsibility, these are initialized through the constructor of the client and can sometimes be dependent on each other:
 
-* ``network``: Responsible for creating and destroying connections. All managers use the ``network`` to send messages and if necessary initialize peer connections
-* ``users``: Responsible for managing user objects and some functions related to privileges
-* ``rooms``: Responsible for managing room objects
+* :attr:`.SoulSeekClient.network`: Responsible for creating and destroying connections. All managers use the ``network`` to send messages and if necessary initialize peer connections
+* :attr:`.SoulSeekClient.users`: Responsible for managing user objects and some functions related to privileges
+* :attr:`.SoulSeekClient.rooms`: Responsible for managing room objects
 
-    * Uses ``users`` to obtain ``User`` objects and set tracking status of the user
+    * Uses ``users`` to obtain :class:`.User` objects and set tracking status of the user
 
-* ``interests``: Responsible for managing interests and recommendations
+* :attr:`.SoulSeekClient.interests`: Responsible for managing interests and recommendations
 
-    * Uses ``users`` to grab ``User`` objects used when emitting events
+    * Uses ``users`` to grab :class:`.User` objects used when emitting events
 
-* ``peers``: Responsible for general peer messages (not transfer related)
+* :attr:`.SoulSeekClient.peers`: Responsible for general peer messages (not transfer related)
 
-    * Uses ``users`` to grab ``User`` objects used when emitting events
+    * Uses ``users`` to grab :class:`.User` objects used when emitting events
     * Uses ``transfers`` to obtain information on free upload slots, upload speed, etc when the user information is requested
     * Uses ``shares`` to obtain a list of shares when such request is made
 
-* ``transfers``: Responsible for managing ``Transfer`` objects and contains the procedures for queing and performing a transfer
+* :attr:`.SoulSeekClient.transfers`: Responsible for managing :class:`.Transfer` objects and contains the procedures for queing and performing a transfer
 
     * Uses ``shares``
 
-* ``shares``: Responsible for managing files and directories that we share
-* ``search``: Responsible for handling all incoming and outgoing search requests and results
+* :attr:`.SoulSeekClient.shares`: Responsible for managing files and directories that we share
+* :attr:`.SoulSeekClient.search`: Responsible for handling all incoming and outgoing search requests and results
 
     * Uses ``shares`` to perform queries
     * Uses ``transfers`` to obtain information on free upload slots, upload speed, etc to provide during the result
 
-* ``distributed``: Responsible for the distributed network
+* :attr:`.SoulSeekClient.distributed`: Responsible for the distributed network
 
-The client will also initialize an ``EventBus`` object to pass to the services. The event bus is used to emit events back to the client consumer.
+The client will also initialize an :class:`.EventBus` object to pass to the services. The event bus is used to emit events back to the client consumer.
 
 
 Connecting and Authentication
 =============================
 
-The client should be started using the ``SoulSeekClient.start()`` method which will first load all data, connect the listening ports and then connect to the server. The client will attempt to connect the listening connections first, if this fails the initialization fails, next the server will be connected.
+The client should be started using the :meth:`.SoulSeekClient.start` method which will first load all data, connect the listening ports and then connect to the server. The client will attempt to connect the listening connections first, if this fails the initialization fails, next the server will be connected.
 
-Once the connections have been successfully set up it is up to the user to perform a logon using ``SoulSeekClient.login()``, this method will take the credentials from the settings. After logon a ``Session`` object will be created and the services will be notified of the new session which will be used by those services (in requests, checks, ...). The logon therefor works in a more synchronous manner, and the client will not start reading messages from the server until the session has been set.
+Once the connections have been successfully set up it is up to the user to perform a logon using :meth:`.SoulSeekClient.login`, this method will take the credentials from the settings. After logon a ``Session`` object will be created and the services will be notified of the new session which will be used by those services (in requests, checks, ...). The logon therefor works in a more synchronous manner, and the client will not start reading messages from the server until the session has been set.
 
 The protocol does not define an explicit logout, instead the session will be destroyed when the server is disconnected.
 
@@ -51,11 +51,11 @@ The protocol does not define an explicit logout, instead the session will be des
 Distributed Network
 ===================
 
-This section describes the behaviour of the ``distributed.py`` module which is responsible for managing the distributed network. The ``DistributedNetwork`` class has 3 important variables:
+This section describes the behaviour of the :mod:`aioslsk.distributed` module which is responsible for managing the distributed network. The :class:`.DistributedNetwork` class has 3 important variables:
 
-* ``distributed_peers``: any peer that connected with peer connection type ``D`` will be added to this list. Upon disconnect that peer will be removed from this list
-* ``parent``: the current parent
-* ``children``: the current list of children
+* :attr:`.DistributedNetwork.distributed_peers`: any peer that connected with peer connection type ``D`` will be added to this list. Upon disconnect that peer will be removed from this list
+* :attr:`parent`: the current parent
+* :attr:`children`: the current list of children
 
 
 After session has been initialized the following values will be advertised to the server:

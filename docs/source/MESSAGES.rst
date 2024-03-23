@@ -1557,6 +1557,8 @@ Usually this is sent by the client right after the :ref:`FileSearch` message usi
       1. **string**: related_searches
 
 
+.. _ExcludedSearchPhrases:
+
 ExcludedSearchPhrases (Code 160)
 --------------------------------
 

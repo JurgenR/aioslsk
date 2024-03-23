@@ -24,11 +24,15 @@ class TransferDirection(Enum):
 @dataclass(frozen=True, eq=True)
 class TransferProgressSnapshot:
     """Represents the current progress of a transfer, used for reporting
-    progress back to the user
+    progress back to the user through a :class:`aioslsk.events.TransferProgressEvent`
     """
     state: TransferState.State
     bytes_transfered: int
+    """Amount of bytes transfered in bytes"""
     speed: float
+    """Current transfer speed if the transfer is still downloading, average
+    speed if the transfer has completed
+    """
     start_time: Optional[float] = None
     complete_time: Optional[float] = None
 
@@ -47,17 +51,20 @@ class Transfer:
         self.state: TransferState = VirginState(self)
 
         self.username: str = username
+        """Username of the peer"""
         self.remote_path: str = remote_path
         """Remote path, this is the path that is shared between peers"""
         self.local_path: Optional[str] = None
         """Absolute path to the file on disk"""
         self.direction: TransferDirection = direction
+        """Determines whether this transfer is an upload or a download"""
 
         self.remotely_queued: bool = False
-        """Indicites whether the transfer queue message was received by the peer
+        """Indicates whether the transfer queue message was received by the peer
         """
         self.place_in_queue: Optional[int] = None
         self.fail_reason: Optional[str] = None
+        """Reason for failure in case the transfer has failed"""
 
         self.filesize: Optional[int] = None
         """Filesize in bytes"""
@@ -81,11 +88,13 @@ class Transfer:
         """
         self.complete_time: Optional[float] = None
         """Time at which the transfer was completed. This is the time the
-        transfer entered the complete or incomplete state
+        transfer entered the COMPLETE, INCOMPLETE, ABORTED or FAILED state
         """
 
         self.progress_snapshot: TransferProgressSnapshot = self.take_progress_snapshot()
-        """Snapshot of the transfer progress"""
+        """Snapshot of the transfer progress. Used internally to report progress
+        at set intervals
+        """
         self._speed_log: Deque[Tuple[float, int]] = deque(maxlen=SPEED_LOG_ENTRIES)
         self._remotely_queue_task: Optional[asyncio.Task] = None
         self._transfer_task: Optional[asyncio.Task] = None
@@ -160,6 +169,10 @@ class Transfer:
         self.last_upload_request_attempt = 0.0
 
     async def transition(self, state: TransferState):
+        """Transitions the state of the transfer and notifies the
+        `state_listeners`. This is an internal method and should not be used
+        directly.
+        """
         old_state = self.state
         logger.debug(f"transitioning transfer state from {old_state.VALUE.name} to {state.VALUE.name}")
         self.state = state
@@ -213,6 +226,7 @@ class Transfer:
         return self.bytes_transfered / transfer_duration
 
     def add_speed_log_entry(self, bytes_transfered: int):
+        """Logs a transfer speed entry. This is an internal method"""
         current_time = time.monotonic()
         # Create speed log entry
         if len(self._speed_log) == 0:
@@ -282,6 +296,7 @@ class Transfer:
         return tasks
 
     def take_progress_snapshot(self) -> TransferProgressSnapshot:
+        """Saves and returns a snapshot of the transfer progress"""
         snapshot = TransferProgressSnapshot(
             state=self.state.VALUE if isinstance(self.state, TransferState) else self.state,
             bytes_transfered=self.bytes_transfered,

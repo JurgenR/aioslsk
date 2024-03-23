@@ -45,7 +45,10 @@ logger = logging.getLogger(__name__)
 
 
 class SoulSeekClient:
-    """SoulSeek client class"""
+    """SoulSeek client class. This class is a facade for a collection of
+    different :class:`aioslsk.base_manager.BaseManager` classes and orchestrates
+    the lifecycle of those classes
+    """
 
     def __init__(
             self, settings: Settings,
@@ -233,6 +236,7 @@ class SoulSeekClient:
         Example waiting for response:
 
         ..code-block:: python
+
             from aioslsk.commands import GetUserStatusCommand
 
             status = await client.execute(
@@ -241,6 +245,7 @@ class SoulSeekClient:
         Example without response:
 
         ..code-block:: python
+
             from aioslsk.commands import JoinRoomCommand
 
             await client.execute(JoinRoomCommand('cool room'))

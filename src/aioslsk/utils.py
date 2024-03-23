@@ -55,7 +55,11 @@ def get_attribute_string(attributes: List[Attribute]) -> str:
     return ' '.join(attr_str)
 
 
-def ticket_generator(initial: int = 1234) -> Generator[int, None, None]:
+def ticket_generator(initial: int = 1) -> Generator[int, None, None]:
+    """Generator for tickets to be used in various protocol messages. The
+    generator will be reset to the `initial` value once the value would exceed
+    2 ^ 32
+    """
     idx = initial
     while True:
         idx += 1

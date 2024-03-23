@@ -19,6 +19,7 @@ class TransferCache(Protocol):
 
 
 class TransferNullCache:
+    """Transfer cache object that does not perform any caching"""
 
     def read(self) -> List['Transfer']:  # pragma: no cover
         return []
@@ -28,6 +29,9 @@ class TransferNullCache:
 
 
 class TransferShelveCache:
+    """Transfer cache that uses the Python built-in `shelve` module to store
+    transfer objects
+    """
 
     DEFAULT_FILENAME = 'transfers'
 
