@@ -5,10 +5,8 @@
 
 import os
 import sys
-print('Current work dir' + os.getcwd())
 sys.path.insert(0, os.path.abspath('../../src/aioslsk'))
 sys.path.insert(0, os.path.abspath('../../src/'))
-sys.path.insert(0, os.path.abspath('../src/aioslsk'))
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
@@ -41,3 +39,8 @@ autodoc_typehints = 'description'
 autodoc_default_options = {
     'undoc-members': True
 }
+autodoc_mock_imports = [
+    'async_timeout',
+    'aiofiles',
+    'mutagen'
+]
