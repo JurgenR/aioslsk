@@ -360,7 +360,7 @@ The :class:`.UserManager` is responsible for :class:`.User` object storage and m
     print(f"User {user.name} is sharing {user.shared_file_count} files")
 
 
-If necessary you can clear certain parameters for a user, the following code will clear the ``picture`` and ``description`` attributes:
+If necessary you can clear certain parameters for a user, the following code will clear the :attr:`.User.picture`` and :attr:`.User.description` attributes:
 
 .. code-block:: python
 
