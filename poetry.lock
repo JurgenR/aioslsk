@@ -204,6 +204,29 @@ tests = ["attrs[tests-no-zope]", "zope-interface"]
 tests-no-zope = ["cloudpickle", "hypothesis", "mypy (>=1.1.1)", "pympler", "pytest (>=4.3.0)", "pytest-mypy-plugins", "pytest-xdist[psutil]"]
 
 [[package]]
+name = "autodoc-pydantic"
+version = "2.1.0"
+description = "Seamlessly integrate pydantic models in your Sphinx documentation."
+optional = false
+python-versions = ">=3.8,<4.0.0"
+files = [
+    {file = "autodoc_pydantic-2.1.0-py3-none-any.whl", hash = "sha256:9f1f82ee3667589dfa08b21697be8bbd80b15110e838cd765bb1bf3ce1b0ea8f"},
+    {file = "autodoc_pydantic-2.1.0.tar.gz", hash = "sha256:3cf1b973e2f5ff0fbbe9b951c11827b5e32d3409e238f7f5782359426ab8d360"},
+]
+
+[package.dependencies]
+importlib-metadata = {version = ">1", markers = "python_version <= \"3.8\""}
+pydantic = ">=2.0,<3.0.0"
+pydantic-settings = ">=2.0,<3.0.0"
+Sphinx = ">=4.0"
+
+[package.extras]
+dev = ["coverage (>=7,<8)", "flake8 (>=3,<4)", "pytest (>=7,<8)", "sphinx-copybutton (>=0.4,<0.5)", "sphinx-rtd-theme (>=1.0,<2.0)", "sphinx-tabs (>=3,<4)", "sphinxcontrib-mermaid (>=0.7,<0.8)", "tox (>=3,<4)"]
+docs = ["sphinx-copybutton (>=0.4,<0.5)", "sphinx-rtd-theme (>=1.0,<2.0)", "sphinx-tabs (>=3,<4)", "sphinxcontrib-mermaid (>=0.7,<0.8)"]
+erdantic = ["erdantic (>=0.6,<0.7)"]
+test = ["coverage (>=7,<8)", "pytest (>=7,<8)"]
+
+[[package]]
 name = "babel"
 version = "2.14.0"
 description = "Internationalization utilities"
@@ -1866,4 +1889,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.8,<3.13"
-content-hash = "d18188651e16a754b3cf8f691f4d12dc6452164159f10fc0ce65e21ff5829d7d"
+content-hash = "da0463a7c38e82af25f1026fd84a17d556fe068196390dd90367f8e3c494fae6"

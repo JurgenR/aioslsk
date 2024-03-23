@@ -37,6 +37,13 @@ aioslsk.exceptions
     :members:
 
 
+aioslsk.settings
+================
+
+.. automodule:: aioslsk.settings
+    :members:
+
+
 aioslsk.distributed
 ===================
 
