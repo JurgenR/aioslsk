@@ -416,6 +416,7 @@ Undescribed rules (matching):
 * Wildcard: doesn't need to match a character. Query ``*song.mp3`` will match ``song.mp3```
 * Wildcard: query ``song *`` will return something
 * Exclusion: there are results for queries using only exclusions but it does not seem official. Example ``-mp3``, returns a limited number of results and some results even containing string ``mp3``
+* Path seperators can be included (backslash and forward slash) but only apply to the directory part of the filename. Query ``my\cool`` will match file ``my\cool\band\song.mp3``, but query ``band\song`` will not match the same file
 
 The algorithm for matching can be described as:
 
