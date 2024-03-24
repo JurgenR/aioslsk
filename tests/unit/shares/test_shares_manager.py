@@ -265,6 +265,29 @@ class TestSharesManagerQuery:
         assert expected_items == unordered(actual_items)
         assert locked_items == []
 
+    @pytest.mark.parametrize(
+        'query,expected_items',
+        [
+            # Backslash, inclusion, directory
+            ('song folk\\folkalbum', ['item1']),
+            # Backslash exclusion, directory
+            ('song -folk\\folkalbum', ['item2', 'item3']),
+            # Backslash, inclusion, filename
+            ('folkalbum, release\\simple band', ['item1']),
+            # Backslash, exclusion, filename
+            ('song -rapalbum_release\\simple band', ['item1', 'item2']),
+            # Slash inclusion
+            ('song folk/folkalbum', []),
+            # Slash exclusion
+            ('song -folk/folkalbum', ['item1', 'item2', 'item3']),
+        ]
+    )
+    def test_queryTermsWithSlashes(self, manager_query: SharesManager, query: str, expected_items: List[str]):
+        expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
+        actual_items, locked_items = manager_query.query(query)
+        assert expected_items == unordered(actual_items)
+        assert locked_items == []
+
     def test_maxResults(self, manager_query: SharesManager):
         # Get the results without any limit, this is simply to ensure that if
         # the test data is changed that this testcase doesn't become bogus

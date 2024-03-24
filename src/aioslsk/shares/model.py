@@ -95,7 +95,7 @@ class SharedItem:
 
     def get_query_path(self) -> str:
         """Returns the query-able part of the `SharedItem`"""
-        return os.path.join(self.subdir, self.filename)
+        return normalize_remote_path(os.path.join(self.subdir, self.filename))
 
     def __getstate__(self):
         fields = self.__dict__.copy()
