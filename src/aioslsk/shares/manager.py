@@ -621,7 +621,7 @@ class SharesManager(BaseManager):
             response_dirs: Dict[str, List[SharedItem]] = {}
             for directory in directories:
                 for item in directory.items:
-                    dir_path = item.get_remote_directory_path()
+                    dir_path = item.get_remote_directory_path_parts()
                     if dir_path in response_dirs:
                         response_dirs[dir_path].append(item)
                     else:
