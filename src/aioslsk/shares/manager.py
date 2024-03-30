@@ -334,6 +334,27 @@ class SharesManager(BaseManager):
         subdirectory of another shared directory its items will be moved into
         that directory
 
+        Example file structure:
+
+        * Music\\
+
+            * Artist_One\\
+
+                * song_one.mp3
+
+            * Artist_Two\\
+
+                * song_two.mp3
+
+        If the user shares 2 directories:
+
+        * Music\\ : EVERYONE
+        * Music\\Artist_One\\ : FRIENDS
+
+        And removes the `Music\\Artist_One\\ shared directory the files of that
+        directory get returned back to the parent directory. In this case file
+        `song_two.mp3` will be shared with EVERYONE again
+
         :param shared_directory: `SharedDirectory` instance to remove
         :raise SharedDirectoryError: raised when the passed `shared_directory`
             was not added to the manager
@@ -616,24 +637,29 @@ class SharesManager(BaseManager):
             is used to determine the locked results
         :return: tuple with two lists: public directories and locked directories
         """
-        def list_unique_directories(directories: List[SharedDirectory]) -> Dict[str, List[SharedItem]]:
-            # Sort files under unique directories by path
-            response_dirs: Dict[str, List[SharedItem]] = {}
+        def list_unique_directories(directories: List[SharedDirectory]) -> Dict[Tuple[str], List[SharedItem]]:
+            response_dirs: Dict[Tuple[str], List[SharedItem]] = {}
+
             for directory in directories:
                 for item in directory.items:
-                    dir_path = item.get_remote_directory_path()
-                    if dir_path in response_dirs:
-                        response_dirs[dir_path].append(item)
-                    else:
-                        response_dirs[dir_path] = [item, ]
+                    dir_path = item.get_remote_directory_path_parts()
+
+                    # Create all possible subdirectory paths
+                    for x in range(len(dir_path)):
+                        dir_path_subpart = dir_path[:x + 1]
+                        if dir_path_subpart not in response_dirs:
+                            response_dirs[dir_path_subpart] = []
+
+                    response_dirs[dir_path].append(item)
+
             return response_dirs
 
-        def convert_to_directory_shares(directory_map: Dict[str, List[SharedItem]]) -> List[DirectoryData]:
+        def convert_to_directory_shares(directory_map: Dict[Tuple[str], List[SharedItem]]) -> List[DirectoryData]:
             public_shares = []
             for directory, files in directory_map.items():
                 public_shares.append(
                     DirectoryData(
-                        name=directory,
+                        name='\\'.join(directory),
                         files=convert_items_to_file_data(files, use_full_path=False)
                     )
                 )
@@ -648,34 +674,43 @@ class SharesManager(BaseManager):
         return visible_shares, locked_shares
 
     def create_directory_reply(self, remote_directory: str) -> List[DirectoryData]:
-        """Lists directory data as a response to a directory request.
+        """Lists directory data as a response to a directory request. This will
+        not contain any information about subdirectories, only the files within
+        that directory
+
+        This method differs from the official clients who don't respond at all
+        to the message if the directory does not exist. Instead if the directory
+        does not exist and empty list is returned
 
         :param remote_directory: remote path of the directory
+        :return: list of directories. Empty if the directory is not shared, a
+            list with one entry if the directory is found
         """
-        remote_directory = remote_directory.rstrip('\\/')
-        response_dirs: Dict[str, List[SharedItem]] = {}
+        items: List[SharedItem] = []
+
+        remote_dir_parts = tuple(remote_directory.split('\\'))
+        remote_dir_parts_len = len(remote_dir_parts)
+        is_shared = False
+
         for shared_dir in self._shared_directories:
             for item in shared_dir.items:
-                item_dir = item.get_remote_directory_path()
-                if item_dir != remote_directory:
-                    continue
+                # Funny logic to determine if the directory is shared
+                if not is_shared:
+                    if item.get_remote_directory_path_parts()[:remote_dir_parts_len] == remote_dir_parts:
+                        is_shared = True
 
-                dir_name = shared_dir.get_remote_path()
-                if dir_name in response_dirs:
-                    response_dirs[dir_name].append(item)
-                else:
-                    response_dirs[dir_name] = [item, ]
+                if item.get_remote_directory_path() == remote_directory:
+                    items.append(item)
 
-        reply = []
-        for directory, files in response_dirs.items():
-            reply.append(
-                DirectoryData(
-                    name=directory,
-                    files=convert_items_to_file_data(files, use_full_path=False)
-                )
+        if not is_shared:
+            return []
+
+        return [
+            DirectoryData(
+                name=remote_directory,
+                files=convert_items_to_file_data(items, use_full_path=False)
             )
-
-        return reply
+        ]
 
     def _add_item_to_term_map(self, item: SharedItem):
         path = (item.subdir + "/" + item.filename).lower()

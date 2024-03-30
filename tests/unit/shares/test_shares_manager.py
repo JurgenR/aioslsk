@@ -27,6 +27,8 @@ SUBDIR_PATH = os.path.join(SHARED_DIR_PATH, 'Cool_Test_Album')
 ROOT_FILE_1_PATH = os.path.join(SHARED_DIR_PATH, MP3_FILENAME)
 ROOT_FILE_2_PATH = os.path.join(SHARED_DIR_PATH, FLAC_FILENAME)
 SUBDIR_FILE_1_PATH = os.path.join(SHARED_DIR_PATH, SUBDIR_FILENAME)
+TOTAL_FILES = 4
+TOTAL_DIRECTORIES = 4
 
 DEFAULT_SETTINGS = {
     'credentials': {'username': 'user0', 'password': 'pass0'},
@@ -315,14 +317,7 @@ class TestSharesManagerSharedDirectoryManagement:
         manager.load_from_settings()
         await manager.scan()
         directory = manager.shared_directories[0]
-        assert 3 == len(directory.items)
-
-    @pytest.mark.asyncio
-    async def test_scan(self, manager: SharesManager):
-        manager.load_from_settings()
-        await manager.scan()
-        directory = manager.shared_directories[0]
-        assert 3 == len(directory.items)
+        assert len(directory.items) == TOTAL_DIRECTORIES
         for item in directory.items:
             assert item.attributes is not None
 
@@ -337,11 +332,11 @@ class TestSharesManagerSharedDirectoryManagement:
             )
         ]
         manager.load_from_settings()
-        assert 2 == len(manager.shared_directories)
+        assert len(manager.shared_directories) == 2
 
         await manager.scan()
-        assert 2 == len(manager.shared_directories[0].items)
-        assert 1 == len(manager.shared_directories[1].items)
+        assert len(manager.shared_directories[0].items) == 3
+        assert len(manager.shared_directories[1].items) == 1
 
     @pytest.mark.asyncio
     async def test_addSharedDirectory_existingSubDirectory(self, manager: SharesManager):
@@ -349,9 +344,9 @@ class TestSharesManagerSharedDirectoryManagement:
         await manager.scan()
         manager.add_shared_directory(SUBDIR_PATH, DirectoryShareMode.FRIENDS)
 
-        assert 2 == len(manager.shared_directories)
-        assert 2 == len(manager.shared_directories[0].items)
-        assert 1 == len(manager.shared_directories[1].items)
+        assert len(manager.shared_directories) == 2
+        assert len(manager.shared_directories[0].items) == 3
+        assert len(manager.shared_directories[1].items) == 1
 
     @pytest.mark.asyncio
     async def test_removeSharedDirectory_withSubdir(self, manager: SharesManager):
@@ -365,14 +360,17 @@ class TestSharesManagerSharedDirectoryManagement:
         ]
         manager.load_from_settings()
         await manager.scan()
-        assert 2 == len(manager.shared_directories[0].items)
-        assert 1 == len(manager.shared_directories[1].items)
 
-        subdir = manager.shared_directories[1]
-        manager.remove_shared_directory(subdir)
-        assert subdir not in manager.shared_directories
-        assert 1 == len(manager.shared_directories)
-        assert 3 == len(manager.shared_directories[0].items)
+        root_directory = manager.shared_directories[0]
+        sub_directory = manager.shared_directories[1]
+
+        assert len(root_directory.items) == 3
+        assert len(sub_directory.items) == 1
+
+        manager.remove_shared_directory(sub_directory)
+        assert sub_directory not in manager.shared_directories
+        assert len(manager.shared_directories) == 1
+        assert len(manager.shared_directories[0].items) == 4
 
 
 class TestManagerReplies:
@@ -380,49 +378,81 @@ class TestManagerReplies:
     @pytest.mark.asyncio
     async def test_createSharesReply_everyone(self, manager: SharesManager):
         await _load_and_scan(manager)
-        result, locked = manager.create_shares_reply('anyone')
-        assert 2 == len(result)
-        assert [] == locked
+        alias = manager.shared_directories[0].alias
+
+        unlocked, locked = manager.create_shares_reply('anyone')
+        unlocked_directories = {directory.name: directory.files for directory in unlocked}
+
+        assert f'@@{alias}' in unlocked_directories
+        assert f'@@{alias}\\Cool_Test_Album' in unlocked_directories
+        assert f'@@{alias}\\Hot_Test_Album' in unlocked_directories
+        assert f'@@{alias}\\Hot_Test_Album\\CD01' in unlocked_directories
+
+        assert len(unlocked_directories[f'@@{alias}']) == 2
+        assert len(unlocked_directories[f'@@{alias}\\Cool_Test_Album']) == 1
+        assert len(unlocked_directories[f'@@{alias}\\Hot_Test_Album']) == 0
+        assert len(unlocked_directories[f'@@{alias}\\Hot_Test_Album\\CD01']) == 1
+
+        assert locked == []
 
     @pytest.mark.asyncio
     async def test_createSharesReply_friends_isFriend(self, manager: SharesManager):
         manager._settings = SETTINGS_SUBDIR_FRIENDS
         await _load_and_scan(manager)
-        result, locked = manager.create_shares_reply(FRIEND)
-        assert 2 == len(result)
-        assert [] == locked
+        unlocked, locked = manager.create_shares_reply(FRIEND)
+
+        assert len(unlocked) == TOTAL_DIRECTORIES
+        assert locked == []
 
     @pytest.mark.asyncio
     async def test_createSharesReply_friends_isNotFriend(self, manager: SharesManager):
         manager._settings = SETTINGS_SUBDIR_FRIENDS
         await _load_and_scan(manager)
-        result, locked = manager.create_shares_reply('notfriend')
-        assert 1 == len(result)
-        assert 1 == len(locked)
+        unlocked, locked = manager.create_shares_reply('notfriend')
+        assert len(unlocked) == TOTAL_DIRECTORIES - 1
+        assert len(locked) == 1
 
     @pytest.mark.asyncio
     async def test_createSharesReply_users_isInList(self, manager: SharesManager):
         manager._settings = SETTINGS_SUBDIR_USERS
         await _load_and_scan(manager)
-        result, locked = manager.create_shares_reply(USER)
-        assert 2 == len(result)
-        assert [] == locked
+        unlocked, locked = manager.create_shares_reply(USER)
+        assert len(unlocked) == TOTAL_DIRECTORIES
+        assert locked == []
 
     @pytest.mark.asyncio
     async def test_createSharesReply_users_isNotInList(self, manager: SharesManager):
         manager._settings = SETTINGS_SUBDIR_USERS
         await _load_and_scan(manager)
-        result, locked = manager.create_shares_reply('notuser')
-        assert 1 == len(result)
-        assert 1 == len(locked)
+        unlocked, locked = manager.create_shares_reply('notuser')
+        assert len(unlocked) == TOTAL_DIRECTORIES - 1
+        assert len(locked) == 1
 
     @pytest.mark.asyncio
     async def test_createDirectoryReply(self, manager: SharesManager):
         await _load_and_scan(manager)
         root_dir = manager.shared_directories[0].get_remote_path()
         directories = manager.create_directory_reply(root_dir)
-        assert 1 == len(directories)
-        assert 2 == len(directories[0].files)
+        assert len(directories) == 1
+        assert len(directories[0].files) == 2
+
+    @pytest.mark.asyncio
+    async def test_createDirectoryReply_emptyDirectory(self, manager: SharesManager):
+        await _load_and_scan(manager)
+        empty_dir = '\\'.join([manager.shared_directories[0].get_remote_path(), 'Hot_Test_Album'])
+        directories = manager.create_directory_reply(empty_dir)
+
+        assert len(directories) == 1
+        assert directories[0].name == empty_dir
+        assert len(directories[0].files) == 0
+
+    @pytest.mark.asyncio
+    async def test_createDirectoryReply_nonExistantDirectory(self, manager: SharesManager):
+        await _load_and_scan(manager)
+        empty_dir = '\\'.join([manager.shared_directories[0].get_remote_path(), 'Non_existant'])
+        directories = manager.create_directory_reply(empty_dir)
+
+        assert len(directories) == 0
 
     @pytest.mark.asyncio
     async def test_createDirectoryReply_subDir(self, manager: SharesManager):
@@ -430,24 +460,24 @@ class TestManagerReplies:
         root_dir = manager.shared_directories[0].get_remote_path()
         subdir = '\\'.join([root_dir, 'Cool_Test_Album'])
         directories = manager.create_directory_reply(subdir)
-        assert 1 == len(directories)
-        assert 1 == len(directories[0].files)
+        assert len(directories) == 1
+        assert len(directories[0].files) == 1
 
     @pytest.mark.asyncio
     async def test_query_friends_isNotFriend(self, manager: SharesManager):
         manager._settings = SETTINGS_SUBDIR_FRIENDS
         await _load_and_scan(manager)
-        result, locked = manager.query('Strange', username='notfriend')
-        assert 0 == len(result)
-        assert 1 == len(locked)
+        unlocked, locked = manager.query('Strange', username='notfriend')
+        assert len(unlocked) == 0
+        assert len(locked) == 1
 
     @pytest.mark.asyncio
     async def test_query_isFriend(self, manager: SharesManager):
         manager._settings = SETTINGS_SUBDIR_FRIENDS
         await _load_and_scan(manager)
-        result, locked = manager.query('Strange', username=FRIEND)
-        assert 1 == len(result)
-        assert 0 == len(locked)
+        unlocked, locked = manager.query('Strange', username=FRIEND)
+        assert len(unlocked) == 1
+        assert len(locked) == 0
 
 
 class TestSharesManager:
