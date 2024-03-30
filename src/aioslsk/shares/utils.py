@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-from typing import List, TYPE_CHECKING
+from typing import List, Pattern, TYPE_CHECKING
 
 from ..constants import PATH_SEPERATOR_PATTERN
 from ..protocol.primitives import Attribute, FileData
@@ -15,10 +15,15 @@ logger = logging.getLogger(__name__)
 
 
 def normalize_remote_path(path: str) -> str:
+    """Normalizes the remote path. Forward slashes will be replaced with back-
+    slashes, multiple subsequent slashes will be replaced with a single back-
+    slash and trailing slashes will be removed
+    """
     return re.sub(PATH_SEPERATOR_PATTERN, '\\\\', path).rstrip('\\/')
 
 
-def create_term_pattern(term: str, wildcard=False):
+def create_term_pattern(term: str, wildcard: bool = False) -> Pattern:
+    """Creates the matching pattern for a single search term of a query"""
     if wildcard:
         return re.compile(
             r"(?:(?<=\W|_)|^)[^\W_]*{}(?=[\W_]|$)".format(re.escape(term)),

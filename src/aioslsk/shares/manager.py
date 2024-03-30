@@ -334,6 +334,27 @@ class SharesManager(BaseManager):
         subdirectory of another shared directory its items will be moved into
         that directory
 
+        Example file structure:
+
+        * Music\\
+
+            * Artist_One\\
+
+                * song_one.mp3
+
+            * Artist_Two\\
+
+                * song_two.mp3
+
+        If the user shares 2 directories:
+
+        * Music\\ : EVERYONE
+        * Music\\Artist_One\\ : FRIENDS
+
+        And removes the `Music\\Artist_One\\ shared directory the files of that
+        directory get returned back to the parent directory. In this case file
+        `song_two.mp3` will be shared with EVERYONE again
+
         :param shared_directory: `SharedDirectory` instance to remove
         :raise SharedDirectoryError: raised when the passed `shared_directory`
             was not added to the manager
@@ -616,24 +637,29 @@ class SharesManager(BaseManager):
             is used to determine the locked results
         :return: tuple with two lists: public directories and locked directories
         """
-        def list_unique_directories(directories: List[SharedDirectory]) -> Dict[str, List[SharedItem]]:
-            # Sort files under unique directories by path
-            response_dirs: Dict[str, List[SharedItem]] = {}
+        def list_unique_directories(directories: List[SharedDirectory]) -> Dict[Tuple[str], List[SharedItem]]:
+            response_dirs: Dict[Tuple[str], List[SharedItem]] = {}
+
             for directory in directories:
                 for item in directory.items:
                     dir_path = item.get_remote_directory_path_parts()
-                    if dir_path in response_dirs:
-                        response_dirs[dir_path].append(item)
-                    else:
-                        response_dirs[dir_path] = [item, ]
+
+                    # Create all possible subdirectory paths
+                    for x in range(len(dir_path)):
+                        dir_path_subpart = dir_path[:x + 1]
+                        if dir_path_subpart not in response_dirs:
+                            response_dirs[dir_path_subpart] = []
+
+                    response_dirs[dir_path].append(item)
+
             return response_dirs
 
-        def convert_to_directory_shares(directory_map: Dict[str, List[SharedItem]]) -> List[DirectoryData]:
+        def convert_to_directory_shares(directory_map: Dict[Tuple[str], List[SharedItem]]) -> List[DirectoryData]:
             public_shares = []
             for directory, files in directory_map.items():
                 public_shares.append(
                     DirectoryData(
-                        name=directory,
+                        name='\\'.join(directory),
                         files=convert_items_to_file_data(files, use_full_path=False)
                     )
                 )

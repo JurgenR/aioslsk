@@ -1658,7 +1658,7 @@ Request all shared files/directories from a peer
 PeerSharesReply (Code 5)
 ------------------------
 
-Response to PeerSharesRequest
+Response to PeerSharesRequest. The response should include empty parent directories.
 
 :Code: 5 (0x05)
 :Send/Receive:

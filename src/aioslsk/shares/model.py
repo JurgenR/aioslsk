@@ -88,7 +88,7 @@ class SharedItem:
     def get_remote_path(self) -> str:
         """Returns the full remote path of this file.
 
-        :return: Full remote file path: Example: "@@abcde\Music\song.mp3"
+        :return: Full remote file path: Example: "@@abcde\\Music\\song.mp3"
         """
         return normalize_remote_path(
             '@@' + os.path.join(self.shared_directory.alias, self.subdir, self.filename))
@@ -96,7 +96,7 @@ class SharedItem:
     def get_remote_directory_path(self) -> str:
         """Returns the remote directory path this file resides in
 
-        :return: Remote directory path. Example: "@@abcde\Music"
+        :return: Remote directory path. Example: "@@abcde\\Music"
         """
         return normalize_remote_path(
             '@@' + os.path.join(self.shared_directory.alias, self.subdir))
@@ -106,9 +106,9 @@ class SharedItem:
         return tuple(self.get_remote_directory_path().split('\\'))
 
     def get_query_path(self) -> str:
-        """Returns the query-able part of the `SharedItem`
+        """Returns the query-able part of the shared item
 
-        :return: Queryable path of the item. Example: "Music\Metal\Song.mp3"
+        :return: Queryable path of the item. Example: "Music\\Metal\\Song.mp3"
         """
         return normalize_remote_path(os.path.join(self.subdir, self.filename))
 
