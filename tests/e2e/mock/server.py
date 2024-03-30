@@ -625,12 +625,13 @@ class MockServer:
         * Empty username
         * Track user already tracked
         """
-        if (user := self.find_user_by_name(message.username)) is not None:
-            if message.username in self.track_map:
-                self.track_map[message.username].add(peer.user.name)
-            else:
-                self.track_map[message.username] = {peer.user.name}
+        # To be verified: track user even if it does not exist
+        if message.username in self.track_map:
+            self.track_map[message.username].add(peer.user.name)
+        else:
+            self.track_map[message.username] = {peer.user.name}
 
+        if (user := self.find_user_by_name(message.username)) is not None:
             await peer.send_message(
                 AddUser.Response(
                     message.username,

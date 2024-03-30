@@ -437,6 +437,24 @@ class TestManagerReplies:
         assert len(directories[0].files) == 2
 
     @pytest.mark.asyncio
+    async def test_createDirectoryReply_emptyDirectory(self, manager: SharesManager):
+        await _load_and_scan(manager)
+        empty_dir = '\\'.join([manager.shared_directories[0].get_remote_path(), 'Hot_Test_Album'])
+        directories = manager.create_directory_reply(empty_dir)
+
+        assert len(directories) == 1
+        assert directories[0].name == empty_dir
+        assert len(directories[0].files) == 0
+
+    @pytest.mark.asyncio
+    async def test_createDirectoryReply_nonExistantDirectory(self, manager: SharesManager):
+        await _load_and_scan(manager)
+        empty_dir = '\\'.join([manager.shared_directories[0].get_remote_path(), 'Non_existant'])
+        directories = manager.create_directory_reply(empty_dir)
+
+        assert len(directories) == 0
+
+    @pytest.mark.asyncio
     async def test_createDirectoryReply_subDir(self, manager: SharesManager):
         await _load_and_scan(manager)
         root_dir = manager.shared_directories[0].get_remote_path()
