@@ -104,7 +104,7 @@ class ExpectedResponse(asyncio.Future):
         self.peer: Optional[str] = peer
         self.fields: Dict[str, Any] = {} if fields is None else fields
 
-    def matches(self, connection: Union[PeerConnection, ServerConnection], response: MessageDataclass) -> bool:
+    def matches(self, connection: DataConnection, response: MessageDataclass) -> bool:
         if connection.__class__ != self.connection_class:
             return False
 

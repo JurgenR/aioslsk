@@ -77,7 +77,7 @@ class CredentialsSettings(BaseModel, validate_assignment=True):
 
     def are_configured(self) -> bool:
         """Returns whether the credentials are correctly configured"""
-        return self.username and self.password is not None
+        return bool(self.username) and self.password is not None
 
 
 class SearchSettings(BaseModel, validate_assignment=True):

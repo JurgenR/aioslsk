@@ -62,7 +62,7 @@ class Serializable(Protocol[T]):
     def deserialize(cls, pos: int, data: bytes) -> Tuple[int, T]:
         ...
 
-    def serialize(self) -> bytes:
+    def serialize(self, *args, **kwargs) -> bytes:
         ...
 
 
@@ -221,16 +221,20 @@ class ProtocolDataclass:
             password: str = field(metadata={'type': string})
             has_privileges: bool = field(metadata={'type': boolean})
     """
-    _CACHED_FIELDS: Optional[Tuple[Field]] = None
+    _CACHED_FIELDS: Optional[Tuple[Field[Any], ...]] = None
     """Cache version of the `dataclasses.fields` return for the current class
     """
 
     def serialize(self) -> bytes:
         message = bytes()
         if self.__class__._CACHED_FIELDS is None:
-            self.__class__._CACHED_FIELDS = fields(self)
+            # Ignoring the typing error because the intent of the class is to
+            # be inherited from by a class that is a dataclass. A check could
+            # impact performance and letting this class be a dataclass would
+            # cause too many issues
+            self.__class__._CACHED_FIELDS = fields(self)  # type: ignore[arg-type]
 
-        for obj_field in fields(self):
+        for obj_field in self.__class__._CACHED_FIELDS:
             value = self._get_value_for_field(self, obj_field)
             if value is None:
                 continue
@@ -261,7 +265,11 @@ class ProtocolDataclass:
     @classmethod
     def deserialize(cls, pos: int, message: bytes):
         if cls._CACHED_FIELDS is None:
-            cls._CACHED_FIELDS = fields(cls)
+            # Ignoring the typing error because the intent of the class is to
+            # be inherited from by a class that is a dataclass. A check could
+            # impact performance and letting this class be a dataclass would
+            # cause too many issues
+            cls._CACHED_FIELDS = fields(cls)  # type: ignore[arg-type]
 
         field_map: Dict[str, Any] = {}
         for obj_field in cls._CACHED_FIELDS:
@@ -349,7 +357,7 @@ class MessageDataclass(ProtocolDataclass):
         return uint32(len(message)).serialize() + message
 
     @classmethod
-    def deserialize(cls, message: bytes, decompress: bool = False):
+    def deserialize(cls, pos: int, message: bytes, decompress: bool = False):
         """Deserializes the passed `message` into an object of the current type
 
         In case the message needs to be decompressed just override this method
@@ -360,8 +368,6 @@ class MessageDataclass(ProtocolDataclass):
             `MESSAGE_ID` defined in the current class
         :return: an object of the current class
         """
-        pos: int = 0
-
         # Parse length and header
         pos, _ = uint32.deserialize(pos, message)
         pos, message_id = type(cls.MESSAGE_ID).deserialize(pos, message)

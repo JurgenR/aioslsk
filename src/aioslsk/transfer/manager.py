@@ -890,7 +890,7 @@ class TransferManager(BaseManager):
             async with aiofiles.open(transfer.local_path, mode='ab') as handle:
                 await connection.receive_file(
                     handle,
-                    transfer.filesize - transfer._offset,
+                    transfer.filesize - transfer.get_offset(),
                     transfer._transfer_progress_callback
                 )
 

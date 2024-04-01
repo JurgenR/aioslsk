@@ -66,7 +66,7 @@ class ServerMessage:
         for msg_class in cls.__subclasses__():
             response_cls = getattr(msg_class, 'Response', None)
             if response_cls and response_cls.MESSAGE_ID == msg_id:
-                return response_cls.deserialize(message)
+                return response_cls.deserialize(0, message)
 
         raise UnknownMessageError(msg_id, message, "Unknown server response message")
 
@@ -81,7 +81,7 @@ class PeerInitializationMessage:
         for msg_class in cls.__subclasses__():
             request_cls = getattr(msg_class, 'Request', None)
             if request_cls and request_cls.MESSAGE_ID == msg_id:
-                return request_cls.deserialize(message)
+                return request_cls.deserialize(0, message)
 
         raise UnknownMessageError(msg_id, message, "Unknown peer initialization message")
 
@@ -96,7 +96,7 @@ class PeerMessage:
         for msg_class in cls.__subclasses__():
             request_cls = getattr(msg_class, 'Request', None)
             if request_cls and request_cls.MESSAGE_ID == msg_id:
-                return request_cls.deserialize(message)
+                return request_cls.deserialize(0, message)
 
         raise UnknownMessageError(msg_id, message, "Unknown peer message")
 
@@ -134,7 +134,7 @@ class Login(ServerMessage):
         greeting: Optional[str] = field(default=None, metadata={'type': string, 'if_true': 'success'})
         ip: Optional[str] = field(default=None, metadata={'type': ipaddr, 'if_true': 'success'})
         md5hash: Optional[str] = field(default=None, metadata={'type': string, 'if_true': 'success'})
-        privileged: bool = field(default=None, metadata={'type': boolean, 'if_true': 'success'})
+        privileged: Optional[bool] = field(default=None, metadata={'type': boolean, 'if_true': 'success'})
         reason: Optional[str] = field(default=None, metadata={'type': string, 'if_false': 'success'})
 
 
@@ -1232,8 +1232,8 @@ class PeerSharesReply(PeerMessage):
             return super().serialize(compress)
 
         @classmethod
-        def deserialize(cls, message: bytes, decompress: bool = True):
-            return super().deserialize(message, decompress)
+        def deserialize(cls, pos: int, message: bytes, decompress: bool = True):
+            return super().deserialize(pos, message, decompress)
 
 
 class PeerSearchReply(PeerMessage):
@@ -1261,8 +1261,8 @@ class PeerSearchReply(PeerMessage):
             return super().serialize(compress)
 
         @classmethod
-        def deserialize(cls, message: bytes, decompress: bool = True):
-            return super().deserialize(message, decompress)
+        def deserialize(cls, pos: int,  message: bytes, decompress: bool = True):
+            return super().deserialize(pos, message, decompress)
 
 
 class PeerUserInfoRequest(PeerMessage):
@@ -1315,8 +1315,8 @@ class PeerDirectoryContentsReply(PeerMessage):
             return super().serialize(compress)
 
         @classmethod
-        def deserialize(cls, message: bytes, decompress: bool = True):
-            return super().deserialize(message, decompress)
+        def deserialize(cls, pos: int, message: bytes, decompress: bool = True):
+            return super().deserialize(pos, message, decompress)
 
 
 class PeerTransferRequest(PeerMessage):

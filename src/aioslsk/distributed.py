@@ -277,7 +277,8 @@ class DistributedNetwork(BaseManager):
 
         if not self._accept_children:
             logger.debug(f"not accepting children, rejecting peer as child: {peer}")
-            await peer.connection.disconnect(CloseReason.REQUESTED)
+            if peer.connection:  # Satisfy type checker
+                await peer.connection.disconnect(CloseReason.REQUESTED)
             return
 
         if len(self.children) >= self._max_children:
@@ -285,7 +286,8 @@ class DistributedNetwork(BaseManager):
                 f"maximum amount of children reached ({len(self.children)} / {self._max_children}), "
                 f"rejecting peer as child: {peer}"
             )
-            await peer.connection.disconnect(CloseReason.REQUESTED)
+            if peer.connection:  # Satisfy type checker
+                await peer.connection.disconnect(CloseReason.REQUESTED)
             return
 
         await self._add_child(peer)

@@ -1,9 +1,9 @@
 from __future__ import annotations
-from aiofiles.threadpool.binary import AsyncBufferedReader
+from aiofiles.threadpool.binary import AsyncBufferedIOBase, AsyncBufferedReader
 import asyncio
 from async_timeout import timeout as atimeout
 from enum import auto, Enum
-from typing import BinaryIO, Callable, List, Optional, TYPE_CHECKING, Union
+from typing import Callable, List, Optional, TYPE_CHECKING, Union
 import logging
 import socket
 import struct
@@ -602,7 +602,7 @@ class PeerConnection(DataConnection):
                 return data
 
     async def receive_file(
-            self, file_handle: BinaryIO, filesize: int, callback: Optional[Callable[[bytes], None]] = None):
+            self, file_handle: AsyncBufferedIOBase, filesize: int, callback: Optional[Callable[[bytes], None]] = None):
         """Receives a file on the current connection and writes it to the given
         `file_handle`
 

@@ -12,7 +12,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from .exceptions import NoSuchUserError
+from .exceptions import InvalidSessionError, NoSuchUserError
 from .protocol.messages import (
     AddHatedInterest,
     AddInterest,
@@ -661,6 +661,9 @@ class RoomMessageCommand(BaseCommand[RoomChatMessage.Response, RoomMessage]):
         )
 
     def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        if not client.session:  # pragma: no cover
+            raise InvalidSessionError("user is not logged in")
+
         return ExpectedResponse(
             ServerConnection,
             RoomChatMessage.Response,
@@ -672,6 +675,9 @@ class RoomMessageCommand(BaseCommand[RoomChatMessage.Response, RoomMessage]):
         )
 
     def handle_response(self, client: SoulSeekClient, response: RoomChatMessage.Response) -> RoomMessage:
+        if not client.session:  # pragma: no cover
+            raise InvalidSessionError("user is not logged in")
+
         return RoomMessage(
             timestamp=int(time.time()),
             user=client.users.get_user_object(client.session.user.name),
@@ -695,6 +701,9 @@ class SetRoomTickerCommand(BaseCommand[RoomTickerAdded.Response, None]):
         )
 
     def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        if not client.session:  # pragma: no cover
+            raise InvalidSessionError("user is not logged in")
+
         return ExpectedResponse(
             ServerConnection,
             RoomTickerAdded.Response,

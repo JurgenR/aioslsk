@@ -6,6 +6,7 @@ from typing import Dict, Optional, Set
 from weakref import WeakValueDictionary
 
 from ..base_manager import BaseManager
+from ..exceptions import InvalidSessionError
 from ..network.connection import ConnectionState, PeerConnection, ServerConnection
 from ..events import (
     build_message_map,
@@ -109,6 +110,9 @@ class UserManager(BaseManager):
 
     def get_self(self) -> User:
         """Returns the user object for the current session"""
+        if not self._session:  # pragma: no cover
+            raise InvalidSessionError("user is not logged in")
+
         return self.get_user_object(self._session.user.name)
 
     def get_user_object(self, username: str) -> User:
@@ -253,6 +257,9 @@ class UserManager(BaseManager):
     # State related messages
     @on_message(CheckPrivileges.Response)
     async def _on_check_privileges(self, message: CheckPrivileges.Response, connection: ServerConnection):
+        if not self._session:  # pragma: no cover
+            raise InvalidSessionError("user is not logged in")
+
         self.privileges_time_left = message.time_left
         self._session.privileges_time_left = message.time_left
 
@@ -291,7 +298,8 @@ class UserManager(BaseManager):
         if message.exists:
             user.name = message.username
             user.status = UserStatus(message.status)
-            user.update_from_user_stats(message.user_stats)
+            if message.user_stats:
+                user.update_from_user_stats(message.user_stats)
             user.country = message.country_code
 
             await self._event_bus.emit(
