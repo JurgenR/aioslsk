@@ -101,7 +101,7 @@ class User:
             self.uploads = None
 
         if upload_info:
-            self.upload_permissions = None
+            self.upload_permissions = UploadPermissions.UNKNOWN
             self.upload_slots = None
             self.has_slots_free = None
             self.queue_length = None

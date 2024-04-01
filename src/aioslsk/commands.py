@@ -455,7 +455,8 @@ class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, Tuple[str, int,
             }
         )
 
-    def handle_response(self, client: SoulSeekClient, response: GetPeerAddress.Response) -> Tuple[str, int, Optional[int]]:
+    def handle_response(
+            self, client: SoulSeekClient, response: GetPeerAddress.Response) -> Tuple[str, int, Optional[int]]:
         return (response.ip, response.port, response.obfuscated_port)
 
 

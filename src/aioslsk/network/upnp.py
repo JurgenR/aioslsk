@@ -64,7 +64,8 @@ class UPNP:
 
             else:
                 logger.debug(f"got entry for index {idx} on device {device.name!r} : {entry!r}")
-                entries.append(entry)
+                if entry:
+                    entries.append(entry)
 
         return entries
 

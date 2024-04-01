@@ -142,6 +142,12 @@ class DistributedNetwork(BaseManager):
         return username, 0
 
     def get_distributed_peer(self, connection: PeerConnection) -> Optional[DistributedPeer]:
+        """Get the distributed peer object related to the given connection.
+
+        This method will return `None` if the connection was not properly
+        initialized (no username set on the connection) or if there is no peer
+        object associated with the connection
+        """
         if connection.username is None:
             return None
 

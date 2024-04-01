@@ -1,4 +1,5 @@
 from __future__ import annotations
+from aiofiles.threadpool.binary import AsyncBufferedReader
 import asyncio
 from async_timeout import timeout as atimeout
 from enum import auto, Enum
@@ -192,6 +193,9 @@ class DataConnection(Connection):
 
         The connection needs to be established for this method to work
         """
+        if not self._writer:  # pragma: no cover
+            raise RuntimeError("connection not initialized")
+
         return self._writer.get_extra_info('sockname')[0]
 
     async def connect(self, timeout: float = 30):
@@ -433,6 +437,9 @@ class DataConnection(Connection):
                 f"{self.hostname}:{self.port} : not sending message, connection is closing / closed : {message!r}")
             return
 
+        if not self._writer:
+            raise ConnectionWriteError("cannot send message, connection is not open")
+
         logger.debug(f"{self.hostname}:{self.port} : send message : {message!r}")
         # Serialize the message
         try:
@@ -527,20 +534,36 @@ class PeerConnection(DataConnection):
         self.connection_state = state
 
     async def _read_transfer_ticket(self) -> bytes:
+        if not self._reader:
+            raise ConnectionReadError("cannot read transfer ticket, connection is not open")
+
         return await self._reader.readexactly(struct.calcsize('I'))
 
     async def _read_transfer_offset(self) -> bytes:
+        if not self._reader:
+            raise ConnectionReadError("cannot read transfer offset, connection is not open")
+
         return await self._reader.readexactly(struct.calcsize('Q'))
 
     async def receive_transfer_ticket(self) -> int:
         """Receive the transfer ticket from the connection"""
         data = await self._read(self._read_transfer_ticket)
+
+        if data is None:  # pragma: no cover
+            raise ConnectionReadError(
+                "couldn't receive transfer ticket, connection closed")
+
         _, ticket = uint32.deserialize(0, data)
         return ticket
 
     async def receive_transfer_offset(self) -> int:
         """Receive the transfer offset from the connection"""
         data = await self._read(self._read_transfer_offset)
+
+        if data is None:  # pragma: no cover
+            raise ConnectionReadError(
+                "couldn't receive transfer offset, connection closed")
+
         _, offset = uint64.deserialize(0, data)
         return offset
 
@@ -556,6 +579,9 @@ class PeerConnection(DataConnection):
             socket
         :return: `bytes` object containing the received data
         """
+        if not self._reader:
+            raise ConnectionReadError("cannot read data, connection is not open")
+
         try:
             async with atimeout(timeout):
                 data = await self._reader.read(n_bytes)
@@ -605,6 +631,9 @@ class PeerConnection(DataConnection):
                 return
 
     async def send_data(self, data: bytes):
+        if not self._writer:
+            raise ConnectionWriteError("cannot send data, connection is not open")
+
         try:
             self._writer.write(data)
             async with atimeout(TRANSFER_TIMEOUT):
@@ -618,7 +647,7 @@ class PeerConnection(DataConnection):
             await self.disconnect(CloseReason.WRITE_ERROR)
             raise ConnectionWriteError(f"{self.hostname}:{self.port} : write error") from exc
 
-    async def send_file(self, file_handle: BinaryIO, callback: Optional[Callable[[bytes], None]] = None):
+    async def send_file(self, file_handle: AsyncBufferedReader, callback: Optional[Callable[[bytes], None]] = None):
         """Sends a file over the connection. This method makes use of the
         `upload_rate_limiter` to limit how many bytes are being sent at a time.
 

@@ -183,6 +183,12 @@ class SoulSeekClient:
             raise AioSlskException(
                 f"expected login response from server but got : {response}")
 
+        if not response.success:
+            raise AuthenticationError(
+                response.reason if response.reason is None else 'Unknown',
+                f"authentication failed for user : {username}"
+            )
+
         # Notify all listeners that the session has been initialized
         self.session = Session(
             user=self.users.get_user_object(username),
