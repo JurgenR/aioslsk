@@ -293,6 +293,9 @@ class SearchManager(BaseManager):
 
     @on_message(ServerSearchRequest.Response)
     async def _on_server_search_request(self, message: ServerSearchRequest.Response, connection: ServerConnection):
+        if self._session is None:
+            return
+
         username = self._session.user.name
         if message.username == username:
             return
@@ -303,6 +306,9 @@ class SearchManager(BaseManager):
     @on_message(FileSearch.Response)
     async def _on_file_search(self, message: FileSearch.Response, connection: ServerConnection):
         """Received when user performs a user or room search"""
+        if self._session is None:
+            return
+
         if message.username == self._session.user.name:
             return
 

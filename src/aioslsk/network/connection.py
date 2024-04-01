@@ -30,9 +30,9 @@ from ..protocol.messages import (
     ServerMessage,
 )
 from ..utils import task_counter
+from .rate_limiter import RateLimiter, UnlimitedRateLimiter
 
 if TYPE_CHECKING:
-    from .rate_limiter import RateLimiter
     from .network import Network
 
 
@@ -492,8 +492,8 @@ class PeerConnection(DataConnection):
         self.connection_type: str = connection_type
         self.read_timeout = PEER_READ_TIMEOUT
 
-        self.download_rate_limiter: Optional[RateLimiter] = None
-        self.upload_rate_limiter: Optional[RateLimiter] = None
+        self.download_rate_limiter: RateLimiter = UnlimitedRateLimiter()
+        self.upload_rate_limiter: RateLimiter = UnlimitedRateLimiter()
 
     async def connect(self, timeout: float = PEER_CONNECT_TIMEOUT):
         await super().connect(timeout=timeout)

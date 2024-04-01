@@ -141,10 +141,15 @@ class DistributedNetwork(BaseManager):
 
         return username, 0
 
-    def get_distributed_peer(self, username: str, connection: PeerConnection) -> DistributedPeer:
+    def get_distributed_peer(self, connection: PeerConnection) -> Optional[DistributedPeer]:
+        if connection.username is None:
+            return None
+
         for peer in self.distributed_peers:
-            if peer.username == username and peer.connection == connection:
+            if peer.username == connection.username and peer.connection == connection:
                 return peer
+
+        return None
 
     async def reset(self):
         """Disconnects all parent and child connections"""
@@ -399,12 +404,11 @@ class DistributedNetwork(BaseManager):
             self, message: DistributedBranchLevel.Request, connection: PeerConnection):
         logger.info(f"branch level {message.level!r}: {connection!r}")
 
-        if not connection.username:
-            logger.warning(
-                "got DistributedBranchLevel for a connection that wasn't properly initialized")
+        peer = self.get_distributed_peer(connection)
+        if not peer:
+            logger.warning(f"distributed peer object not found for connection: {connection} : {message}")
             return
 
-        peer = self.get_distributed_peer(connection.username, connection)
         peer.branch_level = message.level
 
         # Branch root is not always sent in case the peer advertises branch
@@ -423,12 +427,10 @@ class DistributedNetwork(BaseManager):
             self, message: DistributedBranchRoot.Request, connection: PeerConnection):
         logger.info(f"branch root {message.username!r}: {connection!r}")
 
-        if not connection.username:
-            logger.warning(
-                "got DistributedBranchRoot for a connection that wasn't properly initialized")
+        peer = self.get_distributed_peer(connection)
+        if not peer:
+            logger.warning(f"distributed peer object not found for connection: {connection} : {message}")
             return
-
-        peer = self.get_distributed_peer(connection.username, connection)
 
         # When we receive branch level 0 we automatically assume the root is the
         # peer who sent the sender
@@ -446,12 +448,11 @@ class DistributedNetwork(BaseManager):
     @on_message(DistributedChildDepth.Request)
     async def _on_distributed_child_depth(
             self, message: DistributedChildDepth.Request, connection: PeerConnection):
-        if not connection.username:
-            logger.warning(
-                "got DistributedChildDepth for a connection that wasn't properly initialized")
+        peer = self.get_distributed_peer(connection)
+        if not peer:
+            logger.warning(f"distributed peer object not found for connection: {connection} : {message}")
             return
 
-        peer = self.get_distributed_peer(connection.username, connection)
         peer.child_depth = message.depth
 
     @on_message(DistributedSearchRequest.Request)
@@ -555,7 +556,7 @@ class DistributedNetwork(BaseManager):
                 return
 
             if event.state == ConnectionState.CLOSED:
-                peer = self.get_distributed_peer(connection.username, connection)
+                peer = self.get_distributed_peer(connection)
                 # Check if there is a distributed peer registered for this
                 # connection. A distributed peer is only registered once the
                 # full connection initialization has been complete. When the

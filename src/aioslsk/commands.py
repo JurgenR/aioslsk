@@ -436,7 +436,7 @@ class GetSimilarUsersCommand(BaseCommand[GetSimilarUsers.Response, List[Tuple[Us
         return similar_users
 
 
-class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, Tuple[str, int, int]]):
+class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, Tuple[str, int, Optional[int]]]):
 
     def __init__(self, username: str):
         self.username: str = username
@@ -455,7 +455,7 @@ class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, Tuple[str, int,
             }
         )
 
-    def handle_response(self, client: SoulSeekClient, response: GetPeerAddress.Response) -> Tuple[str, int, int]:
+    def handle_response(self, client: SoulSeekClient, response: GetPeerAddress.Response) -> Tuple[str, int, Optional[int]]:
         return (response.ip, response.port, response.obfuscated_port)
 
 
@@ -516,7 +516,7 @@ class TogglePublicChatCommand(BaseCommand[None, None]):
 
     async def send(self, client: SoulSeekClient):
         if self.enable:
-            message = EnablePublicChat.Request()
+            message: MessageDataclass = EnablePublicChat.Request()
         else:
             message = DisablePublicChat.Request()
         await client.network.send_server_messages(message)
