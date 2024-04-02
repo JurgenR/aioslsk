@@ -185,7 +185,7 @@ class SoulSeekClient:
 
         if not response.success:
             raise AuthenticationError(
-                response.reason if response.reason is None else 'Unknown',
+                response.reason if response.reason else '',
                 f"authentication failed for user : {username}"
             )
 

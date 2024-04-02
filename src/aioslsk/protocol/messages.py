@@ -55,7 +55,7 @@ class ServerMessage:
         for msg_class in cls.__subclasses__():
             request_cls = getattr(msg_class, 'Request', None)
             if request_cls and request_cls.MESSAGE_ID == msg_id:
-                return request_cls.deserialize(message)
+                return request_cls.deserialize(0, message)
 
         raise UnknownMessageError(msg_id, message, "Unknown server request message")
 

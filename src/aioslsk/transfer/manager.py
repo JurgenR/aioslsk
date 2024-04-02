@@ -886,6 +886,10 @@ class TransferManager(BaseManager):
             raise AioSlskException(
                 f"attempted to start download for which local_path was not set : {transfer}")
 
+        if transfer.filesize is None:  # pragma: no cover
+            raise AioSlskException(
+                f"attempted to start download for which filesize was not set : {transfer}")
+
         try:
             async with aiofiles.open(transfer.local_path, mode='ab') as handle:
                 await connection.receive_file(

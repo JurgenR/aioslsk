@@ -36,6 +36,7 @@ import hashlib
 import logging
 import socket
 import struct
+from typing_extensions import Self
 from typing import (
     Any,
     ClassVar,
@@ -56,10 +57,12 @@ logger = logging.getLogger(__name__)
 T = TypeVar('T', bound='Serializable')
 
 
-class Serializable(Protocol[T]):
+class Serializable(Protocol):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        ...
 
     @classmethod
-    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, T]:
+    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, Self]:
         ...
 
     def serialize(self, *args, **kwargs) -> bytes:
@@ -185,7 +188,7 @@ class boolean(int):
 
 class array(list):
 
-    def serialize(self, element_type: Type[T]) -> bytes:
+    def serialize(self, element_type: Type[Serializable]) -> bytes:
         body = uint32(len(self)).serialize()
         is_protocoldc = is_dataclass(element_type)
         for value in self:
@@ -221,7 +224,7 @@ class ProtocolDataclass:
             password: str = field(metadata={'type': string})
             has_privileges: bool = field(metadata={'type': boolean})
     """
-    _CACHED_FIELDS: Optional[Tuple[Field[Any], ...]] = None
+    _CACHED_FIELDS: Optional[Tuple[Field, ...]] = None
     """Cache version of the `dataclasses.fields` return for the current class
     """
 
@@ -277,7 +280,7 @@ class ProtocolDataclass:
                 continue
 
             try:
-                proto_type = obj_field.metadata['type']
+                proto_type: Serializable = obj_field.metadata['type']
             except KeyError:
                 raise Exception(f"no 'type' for field {obj_field.name!r} defined")
 
@@ -357,7 +360,7 @@ class MessageDataclass(ProtocolDataclass):
         return uint32(len(message)).serialize() + message
 
     @classmethod
-    def deserialize(cls, pos: int, message: bytes, decompress: bool = False):
+    def deserialize(cls, pos: int, message: bytes, decompress: bool = False) -> Self:
         """Deserializes the passed `message` into an object of the current type
 
         In case the message needs to be decompressed just override this method
