@@ -6,7 +6,11 @@ import logging
 from typing import Deque, List, Optional, Union, Tuple
 
 from .base_manager import BaseManager
-from .constants import POTENTIAL_PARENTS_CACHE_SIZE
+from .constants import (
+    DEFAULT_PARENT_MIN_SPEED,
+    DEFAULT_PARENT_SPEED_RATIO,
+    POTENTIAL_PARENTS_CACHE_SIZE,
+)
 from .events import (
     on_message,
     build_message_map,
@@ -131,13 +135,13 @@ class DistributedNetwork(BaseManager):
             * level = level parent advertised + 1
             * root = whatever our parent sent us initially
         """
-        username = self._session.user.name
+        username = self._session.user.name  # type: ignore[union-attr]
         if self.parent:
             # We are the branch root
             if self.parent.branch_root == username:
                 return username, 0
             else:
-                return self.parent.branch_root, self.parent.branch_level + 1
+                return self.parent.branch_root, self.parent.branch_level + 1  # type: ignore
 
         return username, 0
 
@@ -488,19 +492,27 @@ class DistributedNetwork(BaseManager):
         if self._session and message.username == self._session.user.name:
             speed = message.user_stats.avg_speed
 
-            if self.parent_min_speed is None or self.parent_speed_ratio is None:
+            if self.parent_min_speed is None:
                 logger.debug(
-                    "got user stats without having received ParentMinSpeed and ParentSpeedRatio "
-                    "from the server, using defaults"
-                )
+                    f"using default parent_min_speed: {DEFAULT_PARENT_MIN_SPEED}")
+                parent_min_speed = DEFAULT_PARENT_MIN_SPEED
+            else:
+                parent_min_speed = self.parent_min_speed
 
-            elif speed < self.parent_min_speed * 1024:
+            if self.parent_speed_ratio is None:
+                logger.debug(
+                    f"using default parent_speed_ratio: {DEFAULT_PARENT_SPEED_RATIO}")
+                parent_speed_ratio = DEFAULT_PARENT_SPEED_RATIO
+            else:
+                parent_speed_ratio = self.parent_speed_ratio
+
+            if speed < parent_min_speed * 1024:
                 self._accept_children = False
                 self._max_children = 0
 
             else:
                 self._accept_children = True
-                self._max_children = self._calculate_max_children(speed)
+                self._max_children = self._calculate_max_children(speed, parent_speed_ratio)
 
             logger.debug(
                 f"adjusting distributed children values: "
@@ -528,11 +540,11 @@ class DistributedNetwork(BaseManager):
                 GetUserStats.Request(self._session.user.name)
             )
 
-    def _calculate_max_children(self, upload_speed: int) -> int:
+    def _calculate_max_children(self, upload_speed: int, parent_speed_ratio: int) -> int:
         """Calculates the maximum number of children based on the given upload
         speed
         """
-        divider = (self.parent_speed_ratio / 10) * 1024
+        divider = (parent_speed_ratio / 10) * 1024
         return int(upload_speed / divider)
 
     async def _on_peer_connection_initialized(self, event: PeerInitializedEvent):

@@ -3,6 +3,8 @@ from typing import List
 
 
 DEFAULT_LISTENING_HOST: str = '0.0.0.0'
+DEFAULT_PARENT_MIN_SPEED: int = 1
+DEFAULT_PARENT_SPEED_RATIO: int = 50
 PEER_CONNECT_TIMEOUT: float = 10
 """Direct connection timeout"""
 PEER_INDIRECT_CONNECT_TIMEOUT: float = 60

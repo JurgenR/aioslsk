@@ -21,6 +21,10 @@ jobs:
         run: |
           poetry run flake8 src/aioslsk/
 
+      - name: Run mypy
+        run: |
+          poetry run mypy src/aioslsk/
+
   tests:
     timeout-minutes: 15
     strategy:
