@@ -35,7 +35,7 @@ class TestMessageDataclass:
 
     def test_whenDeserialize_andHasUnparsedBytes_shouldWarn(self, caplog):
         data = bytes.fromhex('0400000001000000ff')
-        SimpleMessage.deserialize(data)
+        SimpleMessage.deserialize(0, data)
         assert len(caplog.records) >= 1
         assert caplog.records[-1].levelname == 'WARNING'
         assert 'message has 1 unparsed bytes' in caplog.records[-1].msg
@@ -43,7 +43,7 @@ class TestMessageDataclass:
     def test_whenDeserialize_mismatchMessageId_shouldRaise(self):
         data = bytes.fromhex('0400000002000000')
         with pytest.raises(Exception):
-            SimpleMessage.deserialize(data)
+            SimpleMessage.deserialize(0, data)
 
     def test_whenSerialize_fieldWithoutType_shouldRaise(self):
         with pytest.raises(Exception):
@@ -52,4 +52,4 @@ class TestMessageDataclass:
     def test_whenDeserialize_fieldWithoutType_shouldRaise(self):
         data = bytes.fromhex('04000000010000000100000030')
         with pytest.raises(Exception):
-            FieldWithoutType.deserialize(data)
+            FieldWithoutType.deserialize(0, data)

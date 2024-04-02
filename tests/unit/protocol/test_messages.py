@@ -207,7 +207,7 @@ class TestLogin:
             minor_version=123
         )
         data = bytes.fromhex('440000000100000004000000546573740800000054657374313233340a0000002000000032366330666134666430386237653233316237316532643434343034373236367b000000')
-        assert Login.Request.deserialize(data) == message
+        assert Login.Request.deserialize(0, data) == message
 
     def test_Login_Response_serialize_successful(self):
         message = Login.Response(
@@ -236,13 +236,12 @@ class TestLogin:
             privileged=True
         )
         data = bytes.fromhex('3700000001000000010500000048656c6c6f0403020120000000326339333431636134636633643837623965346562393035643661336563343501')
-        assert Login.Response.deserialize(data) == message
+        assert Login.Response.deserialize(0, data) == message
 
     def test_Login_Response_deserialize_unsuccessful(self):
-        obj = Login.Response.deserialize(
-            bytes.fromhex("1400000001000000000b000000494e56414c494450415353")
-        )
-        assert obj == Login.Response(
+        data = bytes.fromhex("1400000001000000000b000000494e56414c494450415353")
+        message = Login.Response.deserialize(0, data)
+        assert message == Login.Response(
             success=False,
             reason="INVALIDPASS"
         )
@@ -258,7 +257,7 @@ class TestSetListenPort:
     def test_SetListenPort_Request_deserialize_withoutObfuscatedPorts(self):
         message = SetListenPort.Request(1234)
         data = bytes.fromhex('0800000002000000d2040000')
-        assert SetListenPort.Request.deserialize(data) == message
+        assert SetListenPort.Request.deserialize(0, data) == message
 
     def test_SetListenPort_Request_serialize_withObfuscatedPort(self):
         message = SetListenPort.Request(
@@ -276,7 +275,7 @@ class TestSetListenPort:
             obfuscated_port=1235
         )
         data = bytes.fromhex('1000000002000000d204000001000000d3040000')
-        assert SetListenPort.Request.deserialize(data) == message
+        assert SetListenPort.Request.deserialize(0, data) == message
 
 
 class TestGetPeerAddress:
@@ -289,7 +288,7 @@ class TestGetPeerAddress:
     def test_GetPeerAddress_Request_deserialize(self):
         message = GetPeerAddress.Request('user0')
         data = bytes.fromhex('0d00000003000000050000007573657230')
-        assert GetPeerAddress.Request.deserialize(data) == message
+        assert GetPeerAddress.Request.deserialize(0, data) == message
 
     # Response
     def test_GetPeerAddress_Response_serialize_withoutObfuscatedPorts(self):
@@ -308,7 +307,7 @@ class TestGetPeerAddress:
             port=1234
         )
         data = bytes.fromhex('150000000300000005000000757365723004030201d2040000')
-        assert GetPeerAddress.Response.deserialize(data) == message
+        assert GetPeerAddress.Response.deserialize(0, data) == message
 
     def test_GetPeerAddress_Response_serialize_withObfuscatedPorts(self):
         message = GetPeerAddress.Response(
@@ -330,7 +329,7 @@ class TestGetPeerAddress:
             obfuscated_port=1235
         )
         data = bytes.fromhex('1b0000000300000005000000757365723004030201d204000001000000d304')
-        assert GetPeerAddress.Response.deserialize(data) == message
+        assert GetPeerAddress.Response.deserialize(0, data) == message
 
 
 class TestAddUser:
@@ -343,7 +342,7 @@ class TestAddUser:
     def test_AddUser_Request_deserialize(self):
         message = AddUser.Request('user0')
         data = bytes.fromhex('0d00000005000000050000007573657230')
-        assert AddUser.Request.deserialize(data) == message
+        assert AddUser.Request.deserialize(0, data) == message
 
     # Response
     def test_AddUser_Response_serialize_existsWithoutCountryCode(self):
@@ -374,7 +373,7 @@ class TestAddUser:
             )
         )
         data = bytes.fromhex('2600000005000000050000007573657230010100000064000000e80300000000000010270000a0860100')
-        assert AddUser.Response.deserialize(data) == message
+        assert AddUser.Response.deserialize(0, data) == message
 
     def test_AddUser_Response_serialize_existsWithCountryCode(self):
         message = AddUser.Response(
@@ -406,7 +405,7 @@ class TestAddUser:
             country_code='DE'
         )
         data = bytes.fromhex('2c00000005000000050000007573657230010100000064000000e80300000000000010270000a0860100020000004445')
-        assert AddUser.Response.deserialize(data) == message
+        assert AddUser.Response.deserialize(0, data) == message
 
 
 class TestRemoveUser:
@@ -419,7 +418,7 @@ class TestRemoveUser:
     def test_RemoveUser_Request_deserialize(self):
         message = RemoveUser.Request('user0')
         data = bytes.fromhex('0d00000006000000050000007573657230')
-        assert RemoveUser.Request.deserialize(data) == message
+        assert RemoveUser.Request.deserialize(0, data) == message
 
 
 class TestGetUserStatus:
@@ -432,7 +431,7 @@ class TestGetUserStatus:
     def test_GetUserStatus_Request_deserialize(self):
         message = GetUserStatus.Request('user0')
         data = bytes.fromhex('0d00000007000000050000007573657230')
-        assert GetUserStatus.Request.deserialize(data) == message
+        assert GetUserStatus.Request.deserialize(0, data) == message
 
     def test_GetUserStatus_Response_serialize(self):
         message = GetUserStatus.Response(
@@ -450,7 +449,7 @@ class TestGetUserStatus:
             privileged=1
         )
         data = bytes.fromhex('12000000070000000500000075736572300200000001')
-        assert GetUserStatus.Response.deserialize(data) == message
+        assert GetUserStatus.Response.deserialize(0, data) == message
 
 
 class TestRoomChatMessage:
@@ -469,7 +468,7 @@ class TestRoomChatMessage:
             message="Hello"
         )
         data = bytes.fromhex('160000000d00000005000000726f6f6d300500000048656c6c6f')
-        assert RoomChatMessage.Request.deserialize(data) == message
+        assert RoomChatMessage.Request.deserialize(0, data) == message
 
     def test_RoomChatMessage_Response_serialize(self):
         message = RoomChatMessage.Response(
@@ -487,7 +486,7 @@ class TestRoomChatMessage:
             message="Hello"
         )
         data = bytes.fromhex('1f0000000d00000005000000726f6f6d300500000075736572300500000048656c6c6f')
-        assert RoomChatMessage.Response.deserialize(data) == message
+        assert RoomChatMessage.Response.deserialize(0, data) == message
 
 
 class TestJoinRoom:
@@ -504,7 +503,7 @@ class TestLeaveRoom:
     def test_LeaveRoom_Request_deserialize(self):
         message = LeaveRoom.Request('room0')
         data = bytes.fromhex('0d0000000f00000005000000726f6f6d30')
-        assert LeaveRoom.Request.deserialize(data) == message
+        assert LeaveRoom.Request.deserialize(0, data) == message
 
     def test_LeaveRoom_Response_serialize(self):
         message = LeaveRoom.Response('room0')
@@ -514,7 +513,7 @@ class TestLeaveRoom:
     def test_LeaveRoom_Response_deserialize(self):
         message = LeaveRoom.Response('room0')
         data = bytes.fromhex('0d0000000f00000005000000726f6f6d30')
-        assert LeaveRoom.Response.deserialize(data) == message
+        assert LeaveRoom.Response.deserialize(0, data) == message
 
 
 class TestUserJoinedRoom:
@@ -551,7 +550,7 @@ class TestUserJoinedRoom:
             country_code='DE'
         )
         data = bytes.fromhex('380000001000000005000000726f6f6d3005000000757365723001000000e80300001027000000000000e8030000e803000005000000020000004445')
-        assert UserJoinedRoom.Response.deserialize(data) == message
+        assert UserJoinedRoom.Response.deserialize(0, data) == message
 
 
 class TestUserLeftRoom:
@@ -564,7 +563,7 @@ class TestUserLeftRoom:
     def test_UserLeftRoom_Response_deserialize(self):
         message = UserLeftRoom.Response('room0', 'user0')
         data = bytes.fromhex('160000001100000005000000726f6f6d30050000007573657230')
-        assert UserLeftRoom.Response.deserialize(data) == message
+        assert UserLeftRoom.Response.deserialize(0, data) == message
 
 
 class TestConnectToPeer:
@@ -585,7 +584,7 @@ class TestConnectToPeer:
             typ='P'
         )
         data = bytes.fromhex('1600000012000000d20400000500000075736572300100000050')
-        assert ConnectToPeer.Request.deserialize(data) == message
+        assert ConnectToPeer.Request.deserialize(0, data) == message
 
     def test_ConnectToPeer_Response_serialize_withoutObfuscatedPort(self):
         message = ConnectToPeer.Response(
@@ -609,7 +608,7 @@ class TestConnectToPeer:
             privileged=True
         )
         data = bytes.fromhex('1f00000012000000050000007573657230010000005004030201d2040000e803000001')
-        assert ConnectToPeer.Response.deserialize(data) == message
+        assert ConnectToPeer.Response.deserialize(0, data) == message
 
     def test_ConnectToPeer_Response_serialize_emptyObfuscatedPort(self):
         message = ConnectToPeer.Response(
@@ -637,7 +636,7 @@ class TestConnectToPeer:
             obfuscated_port=0
         )
         data = bytes.fromhex('2700000012000000050000007573657230010000005004030201d2040000e8030000010000000000000000')
-        assert ConnectToPeer.Response.deserialize(data) == message
+        assert ConnectToPeer.Response.deserialize(0, data) == message
 
     def test_ConnectToPeer_Response_serialize_withObfuscatedPort(self):
         message = ConnectToPeer.Response(
@@ -665,7 +664,7 @@ class TestConnectToPeer:
             obfuscated_port=1235
         )
         data = bytes.fromhex('2700000012000000050000007573657230010000005004030201d2040000e80300000101000000d3040000')
-        assert ConnectToPeer.Response.deserialize(data) == message
+        assert ConnectToPeer.Response.deserialize(0, data) == message
 
 
 class TestPrivateChatMessage:
@@ -684,7 +683,7 @@ class TestPrivateChatMessage:
             message='Hello'
         )
         data = bytes.fromhex('16000000160000000500000075736572300500000048656c6c6f')
-        assert PrivateChatMessage.Request.deserialize(data) == message
+        assert PrivateChatMessage.Request.deserialize(0, data) == message
 
     def test_PrivateChatMessage_Response_serialize_withoutIsAdmin(self):
         message = PrivateChatMessage.Response(
@@ -707,7 +706,7 @@ class TestPrivateChatMessage:
             is_admin=False
         )
         data = bytes.fromhex('1e0000001600000040e20100056556630500000075736572300500000048656c6c6f')
-        assert PrivateChatMessage.Response.deserialize(data) == message
+        assert PrivateChatMessage.Response.deserialize(0, data) == message
 
     def test_PrivateChatMessage_Response_serialize_withIsAdmin(self):
         message = PrivateChatMessage.Response(
@@ -729,7 +728,7 @@ class TestPrivateChatMessage:
             is_admin=True
         )
         data = bytes.fromhex('1f0000001600000040e20100056556630500000075736572300500000048656c6c6f01')
-        assert PrivateChatMessage.Response.deserialize(data) == message
+        assert PrivateChatMessage.Response.deserialize(0, data) == message
 
 
 class TestPrivateChatMessageAck:
@@ -742,7 +741,7 @@ class TestPrivateChatMessageAck:
     def test_PrivateChatMessageAck_Request_deserialize(self):
         message = PrivateChatMessageAck.Request(1234)
         data = bytes.fromhex('0800000017000000d2040000')
-        assert PrivateChatMessageAck.Request.deserialize(data) == message
+        assert PrivateChatMessageAck.Request.deserialize(0, data) == message
 
 
 class TestFileSearch:
@@ -761,7 +760,7 @@ class TestFileSearch:
             query="Query"
         )
         data = bytes.fromhex('110000001a000000d2040000050000005175657279')
-        assert FileSearch.Request.deserialize(data) == message
+        assert FileSearch.Request.deserialize(0, data) == message
 
     def test_FileSearch_Response_serialize(self):
         message = FileSearch.Response(
@@ -779,7 +778,7 @@ class TestFileSearch:
             query="Query"
         )
         data = bytes.fromhex('1a0000001a000000050000007573657230d2040000050000005175657279')
-        assert FileSearch.Response.deserialize(data) == message
+        assert FileSearch.Response.deserialize(0, data) == message
 
 
 class TestSendConnectTicket:
@@ -798,7 +797,7 @@ class TestSendConnectTicket:
             ticket=1234
         )
         data = bytes.fromhex('1100000021000000050000007573657230d2040000')
-        assert SendConnectTicket.Request.deserialize(data) == message
+        assert SendConnectTicket.Request.deserialize(0, data) == message
 
     def test_SendConnectTicket_Response_serialize(self):
         message = SendConnectTicket.Response(
@@ -814,7 +813,7 @@ class TestSendConnectTicket:
             ticket=1234
         )
         data = bytes.fromhex('1100000021000000050000007573657230d2040000')
-        assert SendConnectTicket.Response.deserialize(data) == message
+        assert SendConnectTicket.Response.deserialize(0, data) == message
 
 
 class TestSetStatus:
@@ -827,7 +826,7 @@ class TestSetStatus:
     def test_SetStatus_Request_deserialize(self):
         message = SetStatus.Request(2)
         data = bytes.fromhex('080000001c00000002000000')
-        assert SetStatus.Request.deserialize(data) == message
+        assert SetStatus.Request.deserialize(0, data) == message
 
 
 class TestPing:
@@ -840,7 +839,7 @@ class TestPing:
     def test_Ping_Request_deserialize(self):
         message = Ping.Request()
         data = bytes.fromhex('0400000020000000')
-        assert Ping.Request.deserialize(data) == message
+        assert Ping.Request.deserialize(0, data) == message
 
 
 class TestSendDownloadSpeed:
@@ -853,7 +852,7 @@ class TestSendDownloadSpeed:
     def test_SendDownloadSpeed_Request_deserialize(self):
         message = SendDownloadSpeed.Request('user0', 123)
         data = bytes.fromhex('11000000220000000500000075736572307b000000')
-        assert SendDownloadSpeed.Request.deserialize(data) == message
+        assert SendDownloadSpeed.Request.deserialize(0, data) == message
 
 
 class TestSharedFoldersFiles:
@@ -872,7 +871,7 @@ class TestSharedFoldersFiles:
             shared_file_count=10000
         )
         data = bytes.fromhex('0c00000023000000e803000010270000')
-        assert SharedFoldersFiles.Request.deserialize(data) == message
+        assert SharedFoldersFiles.Request.deserialize(0, data) == message
 
 
 class TestGetUserStats:
@@ -885,7 +884,7 @@ class TestGetUserStats:
     def test_GetUserStats_Request_deserialize(self):
         message = GetUserStats.Request('user0')
         data = bytes.fromhex('0d00000024000000050000007573657230')
-        assert GetUserStats.Request.deserialize(data) == message
+        assert GetUserStats.Request.deserialize(0, data) == message
 
     def test_GetUserStats_Response_serialize(self):
         message = GetUserStats.Response(
@@ -911,7 +910,7 @@ class TestGetUserStats:
             )
         )
         data = bytes.fromhex('2100000024000000050000007573657230a086010040420f000000000010270000e8030000')
-        assert GetUserStats.Response.deserialize(data) == message
+        assert GetUserStats.Response.deserialize(0, data) == message
 
 
 class TestKicked:
@@ -924,7 +923,7 @@ class TestKicked:
     def test_Kicked_Response_deserialize(self):
         message = Kicked.Response()
         data = bytes.fromhex('0400000029000000')
-        assert Kicked.Response.deserialize(data) == message
+        assert Kicked.Response.deserialize(0, data) == message
 
 
 class TestUserSearch:
@@ -945,7 +944,7 @@ class TestUserSearch:
             query="Query"
         )
         data = bytes.fromhex('1a0000002a000000050000007573657230d2040000050000005175657279')
-        assert UserSearch.Request.deserialize(data) == message
+        assert UserSearch.Request.deserialize(0, data) == message
 
 
 class TestRoomList:
@@ -958,7 +957,7 @@ class TestRoomList:
     def test_RoomList_Request_deserialize(self):
         message = RoomList.Request()
         data = bytes.fromhex('0400000040000000')
-        assert RoomList.Request.deserialize(data) == message
+        assert RoomList.Request.deserialize(0, data) == message
 
     # TODO: Response tests
 
@@ -987,7 +986,7 @@ class TestExactFileSearch:
             unknown=1
         )
         data = bytes.fromhex('2d00000041000000d20400000a0000006d7966696c652e6d7033060000006d797061746888776655443322114433221101')
-        assert ExactFileSearch.Request.deserialize(data) == message
+        assert ExactFileSearch.Request.deserialize(0, data) == message
 
     def test_ExactFileSearch_Response_serialize(self):
         message = ExactFileSearch.Response(
@@ -1011,7 +1010,7 @@ class TestExactFileSearch:
             checksum=0x11223344
         )
         data = bytes.fromhex('3500000041000000050000007573657230d20400000a0000006d7966696c652e6d7033060000006d7970617468887766554433221144332211')
-        assert ExactFileSearch.Response.deserialize(data) == message
+        assert ExactFileSearch.Response.deserialize(0, data) == message
 
 
 class TestGetUserList:
@@ -1024,7 +1023,7 @@ class TestGetUserList:
     def test_GetUserList_Request_deserialize(self):
         message = GetUserList.Request()
         data = bytes.fromhex('0400000043000000')
-        assert GetUserList.Request.deserialize(data) == message
+        assert GetUserList.Request.deserialize(0, data) == message
 
     def test_GetUserList_Response_serialize(self):
         message = GetUserList.Response(
@@ -1052,7 +1051,7 @@ class TestGetUserList:
             users_countries=['FR', 'GB']
         )
         data = bytes.fromhex('6e00000043000000020000000500000075736572300500000075736572310200000001000000020000000200000064000000e80300000000000010270000a0860100c8000000d007000000000000204e0000400d0300020000000a0000001400000002000000020000004652020000004742')
-        assert GetUserList.Response.deserialize(data) == message
+        assert GetUserList.Response.deserialize(0, data) == message
 
 
 class TestAdminMessage:
@@ -1065,7 +1064,7 @@ class TestAdminMessage:
     def test_AdminMessage_Response_deserialize(self):
         message = AdminMessage.Response('hello')
         data = bytes.fromhex('0d000000420000000500000068656c6c6f')
-        assert AdminMessage.Response.deserialize(data) == message
+        assert AdminMessage.Response.deserialize(0, data) == message
 
 
 class TestTunneledMessage:
@@ -1088,7 +1087,7 @@ class TestTunneledMessage:
             message='hello'
         )
         data = bytes.fromhex('1e00000044000000050000007573657230d2040000010000000500000068656c6c6f')
-        assert TunneledMessage.Request.deserialize(data) == message
+        assert TunneledMessage.Request.deserialize(0, data) == message
 
     def test_TunneledMessage_Response_serialize(self):
         message = TunneledMessage.Response(
@@ -1112,7 +1111,7 @@ class TestTunneledMessage:
             message='hello'
         )
         data = bytes.fromhex('2600000044000000050000007573657230d20400000100000004030201e11000000500000068656c6c6f')
-        assert TunneledMessage.Response.deserialize(data) == message
+        assert TunneledMessage.Response.deserialize(0, data) == message
 
 
 class TestPrivilegedUsers:
@@ -1125,7 +1124,7 @@ class TestPrivilegedUsers:
     def test_PrivilegedUsers_Response_deserialize(self):
         message = PrivilegedUsers.Response(users=['user0', 'user1'])
         data = bytes.fromhex('1a0000004500000002000000050000007573657230050000007573657231')
-        assert PrivilegedUsers.Response.deserialize(data) == message
+        assert PrivilegedUsers.Response.deserialize(0, data) == message
 
 
 class TestToggleParentSearch:
@@ -1138,7 +1137,7 @@ class TestToggleParentSearch:
     def test_ToggleParentSearch_Request_deserialize(self):
         message = ToggleParentSearch.Request(True)
         data = bytes.fromhex('050000004700000001')
-        assert ToggleParentSearch.Request.deserialize(data) == message
+        assert ToggleParentSearch.Request.deserialize(0, data) == message
 
 
 class TestParentIP:
@@ -1151,7 +1150,7 @@ class TestParentIP:
     def test_ParentIP_Request_deserialize(self):
         message = ParentIP.Request('1.2.3.4')
         data = bytes.fromhex('080000004900000004030201')
-        assert ParentIP.Request.deserialize(data) == message
+        assert ParentIP.Request.deserialize(0, data) == message
 
 
 class TestParentMinSpeed:
@@ -1164,7 +1163,7 @@ class TestParentMinSpeed:
     def test_ParentMinSpeed_Response_deserialize(self):
         message = ParentMinSpeed.Response(1000)
         data = bytes.fromhex('0800000053000000e8030000')
-        assert ParentMinSpeed.Response.deserialize(data) == message
+        assert ParentMinSpeed.Response.deserialize(0, data) == message
 
 
 class TestParentSpeedRatio:
@@ -1177,7 +1176,7 @@ class TestParentSpeedRatio:
     def test_ParentSpeedRatio_Response_deserialize(self):
         message = ParentSpeedRatio.Response(1000)
         data = bytes.fromhex('0800000054000000e8030000')
-        assert ParentSpeedRatio.Response.deserialize(data) == message
+        assert ParentSpeedRatio.Response.deserialize(0, data) == message
 
 
 class TestParentInactivityTimeout:
@@ -1190,7 +1189,7 @@ class TestParentInactivityTimeout:
     def test_ParentInactivityTimeout_Response_deserialize(self):
         message = ParentInactivityTimeout.Response(1000)
         data = bytes.fromhex('0800000056000000e8030000')
-        assert ParentInactivityTimeout.Response.deserialize(data) == message
+        assert ParentInactivityTimeout.Response.deserialize(0, data) == message
 
 
 class TestSearchInactivityTimeout:
@@ -1203,7 +1202,7 @@ class TestSearchInactivityTimeout:
     def test_SearchInactivityTimeout_Response_deserialize(self):
         message = SearchInactivityTimeout.Response(1000)
         data = bytes.fromhex('0800000057000000e8030000')
-        assert SearchInactivityTimeout.Response.deserialize(data) == message
+        assert SearchInactivityTimeout.Response.deserialize(0, data) == message
 
 
 class TestMinParentsInCache:
@@ -1216,7 +1215,7 @@ class TestMinParentsInCache:
     def test_MinParentsInCache_Response_deserialize(self):
         message = MinParentsInCache.Response(1000)
         data = bytes.fromhex('0800000058000000e8030000')
-        assert MinParentsInCache.Response.deserialize(data) == message
+        assert MinParentsInCache.Response.deserialize(0, data) == message
 
 
 class TestDistributedAliveInterval:
@@ -1229,7 +1228,7 @@ class TestDistributedAliveInterval:
     def test_DistributedAliveInterval_Response_deserialize(self):
         message = DistributedAliveInterval.Response(1000)
         data = bytes.fromhex('080000005a000000e8030000')
-        assert DistributedAliveInterval.Response.deserialize(data) == message
+        assert DistributedAliveInterval.Response.deserialize(0, data) == message
 
 
 class TestAddPrivilegedUser:
@@ -1242,7 +1241,7 @@ class TestAddPrivilegedUser:
     def test_AddPrivilegedUser_Response_deserialize(self):
         message = AddPrivilegedUser.Response('user0')
         data = bytes.fromhex('0d0000005b000000050000007573657230')
-        assert AddPrivilegedUser.Response.deserialize(data) == message
+        assert AddPrivilegedUser.Response.deserialize(0, data) == message
 
 
 class TestCheckPrivileges:
@@ -1255,7 +1254,7 @@ class TestCheckPrivileges:
     def test_CheckPrivileges_Request_deserialize(self):
         message = CheckPrivileges.Request()
         data = bytes.fromhex('040000005c000000')
-        assert CheckPrivileges.Request.deserialize(data) == message
+        assert CheckPrivileges.Request.deserialize(0, data) == message
 
     def test_CheckPrivileges_Response_serialize(self):
         message = CheckPrivileges.Response(1000)
@@ -1265,7 +1264,7 @@ class TestCheckPrivileges:
     def test_CheckPrivileges_Response_deserialize(self):
         message = CheckPrivileges.Response(1000)
         data = bytes.fromhex('080000005c000000e8030000')
-        assert CheckPrivileges.Response.deserialize(data) == message
+        assert CheckPrivileges.Response.deserialize(0, data) == message
 
 
 class TestServerSearchRequest:
@@ -1290,7 +1289,7 @@ class TestServerSearchRequest:
             query='Query'
         )
         data = bytes.fromhex('1f0000005d0000000300000000050000007573657230d2040000050000005175657279')
-        assert ServerSearchRequest.Response.deserialize(data) == message
+        assert ServerSearchRequest.Response.deserialize(0, data) == message
 
 
 class TestAcceptChildren:
@@ -1303,7 +1302,7 @@ class TestAcceptChildren:
     def test_AcceptChildren_Request_deserialize(self):
         message = AcceptChildren.Request(True)
         data = bytes.fromhex('050000006400000001')
-        assert AcceptChildren.Request.deserialize(data) == message
+        assert AcceptChildren.Request.deserialize(0, data) == message
 
 
 class TestPotentialParents:
@@ -1342,7 +1341,7 @@ class TestPotentialParents:
             ]
         )
         data = bytes.fromhex('2a000000660000000200000005000000757365723004030201d204000005000000757365723105030201d3040000')
-        assert PotentialParents.Response.deserialize(data) == message
+        assert PotentialParents.Response.deserialize(0, data) == message
 
 
 class TestWishlistSearch:
@@ -1361,7 +1360,7 @@ class TestWishlistSearch:
             query="Query"
         )
         data = bytes.fromhex('1100000067000000d2040000050000005175657279')
-        assert WishlistSearch.Request.deserialize(data) == message
+        assert WishlistSearch.Request.deserialize(0, data) == message
 
 
 class TestWishlistInterval:
@@ -1374,7 +1373,7 @@ class TestWishlistInterval:
     def test_WishlistInterval_Response_deserialize(self):
         message = WishlistInterval.Response(1000)
         data = bytes.fromhex('0800000068000000e8030000')
-        assert WishlistInterval.Response.deserialize(data) == message
+        assert WishlistInterval.Response.deserialize(0, data) == message
 
 
 class TestGetSimilarUsers:
@@ -1387,7 +1386,7 @@ class TestGetSimilarUsers:
     def test_GetSimilarUsers_Request_deserialize(self):
         message = GetSimilarUsers.Request()
         data = bytes.fromhex('040000006e000000')
-        assert GetSimilarUsers.Request.deserialize(data) == message
+        assert GetSimilarUsers.Request.deserialize(0, data) == message
 
     def test_GetSimilarUsers_Response_serialize(self):
         message = GetSimilarUsers.Response(
@@ -1407,7 +1406,7 @@ class TestGetSimilarUsers:
             ]
         )
         data = bytes.fromhex('220000006e000000020000000500000075736572300100000005000000757365723102000000')
-        assert GetSimilarUsers.Response.deserialize(data) == message
+        assert GetSimilarUsers.Response.deserialize(0, data) == message
 
 
 class TestGetItemRecommendations:
@@ -1420,7 +1419,7 @@ class TestGetItemRecommendations:
     def test_GetItemRecommendations_Request_deserialize(self):
         message = GetItemRecommendations.Request('recommendation0')
         data = bytes.fromhex('170000006f0000000f0000007265636f6d6d656e646174696f6e30')
-        assert GetItemRecommendations.Request.deserialize(data) == message
+        assert GetItemRecommendations.Request.deserialize(0, data) == message
 
     def test_GetItemRecommendations_Response_serialize(self):
         message = GetItemRecommendations.Response(
@@ -1442,7 +1441,7 @@ class TestGetItemRecommendations:
             ]
         )
         data = bytes.fromhex('3e0000006f000000040000006974656d020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31ffffffff')
-        assert GetItemRecommendations.Response.deserialize(data) == message
+        assert GetItemRecommendations.Response.deserialize(0, data) == message
 
 
 class TestAddInterest:
@@ -1455,7 +1454,7 @@ class TestAddInterest:
     def test_AddInterest_Request_deserialize(self):
         message = AddInterest.Request('interest0')
         data = bytes.fromhex('110000003300000009000000696e74657265737430')
-        assert AddInterest.Request.deserialize(data) == message
+        assert AddInterest.Request.deserialize(0, data) == message
 
 
 class TestRemoveInterest:
@@ -1468,7 +1467,7 @@ class TestRemoveInterest:
     def test_RemoveInterest_Request_deserialize(self):
         message = RemoveInterest.Request('interest0')
         data = bytes.fromhex('110000003400000009000000696e74657265737430')
-        assert RemoveInterest.Request.deserialize(data) == message
+        assert RemoveInterest.Request.deserialize(0, data) == message
 
 
 class TestGetRecommendations:
@@ -1481,7 +1480,7 @@ class TestGetRecommendations:
     def test_GetRecommendations_Request_deserialize(self):
         message = GetRecommendations.Request()
         data = bytes.fromhex('0400000036000000')
-        assert GetRecommendations.Request.deserialize(data) == message
+        assert GetRecommendations.Request.deserialize(0, data) == message
 
     def test_GetRecommendations_Response_serialize(self):
         message = GetRecommendations.Response(
@@ -1509,7 +1508,7 @@ class TestGetRecommendations:
             ]
         )
         data = bytes.fromhex('6c00000036000000020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31ffffffff0200000011000000756e7265636f6d6d656e646174696f6e300100000011000000756e7265636f6d6d656e646174696f6e31ffffffff')
-        assert GetRecommendations.Response.deserialize(data) == message
+        assert GetRecommendations.Response.deserialize(0, data) == message
 
 
 class TestGetGlobalRecommendations:
@@ -1522,7 +1521,7 @@ class TestGetGlobalRecommendations:
     def test_GetGlobalRecommendations_Request_deserialize(self):
         message = GetGlobalRecommendations.Request()
         data = bytes.fromhex('0400000038000000')
-        assert GetGlobalRecommendations.Request.deserialize(data) == message
+        assert GetGlobalRecommendations.Request.deserialize(0, data) == message
 
     def test_GetGlobalRecommendations_Response_serialize(self):
         message = GetGlobalRecommendations.Response(
@@ -1550,7 +1549,7 @@ class TestGetGlobalRecommendations:
             ]
         )
         data = bytes.fromhex('6c00000038000000020000000f0000007265636f6d6d656e646174696f6e30010000000f0000007265636f6d6d656e646174696f6e31ffffffff0200000011000000756e7265636f6d6d656e646174696f6e300100000011000000756e7265636f6d6d656e646174696f6e31ffffffff')
-        assert GetGlobalRecommendations.Response.deserialize(data) == message
+        assert GetGlobalRecommendations.Response.deserialize(0, data) == message
 
 
 class TestGetUserInterests:
@@ -1563,7 +1562,7 @@ class TestGetUserInterests:
     def test_GetUserInterests_Request_deserialize(self):
         message = GetUserInterests.Request('user0')
         data = bytes.fromhex('0d00000039000000050000007573657230')
-        assert GetUserInterests.Request.deserialize(data) == message
+        assert GetUserInterests.Request.deserialize(0, data) == message
 
     def test_GetUserInterests_Response_serialize(self):
         message = GetUserInterests.Response(
@@ -1581,7 +1580,7 @@ class TestGetUserInterests:
             hated_interests=['hated0', 'hated1']
         )
         data = bytes.fromhex('43000000390000000500000075736572300200000009000000696e7465726573743009000000696e74657265737431020000000600000068617465643006000000686174656431')
-        assert GetUserInterests.Response.deserialize(data) == message
+        assert GetUserInterests.Response.deserialize(0, data) == message
 
 
 class TestExecuteCommand:
@@ -1600,7 +1599,7 @@ class TestExecuteCommand:
             arguments=['ban', 'user0', '123']
         )
         data = bytes.fromhex('280000003a0000000500000061646d696e030000000300000062616e05000000757365723003000000313233')
-        assert ExecuteCommand.Request.deserialize(data) == message
+        assert ExecuteCommand.Request.deserialize(0, data) == message
 
 
 class TestGetItemSimilarUsers:
@@ -1613,7 +1612,7 @@ class TestGetItemSimilarUsers:
     def test_GetItemSimilarUsers_Request_deserialize(self):
         message = GetItemSimilarUsers.Request('item0')
         data = bytes.fromhex('0d00000070000000050000006974656d30')
-        assert GetItemSimilarUsers.Request.deserialize(data) == message
+        assert GetItemSimilarUsers.Request.deserialize(0, data) == message
 
     def test_GetItemSimilarUsers_Response_serialize(self):
         message = GetItemSimilarUsers.Response(
@@ -1629,7 +1628,7 @@ class TestGetItemSimilarUsers:
             usernames=['user0', 'user1']
         )
         data = bytes.fromhex('2300000070000000050000006974656d3002000000050000007573657230050000007573657231')
-        assert GetItemSimilarUsers.Response.deserialize(data) == message
+        assert GetItemSimilarUsers.Response.deserialize(0, data) == message
 
 
 class TestRoomTickers:
@@ -1654,7 +1653,7 @@ class TestRoomTickers:
             ]
         )
         data = bytes.fromhex('390000007100000005000000726f6f6d3002000000050000007573657230070000007469636b657230050000007573657231070000007469636b657231')
-        assert RoomTickers.Response.deserialize(data) == message
+        assert RoomTickers.Response.deserialize(0, data) == message
 
 
 class TestRoomTickerAdded:
@@ -1675,7 +1674,7 @@ class TestRoomTickerAdded:
             ticker='ticker0'
         )
         data = bytes.fromhex('210000007200000005000000726f6f6d30050000007573657230070000007469636b657230')
-        assert RoomTickerAdded.Response.deserialize(data) == message
+        assert RoomTickerAdded.Response.deserialize(0, data) == message
 
 
 class TestRoomTickerRemoved:
@@ -1694,7 +1693,7 @@ class TestRoomTickerRemoved:
             username='user0'
         )
         data = bytes.fromhex('160000007300000005000000726f6f6d30050000007573657230')
-        assert RoomTickerRemoved.Response.deserialize(data) == message
+        assert RoomTickerRemoved.Response.deserialize(0, data) == message
 
 
 class TestSetRoomTicker:
@@ -1713,7 +1712,7 @@ class TestSetRoomTicker:
             ticker='ticker0'
         )
         data = bytes.fromhex('180000007400000005000000726f6f6d30070000007469636b657230')
-        assert SetRoomTicker.Request.deserialize(data) == message
+        assert SetRoomTicker.Request.deserialize(0, data) == message
 
 
 class TestAddHatedInterest:
@@ -1726,7 +1725,7 @@ class TestAddHatedInterest:
     def test_AddHatedInterest_Request_deserialize(self):
         message = AddHatedInterest.Request('hated0')
         data = bytes.fromhex('0e0000007500000006000000686174656430')
-        assert AddHatedInterest.Request.deserialize(data) == message
+        assert AddHatedInterest.Request.deserialize(0, data) == message
 
 
 class TestRemoveHatedInterest:
@@ -1739,7 +1738,7 @@ class TestRemoveHatedInterest:
     def test_RemoveHatedInterest_Request_deserialize(self):
         message = RemoveHatedInterest.Request('hated0')
         data = bytes.fromhex('0e0000007600000006000000686174656430')
-        assert RemoveHatedInterest.Request.deserialize(data) == message
+        assert RemoveHatedInterest.Request.deserialize(0, data) == message
 
 
 class TestRoomSearch:
@@ -1760,7 +1759,7 @@ class TestRoomSearch:
             query="Query"
         )
         data = bytes.fromhex('1a0000007800000005000000726f6f6d30d2040000050000005175657279')
-        assert RoomSearch.Request.deserialize(data) == message
+        assert RoomSearch.Request.deserialize(0, data) == message
 
 
 class TestSendUploadSpeed:
@@ -1773,7 +1772,7 @@ class TestSendUploadSpeed:
     def test_SendUploadSpeed_Request_deserialize(self):
         message = SendUploadSpeed.Request(1000)
         data = bytes.fromhex('0800000079000000e8030000')
-        assert SendUploadSpeed.Request.deserialize(data) == message
+        assert SendUploadSpeed.Request.deserialize(0, data) == message
 
 
 class TestGetUserPrivileges:
@@ -1786,7 +1785,7 @@ class TestGetUserPrivileges:
     def test_GetUserPrivileges_Request_deserialize(self):
         message = GetUserPrivileges.Request('user0')
         data = bytes.fromhex('0d0000007a000000050000007573657230')
-        assert GetUserPrivileges.Request.deserialize(data) == message
+        assert GetUserPrivileges.Request.deserialize(0, data) == message
 
     def test_GetUserPrivileges_Response_serialize(self):
         message = GetUserPrivileges.Response('user0', True)
@@ -1796,7 +1795,7 @@ class TestGetUserPrivileges:
     def test_GetUserPrivileges_Response_deserialize(self):
         message = GetUserPrivileges.Response('user0', True)
         data = bytes.fromhex('0e0000007a00000005000000757365723001')
-        assert GetUserPrivileges.Response.deserialize(data) == message
+        assert GetUserPrivileges.Response.deserialize(0, data) == message
 
 
 class TestGiveUserPrivileges:
@@ -1815,7 +1814,7 @@ class TestGiveUserPrivileges:
             days=1000
         )
         data = bytes.fromhex('110000007b000000050000007573657230e8030000')
-        assert GiveUserPrivileges.Request.deserialize(data) == message
+        assert GiveUserPrivileges.Request.deserialize(0, data) == message
 
 
 class TestPrivilegesNotification:
@@ -1834,7 +1833,7 @@ class TestPrivilegesNotification:
             username='user0'
         )
         data = bytes.fromhex('110000007c000000e8030000050000007573657230')
-        assert PrivilegesNotification.Request.deserialize(data) == message
+        assert PrivilegesNotification.Request.deserialize(0, data) == message
 
 
 class TestPrivilegesNotificationAck:
@@ -1847,7 +1846,7 @@ class TestPrivilegesNotificationAck:
     def test_PrivilegesNotificationAck_Request_deserialize(self):
         message = PrivilegesNotificationAck.Request(1000)
         data = bytes.fromhex('080000007d000000e8030000')
-        assert PrivilegesNotificationAck.Request.deserialize(data) == message
+        assert PrivilegesNotificationAck.Request.deserialize(0, data) == message
 
 
 class TestBranchLevel:
@@ -1860,7 +1859,7 @@ class TestBranchLevel:
     def test_BranchLevel_Request_deserialize(self):
         message = BranchLevel.Request(5)
         data = bytes.fromhex('080000007e00000005000000')
-        assert BranchLevel.Request.deserialize(data) == message
+        assert BranchLevel.Request.deserialize(0, data) == message
 
 
 class TestBranchRoot:
@@ -1873,7 +1872,7 @@ class TestBranchRoot:
     def test_BranchRoot_Request_deserialize(self):
         message = BranchRoot.Request('user0')
         data = bytes.fromhex('0d0000007f000000050000007573657230')
-        assert BranchRoot.Request.deserialize(data) == message
+        assert BranchRoot.Request.deserialize(0, data) == message
 
 
 class TestChildDepth:
@@ -1886,7 +1885,7 @@ class TestChildDepth:
     def test_ChildDepth_Request_deserialize(self):
         message = ChildDepth.Request(5)
         data = bytes.fromhex('080000008100000005000000')
-        assert ChildDepth.Request.deserialize(data) == message
+        assert ChildDepth.Request.deserialize(0, data) == message
 
 
 
@@ -1900,7 +1899,7 @@ class TestResetDistributed:
     def test_ResetDistributed_Response_deserialize(self):
         message = ResetDistributed.Response()
         data = bytes.fromhex('0400000082000000')
-        assert ResetDistributed.Response.deserialize(data) == message
+        assert ResetDistributed.Response.deserialize(0, data) == message
 
 
 class TestPrivateRoomMembers:
@@ -1919,7 +1918,7 @@ class TestPrivateRoomMembers:
             usernames=['user0', 'user1']
         )
         data = bytes.fromhex('230000008500000005000000726f6f6d3002000000050000007573657230050000007573657231')
-        assert PrivateRoomMembers.Response.deserialize(data) == message
+        assert PrivateRoomMembers.Response.deserialize(0, data) == message
 
 
 class TestPrivateRoomGrantMembership:
@@ -1938,7 +1937,7 @@ class TestPrivateRoomGrantMembership:
             username='user0'
         )
         data = bytes.fromhex('160000008600000005000000726f6f6d30050000007573657230')
-        assert PrivateRoomGrantMembership.Request.deserialize(data) == message
+        assert PrivateRoomGrantMembership.Request.deserialize(0, data) == message
 
     def test_PrivateRoomGrantMembership_Response_serialize(self):
         message = PrivateRoomGrantMembership.Response(
@@ -1954,7 +1953,7 @@ class TestPrivateRoomGrantMembership:
             username='user0'
         )
         data = bytes.fromhex('160000008600000005000000726f6f6d30050000007573657230')
-        assert PrivateRoomGrantMembership.Response.deserialize(data) == message
+        assert PrivateRoomGrantMembership.Response.deserialize(0, data) == message
 
 
 class TestPrivateRoomRevokeMembership:
@@ -1973,7 +1972,7 @@ class TestPrivateRoomRevokeMembership:
             username='user0'
         )
         data = bytes.fromhex('160000008700000005000000726f6f6d30050000007573657230')
-        assert PrivateRoomRevokeMembership.Request.deserialize(data) == message
+        assert PrivateRoomRevokeMembership.Request.deserialize(0, data) == message
 
     def test_PrivateRoomRevokeMembership_Response_serialize(self):
         message = PrivateRoomRevokeMembership.Response(
@@ -1989,7 +1988,7 @@ class TestPrivateRoomRevokeMembership:
             username='user0'
         )
         data = bytes.fromhex('160000008700000005000000726f6f6d30050000007573657230')
-        assert PrivateRoomRevokeMembership.Response.deserialize(data) == message
+        assert PrivateRoomRevokeMembership.Response.deserialize(0, data) == message
 
 
 class TestPrivateRoomDropMembership:
@@ -2002,7 +2001,7 @@ class TestPrivateRoomDropMembership:
     def test_PrivateRoomDropMembership_Request_deserialize(self):
         message = PrivateRoomDropMembership.Request('room0')
         data = bytes.fromhex('0d0000008800000005000000726f6f6d30')
-        assert PrivateRoomDropMembership.Request.deserialize(data) == message
+        assert PrivateRoomDropMembership.Request.deserialize(0, data) == message
 
 
 class TestPrivateRoomDropOwnership:
@@ -2015,7 +2014,7 @@ class TestPrivateRoomDropOwnership:
     def test_PrivateRoomDropOwnership_Request_deserialize(self):
         message = PrivateRoomDropOwnership.Request('room0')
         data = bytes.fromhex('0d0000008900000005000000726f6f6d30')
-        assert PrivateRoomDropOwnership.Request.deserialize(data) == message
+        assert PrivateRoomDropOwnership.Request.deserialize(0, data) == message
 
 
 class TestPrivateRoomMembershipGranted:
@@ -2028,7 +2027,7 @@ class TestPrivateRoomMembershipGranted:
     def test_PrivateRoomMembershipGranted_Response_deserialize(self):
         message = PrivateRoomMembershipGranted.Response('room0')
         data = bytes.fromhex('0d0000008b00000005000000726f6f6d30')
-        assert PrivateRoomMembershipGranted.Response.deserialize(data) == message
+        assert PrivateRoomMembershipGranted.Response.deserialize(0, data) == message
 
 
 class TestPrivateRoomMembershipRevoked:
@@ -2041,7 +2040,7 @@ class TestPrivateRoomMembershipRevoked:
     def test_PrivateRoomMembershipRevoked_Response_deserialize(self):
         message = PrivateRoomMembershipRevoked.Response('room0')
         data = bytes.fromhex('0d0000008c00000005000000726f6f6d30')
-        assert PrivateRoomMembershipRevoked.Response.deserialize(data) == message
+        assert PrivateRoomMembershipRevoked.Response.deserialize(0, data) == message
 
 
 class TestTogglePrivateRoomInvites:
@@ -2054,7 +2053,7 @@ class TestTogglePrivateRoomInvites:
     def test_TogglePrivateRoomInvites_Request_deserialize(self):
         message = TogglePrivateRoomInvites.Request(True)
         data = bytes.fromhex('050000008d00000001')
-        assert TogglePrivateRoomInvites.Request.deserialize(data) == message
+        assert TogglePrivateRoomInvites.Request.deserialize(0, data) == message
 
 
 class TestNewPassword:
@@ -2067,7 +2066,7 @@ class TestNewPassword:
     def test_NewPassword_Request_deserialize(self):
         message = NewPassword.Request('password0')
         data = bytes.fromhex('110000008e0000000900000070617373776f726430')
-        assert NewPassword.Request.deserialize(data) == message
+        assert NewPassword.Request.deserialize(0, data) == message
 
 
 class TestPrivateRoomGrantOperator:
@@ -2086,7 +2085,7 @@ class TestPrivateRoomGrantOperator:
             username='user0'
         )
         data = bytes.fromhex('160000008f00000005000000726f6f6d30050000007573657230')
-        assert PrivateRoomGrantOperator.Request.deserialize(data) == message
+        assert PrivateRoomGrantOperator.Request.deserialize(0, data) == message
 
     def test_PrivateRoomGrantOperator_Response_serialize(self):
         message = PrivateRoomGrantOperator.Response(
@@ -2102,7 +2101,7 @@ class TestPrivateRoomGrantOperator:
             username='user0'
         )
         data = bytes.fromhex('160000008f00000005000000726f6f6d30050000007573657230')
-        assert PrivateRoomGrantOperator.Response.deserialize(data) == message
+        assert PrivateRoomGrantOperator.Response.deserialize(0, data) == message
 
 
 class TestPrivateRoomRevokeOperator:
@@ -2121,7 +2120,7 @@ class TestPrivateRoomRevokeOperator:
             username='user0'
         )
         data = bytes.fromhex('160000009000000005000000726f6f6d30050000007573657230')
-        assert PrivateRoomRevokeOperator.Request.deserialize(data) == message
+        assert PrivateRoomRevokeOperator.Request.deserialize(0, data) == message
 
     def test_PrivateRoomRevokeOperator_Response_serialize(self):
         message = PrivateRoomRevokeOperator.Response(
@@ -2137,7 +2136,7 @@ class TestPrivateRoomRevokeOperator:
             username='user0'
         )
         data = bytes.fromhex('160000009000000005000000726f6f6d30050000007573657230')
-        assert PrivateRoomRevokeOperator.Response.deserialize(data) == message
+        assert PrivateRoomRevokeOperator.Response.deserialize(0, data) == message
 
 
 class TestPrivateRoomOperatorGranted:
@@ -2150,7 +2149,7 @@ class TestPrivateRoomOperatorGranted:
     def test_PrivateRoomOperatorGranted_Response_deserialize(self):
         message = PrivateRoomOperatorGranted.Response('room0')
         data = bytes.fromhex('0d0000009100000005000000726f6f6d30')
-        assert PrivateRoomOperatorGranted.Response.deserialize(data) == message
+        assert PrivateRoomOperatorGranted.Response.deserialize(0, data) == message
 
 
 class TestPrivateRoomOperatorRevoked:
@@ -2163,7 +2162,7 @@ class TestPrivateRoomOperatorRevoked:
     def test_PrivateRoomOperatorRevoked_Response_deserialize(self):
         message = PrivateRoomOperatorRevoked.Response('room0')
         data = bytes.fromhex('0d0000009200000005000000726f6f6d30')
-        assert PrivateRoomOperatorRevoked.Response.deserialize(data) == message
+        assert PrivateRoomOperatorRevoked.Response.deserialize(0, data) == message
 
 
 class TestPrivateRoomOperators:
@@ -2182,7 +2181,7 @@ class TestPrivateRoomOperators:
             usernames=['user0', 'user1']
         )
         data = bytes.fromhex('230000009400000005000000726f6f6d3002000000050000007573657230050000007573657231')
-        assert PrivateRoomOperators.Response.deserialize(data) == message
+        assert PrivateRoomOperators.Response.deserialize(0, data) == message
 
 
 class TestPrivateChatMessageUsers:
@@ -2201,7 +2200,7 @@ class TestPrivateChatMessageUsers:
             message="Hello"
         )
         data = bytes.fromhex('2300000095000000020000000500000075736572300500000075736572310500000048656c6c6f')
-        assert PrivateChatMessageUsers.Request.deserialize(data) == message
+        assert PrivateChatMessageUsers.Request.deserialize(0, data) == message
 
 
 class TestEnablePublicChat:
@@ -2214,7 +2213,7 @@ class TestEnablePublicChat:
     def test_EnablePublicChat_Request_deserialize(self):
         message = EnablePublicChat.Request()
         data = bytes.fromhex('0400000096000000')
-        assert EnablePublicChat.Request.deserialize(data) == message
+        assert EnablePublicChat.Request.deserialize(0, data) == message
 
 
 class TestDisablePublicChat:
@@ -2227,7 +2226,7 @@ class TestDisablePublicChat:
     def test_DisablePublicChat_Request_deserialize(self):
         message = DisablePublicChat.Request()
         data = bytes.fromhex('0400000097000000')
-        assert DisablePublicChat.Request.deserialize(data) == message
+        assert DisablePublicChat.Request.deserialize(0, data) == message
 
 
 class TestPublicChatMessage:
@@ -2248,7 +2247,7 @@ class TestPublicChatMessage:
             message="Hello"
         )
         data = bytes.fromhex('1f0000009800000005000000726f6f6d300500000075736572300500000048656c6c6f')
-        assert PublicChatMessage.Response.deserialize(data) == message
+        assert PublicChatMessage.Response.deserialize(0, data) == message
 
 
 class TestGetRelatedSearches:
@@ -2261,7 +2260,7 @@ class TestGetRelatedSearches:
     def test_GetRelatedSearches_Request_deserialize(self):
         message = GetRelatedSearches.Request('Query')
         data = bytes.fromhex('0d00000099000000050000005175657279')
-        assert GetRelatedSearches.Request.deserialize(data) == message
+        assert GetRelatedSearches.Request.deserialize(0, data) == message
 
     def test_GetRelatedSearches_Response_serialize(self):
         message = GetRelatedSearches.Response(
@@ -2277,7 +2276,7 @@ class TestGetRelatedSearches:
             related_searches=['some', 'thing']
         )
         data = bytes.fromhex('22000000990000000500000051756572790200000004000000736f6d65050000007468696e67')
-        assert GetRelatedSearches.Response.deserialize(data) == message
+        assert GetRelatedSearches.Response.deserialize(0, data) == message
 
 
 class TestExcludedSearchPhrases:
@@ -2290,7 +2289,7 @@ class TestExcludedSearchPhrases:
     def test_ExcludedSearchPhrases_Response_deserialize(self):
         message = ExcludedSearchPhrases.Response(phrases=['banned phrase'])
         data = bytes.fromhex('19000000a0000000010000000d00000062616e6e656420706872617365')
-        assert ExcludedSearchPhrases.Response.deserialize(data) == message
+        assert ExcludedSearchPhrases.Response.deserialize(0, data) == message
 
 
 class TestCannotConnect:
@@ -2307,7 +2306,7 @@ class TestCannotConnect:
             ticket=1234
         )
         data = bytes.fromhex('08000000e9030000d2040000')
-        assert CannotConnect.Request.deserialize(data) == message
+        assert CannotConnect.Request.deserialize(0, data) == message
 
     def test_CannotConnect_Request_serialize_withUsername(self):
         message = CannotConnect.Request(
@@ -2323,7 +2322,7 @@ class TestCannotConnect:
             username='user0'
         )
         data = bytes.fromhex('11000000e9030000d2040000050000007573657230')
-        assert CannotConnect.Request.deserialize(data) == message
+        assert CannotConnect.Request.deserialize(0, data) == message
 
     # Response
     def test_CannotConnect_Response_serialize_withoutUsername(self):
@@ -2338,7 +2337,7 @@ class TestCannotConnect:
             ticket=1234
         )
         data = bytes.fromhex('08000000e9030000d2040000')
-        assert CannotConnect.Response.deserialize(data) == message
+        assert CannotConnect.Response.deserialize(0, data) == message
 
     def test_CannotConnect_Response_serialize_withUsername(self):
         message = CannotConnect.Response(
@@ -2354,7 +2353,7 @@ class TestCannotConnect:
             username='user0'
         )
         data = bytes.fromhex('11000000e9030000d2040000050000007573657230')
-        assert CannotConnect.Response.deserialize(data) == message
+        assert CannotConnect.Response.deserialize(0, data) == message
 
 
 class TestCannotCreateRoom:
@@ -2371,7 +2370,7 @@ class TestCannotCreateRoom:
             room='room0'
         )
         data = bytes.fromhex('0d000000eb03000005000000726f6f6d30')
-        assert CannotCreateRoom.Response.deserialize(data) == message
+        assert CannotCreateRoom.Response.deserialize(0, data) == message
 
 
 # Peer Initialization messages
@@ -2386,7 +2385,7 @@ class TestPeerPierceFirewall:
     def test_PeerPierceFirewall_Request_deserialize(self):
         message = PeerPierceFirewall.Request(1000)
         data = bytes.fromhex('0500000000e8030000')
-        assert PeerPierceFirewall.Request.deserialize(data) == message
+        assert PeerPierceFirewall.Request.deserialize(0, data) == message
 
 
 class TestPeerInit:
@@ -2407,7 +2406,7 @@ class TestPeerInit:
             ticket=1000
         )
         data = bytes.fromhex('13000000010500000075736572300100000044e8030000')
-        assert PeerInit.Request.deserialize(data) == message
+        assert PeerInit.Request.deserialize(0, data) == message
 
     def test_PeerInit_Request_deserialize_uint64(self):
         message = PeerInit.Request(
@@ -2416,7 +2415,7 @@ class TestPeerInit:
             ticket=1000
         )
         data = bytes.fromhex('13000000010500000075736572300100000044e803000000000000')
-        assert PeerInit.Request.deserialize(data) == message
+        assert PeerInit.Request.deserialize(0, data) == message
 
 
 # Peer messages
@@ -2431,7 +2430,7 @@ class TestPeerSharesRequest:
     def test_PeerSharesRequest_Request_deserialize(self):
         message = PeerSharesRequest.Request()
         data = bytes.fromhex('0400000004000000')
-        assert PeerSharesRequest.Request.deserialize(data) == message
+        assert PeerSharesRequest.Request.deserialize(0, data) == message
 
 
 class TestPeerSharesReply:
@@ -2502,7 +2501,7 @@ class TestPeerSharesReply:
     def test_PeerSharesReply_Request_deserialize_withoutLockedResults(self):
         message = self.MESSAGE
         data = self.DATA
-        assert PeerSharesReply.Request.deserialize(data) == message
+        assert PeerSharesReply.Request.deserialize(0, data) == message
 
     def test_PeerSharesReply_Request_serialize_withLockedResults(self):
         message = self.MESSAGE_LOCKED
@@ -2512,7 +2511,7 @@ class TestPeerSharesReply:
     def test_PeerSharesReply_Request_deserialize_withLockedResults(self):
         message = self.MESSAGE_LOCKED
         data = self.DATA_LOCKED
-        assert PeerSharesReply.Request.deserialize(data) == message
+        assert PeerSharesReply.Request.deserialize(0, data) == message
 
 
 class TestPeerSearchReply:
@@ -2579,7 +2578,7 @@ class TestPeerSearchReply:
     def test_PeerSearchReply_Request_deserialize_withoutLockedResults(self):
         message = self.MESSAGE
         data = self.DATA
-        assert PeerSearchReply.Request.deserialize(data) == message
+        assert PeerSearchReply.Request.deserialize(0, data) == message
 
     def test_PeerSearchReply_Request_serialize_withLockedResults(self):
         message = self.MESSAGE_LOCKED
@@ -2589,7 +2588,7 @@ class TestPeerSearchReply:
     def test_PeerSearchReply_Request_deserialize_withLockedResults(self):
         message = self.MESSAGE_LOCKED
         data = self.DATA_LOCKED
-        assert PeerSearchReply.Request.deserialize(data) == message
+        assert PeerSearchReply.Request.deserialize(0, data) == message
 
 
 class TestPeerUserInfoRequest:
@@ -2602,7 +2601,7 @@ class TestPeerUserInfoRequest:
     def test_PeerUserInfoRequest_Request_deserialize(self):
         message = PeerUserInfoRequest.Request()
         data = bytes.fromhex('040000000f000000')
-        assert PeerUserInfoRequest.Request.deserialize(data) == message
+        assert PeerUserInfoRequest.Request.deserialize(0, data) == message
 
 
 class TestPeerUserInfoReply:
@@ -2627,7 +2626,7 @@ class TestPeerUserInfoReply:
             has_slots_free=True
         )
         data = bytes.fromhex('1d000000100000000b0000006465736372697074696f6e00050000000a00000001')
-        assert PeerUserInfoReply.Request.deserialize(data) == message
+        assert PeerUserInfoReply.Request.deserialize(0, data) == message
 
     def test_PeerUserInfoReply_Request_serialize_withoutPictureWithPermissions(self):
         message = PeerUserInfoReply.Request(
@@ -2651,7 +2650,7 @@ class TestPeerUserInfoReply:
             upload_permissions=0
         )
         data = bytes.fromhex('21000000100000000b0000006465736372697074696f6e00050000000a0000000100000000')
-        assert PeerUserInfoReply.Request.deserialize(data) == message
+        assert PeerUserInfoReply.Request.deserialize(0, data) == message
 
     def test_PeerUserInfoReply_Request_serialize_withPicture(self):
         message = PeerUserInfoReply.Request(
@@ -2675,7 +2674,7 @@ class TestPeerUserInfoReply:
             has_slots_free=True
         )
         data = bytes.fromhex('26000000100000000b0000006465736372697074696f6e0105000000aabbccddee050000000a00000001')
-        assert PeerUserInfoReply.Request.deserialize(data) == message
+        assert PeerUserInfoReply.Request.deserialize(0, data) == message
 
     def test_PeerUserInfoReply_Request_serialize_withPictureWithPermissions(self):
         message = PeerUserInfoReply.Request(
@@ -2701,7 +2700,7 @@ class TestPeerUserInfoReply:
             upload_permissions=3
         )
         data = bytes.fromhex('2a000000100000000b0000006465736372697074696f6e0105000000aabbccddee050000000a0000000103000000')
-        assert PeerUserInfoReply.Request.deserialize(data) == message
+        assert PeerUserInfoReply.Request.deserialize(0, data) == message
 
 
 class TestPeerDirectoryContentsRequest:
@@ -2720,7 +2719,7 @@ class TestPeerDirectoryContentsRequest:
             directory='C:\\dir0'
         )
         data = bytes.fromhex('1300000024000000d204000007000000433a5c64697230')
-        assert PeerDirectoryContentsRequest.Request.deserialize(data) == message
+        assert PeerDirectoryContentsRequest.Request.deserialize(0, data) == message
 
 
 class TestPeerDirectoryContentsReply:
@@ -2755,7 +2754,7 @@ class TestPeerDirectoryContentsReply:
     def test_PeerDirectoryContentsReply_Request_deserialize(self):
         message = self.MESSAGE
         data = self.DATA
-        assert PeerDirectoryContentsReply.Request.deserialize(data) == message
+        assert PeerDirectoryContentsReply.Request.deserialize(0, data) == message
 
 
 class TestPeerTransferRequest:
@@ -2776,7 +2775,7 @@ class TestPeerTransferRequest:
             filename="C:\\dir0\\song0.mp3"
         )
         data = bytes.fromhex('210000002800000001000000d204000011000000433a5c646972305c736f6e67302e6d7033')
-        assert PeerTransferRequest.Request.deserialize(data) == message
+        assert PeerTransferRequest.Request.deserialize(0, data) == message
 
     def test_PeerTransferRequest_Request_serialize_withFilesize(self):
         message = PeerTransferRequest.Request(
@@ -2796,7 +2795,7 @@ class TestPeerTransferRequest:
             filesize=100000
         )
         data = bytes.fromhex('290000002800000001000000d204000011000000433a5c646972305c736f6e67302e6d7033a086010000000000')
-        assert PeerTransferRequest.Request.deserialize(data) == message
+        assert PeerTransferRequest.Request.deserialize(0, data) == message
 
 
 class TestPeerTransferReply:
@@ -2815,7 +2814,7 @@ class TestPeerTransferReply:
             allowed=False
         )
         data = bytes.fromhex('0900000029000000d204000000')
-        assert PeerTransferReply.Request.deserialize(data) == message
+        assert PeerTransferReply.Request.deserialize(0, data) == message
 
     def test_PeerTransferReply_Request_serialize_withFilesize(self):
         message = PeerTransferReply.Request(
@@ -2833,7 +2832,7 @@ class TestPeerTransferReply:
             filesize=1000000
         )
         data = bytes.fromhex('1100000029000000d20400000140420f0000000000')
-        assert PeerTransferReply.Request.deserialize(data) == message
+        assert PeerTransferReply.Request.deserialize(0, data) == message
 
     def test_PeerTransferReply_Request_serialize_withReason(self):
         message = PeerTransferReply.Request(
@@ -2851,7 +2850,7 @@ class TestPeerTransferReply:
             reason='Cancelled'
         )
         data = bytes.fromhex('1600000029000000d2040000000900000043616e63656c6c6564')
-        assert PeerTransferReply.Request.deserialize(data) == message
+        assert PeerTransferReply.Request.deserialize(0, data) == message
 
 
 class TestPeerTransferQueue:
@@ -2868,7 +2867,7 @@ class TestPeerTransferQueue:
             filename="C:\\dir0\\song0.mp3"
         )
         data = bytes.fromhex('190000002b00000011000000433a5c646972305c736f6e67302e6d7033')
-        assert PeerTransferQueue.Request.deserialize(data) == message
+        assert PeerTransferQueue.Request.deserialize(0, data) == message
 
 
 class TestPeerPlaceInQueueReply:
@@ -2887,7 +2886,7 @@ class TestPeerPlaceInQueueReply:
             place=10
         )
         data = bytes.fromhex('1d0000002c00000011000000433a5c646972305c736f6e67302e6d70330a000000')
-        assert PeerPlaceInQueueReply.Request.deserialize(data) == message
+        assert PeerPlaceInQueueReply.Request.deserialize(0, data) == message
 
 
 class TestPeerUploadFailed:
@@ -2904,7 +2903,7 @@ class TestPeerUploadFailed:
             filename="C:\\dir0\\song0.mp3"
         )
         data = bytes.fromhex('190000002e00000011000000433a5c646972305c736f6e67302e6d7033')
-        assert PeerUploadFailed.Request.deserialize(data) == message
+        assert PeerUploadFailed.Request.deserialize(0, data) == message
 
 
 class TestPeerTransferQueueFailed:
@@ -2923,7 +2922,7 @@ class TestPeerTransferQueueFailed:
             reason='Cancelled'
         )
         data = bytes.fromhex('260000003200000011000000433a5c646972305c736f6e67302e6d70330900000043616e63656c6c6564')
-        assert PeerTransferQueueFailed.Request.deserialize(data) == message
+        assert PeerTransferQueueFailed.Request.deserialize(0, data) == message
 
 
 class TestPeerPlaceInQueueRequest:
@@ -2940,7 +2939,7 @@ class TestPeerPlaceInQueueRequest:
             filename="C:\\dir0\\song0.mp3"
         )
         data = bytes.fromhex('190000003300000011000000433a5c646972305c736f6e67302e6d7033')
-        assert PeerPlaceInQueueRequest.Request.deserialize(data) == message
+        assert PeerPlaceInQueueRequest.Request.deserialize(0, data) == message
 
 
 class TestPeerUploadQueueNotification:
@@ -2953,7 +2952,7 @@ class TestPeerUploadQueueNotification:
     def test_PeerUploadQueueNotification_Request_deserialize(self):
         message = PeerUploadQueueNotification.Request()
         data = bytes.fromhex('0400000034000000')
-        assert PeerUploadQueueNotification.Request.deserialize(data) == message
+        assert PeerUploadQueueNotification.Request.deserialize(0, data) == message
 
 
 # Distributed messages
@@ -2968,7 +2967,7 @@ class TestDistributedPing:
     def test_DistributedPing_Request_deserialize(self):
         message = DistributedPing.Request()
         data = bytes.fromhex('0100000000')
-        assert DistributedPing.Request.deserialize(data) == message
+        assert DistributedPing.Request.deserialize(0, data) == message
 
 
 class TestDistributedSearchRequest:
@@ -2991,7 +2990,7 @@ class TestDistributedSearchRequest:
             query='Query'
         )
         data = bytes.fromhex('1b0000000331000000050000007573657230d2040000050000005175657279')
-        assert DistributedSearchRequest.Request.deserialize(data) == message
+        assert DistributedSearchRequest.Request.deserialize(0, data) == message
 
 
 class TestDistributedBranchLevel:
@@ -3004,7 +3003,7 @@ class TestDistributedBranchLevel:
     def test_DistributedBranchLevel_Request_deserialize(self):
         message = DistributedBranchLevel.Request(5)
         data = bytes.fromhex('050000000405000000')
-        assert DistributedBranchLevel.Request.deserialize(data) == message
+        assert DistributedBranchLevel.Request.deserialize(0, data) == message
 
 
 class TestDistributedBranchRoot:
@@ -3017,7 +3016,7 @@ class TestDistributedBranchRoot:
     def test_DistributedBranchRoot_Request_deserialize(self):
         message = DistributedBranchRoot.Request('user0')
         data = bytes.fromhex('0a00000005050000007573657230')
-        assert DistributedBranchRoot.Request.deserialize(data) == message
+        assert DistributedBranchRoot.Request.deserialize(0, data) == message
 
 
 class TestDistributedChildDepth:
@@ -3030,7 +3029,7 @@ class TestDistributedChildDepth:
     def test_DistributedChildDepth_Request_deserialize(self):
         message = DistributedChildDepth.Request(5)
         data = bytes.fromhex('050000000705000000')
-        assert DistributedChildDepth.Request.deserialize(data) == message
+        assert DistributedChildDepth.Request.deserialize(0, data) == message
 
 
 class DistributedServerSearchRequest:
@@ -3055,4 +3054,4 @@ class DistributedServerSearchRequest:
             query='Query'
         )
         data = bytes.fromhex('1f0000005d0000000300000000050000007573657230d2040000050000005175657279')
-        assert DistributedServerSearchRequest.Response.deserialize(data) == message
+        assert DistributedServerSearchRequest.Response.deserialize(0, data) == message
