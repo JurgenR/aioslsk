@@ -1,3 +1,4 @@
+from aioslsk.constants import DEFAULT_PARENT_MIN_SPEED
 from aioslsk.distributed import DistributedNetwork, DistributedPeer
 from aioslsk.events import (
     EventBus,
@@ -142,39 +143,24 @@ class TestDistributedNetwork:
         )
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize('accept_children,max_children', [(True, 10), (False, 15)])
+    @pytest.mark.parametrize(
+        'speed,accept_children,max_children',
+        [
+            (DEFAULT_PARENT_MIN_SPEED * 1024 - 1, False, 0),
+            (DEFAULT_PARENT_MIN_SPEED * 1024 + 1, True, 0),
+            (DEFAULT_PARENT_MIN_SPEED * 1024 + (5 * 1024), True, 1),
+        ]
+    )
     async def test_receiveGetUserStats_noServerSpeedValues_shouldUseDefaults(
             self, distributed_network: DistributedNetwork,
-            accept_children: bool, max_children: int):
+            speed: int, accept_children: bool, max_children: int):
         distributed_network._accept_children = accept_children
         distributed_network._max_children = max_children
 
         server = AsyncMock()
         await distributed_network._event_bus.emit(
             MessageReceivedEvent(
-                message=create_get_user_stats_response(1000),
-                connection=server
-            )
-        )
-
-        assert distributed_network._accept_children is accept_children
-        assert distributed_network._max_children == max_children
-        distributed_network._network.send_server_messages.assert_awaited_once_with(
-            AcceptChildren.Request(accept_children)
-        )
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize('accept_children,max_children', [(True, 10), (False, 15)])
-    async def test_receiveGetUserStats_noServerSpeedValues_shouldUseDefaults(
-            self, distributed_network: DistributedNetwork,
-            accept_children: bool, max_children: int):
-        distributed_network._accept_children = accept_children
-        distributed_network._max_children = max_children
-
-        server = AsyncMock()
-        await distributed_network._event_bus.emit(
-            MessageReceivedEvent(
-                message=create_get_user_stats_response(1000),
+                message=create_get_user_stats_response(speed),
                 connection=server
             )
         )
