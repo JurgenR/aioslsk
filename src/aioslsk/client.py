@@ -130,6 +130,9 @@ class SoulSeekClient:
             await self.connect()
 
     async def run_until_stopped(self):
+        if not self._stop_event:  # pragma: no cover
+            raise AioSlskException("client was never started")
+
         await self._stop_event.wait()
 
     async def stop(self):
@@ -140,7 +143,8 @@ class SoulSeekClient:
         * Write the transfer and shares caches
         """
         logger.info("signaling client to exit")
-        self._stop_event.set()
+        if self._stop_event:
+            self._stop_event.set()
 
         await self.network.disconnect()
 

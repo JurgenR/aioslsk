@@ -287,7 +287,8 @@ class ProtocolDataclass:
             if isinstance(proto_type, ProtocolDataclass):
                 pos, value = proto_type.deserialize(pos, message)
             elif 'subtype' in obj_field.metadata:
-                pos, value = proto_type.deserialize(pos, message, obj_field.metadata['subtype'])
+                pos, value = proto_type.deserialize(
+                    pos, message, obj_field.metadata['subtype'])  # type: ignore[call-arg]
             else:
                 pos, value = proto_type.deserialize(pos, message)
 

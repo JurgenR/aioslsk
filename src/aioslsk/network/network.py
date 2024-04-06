@@ -262,8 +262,10 @@ class Network:
         """
         self._cancel_all_tasks()
 
-        connections = [self.server_connection, ] + self.peer_connections
-        connections += [conn for conn in self.listening_connections if conn]
+        connections: List[Connection] = [self.server_connection]
+        connections.extend(self.peer_connections)
+        connections.extend(conn for conn in self.listening_connections if conn)
+
         logger.info(f"waiting for network disconnect : {len(connections)} connections")
         await asyncio.gather(
             *[conn.disconnect(CloseReason.REQUESTED) for conn in connections],

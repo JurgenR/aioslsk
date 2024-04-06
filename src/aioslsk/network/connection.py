@@ -94,6 +94,9 @@ class Connection:
         self.network: Network = network
         self.state: ConnectionState = ConnectionState.UNINITIALIZED
 
+    async def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
+        raise NotImplementedError()
+
     async def set_state(self, state: ConnectionState, close_reason: CloseReason = CloseReason.UNKNOWN):
         self.state = state
         await self.network.on_state_changed(state, self, close_reason=close_reason)
@@ -271,15 +274,20 @@ class DataConnection(Connection):
 
     # Read/write methods
 
-    async def _read_until_eof(self):
-        await self._reader.read(-1)
+    async def _read_until_eof(self) -> bytes:
+        return await self._reader.read(-1)  # type: ignore[union-attr]
 
-    async def receive_until_eof(self, raise_exception=True):
+    async def receive_until_eof(self, raise_exception: bool = True) -> Optional[bytes]:
+        if not self._reader:
+            raise ConnectionReadError("cannot read until EOF, connection is not open")
+
         try:
             return await self._read(self._read_until_eof)
         except ConnectionReadError:
             if raise_exception:
                 raise
+
+            return None
 
     async def _message_reader_loop(self):
         """Message reader loop. This will loop until the connection is closed or
@@ -303,7 +311,10 @@ class DataConnection(Connection):
                     if message:
                         await self._perform_message_callback(message)
 
-    async def _read_message(self):
+    async def _read_message(self) -> bytes:
+        if not self._reader:
+            raise ConnectionReadError("cannot read message, connection is not open")
+
         header_size = HEADER_SIZE_OBFUSCATED if self.obfuscated else HEADER_SIZE_UNOBFUSCATED
 
         async with atimeout(self.read_timeout):
@@ -313,7 +324,7 @@ class DataConnection(Connection):
         _, message_len = uint32.deserialize(0, message_len_buf)
 
         async with atimeout(self.read_timeout):
-            message = await self._reader.readexactly(message_len)
+            message = await self._reader.readexactly(message_len)  #
 
         return header + message
 
