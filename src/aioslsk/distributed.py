@@ -6,7 +6,11 @@ import logging
 from typing import Deque, List, Optional, Union, Tuple
 
 from .base_manager import BaseManager
-from .constants import POTENTIAL_PARENTS_CACHE_SIZE
+from .constants import (
+    DEFAULT_PARENT_MIN_SPEED,
+    DEFAULT_PARENT_SPEED_RATIO,
+    POTENTIAL_PARENTS_CACHE_SIZE,
+)
 from .events import (
     on_message,
     build_message_map,
@@ -131,20 +135,31 @@ class DistributedNetwork(BaseManager):
             * level = level parent advertised + 1
             * root = whatever our parent sent us initially
         """
-        username = self._session.user.name
+        username = self._session.user.name  # type: ignore[union-attr]
         if self.parent:
             # We are the branch root
             if self.parent.branch_root == username:
                 return username, 0
             else:
-                return self.parent.branch_root, self.parent.branch_level + 1
+                return self.parent.branch_root, self.parent.branch_level + 1  # type: ignore
 
         return username, 0
 
-    def get_distributed_peer(self, username: str, connection: PeerConnection) -> DistributedPeer:
+    def get_distributed_peer(self, connection: PeerConnection) -> Optional[DistributedPeer]:
+        """Get the distributed peer object related to the given connection.
+
+        This method will return `None` if the connection was not properly
+        initialized (no username set on the connection) or if there is no peer
+        object associated with the connection
+        """
+        if connection.username is None:
+            return None
+
         for peer in self.distributed_peers:
-            if peer.username == username and peer.connection == connection:
+            if peer.username == connection.username and peer.connection == connection:
                 return peer
+
+        return None
 
     async def reset(self):
         """Disconnects all parent and child connections"""
@@ -266,7 +281,8 @@ class DistributedNetwork(BaseManager):
 
         if not self._accept_children:
             logger.debug(f"not accepting children, rejecting peer as child: {peer}")
-            await peer.connection.disconnect(CloseReason.REQUESTED)
+            if peer.connection:  # Satisfy type checker
+                await peer.connection.disconnect(CloseReason.REQUESTED)
             return
 
         if len(self.children) >= self._max_children:
@@ -274,7 +290,8 @@ class DistributedNetwork(BaseManager):
                 f"maximum amount of children reached ({len(self.children)} / {self._max_children}), "
                 f"rejecting peer as child: {peer}"
             )
-            await peer.connection.disconnect(CloseReason.REQUESTED)
+            if peer.connection:  # Satisfy type checker
+                await peer.connection.disconnect(CloseReason.REQUESTED)
             return
 
         await self._add_child(peer)
@@ -399,12 +416,11 @@ class DistributedNetwork(BaseManager):
             self, message: DistributedBranchLevel.Request, connection: PeerConnection):
         logger.info(f"branch level {message.level!r}: {connection!r}")
 
-        if not connection.username:
-            logger.warning(
-                "got DistributedBranchLevel for a connection that wasn't properly initialized")
+        peer = self.get_distributed_peer(connection)
+        if not peer:
+            logger.warning(f"distributed peer object not found for connection: {connection} : {message}")
             return
 
-        peer = self.get_distributed_peer(connection.username, connection)
         peer.branch_level = message.level
 
         # Branch root is not always sent in case the peer advertises branch
@@ -423,12 +439,10 @@ class DistributedNetwork(BaseManager):
             self, message: DistributedBranchRoot.Request, connection: PeerConnection):
         logger.info(f"branch root {message.username!r}: {connection!r}")
 
-        if not connection.username:
-            logger.warning(
-                "got DistributedBranchRoot for a connection that wasn't properly initialized")
+        peer = self.get_distributed_peer(connection)
+        if not peer:
+            logger.warning(f"distributed peer object not found for connection: {connection} : {message}")
             return
-
-        peer = self.get_distributed_peer(connection.username, connection)
 
         # When we receive branch level 0 we automatically assume the root is the
         # peer who sent the sender
@@ -446,12 +460,11 @@ class DistributedNetwork(BaseManager):
     @on_message(DistributedChildDepth.Request)
     async def _on_distributed_child_depth(
             self, message: DistributedChildDepth.Request, connection: PeerConnection):
-        if not connection.username:
-            logger.warning(
-                "got DistributedChildDepth for a connection that wasn't properly initialized")
+        peer = self.get_distributed_peer(connection)
+        if not peer:
+            logger.warning(f"distributed peer object not found for connection: {connection} : {message}")
             return
 
-        peer = self.get_distributed_peer(connection.username, connection)
         peer.child_depth = message.depth
 
     @on_message(DistributedSearchRequest.Request)
@@ -479,19 +492,27 @@ class DistributedNetwork(BaseManager):
         if self._session and message.username == self._session.user.name:
             speed = message.user_stats.avg_speed
 
-            if self.parent_min_speed is None or self.parent_speed_ratio is None:
+            if self.parent_min_speed is None:
                 logger.debug(
-                    "got user stats without having received ParentMinSpeed and ParentSpeedRatio "
-                    "from the server, using defaults"
-                )
+                    f"using default parent_min_speed: {DEFAULT_PARENT_MIN_SPEED}")
+                parent_min_speed = DEFAULT_PARENT_MIN_SPEED
+            else:
+                parent_min_speed = self.parent_min_speed
 
-            elif speed < self.parent_min_speed * 1024:
+            if self.parent_speed_ratio is None:
+                logger.debug(
+                    f"using default parent_speed_ratio: {DEFAULT_PARENT_SPEED_RATIO}")
+                parent_speed_ratio = DEFAULT_PARENT_SPEED_RATIO
+            else:
+                parent_speed_ratio = self.parent_speed_ratio
+
+            if speed < parent_min_speed * 1024:
                 self._accept_children = False
                 self._max_children = 0
 
             else:
                 self._accept_children = True
-                self._max_children = self._calculate_max_children(speed)
+                self._max_children = self._calculate_max_children(speed, parent_speed_ratio)
 
             logger.debug(
                 f"adjusting distributed children values: "
@@ -519,11 +540,11 @@ class DistributedNetwork(BaseManager):
                 GetUserStats.Request(self._session.user.name)
             )
 
-    def _calculate_max_children(self, upload_speed: int) -> int:
+    def _calculate_max_children(self, upload_speed: int, parent_speed_ratio: int) -> int:
         """Calculates the maximum number of children based on the given upload
         speed
         """
-        divider = (self.parent_speed_ratio / 10) * 1024
+        divider = (parent_speed_ratio / 10) * 1024
         return int(upload_speed / divider)
 
     async def _on_peer_connection_initialized(self, event: PeerInitializedEvent):
@@ -555,7 +576,7 @@ class DistributedNetwork(BaseManager):
                 return
 
             if event.state == ConnectionState.CLOSED:
-                peer = self.get_distributed_peer(connection.username, connection)
+                peer = self.get_distributed_peer(connection)
                 # Check if there is a distributed peer registered for this
                 # connection. A distributed peer is only registered once the
                 # full connection initialization has been complete. When the

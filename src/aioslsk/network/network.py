@@ -104,7 +104,7 @@ class ExpectedResponse(asyncio.Future):
         self.peer: Optional[str] = peer
         self.fields: Dict[str, Any] = {} if fields is None else fields
 
-    def matches(self, connection: Union[PeerConnection, ServerConnection], response: MessageDataclass) -> bool:
+    def matches(self, connection: DataConnection, response: MessageDataclass) -> bool:
         if connection.__class__ != self.connection_class:
             return False
 
@@ -262,8 +262,10 @@ class Network:
         """
         self._cancel_all_tasks()
 
-        connections = [self.server_connection, ] + self.peer_connections
-        connections += [conn for conn in self.listening_connections if conn]
+        connections: List[Connection] = [self.server_connection]
+        connections.extend(self.peer_connections)
+        connections.extend(conn for conn in self.listening_connections if conn)
+
         logger.info(f"waiting for network disconnect : {len(connections)} connections")
         await asyncio.gather(
             *[conn.disconnect(CloseReason.REQUESTED) for conn in connections],

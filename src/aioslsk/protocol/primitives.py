@@ -36,6 +36,7 @@ import hashlib
 import logging
 import socket
 import struct
+from typing_extensions import Self
 from typing import (
     Any,
     ClassVar,
@@ -56,13 +57,15 @@ logger = logging.getLogger(__name__)
 T = TypeVar('T', bound='Serializable')
 
 
-class Serializable(Protocol[T]):
-
-    @classmethod
-    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, T]:
+class Serializable(Protocol):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         ...
 
-    def serialize(self) -> bytes:
+    @classmethod
+    def deserialize(cls, pos: int, data: bytes) -> Tuple[int, Self]:
+        ...
+
+    def serialize(self, *args, **kwargs) -> bytes:
         ...
 
 
@@ -185,7 +188,7 @@ class boolean(int):
 
 class array(list):
 
-    def serialize(self, element_type: Type[T]) -> bytes:
+    def serialize(self, element_type: Type[Serializable]) -> bytes:
         body = uint32(len(self)).serialize()
         is_protocoldc = is_dataclass(element_type)
         for value in self:
@@ -221,16 +224,20 @@ class ProtocolDataclass:
             password: str = field(metadata={'type': string})
             has_privileges: bool = field(metadata={'type': boolean})
     """
-    _CACHED_FIELDS: Optional[Tuple[Field]] = None
+    _CACHED_FIELDS: Optional[Tuple[Field, ...]] = None
     """Cache version of the `dataclasses.fields` return for the current class
     """
 
     def serialize(self) -> bytes:
         message = bytes()
         if self.__class__._CACHED_FIELDS is None:
-            self.__class__._CACHED_FIELDS = fields(self)
+            # Ignoring the typing error because the intent of the class is to
+            # be inherited from by a class that is a dataclass. A check could
+            # impact performance and letting this class be a dataclass would
+            # cause too many issues
+            self.__class__._CACHED_FIELDS = fields(self)  # type: ignore[arg-type]
 
-        for obj_field in fields(self):
+        for obj_field in self.__class__._CACHED_FIELDS:
             value = self._get_value_for_field(self, obj_field)
             if value is None:
                 continue
@@ -261,7 +268,11 @@ class ProtocolDataclass:
     @classmethod
     def deserialize(cls, pos: int, message: bytes):
         if cls._CACHED_FIELDS is None:
-            cls._CACHED_FIELDS = fields(cls)
+            # Ignoring the typing error because the intent of the class is to
+            # be inherited from by a class that is a dataclass. A check could
+            # impact performance and letting this class be a dataclass would
+            # cause too many issues
+            cls._CACHED_FIELDS = fields(cls)  # type: ignore[arg-type]
 
         field_map: Dict[str, Any] = {}
         for obj_field in cls._CACHED_FIELDS:
@@ -269,14 +280,15 @@ class ProtocolDataclass:
                 continue
 
             try:
-                proto_type = obj_field.metadata['type']
+                proto_type: Serializable = obj_field.metadata['type']
             except KeyError:
                 raise Exception(f"no 'type' for field {obj_field.name!r} defined")
 
             if isinstance(proto_type, ProtocolDataclass):
                 pos, value = proto_type.deserialize(pos, message)
             elif 'subtype' in obj_field.metadata:
-                pos, value = proto_type.deserialize(pos, message, obj_field.metadata['subtype'])
+                pos, value = proto_type.deserialize(
+                    pos, message, obj_field.metadata['subtype'])  # type: ignore[call-arg]
             else:
                 pos, value = proto_type.deserialize(pos, message)
 
@@ -349,7 +361,7 @@ class MessageDataclass(ProtocolDataclass):
         return uint32(len(message)).serialize() + message
 
     @classmethod
-    def deserialize(cls, message: bytes, decompress: bool = False):
+    def deserialize(cls, pos: int, message: bytes, decompress: bool = False) -> Self:
         """Deserializes the passed `message` into an object of the current type
 
         In case the message needs to be decompressed just override this method
@@ -360,8 +372,6 @@ class MessageDataclass(ProtocolDataclass):
             `MESSAGE_ID` defined in the current class
         :return: an object of the current class
         """
-        pos: int = 0
-
         # Parse length and header
         pos, _ = uint32.deserialize(pos, message)
         pos, message_id = type(cls.MESSAGE_ID).deserialize(pos, message)

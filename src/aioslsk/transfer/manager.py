@@ -882,11 +882,19 @@ class TransferManager(BaseManager):
         connection.set_connection_state(PeerConnectionState.TRANSFERRING)
         await transfer.state.start_transferring()
 
+        if transfer.local_path is None:  # pragma: no cover
+            raise AioSlskException(
+                f"attempted to start download for which local_path was not set : {transfer}")
+
+        if transfer.filesize is None:  # pragma: no cover
+            raise AioSlskException(
+                f"attempted to start download for which filesize was not set : {transfer}")
+
         try:
             async with aiofiles.open(transfer.local_path, mode='ab') as handle:
                 await connection.receive_file(
                     handle,
-                    transfer.filesize - transfer._offset,
+                    transfer.filesize - transfer.get_offset(),
                     transfer._transfer_progress_callback
                 )
 

@@ -24,7 +24,9 @@ class NamingStrategy:
 
 
 class DefaultNamingStrategy(NamingStrategy):
-    """The default naming strategy just uses the filename"""
+    """The default naming strategy determines the filename using the
+    `remote_path` parameter. The `local_filename` parameter is ignored
+    """
 
     def apply(self, remote_path: str, local_dir: str, local_filename: str) -> Tuple[str, str]:
         return local_dir, split_remote_path(remote_path)[-1]
@@ -97,7 +99,7 @@ def chain_strategies(strategies: List[NamingStrategy], remote_path: str, local_d
     :return: tuple with the path and filename
     """
     path = local_dir
-    filename = None
+    filename = ''
     for strategy in strategies:
         if strategy.should_be_applied(path, filename):
             path, filename = strategy.apply(remote_path, path, filename)

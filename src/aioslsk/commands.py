@@ -12,7 +12,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from .exceptions import NoSuchUserError
+from .exceptions import InvalidSessionError, NoSuchUserError
 from .protocol.messages import (
     AddHatedInterest,
     AddInterest,
@@ -436,7 +436,7 @@ class GetSimilarUsersCommand(BaseCommand[GetSimilarUsers.Response, List[Tuple[Us
         return similar_users
 
 
-class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, Tuple[str, int, int]]):
+class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, Tuple[str, int, Optional[int]]]):
 
     def __init__(self, username: str):
         self.username: str = username
@@ -455,7 +455,8 @@ class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, Tuple[str, int,
             }
         )
 
-    def handle_response(self, client: SoulSeekClient, response: GetPeerAddress.Response) -> Tuple[str, int, int]:
+    def handle_response(
+            self, client: SoulSeekClient, response: GetPeerAddress.Response) -> Tuple[str, int, Optional[int]]:
         return (response.ip, response.port, response.obfuscated_port)
 
 
@@ -516,7 +517,7 @@ class TogglePublicChatCommand(BaseCommand[None, None]):
 
     async def send(self, client: SoulSeekClient):
         if self.enable:
-            message = EnablePublicChat.Request()
+            message: MessageDataclass = EnablePublicChat.Request()
         else:
             message = DisablePublicChat.Request()
         await client.network.send_server_messages(message)
@@ -660,6 +661,9 @@ class RoomMessageCommand(BaseCommand[RoomChatMessage.Response, RoomMessage]):
         )
 
     def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        if not client.session:  # pragma: no cover
+            raise InvalidSessionError("user is not logged in")
+
         return ExpectedResponse(
             ServerConnection,
             RoomChatMessage.Response,
@@ -671,6 +675,9 @@ class RoomMessageCommand(BaseCommand[RoomChatMessage.Response, RoomMessage]):
         )
 
     def handle_response(self, client: SoulSeekClient, response: RoomChatMessage.Response) -> RoomMessage:
+        if not client.session:  # pragma: no cover
+            raise InvalidSessionError("user is not logged in")
+
         return RoomMessage(
             timestamp=int(time.time()),
             user=client.users.get_user_object(client.session.user.name),
@@ -694,6 +701,9 @@ class SetRoomTickerCommand(BaseCommand[RoomTickerAdded.Response, None]):
         )
 
     def build_expected_response(self, client: SoulSeekClient) -> Optional[ExpectedResponse]:
+        if not client.session:  # pragma: no cover
+            raise InvalidSessionError("user is not logged in")
+
         return ExpectedResponse(
             ServerConnection,
             RoomTickerAdded.Response,

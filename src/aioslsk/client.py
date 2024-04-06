@@ -130,6 +130,9 @@ class SoulSeekClient:
             await self.connect()
 
     async def run_until_stopped(self):
+        if not self._stop_event:  # pragma: no cover
+            raise AioSlskException("client was never started")
+
         await self._stop_event.wait()
 
     async def stop(self):
@@ -140,7 +143,8 @@ class SoulSeekClient:
         * Write the transfer and shares caches
         """
         logger.info("signaling client to exit")
-        self._stop_event.set()
+        if self._stop_event:
+            self._stop_event.set()
 
         await self.network.disconnect()
 
@@ -167,7 +171,7 @@ class SoulSeekClient:
         username = self.settings.credentials.username
         password = self.settings.credentials.password
 
-        # Send the login request and wait for the
+        # Send the login request and wait for the response
         await self.network.send_server_messages(
             Login.Request(
                 username=username,
@@ -185,15 +189,15 @@ class SoulSeekClient:
 
         if not response.success:
             raise AuthenticationError(
-                response.reason,
+                response.reason if response.reason else '',
                 f"authentication failed for user : {username}"
             )
 
         # Notify all listeners that the session has been initialized
         self.session = Session(
             user=self.users.get_user_object(username),
-            ip_address=response.ip,
-            greeting=response.greeting,
+            ip_address=response.ip if response.ip is not None else '',
+            greeting=response.greeting if response.greeting is not None else '',
             client_version=client_version,
             minor_version=minor_version
         )
@@ -219,12 +223,12 @@ class SoulSeekClient:
         await self.stop()
 
     async def __call__(
-            self, command: BaseCommand[RC, RT], response: bool = False,
+            self, command: BaseCommand[RC, Optional[RT]], response: bool = False,
             timeout: float = DEFAULT_COMMAND_TIMEOUT) -> Optional[RT]:
         return await self.execute(command, response=response, timeout=timeout)
 
     async def execute(
-            self, command: BaseCommand[RC, RT], response: bool = False,
+            self, command: BaseCommand[RC, Optional[RT]], response: bool = False,
             timeout: float = DEFAULT_COMMAND_TIMEOUT) -> Optional[RT]:
         """Execute a `BaseCommand`, see the `commands.py` module for a list of
         possible commands.
@@ -262,7 +266,6 @@ class SoulSeekClient:
 
         response_future = command.build_expected_response(self)
         if response and response_future:
-            response_future = command.build_expected_response(self)
             self.network.register_response_future(response_future)
 
         try:

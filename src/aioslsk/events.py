@@ -3,7 +3,19 @@ import asyncio
 from dataclasses import dataclass
 import inspect
 import logging
-from typing import Callable, Dict, List, Optional, Tuple, Type, TYPE_CHECKING, Union
+from typing import (
+    Any,
+    Callable,
+    Coroutine,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    TYPE_CHECKING,
+    Union
+)
 
 from .room.model import Room, RoomMessage
 from .user.model import ChatMessage, User
@@ -68,6 +80,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+E = TypeVar('E', bound='Event')
+
+
+EventListener = Union[
+    Callable[[E], None],
+    Callable[[E], Coroutine[Any, Any, Any]]
+]
+
+
 # Internal functions
 
 def on_message(message_class: Type[MessageDataclass]):
@@ -94,9 +115,9 @@ def build_message_map(obj: object) -> Dict[Type[MessageDataclass], Callable]:
 class EventBus:
 
     def __init__(self):
-        self._events: Dict[Type[Event], List[Tuple[int, Callable[[Event], None]]]] = {}
+        self._events: Dict[Type[Event], List[Tuple[int, EventListener]]] = {}
 
-    def register(self, event_class: Type[Event], listener: Callable[[Event], None], priority: int = 100):
+    def register(self, event_class: Type[E], listener: EventListener, priority: int = 100):
         entry = (priority, listener)
         try:
             self._events[event_class].append(entry)

@@ -637,8 +637,8 @@ class SharesManager(BaseManager):
             is used to determine the locked results
         :return: tuple with two lists: public directories and locked directories
         """
-        def list_unique_directories(directories: List[SharedDirectory]) -> Dict[Tuple[str], List[SharedItem]]:
-            response_dirs: Dict[Tuple[str], List[SharedItem]] = {}
+        def list_unique_directories(directories: List[SharedDirectory]) -> Dict[Tuple[str, ...], List[SharedItem]]:
+            response_dirs: Dict[Tuple[str, ...], List[SharedItem]] = {}
 
             for directory in directories:
                 for item in directory.items:
@@ -654,7 +654,7 @@ class SharesManager(BaseManager):
 
             return response_dirs
 
-        def convert_to_directory_shares(directory_map: Dict[Tuple[str], List[SharedItem]]) -> List[DirectoryData]:
+        def convert_to_directory_shares(directory_map: Dict[Tuple[str, ...], List[SharedItem]]) -> List[DirectoryData]:
             public_shares = []
             for directory, files in directory_map.items():
                 public_shares.append(

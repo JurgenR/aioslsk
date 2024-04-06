@@ -101,7 +101,7 @@ class SharedItem:
         return normalize_remote_path(
             '@@' + os.path.join(self.shared_directory.alias, self.subdir))
 
-    def get_remote_directory_path_parts(self) -> Tuple[str]:
+    def get_remote_directory_path_parts(self) -> Tuple[str, ...]:
         """Returns the remote directory path split into parts"""
         return tuple(self.get_remote_directory_path().split('\\'))
 
