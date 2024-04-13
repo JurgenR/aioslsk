@@ -70,7 +70,7 @@ class Transfer:
         """Filesize in bytes"""
         self._offset: int = 0
         """Offset used for resuming downloads. This offset will be used and
-        reset by the L{read} method of this object
+        reset by the :meth:`read` method of this object
         """
 
         self.bytes_transfered: int = 0
@@ -220,6 +220,7 @@ class Transfer:
             transfer_duration = time.time() - self.start_time
         else:
             transfer_duration = self.complete_time - self.start_time
+
         if transfer_duration == 0.0:
             return 0.0
 

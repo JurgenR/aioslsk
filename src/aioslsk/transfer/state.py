@@ -35,6 +35,7 @@ class TransferState:
         COMPLETE = 7
         FAILED = 8
         ABORTED = 9
+        PAUSED = 10
 
     UNSET = State.UNSET
     VIRGIN = State.VIRGIN
@@ -46,6 +47,7 @@ class TransferState:
     COMPLETE = State.COMPLETE
     FAILED = State.FAILED
     ABORTED = State.ABORTED
+    PAUSED = State.PAUSED
 
     VALUE = UNSET
 
@@ -96,6 +98,11 @@ class TransferState:
             f"attempted to make undefined state transition from {self.VALUE.name} to {new_state.name}")
         return False
 
+    async def pause(self) -> bool:
+        logger.warning(
+            f"attempted to make undefined state transition from {self.VALUE.name} to {self.PAUSED.name}")
+        return False
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.transfer!r})"
 
@@ -107,6 +114,10 @@ class VirginState(TransferState):
     async def queue(self, remotely: bool = False) -> bool:
         self.transfer.remotely_queued = remotely
         await self.transfer.transition(QueuedState(self.transfer))
+        return True
+
+    async def pause(self) -> bool:
+        await self.transfer.transition(PausedState(self.transfer))
         return True
 
 
@@ -134,6 +145,10 @@ class QueuedState(TransferState):
 
     async def abort(self) -> bool:
         await self.transfer.transition(AbortedState(self.transfer))
+        return True
+
+    async def pause(self) -> bool:
+        await self.transfer.transition(PausedState(self.transfer))
         return True
 
 
@@ -197,6 +212,10 @@ class DownloadingState(TransferState):
     """
     VALUE = TransferState.DOWNLOADING
 
+    async def _stop_transfer(self):
+        await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
+        self.transfer.set_complete_time()
+
     async def fail(self, reason: Optional[str] = None) -> bool:
         self.transfer.fail_reason = reason
         self.transfer.set_complete_time()
@@ -209,19 +228,18 @@ class DownloadingState(TransferState):
         return True
 
     async def abort(self) -> bool:
-        tasks = self.transfer.get_tasks()
-        logger.debug(
-            f"aborting download: cancelling tasks : {tasks}")
-        results = await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
-        logger.debug(
-            f"aborting download: completed cancelling tasks : {tasks} : results : {results}")
-        self.transfer.set_complete_time()
+        await self._stop_transfer()
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
     async def incomplete(self) -> bool:
         self.transfer.set_complete_time()
         await self.transfer.transition(IncompleteState(self.transfer))
+        return True
+
+    async def pause(self) -> bool:
+        await self._stop_transfer()
+        await self.transfer.transition(PausedState(self.transfer))
         return True
 
 
@@ -249,12 +267,7 @@ class UploadingState(TransferState):
         return True
 
     async def abort(self) -> bool:
-        tasks = self.transfer.get_tasks()
-        logger.debug(
-            f"aborting upload: cancelling tasks : {tasks}")
-        results = await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
-        logger.debug(
-            f"aborting upload: completed cancelling tasks : {tasks} : results : {results}")
+        await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
         self.transfer.set_complete_time()
         await self.transfer.transition(AbortedState(self.transfer))
         return True
@@ -305,6 +318,10 @@ class IncompleteState(TransferState):
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
+    async def pause(self) -> bool:
+        await self.transfer.transition(PausedState(self.transfer))
+        return True
+
 
 class FailedState(TransferState):
     """
@@ -318,13 +335,37 @@ class FailedState(TransferState):
     async def queue(self, remotely: bool = False) -> bool:
         self.transfer.remotely_queued = remotely
         self.transfer.reset_times()
+        self.transfer.fail_reason = None
         await self.transfer.transition(QueuedState(self.transfer))
+        return True
+
+
+class PausedState(TransferState):
+    """
+    Possible transitions:
+    - QueuedState: Restart the transfer
+    - AbortedState: Abort the transfer
+    """
+    VALUE = TransferState.PAUSED
+
+    async def queue(self, remotely: bool = False) -> bool:
+        self.transfer.remotely_queued = remotely
+        self.transfer.reset_times()
+        await self.transfer.transition(QueuedState(self.transfer))
+        return True
+
+    async def abort(self) -> bool:
+        await self.transfer.transition(AbortedState(self.transfer))
+        return True
+
+    async def fail(self, reason: Optional[str] = None) -> bool:
+        self.transfer.fail_reason = reason
+        await self.transfer.transition(FailedState(self.transfer))
         return True
 
 
 class AbortedState(TransferState):
     """
-
     Possible transitions:
     - QueuedState: Attempt transfer again
     """
