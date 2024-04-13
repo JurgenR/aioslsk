@@ -123,6 +123,8 @@ class TestE2ETransfer:
             if pconnection.connection_type == 'F':
                 pconnection._reader = None
 
+        await asyncio.sleep(1)
+
         for pconnection in client_2.network.peer_connections:
             if pconnection.connection_type == 'F':
                 pconnection._writer = None
