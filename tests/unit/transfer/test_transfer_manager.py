@@ -708,7 +708,7 @@ class TestTransferManager:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "state,reason",
+        "state",
         [
             (TransferState.QUEUED),
             (TransferState.INCOMPLETE),
