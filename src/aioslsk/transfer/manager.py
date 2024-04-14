@@ -537,7 +537,10 @@ class TransferManager(BaseManager):
             else:
                 # For downloads we try to continue with incomplete downloads,
                 # for uploads it's up to the other user
+                # Failed uploads without a reason are retried
                 if transfer.state.VALUE in (TransferState.QUEUED, TransferState.INCOMPLETE):
+                    queued_downloads.append(transfer)
+                elif transfer.state.VALUE == TransferState.FAILED and transfer.fail_reason is None:
                     queued_downloads.append(transfer)
 
         queued_uploads = self._prioritize_uploads(queued_uploads)

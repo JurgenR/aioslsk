@@ -5,7 +5,7 @@ import logging
 import re
 import socket
 import time
-from typing import Dict, Generator, List, Optional, Set, Type
+from typing import Dict, Generator, List, Optional, Set, Type, TypeVar
 import typing
 
 from aioslsk.events import on_message, build_message_map
@@ -107,6 +107,9 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
+T = TypeVar('T', bound='DistributedStrategy')
+
+
 def chat_id_generator(initial: int = 1) -> Generator[int, None, None]:
     idx = initial
     while True:
@@ -141,8 +144,7 @@ class MockServer:
         self.peers: List[Peer] = []
         self.track_map: Dict[str, Set[str]] = {}
         self.excluded_search_phrases: List[str] = excluded_search_phrases
-        self.distributed_strategy: DistributedStrategy = distributed_strategy_class(
-            self.settings, self.peers)
+        self.distributed_strategy: DistributedStrategy = self._create_distributed_strategy(distributed_strategy_class)
         self.distributed_parent_task: Optional[asyncio.Task] = None
 
         if potential_parent_interval > 0:
@@ -154,35 +156,45 @@ class MockServer:
         self.MESSAGE_MAP = build_message_map(self)
         self.message_log: List[MessageDataclass] = []
 
+    def _create_distributed_strategy(self, strategy_cls: Type[T]) -> T:
+        return strategy_cls(self.settings, self.peers)
+
+    def set_distributed_strategy(self, strategy_cls: Type[DistributedStrategy]):
+        self.distributed_strategy = self._create_distributed_strategy(strategy_cls)
+
+    async def notify_potential_parents(self):
+        """Notifies all peers of their potential parents"""
+        messages = []
+        for peer in self.peers:
+            if not peer.user:
+                continue
+
+            if not peer.user.enable_parent_search:
+                continue
+
+            potential_parents = self.distributed_strategy.get_potential_parents(peer)
+            if not potential_parents:
+                continue
+
+            message = PotentialParents.Response(
+                entries=[
+                    PotentialParent(
+                        pot_parent.user.name,
+                        pot_parent.hostname,
+                        pot_parent.user.port
+                    )
+                    for pot_parent in potential_parents
+                ]
+            )
+            messages.append(peer.send_message(message))
+
+        await asyncio.gather(*messages, return_exceptions=True)
+
     async def distributed_parent_job(self, interval: int = 60):
         """Period job for sending out potential parents"""
         while True:
             await asyncio.sleep(interval)
-            messages = []
-            for peer in self.peers:
-                if not peer.user:
-                    continue
-
-                if not peer.user.enable_parent_search:
-                    continue
-
-                potential_parents = self.distributed_strategy.get_potential_parents(peer)
-                if not potential_parents:
-                    continue
-
-                message = PotentialParents.Response(
-                    entries=[
-                        PotentialParent(
-                            pot_parent.user.name,
-                            pot_parent.hostname,
-                            pot_parent.user.port
-                        )
-                        for pot_parent in potential_parents
-                    ]
-                )
-                messages.append(peer.send_message(message))
-
-            await asyncio.gather(*messages, return_exceptions=True)
+            await self.notify_potential_parents()
 
     async def connect(self, start_serving: bool = False):
         tasks = [

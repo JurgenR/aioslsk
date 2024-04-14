@@ -63,7 +63,7 @@ def create_client(tmp_path, username: str, port: int) -> SoulSeekClient:
 
 @pytest_asyncio.fixture
 async def mock_server():
-    server = MockServer(hostname=DEFAULT_SERVER_HOSTNAME, port=DEFAULT_SERVER_PORT)
+    server = MockServer(hostname=DEFAULT_SERVER_HOSTNAME, ports={DEFAULT_SERVER_PORT})
     await server.connect(start_serving=False)
     await asyncio.gather(
         *[

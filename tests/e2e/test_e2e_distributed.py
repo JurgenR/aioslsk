@@ -1,5 +1,6 @@
 from aioslsk.client import SoulSeekClient
-from .mock.server import MockServer, ChainParentsStrategy
+from .mock.server import MockServer
+from .mock.distributed import ChainParentsStrategy
 from .fixtures import mock_server, clients
 from .utils import (
     wait_until_clients_initialized,
@@ -61,7 +62,7 @@ class TestE2EDistributed:
         """Tests when a user gets a search request directly from the server the
         peer becomes root
         """
-        mock_server.distributed_strategy = ChainParentsStrategy(mock_server.peers)
+        mock_server.set_distributed_strategy(ChainParentsStrategy)
         await set_upload_speed_for_clients(mock_server, clients)
         await wait_until_clients_initialized(mock_server, amount=len(clients))
 
@@ -101,7 +102,7 @@ class TestE2EDistributed:
         """Tests when a user gets a search request directly from the server the
         peer becomes root
         """
-        mock_server.distributed_strategy = ChainParentsStrategy(mock_server.peers)
+        mock_server.set_distributed_strategy(ChainParentsStrategy)
         await set_upload_speed_for_clients(mock_server, clients)
         await wait_until_clients_initialized(mock_server, amount=len(clients))
 
@@ -168,7 +169,7 @@ class TestE2EDistributed:
         """Tests if clients on multiple levels in the network receive a search
         request
         """
-        mock_server.distributed_strategy = ChainParentsStrategy(mock_server.peers)
+        mock_server.set_distributed_strategy(ChainParentsStrategy)
         await set_upload_speed_for_clients(mock_server, clients)
         await wait_until_clients_initialized(mock_server, amount=len(clients))
 
