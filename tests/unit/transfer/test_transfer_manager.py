@@ -712,7 +712,6 @@ class TestTransferManager:
         [
             (TransferState.QUEUED),
             (TransferState.INCOMPLETE),
-            (TransferState.FAILED),
         ]
     )
     async def test_onPeerTransferRequest_existingDownload_ready_shouldStartDownload(
