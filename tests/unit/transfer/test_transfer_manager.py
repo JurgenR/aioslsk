@@ -467,6 +467,7 @@ class TestTransferManager:
         "state,expected_reason",
         [
             # Possible states with reason response
+            (TransferState.PAUSED, Reasons.CANCELLED),
             (TransferState.ABORTED, Reasons.CANCELLED),
             (TransferState.COMPLETE, Reasons.COMPLETE),
             (TransferState.QUEUED, Reasons.QUEUED),
@@ -615,6 +616,7 @@ class TestTransferManager:
         "state,expected_reason",
         [
             # Possible states with reason response
+            (TransferState.PAUSED, Reasons.CANCELLED),
             (TransferState.ABORTED, Reasons.CANCELLED),
             (TransferState.COMPLETE, Reasons.COMPLETE),
             # Possible states with no response
