@@ -255,6 +255,10 @@ class UploadingState(TransferState):
     - Aborted: We have aborted the transfer
     """
 
+    async def _stop_transfer(self):
+        await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
+        self.transfer.set_complete_time()
+
     async def fail(self, reason: Optional[str] = None) -> bool:
         self.transfer.fail_reason = reason
         self.transfer.set_complete_time()
@@ -267,9 +271,13 @@ class UploadingState(TransferState):
         return True
 
     async def abort(self) -> bool:
-        await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
-        self.transfer.set_complete_time()
+        await self._stop_transfer()
         await self.transfer.transition(AbortedState(self.transfer))
+        return True
+
+    async def pause(self) -> bool:
+        await self._stop_transfer()
+        await self.transfer.transition(PausedState(self.transfer))
         return True
 
 

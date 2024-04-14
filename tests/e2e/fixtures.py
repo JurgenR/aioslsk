@@ -65,7 +65,12 @@ def create_client(tmp_path, username: str, port: int) -> SoulSeekClient:
 async def mock_server():
     server = MockServer(hostname=DEFAULT_SERVER_HOSTNAME, port=DEFAULT_SERVER_PORT)
     await server.connect(start_serving=False)
-    await server.connection.start_serving()
+    await asyncio.gather(
+        *[
+            connection.start_serving()
+            for connection in server.connections.values()
+        ]
+    )
 
     yield server
 

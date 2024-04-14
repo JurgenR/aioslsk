@@ -32,8 +32,8 @@ class User:
     slots_free: int = 0
     country: str = ''
 
-    port: int = None
-    obfuscated_port: int = None
+    port: Optional[int] = None
+    obfuscated_port: Optional[int] = None
 
     interests: Set[str] = field(default_factory=set)
     hated_interests: Set[str] = field(default_factory=set)

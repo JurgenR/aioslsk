@@ -167,6 +167,39 @@ class TestE2ETransfer:
         await wait_for_transfer_state(upload, TransferState.COMPLETE)
 
     @pytest.mark.asyncio
+    async def test_transfer_pauseAndResumeUpload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        """Tests pausing and resuming a download"""
+        await wait_until_clients_initialized(mock_server, amount=2)
+
+        request = await client_1.searches.search('Strange')
+        await wait_for_search_results(request)
+
+        # Lower speeds so the transfer isn't instantaneous (file is +-200kb)
+        client_1.network.set_download_speed_limit(30)
+        client_2.network.set_upload_speed_limit(30)
+
+        result = request.results[0]
+        download = await client_1.transfers.download(
+            result.username,
+            result.shared_items[0].filename
+        )
+
+        upload = await wait_for_transfer_added(client_2)
+        await asyncio.sleep(1)
+
+        # Pause the transfer and wait for the correct states
+        await client_2.transfers.pause(upload)
+
+        await wait_for_transfer_state(download, TransferState.FAILED)
+        await wait_for_transfer_state(upload, TransferState.PAUSED)
+
+        # Restart the transfer and wait for complete
+        await client_2.transfers.queue(upload)
+
+        await wait_for_transfer_state(download, TransferState.COMPLETE)
+        await wait_for_transfer_state(upload, TransferState.COMPLETE)
+
+    @pytest.mark.asyncio
     async def test_transfer_abortDownload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
         """Tests aborting a download
 

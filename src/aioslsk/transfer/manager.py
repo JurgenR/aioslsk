@@ -310,8 +310,8 @@ class TransferManager(BaseManager):
 
     async def remove(self, transfer: Transfer):
         """Remove a transfer from the list of transfers. This will attempt to
-        abort the transfer before removing it. Emits a `TransferRemovedEvent`
-        after removal
+        abort the transfer before removing it. Emits a
+        :class:`.TransferRemovedEvent` after removal
 
         :param transfer: Transfer object to remove
         :raise TransferNotFoundError: Raised when the transfer was not added to
