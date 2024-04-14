@@ -70,12 +70,12 @@ class InvalidStateTransition(TransferException):
     def __init__(
             self, transfer: Transfer,
             current: TransferState.State, desired: TransferState.State,
-            message):
+            message: str = "could not make the desired state transition"):
         self.transfer = transfer
         self.current: TransferState.State = current
         self.desired: TransferState.State = desired
 
-        self.message = message
+        self.message: str = message
 
 
 class RequestPlaceFailedError(AioSlskException):

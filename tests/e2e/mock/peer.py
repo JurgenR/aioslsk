@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 from aioslsk.protocol.primitives import uint32
 from aioslsk.protocol.messages import MessageDataclass, ServerMessage
 from tests.e2e.mock.constants import HEADER_SIZE
@@ -33,12 +33,12 @@ class Peer:
         self.should_close: bool = False
         self.last_ping: float = 0.0
 
-        self.client_version: int = None
-        self.minor_version: int = None
+        self.client_version: Optional[int] = None
+        self.minor_version: Optional[int] = None
 
-        self.branch_level: int = None
-        self.branch_root: str = None
-        self.child_depth: int = None
+        self.branch_level: Optional[int] = None
+        self.branch_root: Optional[str] = None
+        self.child_depth: Optional[int] = None
 
     async def disconnect(self):
         logger.debug(f"{self.hostname}:{self.port} : disconnecting")

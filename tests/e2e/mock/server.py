@@ -1,10 +1,11 @@
 import asyncio
 from collections import Counter
+from functools import partial
 import logging
 import re
 import socket
 import time
-from typing import Dict, List, Optional, Set
+from typing import Dict, Generator, List, Optional, Set, Type, TypeVar
 import typing
 
 from aioslsk.events import on_message, build_message_map
@@ -96,6 +97,7 @@ from tests.e2e.mock.constants import (
     MAX_RECOMMENDATIONS,
     MAX_GLOBAL_RECOMMENDATIONS,
 )
+from tests.e2e.mock.distributed import DistributedStrategy, EveryoneRootStrategy
 from tests.e2e.mock.messages import AdminMessage
 from tests.e2e.mock.model import User, Room, RoomStatus, Settings
 from tests.e2e.mock.peer import Peer
@@ -105,7 +107,10 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-def chat_id_generator(initial: int = 1) -> int:
+T = TypeVar('T', bound='DistributedStrategy')
+
+
+def chat_id_generator(initial: int = 1) -> Generator[int, None, None]:
     idx = initial
     while True:
         idx += 1
@@ -122,92 +127,16 @@ def remove_0_values(counter: typing.Counter[str]):
         del counter[to_remove]
 
 
-class DistributedStrategy:
-
-    def __init__(self, peers: List[Peer]):
-        self.peers: List[Peer] = peers
-
-    def get_peers_accepting_children(self) -> List[Peer]:
-        """Returns a list of all peers that are:
-
-        * Not looking for a parent
-        * Accepting children
-        """
-        eligable_peers = []
-        for peer in self.peers:
-            if not peer.user.accept_children:
-                continue
-
-            if peer.user.enable_parent_search:
-                continue
-
-            if peer.branch_level is None:
-                continue
-
-            eligable_peers.append(peer)
-
-        return eligable_peers
-
-    def get_potential_parents(self, target_peer: Peer) -> List[Peer]:
-        return []
-
-
-class ChainParentsStrategy(DistributedStrategy):
-    """This strategy simply picks the peers with the highest branch level to be
-    potential parents
-    """
-
-    def get_potential_parents(self, target_peer: Peer) -> List[Peer]:
-        try:
-            max_level = max([
-                peer.branch_level for peer in self.get_peers_accepting_children()
-                if peer != target_peer
-            ])
-        except ValueError:
-            return []
-
-        return [
-            peer for peer in self.get_peers_accepting_children()
-            if peer.branch_level == max_level and peer != target_peer
-        ]
-
-
-class RealisticParentsStrategy(DistributedStrategy):
-
-    def get_potential_parents(self, target_peer: Peer) -> List[Peer]:
-        """Implement a more realistic parent strategy.
-
-        There is a max on how many children a parent can have based on upload
-        speed. Perhaps there is a way to sort parents by upload speed.
-
-        Eg.: if peer0 has upload speed of 2000 and a max of 10 children is
-        configured, he can have 10 children that have a upload speed of 200.
-        Those children can then have 10 children whose upload speed is 20, etc.
-
-        So if a peer has an upload speed of roughly 200, suggest peer0 as parent
-        if it has not reached its max limit yet (become level 1). If he has
-        roughly upload speed of 20 suggest one of the level 1 peers (become level 2).
-
-        Perhaps it could be testable if it is more realistic. When receiving a
-        parent, check its speed and check the speed of the root and try a couple
-        of times to see if any conclusions could be drawn.
-
-        Not sure how to determine if someone should be branch root though. Possibly:
-        * If the upload speed is greater than all others? -> that could cause issues
-        * If the upload speed is greater than the lowest upload speed of one of
-          the branch roots
-        """
-
-
 class MockServer:
 
     def __init__(
-            self, hostname: str = '0.0.0.0', port: int = 2416,
+            self, hostname: str = '0.0.0.0', ports: Set[int] = {2416},
             excluded_search_phrases: List[str] = DEFAULT_EXCLUDED_SEARCH_PHRASES,
-            distributed_strategy: Optional[DistributedStrategy] = None):
+            potential_parent_interval: int = 0,
+            distributed_strategy_class: Type[DistributedStrategy] = EveryoneRootStrategy):
         self.hostname: str = hostname
-        self.port: int = port
-        self.connection: asyncio.Server = None
+        self.ports: Set[int] = ports
+        self.connections: Dict[int, asyncio.Server] = {}
         self.settings: Settings = Settings()
 
         self.users: List[User] = []
@@ -215,60 +144,108 @@ class MockServer:
         self.peers: List[Peer] = []
         self.track_map: Dict[str, Set[str]] = {}
         self.excluded_search_phrases: List[str] = excluded_search_phrases
-        self.distributed_strategy: DistributedStrategy = distributed_strategy or DistributedStrategy(self.peers)
+        self.distributed_strategy: DistributedStrategy = self._create_distributed_strategy(distributed_strategy_class)
+        self.distributed_parent_task: Optional[asyncio.Task] = None
+
+        if potential_parent_interval > 0:
+            self.distributed_parent_task = asyncio.create_task(
+                self.distributed_parent_job(interval=potential_parent_interval))
 
         self.chat_id_gen = chat_id_generator()
 
         self.MESSAGE_MAP = build_message_map(self)
         self.message_log: List[MessageDataclass] = []
 
-    async def connect(self, start_serving=False) -> asyncio.AbstractServer:
-        logger.info(
-            f"open {self.hostname}:{self.port} : listening connection")
+    def _create_distributed_strategy(self, strategy_cls: Type[T]) -> T:
+        return strategy_cls(self.settings, self.peers)
 
-        self.connection = await asyncio.start_server(
-            self.accept_peer,
+    def set_distributed_strategy(self, strategy_cls: Type[DistributedStrategy]):
+        self.distributed_strategy = self._create_distributed_strategy(strategy_cls)
+
+    async def notify_potential_parents(self):
+        """Notifies all peers of their potential parents"""
+        messages = []
+        for peer in self.peers:
+            if not peer.user:
+                continue
+
+            if not peer.user.enable_parent_search:
+                continue
+
+            potential_parents = self.distributed_strategy.get_potential_parents(peer)
+            if not potential_parents:
+                continue
+
+            message = PotentialParents.Response(
+                entries=[
+                    PotentialParent(
+                        pot_parent.user.name,
+                        pot_parent.hostname,
+                        pot_parent.user.port
+                    )
+                    for pot_parent in potential_parents
+                ]
+            )
+            messages.append(peer.send_message(message))
+
+        await asyncio.gather(*messages, return_exceptions=True)
+
+    async def distributed_parent_job(self, interval: int = 60):
+        """Period job for sending out potential parents"""
+        while True:
+            await asyncio.sleep(interval)
+            await self.notify_potential_parents()
+
+    async def connect(self, start_serving: bool = False):
+        tasks = [
+            self.connect_port(port, start_serving)
+            for port in self.ports
+        ]
+        await asyncio.gather(*tasks)
+
+    async def connect_port(self, port: int, start_serving: bool = False):
+        logger.info(
+            f"open {self.hostname}:{port} : listening connection")
+
+        connection = await asyncio.start_server(
+            partial(self.accept_peer, port),
             self.hostname,
-            self.port,
+            port,
             family=socket.AF_INET,
             start_serving=start_serving
         )
-        return self.connection
+        self.connections[port] = connection
 
     async def disconnect_peers(self):
         await asyncio.gather(
             *[peer.disconnect() for peer in self.peers], return_exceptions=True)
 
     async def disconnect(self):
-        logger.debug(f"{self.hostname}:{self.port} : disconnecting")
-        try:
-            if self.connection is not None:
-                if self.connection.is_serving():
-                    self.connection.close()
-                await self.connection.wait_closed()
-            await self.disconnect_peers()
+        for port, connection in self.connections.items():
+            logger.debug(f"{self.hostname}:{port} : disconnecting")
+            try:
+                if connection.is_serving():
+                    connection.close()
+                await connection.wait_closed()
 
-        except Exception as exc:
-            logger.warning(
-                f"{self.hostname}:{self.port} : exception while disconnecting", exc_info=exc)
+            except Exception as exc:
+                logger.warning(
+                    f"{self.hostname}:{port} : exception while disconnecting", exc_info=exc)
 
-        finally:
-            logger.debug(f"{self.hostname}:{self.port} : disconnected")
+            finally:
+                logger.debug(f"{self.hostname}:{port} : disconnected")
 
-    async def accept_peer(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        await self.disconnect_peers()
+
+    async def accept_peer(self, listening_port: int, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         hostname, port = writer.get_extra_info('peername')
-        logger.debug(f"{self.hostname}:{self.port} : accepted connection {hostname}:{port}")
+        logger.debug(f"{self.hostname}:{listening_port} : accepted connection {hostname}:{port}")
         peer = Peer(hostname, port, self, reader, writer)
         self.peers.append(peer)
         peer.start_reader_loop()
 
     async def on_peer_disconnected(self, peer: Peer):
-        """Called when a peer is disconnected
-
-        This will remove the peer from the tracked peers and send:
-
-        *
-        """
+        """Called when a peer is disconnected"""
         logger.info(f"disconnected peer : {peer!r}")
         if peer in self.peers:
             self.peers.remove(peer)
@@ -313,19 +290,6 @@ class MockServer:
 
     def get_joined_rooms(self, user: User) -> List[Room]:
         return [room for room in self.rooms if user in room.joined_users]
-
-    def get_distributed_roots(self) -> List[Peer]:
-        roots = [
-            peer for peer in self.peers
-            if peer.branch_level == 0 and not peer.user.enable_parent_search
-        ]
-        if not roots:
-            return [
-                peer for peer in self.peers
-                if peer.branch_level == 0
-            ]
-        else:
-            return roots
 
     async def set_upload_speed(self, username: str, uploads: int, speed: int):
         """This is utility method for testing that sets the upload speed for the
@@ -947,7 +911,7 @@ class MockServer:
         )
 
         await asyncio.gather(
-            *[peer.send_message(message) for peer in self.get_distributed_roots()],
+            *[peer.send_message(message) for peer in self.distributed_strategy.get_roots()],
             return_exceptions=True
         )
 
@@ -1845,16 +1809,60 @@ async def main(args):
         User(name='priv0', password='pass0', privileges_time_left=3600 * 24 * 7)
     ]
 
-    mock_server = MockServer(port=args.port)
+    mock_server = MockServer(
+        ports=set(args.port),
+        distributed_strategy_class=args.distributed_strategy,
+        potential_parent_interval=args.potential_parent_interval
+    )
     mock_server.users.extend(admin_users + privileged_users)
-    async with await mock_server.connect():
-        await mock_server.connection.serve_forever()
+
+    await mock_server.connect()
+    serving_tasks = [
+        connection.serve_forever()
+        for connection in mock_server.connections.values()
+    ]
+    await asyncio.gather(*serving_tasks)
 
 
 if __name__ == '__main__':
+    def _get_distributed_strategy_class(name: str) -> Type[DistributedStrategy]:
+        for strategy_cls in DistributedStrategy.__subclasses__():
+            if strategy_cls.get_name() == name:
+                return strategy_cls
+
+        raise ValueError(f'invalid distributed strategy : {name}')
+
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--port', type=int, default=2416)
+    parser.add_argument(
+        '--port',
+        help=(
+            "Port(s) to listen on. Multiple ports can be provided can be useful "
+            "when testing different clients"
+        ),
+        nargs="+",
+        type=int,
+        default=[2416]
+    )
+    parser.add_argument(
+        '--distributed-strategy',
+        help="Distributed strategy to use. Default is to treat everyone as a root",
+        default='everyone_root',
+        type=_get_distributed_strategy_class,
+        choices=[
+            strategy_cls.get_name()
+            for strategy_cls in DistributedStrategy.__subclasses__()
+        ]
+    )
+    parser.add_argument(
+        '--potential-parent-interval',
+        help=(
+            "Interval in seconds at which potential parents will be announced to "
+            "peers looking for a parent. Use a value of 0 or below to disable"
+        ),
+        default=0,
+        type=int
+    )
 
     args = parser.parse_args()
 

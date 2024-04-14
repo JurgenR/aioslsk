@@ -201,15 +201,16 @@ class TransferManager(BaseManager):
 
             await asyncio.sleep(self._settings.transfers.report_interval)
 
-    async def download(self, username: str, filename: str) -> Transfer:
+    async def download(self, username: str, filename: str, paused: bool = False) -> Transfer:
         """Requests to start a downloading the file from the given user
 
         :param user: User from which to download the file
         :param filename: Name of the file to download. This should be the full
             path to the file as returned in the search results
-        :return: a `Transfer` object from which the status of the transfer can
-            be requested. If the transfer already exists in the client then this
-            transfer will be returned
+        :param paused: Adds the download in the paused state
+        :return: a :class:`.Transfer` object from which the status of the
+            transfer can be requested. If the transfer already exists in the
+            client then this transfer will be returned
         """
         transfer = await self.add(
             Transfer(
@@ -218,7 +219,11 @@ class TransferManager(BaseManager):
                 TransferDirection.DOWNLOAD
             )
         )
-        await transfer.state.queue()
+        if paused:
+            await transfer.state.pause()
+        else:
+            await transfer.state.queue()
+
         return transfer
 
     async def abort(self, transfer: Transfer):
@@ -253,7 +258,7 @@ class TransferManager(BaseManager):
     async def queue(self, transfer: Transfer):
         """Places given transfer (back) in the queue
 
-        :param transfer: `Transfer` object to queue
+        :param transfer: :class:`.Transfer` object to queue
         :raise TransferNotFoundError: if the transfer has not been added to the
             manager first
         :raise InvalidStateTransition: When the transfer could not be
@@ -268,22 +273,23 @@ class TransferManager(BaseManager):
             raise InvalidStateTransition(
                 transfer,
                 transfer.state.VALUE,
-                TransferState.State.ABORTED,
+                TransferState.State.QUEUED,
                 "Could not make the desired state transition"
             )
 
-    async def _add_transfer(self, transfer: Transfer) -> Transfer:
-        for queued_transfer in self._transfers:
-            if queued_transfer == transfer:
-                logger.info(f"skip adding transfer, already exists : {queued_transfer}")
-                return queued_transfer
+    async def pause(self, transfer: Transfer):
+        if transfer not in self.transfers:
+            raise TransferNotFoundError(
+                "cannot pause transfer: transfer was not added to the manager")
 
-        logger.info(f"adding transfer : {transfer}")
-        transfer.state_listeners.append(self)
-        self._transfers.append(transfer)
-        await self._event_bus.emit(TransferAddedEvent(transfer))
-
-        return transfer
+        has_transitioned = await transfer.state.pause()
+        if not has_transitioned:
+            raise InvalidStateTransition(
+                transfer,
+                transfer.state.VALUE,
+                TransferState.State.PAUSED,
+                "Could not make the desired state transition"
+            )
 
     async def add(self, transfer: Transfer) -> Transfer:
         """Adds a transfer if it does not already exist, otherwise it returns
@@ -304,8 +310,8 @@ class TransferManager(BaseManager):
 
     async def remove(self, transfer: Transfer):
         """Remove a transfer from the list of transfers. This will attempt to
-        abort the transfer before removing it. Emits a `TransferRemovedEvent`
-        after removal
+        abort the transfer before removing it. Emits a
+        :class:`.TransferRemovedEvent` after removal
 
         :param transfer: Transfer object to remove
         :raise TransferNotFoundError: Raised when the transfer was not added to
@@ -531,7 +537,10 @@ class TransferManager(BaseManager):
             else:
                 # For downloads we try to continue with incomplete downloads,
                 # for uploads it's up to the other user
+                # Failed uploads without a reason are retried
                 if transfer.state.VALUE in (TransferState.QUEUED, TransferState.INCOMPLETE):
+                    queued_downloads.append(transfer)
+                elif transfer.state.VALUE == TransferState.FAILED and transfer.fail_reason is None:
                     queued_downloads.append(transfer)
 
         queued_uploads = self._prioritize_uploads(queued_uploads)
@@ -565,6 +574,19 @@ class TransferManager(BaseManager):
 
         ranking.sort(key=itemgetter(0))
         return list(reversed([upload for _, upload in ranking]))
+
+    async def _add_transfer(self, transfer: Transfer) -> Transfer:
+        for queued_transfer in self._transfers:
+            if queued_transfer == transfer:
+                logger.info(f"skip adding transfer, already exists : {queued_transfer}")
+                return queued_transfer
+
+        logger.info(f"adding transfer : {transfer}")
+        transfer.state_listeners.append(self)
+        self._transfers.append(transfer)
+        await self._event_bus.emit(TransferAddedEvent(transfer))
+
+        return transfer
 
     async def _remove_download_path(self, transfer: Transfer):
         if transfer.local_path:
@@ -652,7 +674,7 @@ class TransferManager(BaseManager):
             self, transfer: Transfer, peer_connection: PeerConnection,
             request: PeerTransferRequest.Request):
         """Initializes a download and starts downloading. This method should be
-        called after a PeerTransferRequest has been received
+        called after a :class:`.PeerTransferRequest` has been received
 
         :param transfer: transfer object to initialize
         :param peer_connection: peer connection on which the transfer request
@@ -868,7 +890,7 @@ class TransferManager(BaseManager):
         """Downloads the transfer over the connection. This method will set the
         appropriate states on the passed `transfer` and `connection` objects.
 
-        :param transfer: `Transfer` object
+        :param transfer: :class:`.Transfer` object of the download
         :param connection: connection on which file should be received
         """
         try:
@@ -904,7 +926,7 @@ class TransferManager(BaseManager):
             await connection.disconnect(CloseReason.REQUESTED)
 
         except ConnectionReadError:
-            logger.exception(f"error reading from socket : {transfer:!r}")
+            logger.exception(f"error reading from socket : {transfer!r}")
             await transfer.state.incomplete()
 
         except asyncio.CancelledError:
@@ -919,7 +941,7 @@ class TransferManager(BaseManager):
             if transfer.is_transfered():
                 await transfer.state.complete()
             else:
-                await transfer.state.incomplete()
+                await transfer.state.fail(reason=Reasons.CANCELLED)
 
     async def on_transfer_state_changed(
             self, transfer: Transfer, old: TransferState.State, new: TransferState.State):
@@ -1111,8 +1133,8 @@ class TransferManager(BaseManager):
                 # this always leads to a refusal of the the request as it is up
                 # to us to let the downloader know when we are ready to upload
 
-                # If the state of transfer is ABORTED, COMPLETE, QUEUED: refuse
-                # the request with a specific message
+                # If the state of transfer is PAUSED, ABORTED, COMPLETE, QUEUED:
+                # refuse the request with a specific message
                 # In other cases (INITIALIZING, UPLOADING, FAILED) the message
                 # simply gets ignored
                 # Additional notes:
@@ -1120,6 +1142,7 @@ class TransferManager(BaseManager):
                 # * Other clients might abort the transfer when receiving this
                 #   message in (at least) UPLOADING state
                 fail_reason_map = {
+                    TransferState.PAUSED: Reasons.CANCELLED,
                     TransferState.ABORTED: Reasons.CANCELLED,
                     TransferState.COMPLETE: Reasons.COMPLETE,
                     TransferState.QUEUED: Reasons.QUEUED
@@ -1155,7 +1178,7 @@ class TransferManager(BaseManager):
             if transfer is None:
                 # A download which we don't have in queue, assume we removed it
                 reason = Reasons.CANCELLED
-            elif transfer.state.VALUE == TransferState.ABORTED:
+            elif transfer.state.VALUE in (TransferState.ABORTED, TransferState.PAUSED):
                 reason = Reasons.CANCELLED
             elif transfer.state.VALUE == TransferState.COMPLETE:
                 reason = Reasons.COMPLETE

@@ -254,7 +254,7 @@ class DataConnection(Connection):
                     await self._writer.wait_closed()
 
         except Exception as exc:
-            logger.warning(f"{self.hostname}:{self.port} : exception while disconnecting : {exc}")
+            logger.warning(f"{self.hostname}:{self.port} : exception while disconnecting : {exc!r}")
 
         finally:
             await self.set_state(ConnectionState.CLOSED, close_reason=reason)

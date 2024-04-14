@@ -467,6 +467,7 @@ class TestTransferManager:
         "state,expected_reason",
         [
             # Possible states with reason response
+            (TransferState.PAUSED, Reasons.CANCELLED),
             (TransferState.ABORTED, Reasons.CANCELLED),
             (TransferState.COMPLETE, Reasons.COMPLETE),
             (TransferState.QUEUED, Reasons.QUEUED),
@@ -615,6 +616,7 @@ class TestTransferManager:
         "state,expected_reason",
         [
             # Possible states with reason response
+            (TransferState.PAUSED, Reasons.CANCELLED),
             (TransferState.ABORTED, Reasons.CANCELLED),
             (TransferState.COMPLETE, Reasons.COMPLETE),
             # Possible states with no response
@@ -706,7 +708,11 @@ class TestTransferManager:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "state", [(TransferState.QUEUED), (TransferState.INCOMPLETE)]
+        "state",
+        [
+            (TransferState.QUEUED),
+            (TransferState.INCOMPLETE),
+        ]
     )
     async def test_onPeerTransferRequest_existingDownload_ready_shouldStartDownload(
             self, manager: TransferManager, state: TransferState.State):
@@ -721,6 +727,9 @@ class TestTransferManager:
         manager._shares_manager.get_shared_item = AsyncMock(return_value=shared_item)
 
         download = self._create_download(manager, username, state, shared_item)
+        # Specific to failed state, should retry when there is no valid failed
+        # reason
+        download.fail_reason = None
 
         manager._initialize_download = AsyncMock()
 

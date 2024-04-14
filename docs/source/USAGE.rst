@@ -162,11 +162,33 @@ To start downloading a file:
     from aioslsk.transfer.model import Transfer
 
     search_request: SearchRequest = await client.searches.search('my query')
+    # Wait for a bit and get the first search result
+    await asyncio.sleep(5)
     search_result: SearchResult = search_request.results[0]
-    transfer: Transfer = await client.download(search_result.username, search_result.shared_items[0].filename)
+    # The following will attempt to start the download in the background
+    transfer: Transfer = await client.transfers.download(search_result.username, search_result.shared_items[0].filename)
+
+Transfers can be paused or aborted, aborting will remove the partially downloaded file. To resume the paused transfer call the :func:`.TransferManager.queue` method. Aborted transfers can be requeued as well but since the file was removed the transfer will be restarted from the beginning:
+
+.. code-block:: python
+
+    from aioslsk.transfer.model import Transfer
+
+    # The following will attempt to start the download in the background
+    transfer: Transfer = await client.transfers.download('someuser', 'somefile.mp3')
+
+    # Pause the download wait and requeue
+    await client.transfers.pause(transfer)
+    await asyncio.sleep(5)
+    await client.transfers.queue(transfer)
+
+    # Abort and requeue
+    await client.transfers.abort(transfer)
+    await asyncio.sleep(5)
+    await client.transfers.queue(transfer)
 
 
-Retrieving the transfers:
+A couple of methods are available to retrieve transfers:
 
 .. code-block:: python
 
