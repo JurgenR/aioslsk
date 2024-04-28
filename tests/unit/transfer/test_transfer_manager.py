@@ -111,7 +111,8 @@ class TestTransferManager:
     @pytest.mark.asyncio
     async def test_whenAbortTransfer_download_shouldSetAbortStateAndDeleteFile(self, manager: TransferManager):
         transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
-        transfer.local_path = '/some/path.mp3'
+        local_path = '/some/path.mp3'
+        transfer.local_path = local_path
         await manager.add(transfer)
 
         await transfer.state.queue()
@@ -122,7 +123,7 @@ class TestTransferManager:
                 await manager.abort(transfer)
 
         assert transfer.state.VALUE == TransferState.ABORTED
-        patched_remove.assert_awaited_once_with(transfer.local_path)
+        patched_remove.assert_awaited_once_with(local_path)
 
     @pytest.mark.asyncio
     async def test_whenAbortTransfer_upload_shouldSetAbortState(self, manager: TransferManager):

@@ -1,4 +1,5 @@
 """Implementation of the state design pattern for transfers"""
+from aiofiles import os as asyncos
 import asyncio
 from enum import Enum
 import logging
@@ -7,7 +8,23 @@ from typing import Optional, Protocol, TYPE_CHECKING
 if TYPE_CHECKING:
     from .model import Transfer
 
+
 logger = logging.getLogger(__name__)
+
+
+async def _remove_local_file(transfer: 'Transfer'):
+    if not transfer.is_download():
+        return
+
+    if transfer.local_path:
+        logger.info(f"removing file at {transfer.local_path}")
+        try:
+            if await asyncos.path.exists(transfer.local_path):
+                await asyncos.remove(transfer.local_path)
+        except OSError:
+            logger.warning(f"failed to remove file during abort : {transfer.local_path}")
+
+        transfer.local_path = None
 
 
 class TransferStateListener(Protocol):
@@ -144,6 +161,7 @@ class QueuedState(TransferState):
         return True
 
     async def abort(self) -> bool:
+        await _remove_local_file(self.transfer)
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
@@ -175,6 +193,7 @@ class InitializingState(TransferState):
     VALUE = TransferState.INITIALIZING
 
     async def abort(self) -> bool:
+        await _remove_local_file(self.transfer)
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
@@ -229,6 +248,7 @@ class DownloadingState(TransferState):
 
     async def abort(self) -> bool:
         await self._stop_transfer()
+        await _remove_local_file(self.transfer)
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
@@ -272,6 +292,7 @@ class UploadingState(TransferState):
 
     async def abort(self) -> bool:
         await self._stop_transfer()
+        # Don't remove file
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
@@ -323,6 +344,7 @@ class IncompleteState(TransferState):
         return True
 
     async def abort(self) -> bool:
+        await _remove_local_file(self.transfer)
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
@@ -363,6 +385,7 @@ class PausedState(TransferState):
         return True
 
     async def abort(self) -> bool:
+        await _remove_local_file(self.transfer)
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
