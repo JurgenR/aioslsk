@@ -43,6 +43,7 @@ class Transfer:
         '_speed_log',
         '_transfer_task',
         '_remotely_queue_task',
+        '_state_lock',
         'progress_snapshot',
         'state_listeners'
     )
@@ -98,6 +99,7 @@ class Transfer:
         self._speed_log: Deque[Tuple[float, int]] = deque(maxlen=SPEED_LOG_ENTRIES)
         self._remotely_queue_task: Optional[asyncio.Task] = None
         self._transfer_task: Optional[asyncio.Task] = None
+        self._state_lock: asyncio.Lock = asyncio.Lock()
         self.state_listeners: List[TransferStateListener] = []
 
     def __setstate__(self, obj_state):
@@ -108,6 +110,7 @@ class Transfer:
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
         self._remotely_queue_task = None
         self._transfer_task = None
+        self._state_lock = asyncio.Lock()
         self.state_listeners = []
         self.progress_snapshot = self.take_progress_snapshot()
 

@@ -1,8 +1,9 @@
 import asyncio
 import os
+from pathlib import Path
 import pytest_asyncio
 import shutil
-from typing import List
+from typing import AsyncGenerator, List
 
 from aioslsk.client import SoulSeekClient
 from aioslsk.shares.model import DirectoryShareMode
@@ -21,7 +22,7 @@ FILE_SHARES = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), '..', 'unit', 'resources', 'shared')
 
 
-def create_client(tmp_path, username: str, port: int) -> SoulSeekClient:
+def create_client(tmp_path: Path, username: str, port: int) -> SoulSeekClient:
     download_dir = tmp_path / username / 'downloads'
     download_dir.mkdir(parents=True, exist_ok=True)
     shared_dir = tmp_path / username / 'shared'
@@ -62,7 +63,7 @@ def create_client(tmp_path, username: str, port: int) -> SoulSeekClient:
 
 
 @pytest_asyncio.fixture
-async def mock_server():
+async def mock_server() -> AsyncGenerator[MockServer, None]:
     server = MockServer(hostname=DEFAULT_SERVER_HOSTNAME, ports={DEFAULT_SERVER_PORT})
     await server.connect(start_serving=False)
     await asyncio.gather(
@@ -78,7 +79,7 @@ async def mock_server():
 
 
 @pytest_asyncio.fixture
-async def client_1(tmp_path):
+async def client_1(tmp_path: Path) -> AsyncGenerator[SoulSeekClient, None]:
     client = create_client(tmp_path, 'user0', 40000)
 
     try:
@@ -95,7 +96,7 @@ async def client_1(tmp_path):
 
 
 @pytest_asyncio.fixture
-async def client_2(tmp_path):
+async def client_2(tmp_path: Path) -> AsyncGenerator[SoulSeekClient, None]:
     client = create_client(tmp_path, 'user1', 41000)
 
     try:
@@ -112,7 +113,7 @@ async def client_2(tmp_path):
 
 
 @pytest_asyncio.fixture
-async def clients(tmp_path, request) -> List[SoulSeekClient]:
+async def clients(tmp_path: Path, request) -> AsyncGenerator[List[SoulSeekClient], None]:
     async def client_start_and_scan(client: SoulSeekClient):
         await client.start()
         await client.login()

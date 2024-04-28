@@ -226,8 +226,9 @@ class TestE2ETransfer:
         await wait_for_transfer_to_transfer(download)
         await asyncio.sleep(2)
 
-        # Check the path exists
+        # Check the path exists (store to check later if it is removed)
         assert os.path.exists(download.local_path) is True
+        download_local_path = download.local_path
 
         # Finally abort the transfer
         await client_1.transfers.abort(download)
@@ -246,7 +247,8 @@ class TestE2ETransfer:
         assert TransferState.FAILED == upload.state.VALUE
 
         # Verify file
-        assert os.path.exists(download.local_path) is False
+        assert download.local_path is None
+        assert os.path.exists(download_local_path) is False
         assert os.path.exists(upload.local_path) is True
 
     @pytest.mark.asyncio
