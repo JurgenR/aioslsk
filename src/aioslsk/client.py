@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 from async_timeout import timeout as atimeout
 import logging
-from typing import Callable, List, Optional
+from typing import List, Optional
 
 from .base_manager import BaseManager
 from .commands import BaseCommand, RC, RT
@@ -71,7 +71,8 @@ class SoulSeekClient:
         self.interests: InterestManager = self.create_interest_manager()
 
         self.shares: SharesManager = self.create_shares_manager(
-            shares_cache or SharesNullCache()
+            shares_cache or SharesNullCache(),
+            executor_factory=executor_factory
         )
         self.transfers: TransferManager = self.create_transfer_manager(
             transfer_cache or TransferNullCache()
