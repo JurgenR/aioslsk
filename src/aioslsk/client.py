@@ -20,7 +20,7 @@ from .events import (
 from .exceptions import AioSlskException, AuthenticationError, InvalidSessionError
 from .interest.manager import InterestManager
 from .shares.cache import SharesCache, SharesNullCache
-from .shares.manager import SharesManager
+from .shares.manager import ExecutorFactory, SharesManager
 from .network.connection import ConnectionState, ServerConnection
 from .network.network import Network
 from .peer import PeerManager
@@ -53,6 +53,7 @@ class SoulSeekClient:
     def __init__(
             self, settings: Settings,
             shares_cache: Optional[SharesCache] = None, transfer_cache: Optional[TransferCache] = None,
+            executor_factory: Optional[ExecutorFactory] = None,
             event_bus: Optional[EventBus] = None):
         self.settings: Settings = settings
 
@@ -70,7 +71,8 @@ class SoulSeekClient:
         self.interests: InterestManager = self.create_interest_manager()
 
         self.shares: SharesManager = self.create_shares_manager(
-            shares_cache or SharesNullCache()
+            shares_cache or SharesNullCache(),
+            executor_factory=executor_factory
         )
         self.transfers: TransferManager = self.create_transfer_manager(
             transfer_cache or TransferNullCache()
@@ -309,12 +311,16 @@ class SoulSeekClient:
             self.network
         )
 
-    def create_shares_manager(self, cache: SharesCache) -> SharesManager:
+    def create_shares_manager(
+            self, cache: SharesCache,
+            executor_factory: Optional[ExecutorFactory] = None) -> SharesManager:
+
         return SharesManager(
             self.settings,
             self.events,
             self.network,
-            cache=cache
+            cache=cache,
+            executor_factory=executor_factory
         )
 
     def create_transfer_manager(self, cache: TransferCache) -> TransferManager:

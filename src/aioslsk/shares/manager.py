@@ -1,5 +1,6 @@
 from aiofiles import os as asyncos
 import asyncio
+from concurrent.futures import Executor
 from functools import partial
 import logging
 import mutagen
@@ -8,7 +9,15 @@ import os
 import re
 import sys
 import time
-from typing import Optional, Dict, List, Set, Tuple, Union
+from typing import (
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 import uuid
 from weakref import WeakSet
 
@@ -41,6 +50,8 @@ from .utils import convert_items_to_file_data
 
 logger = logging.getLogger(__name__)
 
+ItemAttributes = List[Tuple[int, int]]
+ExecutorFactory = Callable[[], Executor]
 
 _COMPRESSED_FORMATS = [
     'MP3',
@@ -60,6 +71,12 @@ def scan_directory(
         shared_directory: SharedDirectory,
         children: Optional[List[SharedDirectory]] = None) -> Set[SharedItem]:
     """Scans the directory for items to share
+
+    Warning: when using ProcessPoolExecutor on this method the returned items
+    will not have the shared directory set in some cases. The shared_directory
+    passed here is a copy and the object will be removed once this function
+    finishes (see https://stackoverflow.com/a/72726998/1419478). In this case
+    you should manually assign it again
 
     :param shared_directory: `SharedDirectory` instance
     :param children: list of `SharedDirectory` instances, the items in this list
@@ -94,7 +111,7 @@ def scan_directory(
     return shared_items
 
 
-def extract_attributes(filepath: str) -> List[Tuple[int, int]]:
+def extract_attributes(filepath: str) -> ItemAttributes:
     """Attempts to extract attributes from the file at `filepath`. If there was
     an error attempting to extract the attributes this method will log a warning
     and return an empty list of attributes
@@ -137,16 +154,18 @@ class SharesManager(BaseManager):
 
     def __init__(
             self, settings: Settings, event_bus: EventBus,
-            network: Network, cache: Optional[SharesCache] = None):
+            network: Network, cache: Optional[SharesCache] = None,
+            executor_factory: Optional[ExecutorFactory] = None):
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._network: Network = network
         self._term_map: Dict[str, WeakSet[SharedItem]] = {}
-        self._shared_directories: List[SharedDirectory] = list()
+        self._shared_directories: List[SharedDirectory] = []
         self._session: Optional[Session] = None
 
         self.cache: SharesCache = cache if cache else SharesNullCache()
-        self.executor = None
+        self.executor: Optional[Executor] = None
+        self.executor_factory: Optional[ExecutorFactory] = executor_factory
 
         self.naming_strategies = [
             DefaultNamingStrategy(),
@@ -198,6 +217,17 @@ class SharesManager(BaseManager):
         alias_string = alias_bytes.decode('utf8')
 
         return alias_string
+
+    async def start(self):
+        if self.executor_factory:
+            self.executor = self.executor_factory()
+
+    async def stop(self) -> List[asyncio.Task]:
+        if self.executor:
+            self.executor.shutdown()
+            self.executor = None
+
+        return []
 
     async def load_data(self):
         self.read_cache()
@@ -404,8 +434,15 @@ class SharesManager(BaseManager):
         else:
             logger.debug(f"scan found {len(shared_items)} files for directory {shared_directory!r}")
 
+            # When using a ProcessPoolExecutor the `shared_directory` property
+            # might be set to None (since objects are cloned instead of passed
+            # by reference). Re-assign it the proper object
+            for item in shared_items:
+                item.shared_directory = shared_directory
+
             # Adds all new items to the directory items
             shared_directory.items |= shared_items
+
             # Remove all items from the cache that weren't in the returned items
             # set
             shared_directory.items -= (shared_directory.items ^ shared_items)
@@ -424,32 +461,39 @@ class SharesManager(BaseManager):
             need to be scanned
         :return: List of futures for each file that needs to be scanned
         """
-        def extract_item_attributes(item: SharedItem):
-            return item, extract_attributes(item.get_absolute_path())
-
         loop = asyncio.get_running_loop()
 
         # Schedule the items on the executor
-        extract_futures: List[asyncio.Future] = []
+        futures: List[asyncio.Future] = []
         for item in shared_directory.items:
             if item.attributes is None:
                 future = loop.run_in_executor(
                     self.executor,
-                    partial(extract_item_attributes, item)
+                    partial(extract_attributes, item.get_absolute_path())
                 )
-                extract_futures.append(future)
+                future.add_done_callback(
+                    partial(self._extract_attributes_callback, item)
+                )
+                futures.append(future)
 
         logger.debug(
-            f"scheduled {len(extract_futures)} / {len(shared_directory.items)} items "
+            f"scheduled {len(futures)} / {len(shared_directory.items)} items "
             f"for attribute extracting for directory {shared_directory}")
 
-        for future in asyncio.as_completed(extract_futures):
-            try:
-                item, attributes = await future
-            except Exception:
-                logger.warning("exception fetching shared item attributes")
-            else:
-                item.attributes = attributes
+        start = time.perf_counter()
+
+        await asyncio.gather(*futures, return_exceptions=True)
+
+        logger.debug(
+            f"scanned attributes for {len(futures)} items in {time.perf_counter() - start}s")
+
+    def _extract_attributes_callback(self, item: SharedItem, future: asyncio.Future):
+        try:
+            attributes = future.result()
+        except Exception:
+            logger.warning("exception fetching shared item attributes")
+        else:
+            item.attributes = attributes
 
     async def scan(self):
         """Scan the files and their attributes for all directories currently
@@ -470,7 +514,7 @@ class SharesManager(BaseManager):
             self.scan_directory_file_attributes(shared_directory)
             for shared_directory in self._shared_directories
         ]
-        await asyncio.gather(*attribute_futures, return_exceptions=True)
+        await asyncio.gather(*attribute_futures)
 
         logger.info(f"completed scan in {time.perf_counter() - start_time} seconds")
         folder_count, file_count = self.get_stats()

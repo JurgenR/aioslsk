@@ -24,13 +24,15 @@ class SharesNullCache:
 
 
 class SharesShelveCache:
+    """Shares cache that uses the Python built-in `shelve` module"""
     DEFAULT_FILENAME = 'shares_index'
 
-    def __init__(self, data_directory: str):
+    def __init__(self, data_directory: str, filename: str = DEFAULT_FILENAME):
         self.data_directory: str = data_directory
+        self.filename: str = filename
 
     def _get_index_path(self) -> str:
-        return os.path.join(self.data_directory, self.DEFAULT_FILENAME)
+        return os.path.join(self.data_directory, self.filename)
 
     def read(self) -> List[SharedDirectory]:
         with shelve.open(self._get_index_path(), 'c') as db:
