@@ -1,6 +1,6 @@
 import os
 import shelve
-from typing import List, Optional, Protocol
+from typing import List, Protocol
 from .model import SharedDirectory
 
 
