@@ -5,12 +5,13 @@ from aioslsk.shares.model import DirectoryShareMode, SharedDirectory, SharedItem
 from aioslsk.naming import DefaultNamingStrategy, KeepDirectoryStrategy
 from aioslsk.settings import Settings, SharedDirectorySettingEntry
 
+from concurrent.futures import Executor, ProcessPoolExecutor, ThreadPoolExecutor
 import mutagen
 import pytest
 from pytest_unordered import unordered
 import os
 import sys
-from typing import List
+from typing import Optional, List, Type
 from unittest.mock import patch, AsyncMock
 
 
@@ -313,9 +314,20 @@ class TestSharesManagerSharedDirectoryManagement:
         assert manager.shared_directories[0].absolute_path == os.path.abspath(SHARED_DIR_PATH)
 
     @pytest.mark.asyncio
-    async def test_scan(self, manager: SharesManager):
+    @pytest.mark.parametrize(
+        'executor',
+        [
+            None,
+            ThreadPoolExecutor,
+            ProcessPoolExecutor
+        ]
+    )
+    async def test_scan(self, manager: SharesManager, executor: Optional[Type[Executor]]):
         manager.load_from_settings()
+        manager.executor = executor() if executor else None
+
         await manager.scan()
+
         directory = manager.shared_directories[0]
         assert len(directory.items) == TOTAL_DIRECTORIES
         for item in directory.items:
