@@ -334,6 +334,24 @@ class TestSharesManagerSharedDirectoryManagement:
             assert item.attributes is not None
 
     @pytest.mark.asyncio
+    async def test_scan_withExecutorFactory(self, manager: SharesManager):
+        manager.load_from_settings()
+        manager.executor_factory = ProcessPoolExecutor
+
+        await manager.start()
+        assert manager.executor is not None
+
+        await manager.scan()
+
+        await manager.stop()
+        assert manager.executor is None
+
+        directory = manager.shared_directories[0]
+        assert len(directory.items) == TOTAL_DIRECTORIES
+        for item in directory.items:
+            assert item.attributes is not None
+
+    @pytest.mark.asyncio
     async def test_scan_nestedDirectories(self, manager: SharesManager):
         manager._settings.shares.directories = [
             SharedDirectorySettingEntry(

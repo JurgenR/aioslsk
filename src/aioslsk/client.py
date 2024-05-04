@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 from async_timeout import timeout as atimeout
 import logging
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from .base_manager import BaseManager
 from .commands import BaseCommand, RC, RT
@@ -20,7 +20,7 @@ from .events import (
 from .exceptions import AioSlskException, AuthenticationError, InvalidSessionError
 from .interest.manager import InterestManager
 from .shares.cache import SharesCache, SharesNullCache
-from .shares.manager import SharesManager
+from .shares.manager import ExecutorFactory, SharesManager
 from .network.connection import ConnectionState, ServerConnection
 from .network.network import Network
 from .peer import PeerManager
@@ -53,6 +53,7 @@ class SoulSeekClient:
     def __init__(
             self, settings: Settings,
             shares_cache: Optional[SharesCache] = None, transfer_cache: Optional[TransferCache] = None,
+            executor_factory: Optional[ExecutorFactory] = None,
             event_bus: Optional[EventBus] = None):
         self.settings: Settings = settings
 
@@ -309,12 +310,16 @@ class SoulSeekClient:
             self.network
         )
 
-    def create_shares_manager(self, cache: SharesCache) -> SharesManager:
+    def create_shares_manager(
+            self, cache: SharesCache,
+            executor_factory: Optional[ExecutorFactory] = None) -> SharesManager:
+
         return SharesManager(
             self.settings,
             self.events,
             self.network,
-            cache=cache
+            cache=cache,
+            executor_factory=executor_factory
         )
 
     def create_transfer_manager(self, cache: TransferCache) -> TransferManager:

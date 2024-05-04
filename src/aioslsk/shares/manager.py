@@ -9,7 +9,15 @@ import os
 import re
 import sys
 import time
-from typing import Optional, Dict, List, Set, Tuple, Union
+from typing import (
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 import uuid
 from weakref import WeakSet
 
@@ -43,6 +51,7 @@ from .utils import convert_items_to_file_data
 logger = logging.getLogger(__name__)
 
 ItemAttributes = List[Tuple[int, int]]
+ExecutorFactory = Callable[[], Executor]
 
 _COMPRESSED_FORMATS = [
     'MP3',
@@ -145,7 +154,8 @@ class SharesManager(BaseManager):
 
     def __init__(
             self, settings: Settings, event_bus: EventBus,
-            network: Network, cache: Optional[SharesCache] = None):
+            network: Network, cache: Optional[SharesCache] = None,
+            executor_factory: Optional[ExecutorFactory] = None):
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._network: Network = network
@@ -155,9 +165,7 @@ class SharesManager(BaseManager):
 
         self.cache: SharesCache = cache if cache else SharesNullCache()
         self.executor: Optional[Executor] = None
-        """Executor used when scanning shares. When this value is `None` the
-        default `asyncio` executor will be used
-        """
+        self.executor_factory: Optional[ExecutorFactory] = executor_factory
 
         self.naming_strategies = [
             DefaultNamingStrategy(),
@@ -210,9 +218,14 @@ class SharesManager(BaseManager):
 
         return alias_string
 
+    async def start(self):
+        if self.executor_factory:
+            self.executor = self.executor_factory()
+
     async def stop(self) -> List[asyncio.Task]:
         if self.executor:
             self.executor.shutdown()
+            self.executor = None
 
         return []
 

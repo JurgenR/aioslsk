@@ -332,6 +332,41 @@ The client provides a mechanism for scanning and caching the files you want to s
 It is possible to add or remove shared directories on the fly.
 
 
+Defining a custom executor for scanning
+---------------------------------------
+
+By default the :py:mod:`asyncio` executor is used for scanning shares. You can play around with using different types of executors by using the `executor_factory` parameter when creating the client. The client will call the factory to create a new executor each time the client is started and will destroy it when :func:`SoulSeekClient.stop` is called.
+
+Following example shows how to use a :py:class:`concurrent.futures.ProcessPoolExecutor`:
+
+.. code-block:: python
+
+    from concurrent.futures import ProcessPoolExecutor
+    from aioslsk.client import SoulSeekClient
+
+    async def main():
+        client: SoulSeekClient = SoulSeekClient(
+            settings,
+            executor_factory=ProcessPoolExecutor
+        )
+
+Another example using :py:class:`concurrent.futures.ThreadPoolExecutor` with a limited number of threads, in this case a maximum of 3 threads:
+
+.. code-block:: python
+
+    from concurrent.futures import ThreadPoolExecutor
+    from aioslsk.client import SoulSeekClient
+
+    def thread_executor_factory() -> ThreadPoolExecutor:
+        return ThreadPoolExecutor(max_workers=3)
+
+    async def main():
+        client: SoulSeekClient = SoulSeekClient(
+            settings,
+            executor_factory=thread_executor_factory
+        )
+
+
 File naming
 -----------
 
