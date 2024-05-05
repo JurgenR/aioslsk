@@ -21,7 +21,8 @@ author = 'Jurgen'
 extensions = [
     'sphinx_rtd_theme',
     'sphinx.ext.autodoc',
-    'sphinxcontrib.autodoc_pydantic'
+    'sphinxcontrib.autodoc_pydantic',
+    'sphinx.ext.intersphinx',
 ]
 
 templates_path = ['_templates']
@@ -49,3 +50,6 @@ autodoc_mock_imports = [
 
 autodoc_pydantic_model_show_json = False
 autodoc_pydantic_settings_show_json = False
+
+# Intersphinx mapping
+intersphinx_mapping = {'python': ('https://docs.python.org/3.12', None)}
