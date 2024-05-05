@@ -439,6 +439,7 @@ class TransferManager(BaseManager):
         for transfer in self._transfers:
             if transfer == req_transfer:
                 return transfer
+
         raise ValueError(
             f"transfer for user {username} and remote_path {remote_path} (direction={direction}) not found")
 

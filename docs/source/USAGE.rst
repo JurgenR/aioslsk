@@ -405,7 +405,7 @@ When providing a shares cache the client will automatically read and store the s
 Adding / Removing / Scanning Directories
 ----------------------------------------
 
-It is possible to add or remove shared directories on the fly. Following example shows how to add, remove and scan individual or all directories:
+It is possible to add, remove or update shared directories on the fly. Following example shows how to add, remove and scan individual or all directories:
 
 .. code-block:: python
 
@@ -415,6 +415,12 @@ It is possible to add or remove shared directories on the fly. Following example
     shared_dir = client.shares.add_shared_directory(
         'my/shared/directory',
         share_mode=DirectoryShareMode.FRIENDS
+    )
+
+    # Update the shared directory
+    client.shares.update_shared_directory(
+        shared_dir,
+        share_mode=DirectoryShareMode.EVERYONE
     )
 
     # Scan the directory files and file attributes
