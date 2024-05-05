@@ -7,7 +7,7 @@ Starting the client
 
 .. warning::
 
-    The server has an anti-DDOS mechanism, be careful when connecting / disconnecting too quickly or you will get banned
+    The server has an anti-DDOS mechanism, be careful when connecting and disconnecting too quickly or you will get banned
 
 
 Before starting the client, ensure you create a settings object where you have configured at least the `credentials` section:
@@ -300,6 +300,9 @@ To receive room messages listen to the :class:`.RoomMessageEvent`:
     client.events.register(RoomMessageEvent, room_message_listener)
 
 
+Several commands and events specific to private rooms are available. See the :mod:`aioslsk.commands` and :mod:`aioslsk.events` references
+
+
 Private Messages
 ================
 
@@ -545,6 +548,45 @@ Internally, the library will automatically track users as well:
 * Users in the same room
 
 If a user is tracked it holds a reference to the :class:`.User` object.
+
+
+Interests and Recommendations
+=============================
+
+Interests and hated interests are defined in the settings (``interests`` section) are automatically advertised to the server after logging on. Commands can be used to add or remove them while after being logged in:
+
+.. code-block:: python
+
+    from aioslsk.commands import (
+        AddInterestCommand,
+        AddHatedInterestCommand,
+        RemoveInterestCommand,
+        RemoveHatedInterestCommand,
+    )
+
+    # Adding an interested and hated interest
+    await client(AddInterestCommand('funny jokes'))
+    await client(AddHatedInterestCommand('unfunny jokes'))
+
+    # Removing them again
+    await client(RemoveInterestCommand('funny jokes'))
+    await client(RemoveHatedInterestCommand('unfunny jokes'))
+
+
+Recommendations can be requested and listened for using the commands and events. There are several commands and events, this example is for getting item recommendations:
+
+.. code-block:: python
+
+    from aioslsk.events import ItemRecommendationsEvent
+    from aioslsk.commands import GetItemRecommendationsCommand
+
+    async def on_item_recommendations(event: ItemRecommendationsEvent):
+        if len(event.recommendations) > 0:
+            print(f"Best recommendation for item {event.item} : {event.recommendations[0]}")
+
+    client.events.register(ItemRecommendationsEvent, on_item_recommendations)
+
+    await client(GetItemRecommendationsCommand('funny jokes'))
 
 
 Protocol Messages
