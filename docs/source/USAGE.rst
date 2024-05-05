@@ -7,7 +7,7 @@ Starting the client
 
 .. warning::
 
-    The server has an anti-DDOS mechanism, be careful when connecting / disconnecting too quickly or you will get banned
+    The server has an anti-DDOS mechanism, be careful when connecting and disconnecting too quickly or you will get banned
 
 
 Before starting the client, ensure you create a settings object where you have configured at least the `credentials` section:
@@ -24,10 +24,10 @@ Before starting the client, ensure you create a settings object where you have c
         )
     )
 
-It's also recommended to configure a listening port and a downloads directory. For the full list of configuration options see:
+It's also recommended to configure a listening port and a downloads directory. For the full list of configuration options see: :doc:`./SETTINGS`
 
 
-Next create and start the client. Calling :func:`SoulSeekClient.start` will connect the listening ports and to the server. Next perform a login and, for example, send a private message:
+Next create and start the client. Calling :meth:`.SoulSeekClient.start` will connect the listening ports and to the server. Next perform a login and, for example, send a private message:
 
 .. code-block:: python
 
@@ -168,7 +168,7 @@ To start downloading a file:
     # The following will attempt to start the download in the background
     transfer: Transfer = await client.transfers.download(search_result.username, search_result.shared_items[0].filename)
 
-Transfers can be paused or aborted, aborting will remove the partially downloaded file. To resume the paused transfer call the :func:`.TransferManager.queue` method. Aborted transfers can be requeued as well but since the file was removed the transfer will be restarted from the beginning:
+Transfers can be paused or aborted, aborting will remove the partially downloaded file. To resume the paused transfer call the :meth:`.TransferManager.queue` method. Aborted transfers can be requeued as well but since the file was removed the transfer will be restarted from the beginning:
 
 .. code-block:: python
 
@@ -300,6 +300,9 @@ To receive room messages listen to the :class:`.RoomMessageEvent`:
     client.events.register(RoomMessageEvent, room_message_listener)
 
 
+Several commands and events specific to private rooms are available. See the :mod:`aioslsk.commands` and :mod:`aioslsk.events` references
+
+
 Private Messages
 ================
 
@@ -324,18 +327,113 @@ To receive private message listen for the :class:`.PrivateMessageEvent`:
 Sharing
 =======
 
-Adding / Removing Directories
------------------------------
+The client provides a mechanism for scanning and caching the files you want to share. Directories you wish to share can be :ref:`added and removed on the fly <shares_add_remove_scan>` or provided through the settings:
 
-The client provides a mechanism for scanning and caching the files you want to share. Since it's possible to share millions of files the file information is stored in memory as well as in a cache on disk. When starting the client through :func:`.SoulSeekClient.start` the cache will be read and the files configured in the settings will be scanned.
+.. code-block:: python
 
-It is possible to add or remove shared directories on the fly.
+    from aioslsk.settings import (
+        Settings,
+        CredentialsSettings,
+        SharesSettings,
+        SharedDirectorySettingEntry,
+    )
+    from aioslsk.shares.model import DirectoryShareMode
+
+    # Configure credentials, configure to scan the shares on start, and set the
+    # desired shared directories
+    settings: Settings = Settings(
+        credentials=CredentialsSettings(username='my_user', password='Secret123'),
+        shares=SharesSettings(
+            scan_on_start=True,
+            directories=[
+                SharedDirectorySettingEntry(
+                    'music/metal',
+                    share_mode=DirectoryShareMode.EVERYONE
+                ),
+                SharedDirectorySettingEntry(
+                    'music/punk',
+                    share_mode=DirectoryShareMode.FRIENDS
+                ),
+                SharedDirectorySettingEntry(
+                    'music/folk',
+                    share_mode=DirectoryShareMode.USERS,
+                    users=['secret guy']
+                )
+            ]
+        )
+    )
+
+
+When providing a shares cache the client will automatically read and store the shared items based on what you configured. This example shows how to use the a cache that stores the files using Python's :py:mod:`shelve` module:
+
+.. code-block:: python
+
+    import asyncio
+    from aioslsk.client import SoulSeekClient
+    from aioslsk.shares.cache import SharesShelveCache
+    from aioslsk.settings import (Settings, CredentialsSettings, SharesSettings)
+
+    async def main():
+        settings: Settings = Settings(
+            credentials=CredentialsSettings(username='my_user', password='Secret123'),
+            shares=SharesSettings(
+                scan_on_start=False,
+                directories=[
+                    # Some directories you wish to share
+                ]
+            )
+        )
+
+        cache = SharesShelveCache(data_directory='documents/shares_cache/')
+
+        async with SoulSeekClient(settings, shares_cache=cache) as client:
+            await client.login()
+
+            # If there were shared items stored in the cache this will output
+            # the total amount of directories and files shared
+            dir_count, file_count = client.shares.get_stats()
+            print(f"currently sharing {dir_count} directories and {file_count} files")
+
+            # Manually write the cache to disk
+            client.shares.write_cache()
+
+    asyncio.run(main())
+
+
+.. _shares_add_remove_scan:
+
+Adding / Removing / Scanning Directories
+----------------------------------------
+
+It is possible to add or remove shared directories on the fly. Following example shows how to add, remove and scan individual or all directories:
+
+.. code-block:: python
+
+    from aioslsk.shares.model import DirectoryShareMode
+
+    # Add a shared directory only shared with friends
+    shared_dir = client.shares.add_shared_directory(
+        'my/shared/directory',
+        share_mode=DirectoryShareMode.FRIENDS
+    )
+
+    # Scan the directory files and file attributes
+    await client.shares.scan_directory_files(shared_dir)
+    await client.shares.scan_directory_file_attributes(shared_dir)
+
+    # Scanning all current shared directories
+    await client.shares.scan()
+
+    # Removing a shared directory
+    client.shares.remove_shared_directory(shared_dir)
+
+When rescanning an individual or all directories newly found items will be added and items that are no longer found will be removed. Attributes will be scanned for the newly found files and files that have been modified.
 
 
 Defining a custom executor for scanning
 ---------------------------------------
 
-By default the :py:mod:`asyncio` executor is used for scanning shares. You can play around with using different types of executors by using the `executor_factory` parameter when creating the client. The client will call the factory to create a new executor each time the client is started and will destroy it when :func:`SoulSeekClient.stop` is called.
+By default the :py:mod:`asyncio` executor is used for scanning shares. You can play around with using different types of executors by using the `executor_factory` parameter when creating the client. The client will call the factory to create a new executor each time the client is started and will destroy it when :meth:`.SoulSeekClient.stop` is called.
 
 Following example shows how to use a :py:class:`concurrent.futures.ProcessPoolExecutor`:
 
@@ -417,7 +515,7 @@ The :class:`.UserManager` is responsible for :class:`.User` object storage and m
     print(f"User {user.name} is sharing {user.shared_file_count} files")
 
 
-If necessary you can clear certain parameters for a user, the following code will clear the :attr:`.User.picture`` and :attr:`.User.description` attributes:
+If necessary you can clear certain parameters for a user, the following code will clear the :attr:`.User.picture` and :attr:`.User.description` attributes:
 
 .. code-block:: python
 
@@ -452,6 +550,45 @@ Internally, the library will automatically track users as well:
 If a user is tracked it holds a reference to the :class:`.User` object.
 
 
+Interests and Recommendations
+=============================
+
+Interests and hated interests are defined in the settings (``interests`` section) are automatically advertised to the server after logging on. Commands can be used to add or remove them while after being logged in:
+
+.. code-block:: python
+
+    from aioslsk.commands import (
+        AddInterestCommand,
+        AddHatedInterestCommand,
+        RemoveInterestCommand,
+        RemoveHatedInterestCommand,
+    )
+
+    # Adding an interested and hated interest
+    await client(AddInterestCommand('funny jokes'))
+    await client(AddHatedInterestCommand('unfunny jokes'))
+
+    # Removing them again
+    await client(RemoveInterestCommand('funny jokes'))
+    await client(RemoveHatedInterestCommand('unfunny jokes'))
+
+
+Recommendations can be requested and listened for using the commands and events. There are several commands and events, this example is for getting item recommendations:
+
+.. code-block:: python
+
+    from aioslsk.events import ItemRecommendationsEvent
+    from aioslsk.commands import GetItemRecommendationsCommand
+
+    async def on_item_recommendations(event: ItemRecommendationsEvent):
+        if len(event.recommendations) > 0:
+            print(f"Best recommendation for item {event.item} : {event.recommendations[0]}")
+
+    client.events.register(ItemRecommendationsEvent, on_item_recommendations)
+
+    await client(GetItemRecommendationsCommand('funny jokes'))
+
+
 Protocol Messages
 =================
 
@@ -483,4 +620,4 @@ For peers it works the same way, except you need to provide the username as the 
         PeerUserInfoRequest.Request()
     )
 
-Keep in mind that sending a messages to peers is more unreliable than sending to the server. The :meth:`.Network.send_peer_messages` method will raise an exception if a connection to the peer failed. Both :meth:`.Network.send_peer_messages` and :method:`.Network.send_server_messages` have an parameter called `raise_on_error`, when set to `True` an exception will be raised otherwise the methods will return a list containing tuples containing the message and the result of the message attempted to send, `None` in case of success and an `Exception` object in case of failure.
+Keep in mind that sending a messages to peers is more unreliable than sending to the server. The :meth:`.Network.send_peer_messages` method will raise an exception if a connection to the peer failed. Both :meth:`.Network.send_peer_messages` and :meth:`.Network.send_server_messages` have an parameter called `raise_on_error`, when set to `True` an exception will be raised otherwise the methods will return a list containing tuples containing the message and the result of the message attempted to send, `None` in case of success and an `Exception` object in case of failure.

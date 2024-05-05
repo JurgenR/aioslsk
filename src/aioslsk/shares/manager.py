@@ -288,14 +288,15 @@ class SharesManager(BaseManager):
     async def get_shared_item(self, remote_path: str, username: Optional[str] = None) -> SharedItem:
         """Gets a shared item from the cache based on the given file path. If
         the file does not exist in the `shared_items` or the file is present
-        in the cache but does not exist on disk a `FileNotFoundError` is raised
+        in the cache but does not exist on disk a :class:`.FileNotFoundError` is
+        raised
 
         If a `username` is passed this will also check if the file is locked
-        and raise a `FileNotSharedError` if the file is not accessible for that
-        user
+        and raise a :class:`.FileNotSharedError` if the file is not accessible
+        for that user
 
         :param remote_path: the remote_path
-        :param username:
+        :param username: optional username to check if the file is shared or not
         :raise FileNotFoundError: filename was not found in shared_items or was found
             but did not exist on disk
         :raise FileNotSharedError: file is found, but locked for the given
@@ -323,13 +324,15 @@ class SharesManager(BaseManager):
             share_mode: DirectoryShareMode = DirectoryShareMode.EVERYONE,
             users: Optional[List[str]] = None) -> SharedDirectory:
         """Adds a shared directory. This method will call `generate_alias` and
-        add the directory to the directory map.
+        add the directory to the directory map. This method will not scan the
+        directory, for scanning see the :meth:`scan`, :meth:`scan_directory_files`
+        and :meth:`scan_directory_file_attributes` methods.
 
         :param shared_directory: path of the shared directory
         :param share_mode: the share mode for the directory
         :param users: in case the share mode is `USERS`, a list of users to
             share it with
-        :return: a `SharedDirectory` object
+        :return: a :class:`.SharedDirectory` object
         """
         # Calc absolute path, generate an alias and store it
         abs_directory = os.path.normpath(os.path.abspath(shared_directory))
@@ -385,7 +388,7 @@ class SharesManager(BaseManager):
         directory get returned back to the parent directory. In this case file
         `song_two.mp3` will be shared with EVERYONE again
 
-        :param shared_directory: `SharedDirectory` instance to remove
+        :param shared_directory: :class:`.SharedDirectory` instance to remove
         :raise SharedDirectoryError: raised when the passed `shared_directory`
             was not added to the manager
         """
@@ -408,7 +411,7 @@ class SharesManager(BaseManager):
     async def scan_directory_files(self, shared_directory: SharedDirectory):
         """Scans the files for the given `shared_directory`
 
-        :param shared_directory: `SharedDirectory` instance to scan
+        :param shared_directory: :class:`.SharedDirectory` instance to scan
         :raise SharedDirectoryError: raised when the passed `shared_directory`
             was not added to the manager
         """
@@ -444,7 +447,10 @@ class SharesManager(BaseManager):
             shared_directory.items |= shared_items
 
             # Remove all items from the cache that weren't in the returned items
-            # set
+            # set. Because the `modified` parameter is part of the hash items
+            # with a changed `modified` parameter will also be removed meaning
+            # their attributes will be reset and these files attributes need
+            # to be rescanned
             shared_directory.items -= (shared_directory.items ^ shared_items)
 
         self._build_term_map(shared_directory)
@@ -455,10 +461,10 @@ class SharesManager(BaseManager):
         only files that do not yet have attributes will be scanned
 
         The results of the scan are handled internally and are automatically to
-        the `SharedItem` object for which the scan was performed
+        the :class:`.SharedItem` object for which the scan was performed
 
-        :param shared_directory: `SharedDirectory` instance for which the files
-            need to be scanned
+        :param shared_directory: :class:`.SharedDirectory` instance for which
+            the files need to be scanned
         :return: List of futures for each file that needs to be scanned
         """
         loop = asyncio.get_running_loop()
@@ -499,8 +505,8 @@ class SharesManager(BaseManager):
         """Scan the files and their attributes for all directories currently
         defined in the `shared_directories`
 
-        This method will emit a `ScanCompleteEvent` on the event bus and report
-        the shares to the server
+        This method will emit a :class:`.ScanCompleteEvent` on the event bus
+        and report the shares to the server
         """
         start_time = time.perf_counter()
 
@@ -675,7 +681,7 @@ class SharesManager(BaseManager):
 
     def create_shares_reply(self, username: str) -> Tuple[List[DirectoryData], List[DirectoryData]]:
         """Creates a complete list of the currently shared items as a reply to
-        a `PeerSharesRequest` messages
+        a :class:`.PeerSharesRequest` messages
 
         :param username: username of the user requesting the shares reply, this
             is used to determine the locked results
