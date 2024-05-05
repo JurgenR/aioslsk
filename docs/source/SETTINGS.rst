@@ -4,8 +4,8 @@ Settings
 
 This is a full list of settings used by the library
 
-User
-----
+Credentials
+-----------
 
 +------------------------------+--------+------------------------------------------------------------------------+-----------+
 |          Parameter           |  Type  |                              Description                               |  Default  |
