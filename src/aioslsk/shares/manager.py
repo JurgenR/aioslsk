@@ -237,13 +237,34 @@ class SharesManager(BaseManager):
         self.write_cache()
 
     def load_from_settings(self):
-        """Loads the directories from the settings"""
-        for shared_directory in self._settings.shares.directories:
-            self.add_shared_directory(
-                shared_directory.path,
-                share_mode=shared_directory.share_mode,
-                users=shared_directory.users
-            )
+        """Loads the shared directories from the settings. Existing directories
+        will be updated, non-existing directories added, directories that no
+        longer exist will be removed
+        """
+        new_shared_directories: List[SharedDirectory] = []
+
+        # Add or update directories
+        for directory_entry in self._settings.shares.directories:
+            try:
+                shared_directory = self.get_shared_directory(directory_entry.path)
+            except SharedDirectoryError:
+                shared_directory = self.add_shared_directory(
+                    directory_entry.path,
+                    share_mode=directory_entry.share_mode,
+                    users=directory_entry.users
+                )
+            else:
+                self.update_shared_directory(
+                    shared_directory,
+                    share_mode=directory_entry.share_mode,
+                    users=directory_entry.users or []
+                )
+
+            new_shared_directories.append(shared_directory)
+
+        self._shared_directories = new_shared_directories
+
+        self.rebuild_term_map()
 
     def read_cache(self):
         """Read the directories from the cache"""
