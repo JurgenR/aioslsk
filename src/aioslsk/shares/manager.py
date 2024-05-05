@@ -333,12 +333,16 @@ class SharesManager(BaseManager):
         :param users: in case the share mode is `USERS`, a list of users to
             share it with
         :return: a :class:`.SharedDirectory` object
+        :raise SharedDirectoryError: if the directory is already shared
         """
-        # Calc absolute path, generate an alias and store it
+        if self.is_directory_shared(shared_directory):
+            raise SharedDirectoryError(
+                f"directory {shared_directory} is already shared")
+
+        # Generate an absolute path, alias and create the object
         abs_directory = os.path.normpath(os.path.abspath(shared_directory))
         alias = self.generate_alias(abs_directory)
 
-        # Check if we have an existing shared directory, otherwise return it
         directory_object = SharedDirectory(
             shared_directory,
             abs_directory,
@@ -346,9 +350,6 @@ class SharesManager(BaseManager):
             share_mode=share_mode,
             users=users or []
         )
-        for shared_dir in self._shared_directories:
-            if shared_dir == directory_object:
-                return shared_dir
 
         # If the new directory is a child of an existing directory, move items
         # to the child directory and remove them from the parent directory
@@ -362,7 +363,32 @@ class SharesManager(BaseManager):
         self._shared_directories.append(directory_object)
         return directory_object
 
-    def remove_shared_directory(self, directory: SharedDirectory):
+    def update_shared_directory(
+            self, directory: Union[str, SharedDirectory],
+            share_mode: Optional[DirectoryShareMode] = None,
+            users: Optional[List[str]] = None) -> SharedDirectory:
+        """Updates `share_mode` and `users` values for the given directory
+
+        :param directory: if a string is given this method will attempt to find
+            the shared directory based on the absolute path
+        :return: the updated directory
+        :raise SharedDirectoryError: if the given directory is a string and not
+            in the list of shared directories
+        """
+        if isinstance(directory, str):
+            shared_directory = self.get_shared_directory(directory)
+        else:
+            shared_directory = directory
+
+        if share_mode is not None:
+            shared_directory.share_mode = share_mode
+
+        if users is not None:
+            shared_directory.users = users
+
+        return shared_directory
+
+    def remove_shared_directory(self, directory: Union[str, SharedDirectory]) -> SharedDirectory:
         """Removes the given shared directory. If the directory was a
         subdirectory of another shared directory its items will be moved into
         that directory
@@ -389,24 +415,57 @@ class SharesManager(BaseManager):
         `song_two.mp3` will be shared with EVERYONE again
 
         :param shared_directory: :class:`.SharedDirectory` instance to remove
-        :raise SharedDirectoryError: raised when the passed `shared_directory`
-            was not added to the manager
+        :return: the removed directory
+        :raise SharedDirectoryError: raised when the passed `directory` was not
+            added to the manager
         """
-        if directory not in self._shared_directories:
-            raise SharedDirectoryError(
-                "attempted to remove directory which was not added to the manager"
-            )
+        if isinstance(directory, str):
+            shared_directory = self.get_shared_directory(directory)
+        else:
+            if directory not in self._shared_directories:
+                raise SharedDirectoryError(
+                    "attempted to remove directory which was not added to the manager"
+                )
+            else:
+                shared_directory = directory
 
-        self._shared_directories.remove(directory)
+        self._shared_directories.remove(shared_directory)
 
-        parents = self._get_parent_directories(directory)
+        parents = self._get_parent_directories(shared_directory)
         # If the directory has a parent directory, move all items into that
         # directory
         if parents:
             parent = parents[-1]
-            parent.items |= directory.items
+            parent.items |= shared_directory.items
 
         self._cleanup_term_map()
+
+        return shared_directory
+
+    def get_shared_directory(self, directory: str) -> SharedDirectory:
+        """Calculates the absolute path of given `directory` and looks for the
+        matching :class:`SharedDirectory` instance
+
+        :raise SharedDirectoryError: if the directory is not found
+        """
+        abs_path = os.path.normpath(os.path.abspath(directory))
+        for shared_directory in self.shared_directories:
+            if shared_directory.absolute_path == abs_path:
+                return shared_directory
+
+        raise SharedDirectoryError(
+            f"did not find shared directory with path : {directory}")
+
+    def is_directory_shared(self, directory: str) -> bool:
+        """Checks if a directory is already a shared directory by checking the
+        absolute path of that directory
+        """
+        try:
+            self.get_shared_directory(directory)
+        except SharedDirectoryError:
+            return False
+        else:
+            return True
 
     async def scan_directory_files(self, shared_directory: SharedDirectory):
         """Scans the files for the given `shared_directory`

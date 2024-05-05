@@ -1,5 +1,9 @@
 from aioslsk.events import EventBus
-from aioslsk.exceptions import FileNotFoundError, FileNotSharedError
+from aioslsk.exceptions import (
+    FileNotFoundError,
+    FileNotSharedError,
+    SharedDirectoryError,
+)
 from aioslsk.shares.manager import SharesManager, extract_attributes
 from aioslsk.shares.model import DirectoryShareMode, SharedDirectory, SharedItem
 from aioslsk.naming import DefaultNamingStrategy, KeepDirectoryStrategy
@@ -368,6 +372,56 @@ class TestSharesManagerSharedDirectoryManagement:
         assert len(manager.shared_directories[0].items) == 3
         assert len(manager.shared_directories[1].items) == 1
 
+    @pytest.mark.parametrize(
+        'directory_path',
+        [
+            ('/home/user/music'),
+            ('/home/user/music/something/../')
+        ]
+    )
+    def test_getSharedDirectory_returnObject(self, manager: SharesManager, directory_path: str):
+        path = '/home/user/music'
+        expected_shared_dir = manager.add_shared_directory(path)
+
+        shared_dir = manager.get_shared_directory(directory_path)
+        assert shared_dir == expected_shared_dir
+
+    @pytest.mark.parametrize(
+        'directory_path',
+        [
+            ('/home/user/'),
+            ('/home/user'),
+            ('/home/user/music/some'),
+            ('/home/user/music/some/thing/..')
+        ]
+    )
+    def test_getSharedDirectory_raisesError(self, manager: SharesManager, directory_path: str):
+        path = '/home/user/music'
+        manager.add_shared_directory(path)
+
+        with pytest.raises(SharedDirectoryError):
+            manager.get_shared_directory(directory_path)
+
+    def test_isDirectoryShared_returnTrue(self, manager: SharesManager):
+        path = '/home/user/music'
+        manager.add_shared_directory(path)
+
+        value = manager.is_directory_shared('/home/user/music/something/../')
+        assert value is True
+
+    def test_isDirectoryShared_returnFalse(self, manager: SharesManager):
+        path = '/home/user/music'
+        manager.add_shared_directory(path)
+
+        value = manager.is_directory_shared('/home/user/music/something')
+        assert value is False
+
+    def test_addSharedDirectory_alreadyAdded(self, manager: SharesManager):
+        manager.add_shared_directory('test/path')
+
+        with pytest.raises(SharedDirectoryError):
+            manager.add_shared_directory('test/inbetween/../path')
+
     @pytest.mark.asyncio
     async def test_addSharedDirectory_existingSubDirectory(self, manager: SharesManager):
         manager.load_from_settings()
@@ -377,6 +431,53 @@ class TestSharesManagerSharedDirectoryManagement:
         assert len(manager.shared_directories) == 2
         assert len(manager.shared_directories[0].items) == 3
         assert len(manager.shared_directories[1].items) == 1
+
+    def test_updateSharedDirectory(self, manager: SharesManager):
+        directory0 = manager.add_shared_directory(
+            'test/path',
+            share_mode=DirectoryShareMode.USERS,
+            users=['user1']
+        )
+
+        directory1 = manager.update_shared_directory(
+            'test/path',
+            share_mode=None,
+            users=['user1', 'user2']
+        )
+
+        assert directory1 == directory0
+        assert directory1.share_mode == DirectoryShareMode.USERS
+        assert directory1.users == ['user1', 'user2']
+
+        directory2 = manager.update_shared_directory(
+            'test/path/test/../',
+            share_mode=DirectoryShareMode.EVERYONE,
+            users=None
+        )
+
+        assert directory2 == directory0
+        assert directory2.share_mode == DirectoryShareMode.EVERYONE
+        assert directory2.users == ['user1', 'user2']
+
+    def test_removeSharedDirectory_usingPath(self, manager: SharesManager):
+        directory = manager.add_shared_directory(
+            'test/path',
+            share_mode=DirectoryShareMode.USERS,
+            users=['user1']
+        )
+
+        removed_directory = manager.remove_shared_directory('test/path')
+
+        assert removed_directory == directory
+        assert directory not in manager.shared_directories
+
+    def test_removeSharedDirectory_nonExisting_shouldRaise(self, manager: SharesManager):
+        directory = manager.add_shared_directory('test/path')
+
+        manager.remove_shared_directory('test/path')
+
+        with pytest.raises(SharedDirectoryError):
+            manager.remove_shared_directory(directory)
 
     @pytest.mark.asyncio
     async def test_removeSharedDirectory_withSubdir(self, manager: SharesManager):
