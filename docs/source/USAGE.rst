@@ -27,7 +27,7 @@ Before starting the client, ensure you create a settings object where you have c
 It's also recommended to configure a listening port and a downloads directory. For the full list of configuration options see: :doc:`./SETTINGS`
 
 
-Next create and start the client. Calling :func:`SoulSeekClient.start` will connect the listening ports and to the server. Next perform a login and, for example, send a private message:
+Next create and start the client. Calling :meth:`.SoulSeekClient.start` will connect the listening ports and to the server. Next perform a login and, for example, send a private message:
 
 .. code-block:: python
 
@@ -168,7 +168,7 @@ To start downloading a file:
     # The following will attempt to start the download in the background
     transfer: Transfer = await client.transfers.download(search_result.username, search_result.shared_items[0].filename)
 
-Transfers can be paused or aborted, aborting will remove the partially downloaded file. To resume the paused transfer call the :func:`.TransferManager.queue` method. Aborted transfers can be requeued as well but since the file was removed the transfer will be restarted from the beginning:
+Transfers can be paused or aborted, aborting will remove the partially downloaded file. To resume the paused transfer call the :meth:`.TransferManager.queue` method. Aborted transfers can be requeued as well but since the file was removed the transfer will be restarted from the beginning:
 
 .. code-block:: python
 
@@ -324,7 +324,7 @@ To receive private message listen for the :class:`.PrivateMessageEvent`:
 Sharing
 =======
 
-The client provides a mechanism for scanning and caching the files you want to share. Directories you wish to share can be provided through the settings:
+The client provides a mechanism for scanning and caching the files you want to share. Directories you wish to share can be :ref:`added and removed on the fly <shares_add_remove_scan>` or provided through the settings:
 
 .. code-block:: python
 
@@ -391,11 +391,13 @@ When providing a shares cache the client will automatically read and store the s
             dir_count, file_count = client.shares.get_stats()
             print(f"currently sharing {dir_count} directories and {file_count} files")
 
-            # Write back the cache to disk
+            # Manually write the cache to disk
             client.shares.write_cache()
 
     asyncio.run(main())
 
+
+.. _shares_add_remove_scan:
 
 Adding / Removing / Scanning Directories
 ----------------------------------------
@@ -428,7 +430,7 @@ When rescanning an individual or all directories newly found items will be added
 Defining a custom executor for scanning
 ---------------------------------------
 
-By default the :py:mod:`asyncio` executor is used for scanning shares. You can play around with using different types of executors by using the `executor_factory` parameter when creating the client. The client will call the factory to create a new executor each time the client is started and will destroy it when :func:`.SoulSeekClient.stop` is called.
+By default the :py:mod:`asyncio` executor is used for scanning shares. You can play around with using different types of executors by using the `executor_factory` parameter when creating the client. The client will call the factory to create a new executor each time the client is started and will destroy it when :meth:`.SoulSeekClient.stop` is called.
 
 Following example shows how to use a :py:class:`concurrent.futures.ProcessPoolExecutor`:
 
@@ -510,7 +512,7 @@ The :class:`.UserManager` is responsible for :class:`.User` object storage and m
     print(f"User {user.name} is sharing {user.shared_file_count} files")
 
 
-If necessary you can clear certain parameters for a user, the following code will clear the :attr:`.User.picture`` and :attr:`.User.description` attributes:
+If necessary you can clear certain parameters for a user, the following code will clear the :attr:`.User.picture` and :attr:`.User.description` attributes:
 
 .. code-block:: python
 
@@ -576,4 +578,4 @@ For peers it works the same way, except you need to provide the username as the 
         PeerUserInfoRequest.Request()
     )
 
-Keep in mind that sending a messages to peers is more unreliable than sending to the server. The :meth:`.Network.send_peer_messages` method will raise an exception if a connection to the peer failed. Both :meth:`.Network.send_peer_messages` and :method:`.Network.send_server_messages` have an parameter called `raise_on_error`, when set to `True` an exception will be raised otherwise the methods will return a list containing tuples containing the message and the result of the message attempted to send, `None` in case of success and an `Exception` object in case of failure.
+Keep in mind that sending a messages to peers is more unreliable than sending to the server. The :meth:`.Network.send_peer_messages` method will raise an exception if a connection to the peer failed. Both :meth:`.Network.send_peer_messages` and :meth:`.Network.send_server_messages` have an parameter called `raise_on_error`, when set to `True` an exception will be raised otherwise the methods will return a list containing tuples containing the message and the result of the message attempted to send, `None` in case of success and an `Exception` object in case of failure.

@@ -288,14 +288,15 @@ class SharesManager(BaseManager):
     async def get_shared_item(self, remote_path: str, username: Optional[str] = None) -> SharedItem:
         """Gets a shared item from the cache based on the given file path. If
         the file does not exist in the `shared_items` or the file is present
-        in the cache but does not exist on disk a `FileNotFoundError` is raised
+        in the cache but does not exist on disk a :class:`.FileNotFoundError` is
+        raised
 
         If a `username` is passed this will also check if the file is locked
-        and raise a `FileNotSharedError` if the file is not accessible for that
-        user
+        and raise a :class:`.FileNotSharedError` if the file is not accessible
+        for that user
 
         :param remote_path: the remote_path
-        :param username:
+        :param username: optional username to check if the file is shared or not
         :raise FileNotFoundError: filename was not found in shared_items or was found
             but did not exist on disk
         :raise FileNotSharedError: file is found, but locked for the given
@@ -460,7 +461,7 @@ class SharesManager(BaseManager):
         only files that do not yet have attributes will be scanned
 
         The results of the scan are handled internally and are automatically to
-        the `SharedItem` object for which the scan was performed
+        the :class:`.SharedItem` object for which the scan was performed
 
         :param shared_directory: :class:`.SharedDirectory` instance for which
             the files need to be scanned

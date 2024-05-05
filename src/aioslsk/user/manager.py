@@ -193,8 +193,8 @@ class UserManager(BaseManager):
 
     async def untrack_user(self, username: str, flag: TrackingFlag):
         """Removes the given flag from the user and untracks the user (send
-        `RemoveUser` message) in case none of the AddUser tracking flags are
-        set or the removed tracking flag is `TrackingFlag.REQUESTED`.
+        :class:`.RemoveUser` message) in case none of the AddUser tracking flags
+        are set or the removed tracking flag is `TrackingFlag.REQUESTED`.
 
         The user will be removed from the tracked users if there are no flags
         left, if there is still a reference left to the user it will remain
