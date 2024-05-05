@@ -436,7 +436,7 @@ class SharesManager(BaseManager):
         # directory
         if parents:
             parent = parents[-1]
-            parent.items |= directory.items
+            parent.items |= shared_directory.items
 
         self._cleanup_term_map()
 
