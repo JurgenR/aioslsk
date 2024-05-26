@@ -7,6 +7,8 @@ Exporting / Importing
 
 The settings make use of the pydantic-settings_ library, following examples show how it can be used to export and import the settings to a JSON files.
 
+Writing settings to a JSON file:
+
 .. code-block:: python
 
     import json
@@ -17,11 +19,19 @@ The settings make use of the pydantic-settings_ library, following examples show
     )
     settings_filename = 'my_settings.json'
 
-    # Writing settings to a json file
     with open(settings_filename, 'w') as fh:
         fh.write(settings.dump_model(mode='json'))
 
-    # Reading settings from a JSON file
+
+Reading settings from a JSON file:
+
+.. code-block:: python
+
+    import json
+    from aioslsk.settings import Settings, CredentialsSettings
+
+    settings_filename = 'my_settings.json'
+
     with open(settings_filename, 'r') as fh:
         py_settings = json.load(fh)
 
