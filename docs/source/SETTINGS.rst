@@ -2,6 +2,35 @@
 Settings
 ========
 
+Exporting / Importing
+=====================
+
+The settings make use of the pydantic-settings_ library, following examples show how it can be used to export and import the settings to a JSON files.
+
+.. code-block:: python
+
+    import json
+    from aioslsk.settings import Settings, CredentialsSettings
+
+    settings = Settings(
+        credentials=CredentialsSettings(username='user', password='testpass')
+    )
+    settings_filename = 'my_settings.json'
+
+    # Writing settings to a json file
+    with open(settings_filename, 'w') as fh:
+        fh.write(settings.dump_model(mode='json'))
+
+    # Reading settings from a JSON file
+    with open(settings_filename, 'r') as fh:
+        py_settings = json.load(fh)
+
+    loaded_settings = Settings(**py_settings)
+
+
+Settings
+========
+
 This is a full list of settings used by the library
 
 Credentials
@@ -150,3 +179,6 @@ Debug
 +----------------------------+---------------------+----------------------------------------------------+---------+
 | debug.log_connection_count | boolean             | Periodically log the amount of current connections | false   |
 +----------------------------+---------------------+----------------------------------------------------+---------+
+
+
+.. _pydantic-settings: https://docs.pydantic.dev/latest/concepts/pydantic_settings/
