@@ -149,6 +149,15 @@ class UserManager(BaseManager):
         self._tracked_users = dict()
         self._privileged_users = set()
 
+    def get_tracking_flags(self, username: str) -> TrackingFlag:
+        """Returns current tracking flags of the user with given username
+
+        :param username: username of the user
+        """
+        if username in self._tracked_users:
+            return self._tracked_users[username].flags
+        return TrackingFlag(0)
+
     def set_tracking_flag(self, user: User, flag: TrackingFlag = TrackingFlag.REQUESTED) -> bool:
         """Set given tracking flag for the user. This method returns `True` if
         the user previously had not tracking flags set.
@@ -183,15 +192,7 @@ class UserManager(BaseManager):
                 self.unset_tracking_flag(user, flag)
                 raise
 
-    async def track_friends(self):
-        """Starts tracking the users defined in the friends list"""
-        tasks = []
-        for friend in self._settings.users.friends:
-            tasks.append(self.track_user(friend, TrackingFlag.FRIEND))
-
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-    async def untrack_user(self, username: str, flag: TrackingFlag):
+    async def untrack_user(self, username: str, flag: TrackingFlag = TrackingFlag.REQUESTED):
         """Removes the given flag from the user and untracks the user (send
         :class:`.RemoveUser` message) in case none of the AddUser tracking flags
         are set or the removed tracking flag is `TrackingFlag.REQUESTED`.
@@ -219,6 +220,23 @@ class UserManager(BaseManager):
                 if username in self._tracked_users:
                     del self._tracked_users[username]
                 await self._event_bus.emit(UserUntrackingEvent(user=user))
+
+    async def track_friend(self, username: str):
+        """Request to track a friend with given username"""
+        await self.track_user(username, TrackingFlag.FRIEND)
+
+    async def track_friends(self):
+        """Starts tracking the users defined in the friends list"""
+        tasks = [
+            self.track_friend(friend)
+            for friend in self._settings.users.friends
+        ]
+
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def untrack_friend(self, username: str):
+        """Request to stop tracking a friend with given username"""
+        await self.untrack_user(username, TrackingFlag.FRIEND)
 
     @on_message(AdminMessage.Response)
     async def _on_admin_message(self, message: AdminMessage.Response, connection: ServerConnection):

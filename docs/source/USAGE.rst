@@ -533,27 +533,96 @@ If necessary you can clear certain parameters for a user, the following code wil
     user.clear(info=True)
 
 
+.. _users-tracking:
+
 User Tracking
 -------------
 
-The server will automatically send updates for users in the following situations:
+The server will send user updates in the following situations:
 
-1. A user has been added with the :class:`.AddUser` message
-
-    * Automatic user status / privileges updates
-
-2. A user is part of the same room you are in:
+1. A user has been added with the AddUser_ message
 
     * Automatic user status / privileges updates
-    * Automatic user sharing updates
 
-Internally, the library will automatically track users as well:
+2. A user is part of the same room you are in
 
-* Users added to the friends list in the settings. These users will automatically be tracked after logging on
-* Users for which we have open transfers. Tracked to make decisions on which transfers to start next and prioritization
-* Users in the same room
+    * Automatic user status / privileges updates
+    * Automatic user shares updates (amount of files / directories shared)
 
-If a user is tracked it holds a reference to the :class:`.User` object.
+Tracking of a user using the AddUser_ message can be undone using the RemoveUser_ message. Whenever the server sends an update for a user an event will be emitted, the following events can be listened to:
+
+* :class:`.UserStatusUpdateEvent`
+* :class:`.UserStatsUpdateEvent`
+
+There are multiple situations where the library keeps track of a user, internally they are stored as flags:
+
+* Requested: User has requested to track a user
+* Friends: Friends will be automatically tracked (see users-friends_ section below)
+* Transfers: Users for which there are unfinished transfers will be tracked to make decisions on upload priority
+
+When the last tracking flag is removed the library will issue a RemoveUser_ message to the server and updates will no longer be received. Following example shows how to track/untrack a user and getting the tracking flags:
+
+.. code-block:: python
+
+    from aioslsk.user.model import TrackingFlag
+
+    client: SoulSeekClient = SoulSeekClient(settings)
+
+    # Track a user. TrackingFlag.REQUESTED is the default flag
+    client.users.track_user('interesting user')
+
+    # Get the tracking flags for a user
+    flags = client.users.get_tracking_flags('interesting user')
+    if TrackingFlag.REQUESTED in flags:
+        print("Tracking user because we requested it")
+
+    # Stop tracking a user
+    client.users.untrack_user('interesting user')
+
+Sending the command does not necessarily mean the tracking of the user was successful, if the user we attempted to track does not exist then the tracking will fail. Events related to tracking:
+
+* :class:`.UserTrackingEvent`
+* :class:`.UserTrackingFailedEvent`
+* :class:`.UserUntrackingEvent`
+
+
+.. _users-friends:
+
+Friends
+-------
+
+A list of friends can found in the settings under ``users.friends``. This list is used to:
+
+* Prioritize uploads
+* Lock files depending on whether the user is in the list
+* Automatically request the server to track the users in the list after logging on
+
+Adding a friend on the fly means adding it to friends set and requesting to track the user:
+
+.. code-block:: python
+
+    from aioslsk.settings import Settings, CredentialsSettings, UsersSettings
+
+    settings: Settings = Settings(
+        credentials=CredentialsSettings(username='my_user', password='Secret123'),
+        users=UsersSettings(
+            friends={
+                'good friend',
+                'best friend'
+            }
+        )
+    )
+    client: SoulSeekClient = SoulSeekClient(settings)
+
+    new_friend = 'awesome friend'
+
+    # Add a new friend to the list and track him
+    settings.users.friends.add(new_friend)
+    await client.users.track_friend(new_friend)
+
+    # Untrack the user and remove from the list
+    await client.users.untrack_friend(new_friend)
+    settings.users.friend.discard(new_friend)
 
 
 Interests and Recommendations
