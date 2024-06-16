@@ -356,14 +356,7 @@ Establishing a connection and logging on:
 2. Open up at least one listening connection (see :ref:`peer-connections` for more info)
 3. Send the :ref:`Login`: message on the server socket
 
-A login response will be received which determines whether the login was successful along with the following messages:
-
-* :ref:`function-room-list-update`
-* :ref:`ParentMinSpeed`
-* :ref:`ParentSpeedRatio`
-* :ref:`WishlistInterval`
-* :ref:`PrivilegedUsers`
-* :ref:`ExcludedSearchPhrases`
+A login response will be received which determines whether the login was successful
 
 After the response we send the following messages back to the server with some information about us:
 
@@ -382,15 +375,6 @@ We also send messages to advertise we have no parent:
 
 
 After connection is complete, send a :ref:`Ping` command to the server every 5 minutes.
-
-Exception Cases
----------------
-
-* No check on hash seems currently performed
-* No check on password length seems currently performed (empty password allowed)
-* Logon with an empty username results in failure reason ``INVALIDUSERNAME``
-* If the user was previously logged in with and the password does not match results in failure reason ``INVALIDPASS``
-* If the credentials are valid but the user is logged in elsewhere the other user will receive message :ref:`Kicked` and the connection will be terminated
 
 
 Server Flows
@@ -708,20 +692,103 @@ A request to change the current status of the user
    * status : ``status`` field from the message
 
 
+Set Shared Files / Folders
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A request to change the amount of files and folders shared
+
+**Message:** :ref:`SharedFoldersFiles`
+
+**Actors:**
+
+* ``user`` : User attempting to change his sharing stats
+
+**Actions:**
+
+1. Change the ``user`` structure:
+
+   * ``shared_file_count``
+   * ``shared_folder_count``
+
+2. For each user that has the ``user`` in the ``added_users`` list:
+
+   1. :ref:`GetUserStatus` : with the updated stats
+
+3. For each room where the ``user`` is in the ``joined_users`` list:
+
+   1. For each user in the ``joined_users`` list of that room:
+
+      1. :ref:`GetUserStats` : with the updated stats
+
+
+Send Upload Speed
+~~~~~~~~~~~~~~~~~
+
+A request to update the average upload speed of the user
+
+**Message:** :ref:`SendUploadSpeed`
+
+**Actors:**
+
+* ``user`` : User attempting to change his sharing stats
+
+**Actions:**
+
+Consider ``speed`` being the speed value sent in the message
+
+1. Change the ``user`` structure
+
+   1. Calculate the ``avg_speed``:
+
+      .. math::
+
+         avgspeed = ((avgspeed * uploads) + speed) / (uploads + 1)
+
+   2. Increase the ``uploads`` by 1
+
+
 Get User Status
 ~~~~~~~~~~~~~~~
 
 **Message:** :ref:`GetUserStatus`
 
-**Input Checks:**
-
 **Checks:**
 
+* If the user does not exist in the ``users`` list:
+
+  1. :ref:`GetUserStatus`
+
+     * ``username`` : name of the user for which status was requested
+     * ``status`` : ``UserStatus.OFFLINE``
+
 **Actions:**
+
+  1. :ref:`GetUserStatus`
+
+     * ``username`` : name of the user for which status was requested
+     * ``status`` : ``status`` of the user for which status was requested
 
 
 Get User Stats
 ~~~~~~~~~~~~~~
+
+**Message:** :ref:`GetUserStats`
+
+**Checks:**
+
+* If the user does not exist in the ``users`` list:
+
+  1. :ref:`GetUserStats`
+
+     * ``username`` : name of the user for which stats were requested
+     * all stats set to 0
+
+**Actions:**
+
+  1. :ref:`GetUserStats`
+
+     * ``username`` : name of the user for which stats were requested
+     * stats of the user for which stats were requested
 
 
 Add A User
@@ -1560,16 +1627,16 @@ Function: Update user status
       1. :ref:`GetUserStatus`
 
          * ``username`` : the name of the ``user``
-         * status : ``status`` field from the message
+         * ``status`` : the new status
 
-2. For each user that has the ``user`` in the ``added_users`` list
+3. For each user that has the ``user`` in the ``added_users`` list:
 
    1. :ref:`GetUserStatus`
 
       * ``username`` : the name of the ``user``
       * ``status`` : the new status
 
-3. For each room where the ``user`` is in the ``joined_users`` list:
+4. For each room where the ``user`` is in the ``joined_users`` list:
 
    1. For each user in the ``joined_users`` list of that room:
 
@@ -1587,7 +1654,7 @@ Function: Update user status
    * During disconnect: user status goes from online/away to offline
    * When user sets status: user status goes from online to away or vice versa
 
-   This is a bug on the server because this function is also used during the ``
+   Step 2, informing the user itself of the status update, is effectively only executed when the status is changed to the away status. As such this message is only sent when a user changes his status from online to away. This seems to be a bug in the server.
 
 
 .. _function-room-list-update:
@@ -1846,48 +1913,6 @@ The server will send private chat messages to report errors and information back
 2. ``receiver`` to server:
 
    1. :ref:`PrivateChatMessageAck` (chat_id = ``<chat_id from received message>``)
-
-
-Users
-=====
-
-There's two situations where the server will automatically send updates for a user:
-
-* User was explicitly added with the :ref:`AddUser` message
-* User is part of a room we are currently in
-
-The updates will come in the form of two messages:
-
-* :ref:`GetUserStatus` : update on user status and privileges
-* :ref:`GetUserStats` : update on user stats (shared files/folders, upload stats)
-
-The following describes the behaviour when another user modifies his status / stats:
-
-* User logs in:
-
-   * TODO
-
-* User send :ref:`SetStatus`
-
-   * Server send: :ref:`GetUserStatus` to all users in all rooms the user has joined (includes the user sending the update)
-   * Server send: :ref:`GetUserStatus` to all users that have sent an :ref:`AddUser` message
-
-* User disconnects (offline)
-
-   * Presumably a :ref:`GetUserStatus` is sent to all users in the rooms the user had joined. But the user is removed from all rooms before the update is sent
-   * Server send: :ref:`GetUserStatus` to all users that have sent an :ref:`AddUser` message
-
-* User send :ref:`SharedFoldersFiles`
-
-   * Server send: :ref:`GetUserStats` to all users in all rooms the user has joined (includes the user sending the update)
-
-* User send :ref:`SendUploadSpeed`
-
-   * No updates sent
-
-* Adding privileges to a user
-
-   * TODO
 
 
 Chat

@@ -777,6 +777,8 @@ class MockServer:
         peer.user.shared_folder_count = message.shared_folder_count
         peer.user.shared_file_count = message.shared_file_count
 
+        await self.send_stats_update(peer.user)
+
     @on_message(SetStatus.Request)
     async def on_set_status(self, message: SetStatus.Request, peer: Peer):
         if not peer.user:
@@ -1173,12 +1175,9 @@ class MockServer:
         TODO: Investigate
         * Formula used for calculation
         """
-        if peer.user.uploads == 0:
-            peer.user.avg_speed = message.speed
-        else:
-            new_speed = (peer.user.avg_speed * peer.user.uploads) + message.speed
-            new_speed /= (peer.user.uploads + 1)
-            peer.user.avg_speed = int(new_speed)
+        new_speed = (peer.user.avg_speed * peer.user.uploads) + message.speed
+        new_speed /= (peer.user.uploads + 1)
+        peer.user.avg_speed = int(new_speed)
 
         peer.user.uploads += 1
 
