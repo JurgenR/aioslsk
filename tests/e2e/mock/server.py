@@ -1066,11 +1066,11 @@ class MockServer:
     @on_message(GetItemSimilarUsers.Request)
     async def on_get_item_similar_users(self, message: GetItemSimilarUsers.Request, peer: Peer):
         """
-        TODO:
-        * What's the max?
-
         Behaviour:
         * Includes self
+
+        TODO:
+        * What's the max?
         """
         similar_users = []
         for other_peer in self.get_valid_peers():
@@ -1087,6 +1087,7 @@ class MockServer:
     @on_message(GetSimilarUsers.Request)
     async def on_get_similar_users(self, message: GetSimilarUsers.Request, peer: Peer):
         """
+        Behaviour:
         * Only online / away users
         * List is returned unsorted
         * Excludes self
@@ -1140,12 +1141,12 @@ class MockServer:
     async def on_add_interest(self, message: AddInterest.Request, peer: Peer):
         """
         Behaviour:
-        - Returns nothing when accepted
-        - Empty string is accepted and returned through GetUserInterests
-        - Duplicates are ignored (GetUserInterests will only return 1)
+        * Returns nothing when accepted
+        * Empty string is accepted and returned through GetUserInterests
+        * Duplicates are ignored (GetUserInterests will only return 1)
 
         To investigate:
-        - Input error: Longest possible?
+        * Input error: Longest possible?
         """
         peer.user.interests.add(message.interest)
 
@@ -1153,11 +1154,11 @@ class MockServer:
     async def on_remove_interest(self, message: RemoveInterest.Request, peer: Peer):
         """
         Behaviour:
-        - Returns nothing when accepted
-        - Removing an interest that is not an interest does nothing (no error)
+        * Returns nothing when accepted
+        * Removing an interest that is not an interest does nothing (no error)
 
         To investigate:
-        - Input error: Longest possible?
+        * Input error: Longest possible?
         """
         peer.user.interests.discard(message.interest)
 
@@ -1171,17 +1172,11 @@ class MockServer:
 
     @on_message(SendUploadSpeed.Request)
     async def on_send_upload_speed(self, message: SendUploadSpeed.Request, peer: Peer):
-        """
-        TODO: Investigate
-        * Formula used for calculation
-        """
         new_speed = (peer.user.avg_speed * peer.user.uploads) + message.speed
         new_speed /= (peer.user.uploads + 1)
         peer.user.avg_speed = int(new_speed)
 
         peer.user.uploads += 1
-
-        await self.notify_trackers(peer.user)
 
     @on_message(TogglePrivateRoomInvites.Request)
     async def on_toggle_private_rooms(self, message: TogglePrivateRoomInvites.Request, peer: Peer):

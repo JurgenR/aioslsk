@@ -738,7 +738,7 @@ Consider ``speed`` being the speed value sent in the message
 
 1. Change the ``user`` structure
 
-   1. Calculate the ``avg_speed``:
+   1. Calculate the ``avg_speed`` (floor the result):
 
       .. math::
 
