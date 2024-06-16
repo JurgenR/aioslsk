@@ -218,11 +218,11 @@ Obfuscated port: this part seems to be optional, either it can be omitted comple
 
 :Code: 2 (0x02)
 :Send:
-   1. **uint32**: listening port
+   1. **uint32**: listening_port
    2. Optional:
 
-      1. **uint32**: has obfuscated listening port
-      2. **uint32**: obfuscated listening port
+      1. **uint32**: has_obfuscated_port
+      2. **uint32**: obfuscated_port
 
 
 .. _GetPeerAddress:
@@ -240,12 +240,12 @@ If the peer does not exist we will receive a response with IP address, port set 
    1. **string**: username
 :Receive:
    1. **string**: username
-   2. **uint32**: IP address
-   3. **uint32**: listening port
+   2. **uint32**: ip
+   3. **uint32**: port
    4. Optional:
 
-      1. **uint32**: has obfuscated listening port
-      2. **uint16**: obfuscated listening port
+      1. **uint32**: has_obfuscated_port
+      2. **uint16**: obfuscated_port
 
 
 .. _AddUser:
