@@ -380,6 +380,9 @@ After connection is complete, send a :ref:`Ping` command to the server every 5 m
 Server Flows
 ============
 
+This section describes the flows from a point of view of the server as well as the presumed internal structures.
+
+
 Structures
 ----------
 
@@ -548,6 +551,16 @@ Peer Connected
 1. Create a new ``Peer`` structure and add it to the list of ``peers``
 
 
+.. note::
+
+   If the peer does not perform a valid logon with 1 minute then the peer will be disconnected
+
+   * TODO: Check if performing an invalid logon extends the timeout
+   * TODO: If above is true, check whether the same happens with other messages
+   * TODO: Check what happens if any other message except logon is sent
+   * TODO: Check total timeout of the server. Normally a ping should be sent every 5 minutes, if this is not done and no other messages are sent will the client be disconnected as well?
+
+
 Peer Disconnected
 ~~~~~~~~~~~~~~~~~
 
@@ -569,6 +582,22 @@ Peer Disconnected
       * status : ``UserStatus.OFFLINE``
 
 
+Message Received
+~~~~~~~~~~~~~~~~
+
+**Actors:**
+
+* ``peer`` : A peer connection over which a valid message was sent
+
+**Checks:**
+
+
+
+**Actions:**
+
+
+
+
 Messages
 --------
 
@@ -579,25 +608,38 @@ The :ref:`Login` message is the first message a peer needs to send to the server
 
 **Message** :ref:`Login`
 
+**Actors:**
+
+* ``user`` : The user attempting to login
+
 **Input Checks:**
 
 * If ``username`` is empty:
 
-  * Send :ref:`Login` (reason = ``INVALIDUSERNAME``)
+  1. Send :ref:`Login`
+
+     * success : false
+     * reason : ``INVALIDPASS``
 
 * If ``password`` is empty: continue
-
+* TODO: If the ``md5_hashed`` parameter mismatches with the MD5 hash of the ``username`` and ``password``  of the message itself
 
 **Checks:**
 
 * If the user exists in the ``users`` list:
 
-  * If the ``password`` parameter of the message does not equal
-  * If the ``md5_hashed`` parameter does not equal the hash md5(``name`` + ``password``): Continue
+  * If the ``md5_hashed`` parameter mismatches with the MD5 hash of the ``name`` and ``password`` of the ``user``: Continue
+  * If the ``password`` parameter of the message does not equal the ``password`` of the ``user``:
+
+    1. Send :ref:`Login`
+
+       * success : false
+       * reason : ``INVALIDPASS``
+
   * If there is ``peer`` in the ``peers`` list with the ``user`` already assigned:
 
-    * Send :ref:`Kicked` message to the **existing peer**
-    * Disconnect the **existing peer**
+    1. Send :ref:`Kicked` message to the **existing peer**
+    2. Disconnect the **existing peer**
 
 
 **Actions:**
@@ -613,12 +655,12 @@ The :ref:`Login` message is the first message a peer needs to send to the server
 
 4. Send to the ``user``:
 
-   * :ref:`function-room-list-update`
-   * :ref:`ParentMinSpeed` : value from ``parent_min_speed``
-   * :ref:`ParentSpeedRatio` : value from ``parent_speed_ratio``
-   * :ref:`WishlistInterval` : value from ``wishlist_interval``
-   * :ref:`PrivilegedUsers` : list of ``privileged_users``
-   * :ref:`ExcludedSearchPhrases` : list of ``excluded_search_phrases``
+   1. :ref:`function-room-list-update`
+   2. :ref:`ParentMinSpeed` : value from ``parent_min_speed``
+   3. :ref:`ParentSpeedRatio` : value from ``parent_speed_ratio``
+   4. :ref:`WishlistInterval` : value from ``wishlist_interval``
+   5. :ref:`PrivilegedUsers` : list of ``privileged_users``
+   6. :ref:`ExcludedSearchPhrases` : list of ``excluded_search_phrases``
 
 
 Set Listening Ports
