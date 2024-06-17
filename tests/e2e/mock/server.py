@@ -476,57 +476,64 @@ class MockServer:
 
     @on_message(Login.Request)
     async def on_login(self, message: Login.Request, peer: Peer):
+        # Ignore hash mismatch
+        if message.md5hash != calc_md5(message.username + message.password):
+            pass
+
         # Check if username entered is valid
         if not message.username:
-            await peer.send_message(Login.Response(
-                success=False,
-                reason='INVALIDUSERNAME'
-            ))
+            await peer.send_message(
+                Login.Response(
+                    success=False,
+                    reason='INVALIDUSERNAME'
+                )
+            )
             return
 
         # Check if we have a user, if so check the password
         user = self.find_user_by_name(message.username)
         if user and message.password != user.password:
-            await peer.send_message(Login.Response(
-                success=False,
-                reason='INVALIDPASS'
-            ))
+            await peer.send_message(
+                Login.Response(
+                    success=False,
+                    reason='INVALIDPASS'
+                )
+            )
             return
 
-        # Login is successful, just need to check if we need to create a new user
-        # or this user is already logged in elsewhere
-        if user:
-            # Check if there is another peer
-            other_peer = self.find_peer_by_name(message.username)
-            if other_peer:
-                other_peer.user = None
-                await other_peer.send_message(Kicked.Response())
-                await other_peer.disconnect()
-        else:
-            # Create a new user if we did not have it yet
+        # Create a new user if we did not have it yet
+        if not user:
             user = User(message.username, password=message.password)
             self.users.append(user)
 
-        # Send success response and set user/peer
+        # Check if there is another peer
+        other_peer = self.find_peer_by_name(message.username)
+        if other_peer:
+            other_peer.user = None
+            await other_peer.send_message(Kicked.Response())
+            await other_peer.disconnect()
 
+        # Link the user to the peer
         peer.user = user
+
         user.status = UserStatus.ONLINE
-
-        await peer.send_message(Login.Response(
-            success=True,
-            greeting='',
-            ip=peer.hostname,
-            md5hash=calc_md5(message.password),
-            privileged=False
-        ))
-
         await self.send_status_update(user)
+
+        await peer.send_message(
+            Login.Response(
+                success=True,
+                greeting='',
+                ip=peer.hostname,
+                md5hash=calc_md5(message.password),
+                privileged=user.privileged
+            )
+        )
 
         # Send all post login messages
         # NOTE: the room list should only contain rooms with 5 or more joined
         # users after login. Ignoring for now since there won't be much rooms
         # during testing
-        await self.send_room_list_update(peer.user)
+        await self.send_room_list_update(user)
         await peer.send_message(
             ParentMinSpeed.Response(self.settings.parent_min_speed))
         await peer.send_message(

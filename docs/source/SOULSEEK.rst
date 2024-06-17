@@ -403,6 +403,8 @@ Structures
 +----------------------------+---------------+---------+----------------------------------------+
 | excluded_search_phrases    | array[string] | <empty> |                                        |
 +----------------------------+---------------+---------+----------------------------------------+
+| motd                       | string        | <empty> | Message of the day                     |
++----------------------------+---------------+---------+----------------------------------------+
 | parent_min_speed           | integer       | 1       |                                        |
 +----------------------------+---------------+---------+----------------------------------------+
 | parent_speed_ratio         | integer       | 50      |                                        |
@@ -621,25 +623,24 @@ The :ref:`Login` message is the first message a peer needs to send to the server
      * success : false
      * reason : ``INVALIDPASS``
 
-* If ``password`` is empty: continue
-* TODO: If the ``md5_hashed`` parameter mismatches with the MD5 hash of the ``username`` and ``password``  of the message itself
+* If ``password`` is empty : Continue
+* If ``md5hash`` parameter mismatches with the MD5 hash of the ``username + password`` parameters : Continue
 
 **Checks:**
 
-* If the user exists in the ``users`` list:
+1. If the user exists in the ``users`` list:
 
-  * If the ``md5_hashed`` parameter mismatches with the MD5 hash of the ``name`` and ``password`` of the ``user``: Continue
-  * If the ``password`` parameter of the message does not equal the ``password`` of the ``user``:
+   1. If the ``password`` parameter of the message does not equal the ``password`` of the ``user``:
 
-    1. Send :ref:`Login`
+      1. Send :ref:`Login`
 
-       * success : false
-       * reason : ``INVALIDPASS``
+         * success : false
+         * reason : ``INVALIDPASS``
 
-  * If there is ``peer`` in the ``peers`` list with the ``user`` already assigned:
+   2. If there is ``peer`` in the ``peers`` list with the ``user`` already assigned:
 
-    1. Send :ref:`Kicked` message to the **existing peer**
-    2. Disconnect the **existing peer**
+      1. Send :ref:`Kicked` message to the **existing peer**
+      2. Disconnect the **existing peer**
 
 
 **Actions:**
@@ -655,12 +656,18 @@ The :ref:`Login` message is the first message a peer needs to send to the server
 
 4. Send to the ``user``:
 
-   1. :ref:`function-room-list-update`
-   2. :ref:`ParentMinSpeed` : value from ``parent_min_speed``
-   3. :ref:`ParentSpeedRatio` : value from ``parent_speed_ratio``
-   4. :ref:`WishlistInterval` : value from ``wishlist_interval``
-   5. :ref:`PrivilegedUsers` : list of ``privileged_users``
-   6. :ref:`ExcludedSearchPhrases` : list of ``excluded_search_phrases``
+   1. :ref:`Login`
+
+       * success : true
+       * greeting : value from ``motd``
+       * md5hash : md5hash of the ``password`` of the ``user``
+
+   2. :ref:`function-room-list-update`
+   3. :ref:`ParentMinSpeed` : value from ``parent_min_speed``
+   4. :ref:`ParentSpeedRatio` : value from ``parent_speed_ratio``
+   5. :ref:`WishlistInterval` : value from ``wishlist_interval``
+   6. :ref:`PrivilegedUsers` : list of ``privileged_users``
+   7. :ref:`ExcludedSearchPhrases` : list of ``excluded_search_phrases``
 
 
 Set Listening Ports
@@ -1376,7 +1383,7 @@ Request a set of recommendations can be returned based on the specified item.
 
 **Input Checks:**
 
-* TODO: If the ``item`` is empty
+* If the ``item`` is empty : Continue
 
 **Actions:**
 
@@ -1650,7 +1657,7 @@ The :ref:`GetItemSimilarUsers` message returns users that have the interest as p
 
 **Input Checks:**
 
-* TODO: Item is empty
+* If the ``item`` is empty : Continue
 
 **Actions:**
 
