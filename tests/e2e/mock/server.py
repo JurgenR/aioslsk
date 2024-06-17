@@ -428,7 +428,7 @@ class MockServer:
             self._create_room_list_message(user, min_users=min_users)
         ]
 
-        # Following is done in 2 loops deliberatly
+        # Following is done in 2 loops deliberatly to keep order of messages
         # PrivateRoomMembers (excludes owner, includes operators)
         user_private_rooms = self.get_user_private_rooms(user)
         for room in user_private_rooms:
@@ -467,32 +467,6 @@ class MockServer:
             tracker_peer = self.find_peer_by_name(tracker_name)
             if tracker_peer:
                 tasks.append(tracker_peer.send_message(message))
-
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-    async def notify_trackers(self, user: User):
-        """Notify the peers tracking the given user of changes"""
-        if user.name not in self.track_map:
-            return
-
-        tasks = []
-        message = AddUser.Response(
-            user.name,
-            exists=True,
-            status=user.status.value,
-            user_stats=UserStats(
-                avg_speed=user.avg_speed,
-                uploads=user.uploads,
-                shared_file_count=user.shared_file_count,
-                shared_folder_count=user.shared_folder_count
-            ),
-            country_code=user.country
-        )
-
-        for username in self.track_map[user.name]:
-            for peer in self.get_valid_peers():
-                if peer.user.name == username:
-                    tasks.append(peer.send_message(message))
 
         await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -588,9 +562,11 @@ class MockServer:
     @on_message(AddUser.Request)
     async def on_add_user(self, message: AddUser.Request, peer: Peer):
         """
+        Behaviour:
+        * Empty username -> user cannot exist
+        * Track user already tracked -> user only gets 1 update
+
         TODO: Investigate
-        * Empty username
-        * Track user already tracked
         * Non-existing user, user is created
         """
         if not peer.user:
@@ -756,6 +732,14 @@ class MockServer:
                     privileged=user.privileged
                 )
             )
+        else:
+            await peer.send_message(
+                GetUserStatus.Response(
+                    username=message.username,
+                    status=UserStatus.OFFLINE.value,
+                    privileged=False
+                )
+            )
 
     @on_message(GetUserStats.Request)
     async def on_get_user_stats(self, message: GetUserStats.Request, peer: Peer):
@@ -768,6 +752,18 @@ class MockServer:
                         uploads=user.uploads,
                         shared_file_count=user.shared_file_count,
                         shared_folder_count=user.shared_folder_count
+                    )
+                )
+            )
+        else:
+            await peer.send_message(
+                GetUserStats.Response(
+                    username=message.username,
+                    user_stats=UserStats(
+                        avg_speed=0,
+                        uploads=0,
+                        shared_file_count=0,
+                        shared_folder_count=0
                     )
                 )
             )
