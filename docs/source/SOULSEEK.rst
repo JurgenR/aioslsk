@@ -1285,7 +1285,7 @@ Remove an Interest
 
 **Input Checks:**
 
-* TODO: If the ``interest`` is empty
+* If the ``interest`` is empty: Continue
 * TODO: If the ``interest`` is not in the list of ``interests``
 
 **Actions:**
@@ -1302,7 +1302,7 @@ Remove a Hated Interest
 
 **Input Checks:**
 
-* TODO: If the ``hated_interest`` is empty
+* If the ``hated_interest`` is empty: Continue
 * TODO: If the ``hated_interest`` is not in the list of ``hated_interests``
 
 **Actions:**
@@ -1317,15 +1317,31 @@ Getting Interests
 
 **Message:** :ref:`GetUserInterests`
 
+**Actors:**
+
+* ``user`` : user for which the interests were requested
+
 **Input Checks:**
 
-* TODO: ``user`` is empty
+* If the ``username`` is empty: continue
 
 **Checks:**
 
-* TODO: ``user`` does not exist
+* If the ``user`` does not exist:
 
-**Message:** :ref:`GetUserInterests`
+  1. :ref:`GetUserInterests`
+
+     * ``username`` : username of the user for which interests were requested
+     * ``interests`` : empty list
+     * ``hated_interests`` : empty list
+
+**Actions:**
+
+1. :ref:`GetUserInterests`
+
+   * ``username`` : username of the user for which interests were requested
+   * ``interests`` : ``interests`` of the ``user``
+   * ``hated_interests`` : ``hated_interests`` of the ``user``
 
 
 Get Global Recommendations

@@ -1119,19 +1119,23 @@ class MockServer:
         * No whitespace trimming is done
         * Non-existing user returns empty recommendations
         """
-        interests = []
-        hated_interests = []
-        if user := self.find_user_by_name(message.username):
-            interests = list(user.interests)
-            hated_interests = list(user.hated_interests)
-
-        await peer.send_message(
-            GetUserInterests.Response(
-                message.username,
-                interests,
-                hated_interests
+        if (user := self.find_user_by_name(message.username)) is not None:
+            await peer.send_message(
+                GetUserInterests.Response(
+                    username=message.username,
+                    interests=list(user.interests),
+                    hated_interests=list(user.hated_interests)
+                )
             )
-        )
+
+        else:
+            await peer.send_message(
+                GetUserInterests.Response(
+                    username=message.username,
+                    interests=[],
+                    hated_interests=[]
+                )
+            )
 
     @on_message(AddInterest.Request)
     async def on_add_interest(self, message: AddInterest.Request, peer: Peer):
