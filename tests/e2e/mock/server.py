@@ -99,7 +99,13 @@ from tests.e2e.mock.constants import (
 )
 from tests.e2e.mock.distributed import DistributedStrategy, EveryoneRootStrategy
 from tests.e2e.mock.messages import AdminMessage
-from tests.e2e.mock.model import User, Room, RoomStatus, Settings
+from tests.e2e.mock.model import (
+    QueuedPrivateMessage,
+    Room,
+    RoomStatus,
+    Settings,
+    User,
+)
 from tests.e2e.mock.peer import Peer
 
 
@@ -647,8 +653,6 @@ class MockServer:
         """User sends a private message to a another user
 
         TODO: Investigate:
-        * Empty username
-        * Empty message
         * User does not exist
         * Does message get queued and sent if user is valid but not online
         * Trimming of messages?
@@ -657,22 +661,31 @@ class MockServer:
             return
 
         # Do nothing when sending u user that does not exist
-        if self.find_user_by_name(message.username) is None:
+        if (user_receiver := self.find_user_by_name(message.username)) is None:
             return
 
-        # User exists but is currently not connected
         if (peer_receiver := self.find_peer_by_name(message.username)) is None:
-            return
-
-        await peer_receiver.send_message(
-            PrivateChatMessage.Response(
-                next(self.chat_id_gen),
-                timestamp=int(time.time()),
-                message=message.message,
-                username=peer.user.name,
-                is_admin=peer.user.is_admin
+            # User exists but is currently not connected -> queue
+            user_receiver.queued_private_messages.append(
+                QueuedPrivateMessage(
+                    chat_id=next(self.chat_id_gen),
+                    username=peer.user.name,
+                    message=message.message,
+                    timestamp=int(time.time())
+                )
             )
-        )
+
+        else:
+
+            await peer_receiver.send_message(
+                PrivateChatMessage.Response(
+                    next(self.chat_id_gen),
+                    timestamp=int(time.time()),
+                    message=message.message,
+                    username=peer.user.name,
+                    is_admin=peer.user.is_admin
+                )
+            )
 
     @on_message(RoomChatMessage.Request)
     async def on_chat_room_message(self, message: RoomChatMessage.Request, peer: Peer):

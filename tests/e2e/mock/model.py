@@ -18,6 +18,14 @@ class Settings:
 
 
 @dataclass
+class QueuedPrivateMessage:
+    chat_id: int
+    username: str
+    message: str
+    timestamp: int
+
+
+@dataclass
 class User:
     name: str
     password: str = None
@@ -37,6 +45,8 @@ class User:
 
     interests: Set[str] = field(default_factory=set)
     hated_interests: Set[str] = field(default_factory=set)
+
+    queued_private_messages: List[QueuedPrivateMessage] = field(default_factory=list)
 
     # TODO: Investigate what the default values are
     enable_private_rooms: bool = False

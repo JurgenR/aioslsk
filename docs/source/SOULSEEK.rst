@@ -432,12 +432,22 @@ Structures
 | ip_address | string | 0.0.0.0   | IP address that the peer is connecting from     |
 +------------+--------+-----------+-------------------------------------------------+
 
+**QueuedPrivateMessage structure**
 
-**User structure**
++------------+--------+-----------+-------------------------------------------------+
+|   Field    |  Type  |  Default  |                   Description                   |
++============+========+===========+=================================================+
+| username   | string | <not set> | Username of the sender of the private message   |
++------------+--------+-----------+-------------------------------------------------+
+| message    | string | 0.0.0.0   | Message that was sent                           |
++------------+--------+-----------+-------------------------------------------------+
+
+
+**UserStatus enumeration**
+
+List of possible user statuses
 
 .. _structure-user-status:
-
-List of possible user statuses:
 
 +---------+-------+
 | Status  | Value |
@@ -449,6 +459,7 @@ List of possible user statuses:
 | ONLINE  | 2     |
 +---------+-------+
 
+**User structure**
 
 .. _structure-user:
 
@@ -893,6 +904,79 @@ Remove A User
 **Actions:**
 
 1. Remove the ``removee`` from the list of ``added_users`` of the ``remover``
+
+
+Private Chat Message
+~~~~~~~~~~~~~~~~~~~~
+
+This message is used to send a private chat message to a single user.
+
+**Message:** :ref:`PrivateChatMessage`
+
+**Actors:**
+
+* ``sender`` : User sending the message
+* ``receiver`` : User to which the message should be sent
+
+**Input Checks:**
+
+* If the ``username`` is empty : Continue (it should not be possible to have a user with an empty username)
+* If the ``message`` is empty : Continue
+
+**Checks:**
+
+* If the ``receiver`` does not exist : Do nothing
+* If the ``sender`` is the ``receiver`` : Continue
+
+**Actions:**
+
+1. Generate a new ``chat_id``
+2. If there is no ``peer`` which is associated with the ``receiver``:
+
+   * Add
+
+3. If there is a ``peer`` which is associated with the ``receiver``:
+
+   1. Send to the ``receiver``
+
+       1. :ref:`PrivateChatMessage`
+
+          * chat_id : Generated ``chat_id``
+          * timestamp : Current timestamp
+          * is_admin : Value of the ``is_admin`` value of the ``sender``
+          * message : ``message`` value of the message
+          * username : Value of the ``name`` value of the ``sender``
+
+
+Private Chat Message Acknowledge
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Message:** :ref:`PrivateChatMessageAck`
+
+**Checks:**
+
+* TODO: If the ``chat_id`` does not match some internal state?
+* TODO: If the ``chat_id`` exists but is not associated with the user
+
+**Actions:**
+
+
+Private Chat Message Multiple Users
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Message:** :ref:`PrivateChatMessageUsers`
+
+**Input Checks:**
+
+* TODO: If the ``message`` is empty
+* TODO: If the list of ``usernames`` is empty
+
+**Checks:**
+
+* TODO: If one of the ``usernames`` does not exist
+
+**Actions:**
+
 
 
 Room Joining / Creation
@@ -1980,8 +2064,11 @@ The server will send private chat messages to report errors and information back
    1. :ref:`PrivateChatMessageAck` (chat_id = ``<chat_id from received message>``)
 
 
-Chat
-====
+
+Client Flows
+============
+
+This section describes some of the flows from the client point of view. Specifically it focuses on the interactions between the client and the server
 
 Private Chat Message
 --------------------
@@ -2004,6 +2091,13 @@ Private Chat Message
 3. ``receiver`` to server:
 
    1. :ref:`PrivateChatMessageAck` (chat_id = ``<chat_id from received message>``)
+
+
+.. note::
+
+   Some unresolved questions are:
+
+   * Is a message still delivered after the sender is removed?
 
 
 .. _room-list:
