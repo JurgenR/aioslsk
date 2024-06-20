@@ -539,6 +539,7 @@ class MockServer:
         # NOTE: the room list should only contain rooms with 5 or more joined
         # users after login. Ignoring for now since there won't be much rooms
         # during testing
+        await self.send_queued_private_messages(peer)
         await self.send_room_list_update(user)
         await peer.send_message(
             ParentMinSpeed.Response(self.settings.parent_min_speed))
@@ -660,7 +661,7 @@ class MockServer:
         if not peer.user:
             return
 
-        # Do nothing when sending u user that does not exist
+        # Do nothing when sending to a user that does not exist
         if (user_receiver := self.find_user_by_name(message.username)) is None:
             return
 
@@ -1527,6 +1528,13 @@ class MockServer:
         )
         for room in self.get_joined_rooms(user):
             await self.notify_room_joined_users(room, stats_message)
+
+    async def send_queued_private_messages(self, peer: Peer):
+        """Sends all private messages to the peer"""
+        queued_messages = peer.user.queued_private_messages
+        peer.user.queued_private_messages = []
+        for queued_message in queued_messages:
+            await peer.send_message(queued_message.to_protocol_message())
 
     async def create_public_room(self, name: str) -> Room:
         """Creates a new private room, should be called when all checks are

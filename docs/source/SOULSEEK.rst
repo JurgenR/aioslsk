@@ -434,13 +434,26 @@ Structures
 
 **QueuedPrivateMessage structure**
 
-+------------+--------+-----------+-------------------------------------------------+
-|   Field    |  Type  |  Default  |                   Description                   |
-+============+========+===========+=================================================+
-| username   | string | <not set> | Username of the sender of the private message   |
-+------------+--------+-----------+-------------------------------------------------+
-| message    | string | 0.0.0.0   | Message that was sent                           |
-+------------+--------+-----------+-------------------------------------------------+
++-----------+--------+-----------+--------------------------------------------------------+
+|   Field   |  Type  |  Default  |                      Description                       |
++===========+========+===========+========================================================+
+| username  | string | <not set> | Username of the sender of the private message          |
++-----------+--------+-----------+--------------------------------------------------------+
+| message   | string | <not set> | Message body                                           |
++-----------+--------+-----------+--------------------------------------------------------+
+| chat_id   | int    | <not set> | Generated chat ID                                      |
++-----------+--------+-----------+--------------------------------------------------------+
+| timestamp | int    | <not set> | Timestamp that the send sent the message to the server |
++-----------+--------+-----------+--------------------------------------------------------+
+| is_admin  | bool   | false     | Whether the user sending the message is an admin       |
++-----------+--------+-----------+--------------------------------------------------------+
+
+
+.. note::
+
+   In reality this is the same message as :ref:`PrivateChatMessage` but is described here to more easily differentiate.
+
+   The only unknown is whether the ``is_admin`` value is stored at the time the message was sent or it retrieved at time of actually sending the message to the receiver.
 
 
 **UserStatus enumeration**

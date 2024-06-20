@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import auto, Enum
+from aioslsk.protocol.messages import PrivateChatMessage
 from aioslsk.user.model import UserStatus
 import typing
 from typing import List, Set, Optional
@@ -23,6 +24,16 @@ class QueuedPrivateMessage:
     username: str
     message: str
     timestamp: int
+    is_admin: bool
+
+    def to_protocol_message(self) -> PrivateChatMessage:
+        return PrivateChatMessage.Response(
+            chat_id=self.chat_id,
+            timestamp=self.timestamp,
+            username=self.username,
+            message=self.message,
+            is_admin=self.is_admin
+        )
 
 
 @dataclass
