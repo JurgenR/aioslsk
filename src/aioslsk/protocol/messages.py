@@ -326,7 +326,22 @@ class PrivateChatMessage(ServerMessage):
         timestamp: int = field(metadata={'type': uint32})
         username: str = field(metadata={'type': string})
         message: str = field(metadata={'type': string})
-        is_admin: Optional[bool] = field(default=False, metadata={'type': boolean, 'optional': True})
+        is_direct: Optional[bool] = field(default=False, metadata={'type': boolean, 'optional': True})
+
+        @property
+        def is_admin(self) -> bool:
+            """Only kept to keep backward compatibility. Use ``is_direct``
+
+            This property does not actually represent whether the message was sent
+            by an admin. Instead it represents whether the message was sent directly
+            or was queued on the server before being sent (example, when user was
+            offline and came back online)
+            """
+            return self.is_direct
+
+        @is_admin.setter
+        def is_admin(self):
+            return self.is_direct
 
 
 class PrivateChatMessageAck(ServerMessage):

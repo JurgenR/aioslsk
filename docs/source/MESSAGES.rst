@@ -445,7 +445,7 @@ Send or receive a private message
    4. **string**: message
    5. Optional:
 
-      1. **boolean**: is_admin
+      1. **boolean**: is_direct
 
 
 .. _PrivateChatMessageAck:

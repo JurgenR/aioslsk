@@ -115,7 +115,22 @@ class ChatMessage:
     timestamp: int
     user: User
     message: str
-    is_admin: bool
+    is_direct: bool
 
     def is_server_message(self) -> bool:
-        return self.is_admin and self.user.name == 'server'
+        return self.user.name == 'server'
+
+    @property
+    def is_admin(self) -> bool:
+        """Only kept to keep backward compatibility. Use ``is_direct``
+
+        This property does not actually represent whether the message was sent
+        by an admin. Instead it represents whether the message was sent directly
+        or was queued on the server before being sent (example, when user was
+        offline and came back online)
+        """
+        return self.is_direct
+
+    @is_admin.setter
+    def is_admin(self, value: bool):
+        self.is_direct = value
