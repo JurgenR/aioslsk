@@ -691,19 +691,19 @@ class TestPrivateChatMessage:
             timestamp=1666606341,
             username='user0',
             message='Hello',
-            is_admin=None
+            is_direct=None
         )
         data = bytes.fromhex('1e0000001600000040e20100056556630500000075736572300500000048656c6c6f')
         assert message.serialize() == data
 
     def test_PrivateChatMessage_Response_deserialize_withoutIsAdmin(self):
-        # is_admin has default of false
+        # is_direct has default of false
         message = PrivateChatMessage.Response(
             chat_id=123456,
             timestamp=1666606341,
             username='user0',
             message='Hello',
-            is_admin=False
+            is_direct=False
         )
         data = bytes.fromhex('1e0000001600000040e20100056556630500000075736572300500000048656c6c6f')
         assert PrivateChatMessage.Response.deserialize(0, data) == message
@@ -714,7 +714,7 @@ class TestPrivateChatMessage:
             timestamp=1666606341,
             username='user0',
             message='Hello',
-            is_admin=True
+            is_direct=True
         )
         data = bytes.fromhex('1f0000001600000040e20100056556630500000075736572300500000048656c6c6f01')
         assert message.serialize() == data
@@ -725,7 +725,7 @@ class TestPrivateChatMessage:
             timestamp=1666606341,
             username='user0',
             message='Hello',
-            is_admin=True
+            is_direct=True
         )
         data = bytes.fromhex('1f0000001600000040e20100056556630500000075736572300500000048656c6c6f01')
         assert PrivateChatMessage.Response.deserialize(0, data) == message
