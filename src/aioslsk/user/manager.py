@@ -259,7 +259,7 @@ class UserManager(BaseManager):
             timestamp=message.timestamp,
             user=user,
             message=message.message,
-            is_admin=bool(message.is_admin)
+            is_direct=bool(message.is_direct)
         )
 
         await self._network.send_server_messages(
