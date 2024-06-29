@@ -120,7 +120,7 @@ class TestUserManager:
             username=DEFAULT_USERNAME,
             message='hello',
             timestamp=100.0,
-            is_admin=False
+            is_direct=False
         )
         await manager._on_private_message(raw_message, manager._network.server)
 
@@ -132,7 +132,7 @@ class TestUserManager:
             timestamp=100.0,
             user=user,
             message='hello',
-            is_admin=False
+            is_direct=False
         )
         callback.assert_awaited_once_with(
             PrivateMessageEvent(message=message, raw_message=raw_message))

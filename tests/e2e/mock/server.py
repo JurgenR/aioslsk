@@ -360,7 +360,7 @@ class MockServer:
                 timestamp=int(time.time()),
                 message=message,
                 username='server',
-                is_admin=True
+                is_direct=True
             )
         )
 
@@ -644,7 +644,7 @@ class MockServer:
                     timestamp,
                     message=message.message,
                     username=peer.user.name,
-                    is_admin=peer.user.is_admin
+                    is_direct=peer.user.is_admin
                 )
             ))
 
@@ -678,7 +678,7 @@ class MockServer:
                 timestamp=int(time.time()),
                 message=message.message,
                 username=peer.user.name,
-                is_admin=peer.user.is_admin
+                is_direct=peer.user.is_admin
             )
         )
 
