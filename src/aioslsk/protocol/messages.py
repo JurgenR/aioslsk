@@ -340,8 +340,8 @@ class PrivateChatMessage(ServerMessage):
             return self.is_direct
 
         @is_admin.setter
-        def is_admin(self):
-            return self.is_direct
+        def is_admin(self, value: bool):
+            self.is_direct = value
 
 
 class PrivateChatMessageAck(ServerMessage):
