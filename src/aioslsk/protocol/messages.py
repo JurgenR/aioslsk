@@ -329,7 +329,7 @@ class PrivateChatMessage(ServerMessage):
         is_direct: Optional[bool] = field(default=False, metadata={'type': boolean, 'optional': True})
 
         @property
-        def is_admin(self) -> bool:
+        def is_admin(self) -> Optional[bool]:
             """Only kept to keep backward compatibility. Use ``is_direct``
 
             This property does not actually represent whether the message was sent
