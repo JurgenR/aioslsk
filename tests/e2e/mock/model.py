@@ -24,7 +24,6 @@ class QueuedPrivateMessage:
     username: str
     message: str
     timestamp: int
-    is_admin: bool
 
     def to_protocol_message(self) -> PrivateChatMessage:
         return PrivateChatMessage.Response(
@@ -32,7 +31,7 @@ class QueuedPrivateMessage:
             timestamp=self.timestamp,
             username=self.username,
             message=self.message,
-            is_admin=self.is_admin
+            is_direct=False
         )
 
 

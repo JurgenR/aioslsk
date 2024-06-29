@@ -445,15 +445,6 @@ Structures
 +-----------+--------+-----------+--------------------------------------------------------+
 | timestamp | int    | <not set> | Timestamp that the send sent the message to the server |
 +-----------+--------+-----------+--------------------------------------------------------+
-| is_admin  | bool   | false     | Whether the user sending the message is an admin       |
-+-----------+--------+-----------+--------------------------------------------------------+
-
-
-.. note::
-
-   In reality this is the same message as :ref:`PrivateChatMessage` but is described here to more easily differentiate.
-
-   The only unknown is whether the ``is_admin`` value is stored at the time the message was sent or it retrieved at time of actually sending the message to the receiver.
 
 
 **UserStatus enumeration**
@@ -608,12 +599,12 @@ Peer Disconnected
       * status : ``UserStatus.OFFLINE``
 
 
-Message Received
-~~~~~~~~~~~~~~~~
+Protocol Message Received
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Actors:**
 
-* ``peer`` : A peer connection over which a valid message was sent
+* ``peer`` : A peer connection over which a valid protocol message was sent
 
 **Checks:**
 
@@ -686,12 +677,13 @@ The :ref:`Login` message is the first message a peer needs to send to the server
        * greeting : value from ``motd``
        * md5hash : md5hash of the ``password`` of the ``user``
 
-   2. :ref:`function-room-list-update`
-   3. :ref:`ParentMinSpeed` : value from ``parent_min_speed``
-   4. :ref:`ParentSpeedRatio` : value from ``parent_speed_ratio``
-   5. :ref:`WishlistInterval` : value from ``wishlist_interval``
-   6. :ref:`PrivilegedUsers` : list of ``privileged_users``
-   7. :ref:`ExcludedSearchPhrases` : list of ``excluded_search_phrases``
+   2. :ref:`function-send-queued-messages`
+   3. :ref:`function-room-list-update`
+   4. :ref:`ParentMinSpeed` : value from ``parent_min_speed``
+   5. :ref:`ParentSpeedRatio` : value from ``parent_speed_ratio``
+   6. :ref:`WishlistInterval` : value from ``wishlist_interval``
+   7. :ref:`PrivilegedUsers` : list of ``privileged_users``
+   8. :ref:`ExcludedSearchPhrases` : list of ``excluded_search_phrases``
 
 
 Set Listening Ports
@@ -943,10 +935,15 @@ This message is used to send a private chat message to a single user.
 
 **Actions:**
 
-1. Generate a new ``chat_id``
+1. Generate a ``chat_id``
 2. If there is no ``peer`` which is associated with the ``receiver``:
 
-   * Add
+   1. Create a new instance of ``QueuedPrivateMessage`` and add to the ``queued_private_messages`` of the ``receiver``
+
+      * chat_id : Generated ``chat_id``
+      * timestamp : Current timestamp
+      * message : ``message`` value of the message
+      * username : Value of the ``name`` value of the ``sender``
 
 3. If there is a ``peer`` which is associated with the ``receiver``:
 
@@ -956,9 +953,9 @@ This message is used to send a private chat message to a single user.
 
           * chat_id : Generated ``chat_id``
           * timestamp : Current timestamp
-          * is_admin : Value of the ``is_admin`` value of the ``sender``
           * message : ``message`` value of the message
           * username : Value of the ``name`` value of the ``sender``
+          * is_direct : true
 
 
 Private Chat Message Acknowledge
@@ -981,15 +978,26 @@ Private Chat Message Multiple Users
 
 **Input Checks:**
 
-* TODO: If the ``message`` is empty
-* TODO: If the list of ``usernames`` is empty
-
-**Checks:**
-
-* TODO: If one of the ``usernames`` does not exist
+* If the ``message`` is empty : Continue
+* If the list of ``usernames`` is empty : Continue
 
 **Actions:**
 
+1. For each ``user`` in the ``usernames``
+
+   1. If the ``user`` does not exist : Do nothing
+   2. If the ``user`` exists:
+
+      1. If the ``user`` does not have a ``peer`` associated : Do nothing
+      2. If the ``user`` does have a ``peer`` associated:
+
+         1. :ref:`PrivateChatMessage`
+
+            * chat_id : Generated ``chat_id``
+            * timestamp : Current timestamp
+            * message : ``message`` value of the message
+            * username : Value of the ``name`` value of the ``sender``
+            * is_direct : true
 
 
 Room Joining / Creation
@@ -1819,6 +1827,28 @@ Function: Update user status
    Step 2, informing the user itself of the status update, is effectively only executed when the status is changed to the away status. As such this message is only sent when a user changes his status from online to away. This seems to be a bug in the server.
 
 
+.. _function-send-queued-messages:
+
+Function: Send Queued Messages
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**Actors:**
+
+* ``receiver`` user that the queued messages need to be delivered to
+
+**Actions:**
+
+1. For each messages in the ``queued_private_messages`` of the ``receiver``
+
+   1. :ref:`PrivateChatMessage`
+
+      * chat_id : ``chat_id`` value of the queued message
+      * timestamp : ``timestamp`` value of the message
+      * message : ``message`` value of the queued message
+      * username : ``username``
+      * is_direct : false
+
+
 .. _function-room-list-update:
 
 Function: Send Room List Update
@@ -2068,14 +2098,16 @@ The server will send private chat messages to report errors and information back
 
 **Actions:**
 
-1. Server to ``receiver``:
+1. Generate a ``chat_id``
+2. Server to ``receiver``:
 
-   1. Send :ref:`PrivateChatMessage` (username = ``server``, is_admin = ``true``, chat_id = ``<generated>``, message = ``message``)
+   1. Send :ref:`PrivateChatMessage`
 
-2. ``receiver`` to server:
-
-   1. :ref:`PrivateChatMessageAck` (chat_id = ``<chat_id from received message>``)
-
+      * chat_id : Generated ``chat_id``
+      * timestamp : Current timestamp
+      * username : ``server``
+      * message = ``message``
+      * is_direct = true
 
 
 Client Flows

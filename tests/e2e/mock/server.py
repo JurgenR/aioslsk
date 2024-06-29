@@ -643,11 +643,11 @@ class MockServer:
                     timestamp,
                     message=message.message,
                     username=peer.user.name,
-                    is_admin=peer.user.is_admin
+                    is_admin=True
                 )
             ))
 
-        asyncio.gather(*messages, return_exceptions=True)
+        await asyncio.gather(*messages, return_exceptions=True)
 
     @on_message(PrivateChatMessage.Request)
     async def on_chat_private_message(self, message: PrivateChatMessage.Request, peer: Peer):
@@ -684,7 +684,7 @@ class MockServer:
                     timestamp=int(time.time()),
                     message=message.message,
                     username=peer.user.name,
-                    is_admin=peer.user.is_admin
+                    is_admin=True
                 )
             )
 
