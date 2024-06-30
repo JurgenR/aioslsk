@@ -936,14 +936,12 @@ This message is used to send a private chat message to a single user.
 **Actions:**
 
 1. Generate a ``chat_id``
-2. If there is no ``peer`` which is associated with the ``receiver``:
+2. Create a new instance of ``QueuedPrivateMessage`` and add to the ``queued_private_messages`` of the ``receiver``
 
-   1. Create a new instance of ``QueuedPrivateMessage`` and add to the ``queued_private_messages`` of the ``receiver``
-
-      * chat_id : Generated ``chat_id``
-      * timestamp : Current timestamp
-      * message : ``message`` value of the message
-      * username : Value of the ``name`` value of the ``sender``
+   * chat_id : Generated ``chat_id``
+   * timestamp : Current timestamp
+   * message : ``message`` value of the message
+   * username : Value of the ``name`` value of the ``sender``
 
 3. If there is a ``peer`` which is associated with the ``receiver``:
 
@@ -961,20 +959,33 @@ This message is used to send a private chat message to a single user.
 Private Chat Message Acknowledge
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+This is used to acknowledge that a specific private message has been received. If private messages are not acknowledged they will be resent when the user logs in again.
+
 **Message:** :ref:`PrivateChatMessageAck`
+
+**Actors:**
+
+* ``receiver`` : the user who has received the private message and is using this message to acknowledge he has received it
 
 **Checks:**
 
 * TODO: If the ``chat_id`` does not match some internal state?
-* TODO: If the ``chat_id`` exists but is not associated with the user
 
 **Actions:**
+
+1. If the ``chat_id`` exists in the ``queued_private_messages`` of the ``receiver``
+
+   1. Remove the message with ``chat_id`` from the ``queued_private_message`` of the ``receiver``
 
 
 Private Chat Message Multiple Users
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 **Message:** :ref:`PrivateChatMessageUsers`
+
+**Actors:**
+
+* ``sender`` : User sending the message to multiple users
 
 **Input Checks:**
 
@@ -983,21 +994,30 @@ Private Chat Message Multiple Users
 
 **Actions:**
 
-1. For each ``user`` in the ``usernames``
+1. For each ``receiver`` in the ``usernames`` parameter of the message
 
-   1. If the ``user`` does not exist : Do nothing
-   2. If the ``user`` exists:
+   1. If the ``receiver`` does not exist : Do nothing
+   2. If the ``receiver`` exists:
 
-      1. If the ``user`` does not have a ``peer`` associated : Do nothing
-      2. If the ``user`` does have a ``peer`` associated:
+      1. If the ``sender`` is not in the list of ``added_user`` of the ``receiver`` : Do nothing
+      2. Create a new instance of ``QueuedPrivateMessage`` and add to the ``queued_private_messages`` of the ``receiver``
 
-         1. :ref:`PrivateChatMessage`
+         * chat_id : Generated ``chat_id``
+         * timestamp : Current timestamp
+         * message : ``message`` value of the message
+         * username : Value of the ``name`` value of the ``sender``
 
-            * chat_id : Generated ``chat_id``
-            * timestamp : Current timestamp
-            * message : ``message`` value of the message
-            * username : Value of the ``name`` value of the ``sender``
-            * is_direct : true
+      3. If there is a ``peer`` which is associated with the ``receiver``:
+
+         1. Send to the ``receiver``
+
+            1. :ref:`PrivateChatMessage`
+
+               * chat_id : Generated ``chat_id``
+               * timestamp : Current timestamp
+               * message : ``message`` value of the message
+               * username : Value of the ``name`` value of the ``sender``
+               * is_direct : true
 
 
 Room Joining / Creation
@@ -1362,8 +1382,7 @@ Add an Interest
 
 **Input Checks:**
 
-* TODO: If the ``interest`` is empty
-* TODO: If the ``interest`` is already in the list of ``interests``
+* If the ``interest`` is empty : Continue
 
 **Actions:**
 
@@ -1379,8 +1398,7 @@ Add a Hated Interest
 
 **Input Checks:**
 
-* TODO: If the ``hated_interest`` is empty
-* TODO: If the ``hated_interest`` is already in the list of ``hated_interests``
+* If the ``hated_interest`` is empty : Continue
 
 **Actions:**
 
@@ -1398,7 +1416,6 @@ Remove an Interest
 **Input Checks:**
 
 * If the ``interest`` is empty: Continue
-* TODO: If the ``interest`` is not in the list of ``interests``
 
 **Actions:**
 
@@ -1415,7 +1432,6 @@ Remove a Hated Interest
 **Input Checks:**
 
 * If the ``hated_interest`` is empty: Continue
-* TODO: If the ``hated_interest`` is not in the list of ``hated_interests``
 
 **Actions:**
 
@@ -1847,6 +1863,11 @@ Function: Send Queued Messages
       * message : ``message`` value of the queued message
       * username : ``username``
       * is_direct : false
+
+
+.. note::
+
+   Messages are not removed from this list until they are acknowledged
 
 
 .. _function-room-list-update:

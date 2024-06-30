@@ -7,6 +7,7 @@ import socket
 import time
 from typing import Dict, Generator, List, Optional, Set, Type, TypeVar
 import typing
+from weakref import WeakSet
 
 from aioslsk.events import on_message, build_message_map
 from aioslsk.user.model import UserStatus
@@ -55,6 +56,7 @@ from aioslsk.protocol.messages import (
     Ping,
     PotentialParents,
     PrivateChatMessage,
+    PrivateChatMessageAck,
     PrivateChatMessageUsers,
     PrivateRoomDropMembership,
     PrivateRoomDropOwnership,
@@ -148,7 +150,6 @@ class MockServer:
         self.users: List[User] = []
         self.rooms: List[Room] = []
         self.peers: List[Peer] = []
-        self.track_map: Dict[str, Set[str]] = {}
         self.excluded_search_phrases: List[str] = excluded_search_phrases
         self.distributed_strategy: DistributedStrategy = self._create_distributed_strategy(distributed_strategy_class)
         self.distributed_parent_task: Optional[asyncio.Task] = None
@@ -459,22 +460,12 @@ class MockServer:
 
     async def notify_trackers_status(self, user: User):
         """Notify the peers tracking the given user of status changes"""
-        if user.name not in self.track_map:
-            return
-
         message = GetUserStatus.Response(
             username=user.name,
             status=user.status.value,
             privileged=user.privileged
         )
-
-        tasks = []
-        for tracker_name in self.track_map[user.name]:
-            tracker_peer = self.find_peer_by_name(tracker_name)
-            if tracker_peer:
-                tasks.append(tracker_peer.send_message(message))
-
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await self.notify_added_users(user, message)
 
     @on_message(ExactFileSearch.Request)
     async def on_exact_file_search(self, message: ExactFileSearch.Request, peer: Peer):
@@ -579,22 +570,16 @@ class MockServer:
         Behaviour:
         * Empty username -> user cannot exist
         * Track user already tracked -> user only gets 1 update
-
-        TODO: Investigate
-        * Non-existing user, user is created
         """
         if not peer.user:
             return
 
-        # Tracking self is ignored
-        if peer.user.name != message.username:
-            # To be verified: track user even if it does not exist
-            if message.username in self.track_map:
-                self.track_map[message.username].add(peer.user.name)
-            else:
-                self.track_map[message.username] = {peer.user.name}
-
         if (user := self.find_user_by_name(message.username)) is not None:
+            # Add only to the added_users if the user exists and he is not
+            # himself
+            if message.username != peer.user.name:
+                peer.user.added_users[message.username] = user
+
             await peer.send_message(
                 AddUser.Response(
                     message.username,
@@ -620,44 +605,46 @@ class MockServer:
 
     @on_message(PrivateChatMessageUsers.Request)
     async def on_private_chat_message_users(self, message: PrivateChatMessageUsers.Request, peer: Peer):
-        """User sends a private message to multiple users
+        """User sends a private message to multiple users"""
+        if not peer.user:
+            return
 
-        TODO: Investigate:
-        * Empty list
-        * Empty message
-        * One/multiple of the users does not exist
-        * One/multiple of the users is not connected
-        """
         timestamp = int(time.time())
-        messages = []
+        chat_id = next(self.chat_id_gen)
+
+        tasks = []
         for username in message.usernames:
-            if self.find_user_by_name(username) is None:
+
+            # Skip users in the list that do not exist
+            if (user_receiver := self.find_user_by_name(username)) is None:
                 continue
 
-            if (receiving_peer := self.find_peer_by_name(username)) is None:
+            # Skip sending a message if sender is not in the added users of the
+            # receiver
+            if peer.user.name not in user_receiver.added_users:
                 continue
 
-            messages.append(receiving_peer.send_message(
-                PrivateChatMessage.Response(
-                    next(self.chat_id_gen),
-                    timestamp,
-                    message=message.message,
-                    username=peer.user.name,
-                    is_direct=True
+            # TODO: Verify if a new chat ID is generated for each user
+            private_message = QueuedPrivateMessage(
+                chat_id=chat_id,
+                username=peer.user.name,
+                message=message.message,
+                timestamp=timestamp
+            )
+            user_receiver.queued_private_messages.append(private_message)
+
+            if (peer_receiver := self.find_peer_by_name(username)) is not None:
+                tasks.append(
+                    peer_receiver.send_message(
+                        private_message.to_protocol_message(is_direct=True)
+                    )
                 )
-            ))
 
-        await asyncio.gather(*messages, return_exceptions=True)
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     @on_message(PrivateChatMessage.Request)
     async def on_chat_private_message(self, message: PrivateChatMessage.Request, peer: Peer):
-        """User sends a private message to a another user
-
-        TODO: Investigate:
-        * User does not exist
-        * Does message get queued and sent if user is valid but not online
-        * Trimming of messages?
-        """
+        """User sends a private message to a another user"""
         if not peer.user:
             return
 
@@ -665,28 +652,36 @@ class MockServer:
         if (user_receiver := self.find_user_by_name(message.username)) is None:
             return
 
-        if (peer_receiver := self.find_peer_by_name(message.username)) is None:
-            # User exists but is currently not connected -> queue
-            user_receiver.queued_private_messages.append(
-                QueuedPrivateMessage(
-                    chat_id=next(self.chat_id_gen),
-                    username=peer.user.name,
-                    message=message.message,
-                    timestamp=int(time.time())
-                )
-            )
+        private_message = QueuedPrivateMessage(
+            chat_id=next(self.chat_id_gen),
+            username=peer.user.name,
+            message=message.message,
+            timestamp=int(time.time())
+        )
+        user_receiver.queued_private_messages.append(private_message)
 
-        else:
-
+        # If there is a peer for that user, send the message with is_direct=True
+        if (peer_receiver := self.find_peer_by_name(message.username)) is not None:
             await peer_receiver.send_message(
-                PrivateChatMessage.Response(
-                    next(self.chat_id_gen),
-                    timestamp=int(time.time()),
-                    message=message.message,
-                    username=peer.user.name,
-                    is_direct=True
-                )
+                private_message.to_protocol_message(is_direct=True)
             )
+
+    @on_message(PrivateChatMessageAck.Request)
+    async def on_chat_private_message_ack(
+        self, message: PrivateChatMessageAck.Request, peer: Peer):
+
+        if not peer.user:
+            return
+
+        to_remove = []
+        for queued_message in peer.user.queued_private_messages:
+            if queued_message.chat_id == message.chat_id:
+                to_remove.append(queued_message)
+
+        peer.user.queued_private_messages = [
+            queued_pmessage for queued_pmessage in peer.user.queued_private_messages
+            if queued_pmessage not in to_remove
+        ]
 
     @on_message(RoomChatMessage.Request)
     async def on_chat_room_message(self, message: RoomChatMessage.Request, peer: Peer):
@@ -739,9 +734,8 @@ class MockServer:
         if peer.user.name == message.username:
             return
 
-        if message.username in self.track_map:
-            if peer.user.name in self.track_map[message.username]:
-                self.track_map[message.username].remove(peer.user.name)
+        if message.username in peer.user.added_users:
+            del peer.user.added_users[message.username]
 
     @on_message(GetUserStatus.Request)
     async def on_get_user_status(self, message: GetUserStatus.Request, peer: Peer):
@@ -1500,7 +1494,7 @@ class MockServer:
             privileged=user.privileged
         )
 
-        # Notify the user his status has changed. Not applicable for statuses:
+        # Notify the user who is changing his status. Not applicable for statuses:
         # * OFFLINE: user disconnected and thus will not receive the message
         #            anyway
         # * ONLINE: message is not sent during logon. This causes the message
@@ -1531,10 +1525,9 @@ class MockServer:
 
     async def send_queued_private_messages(self, peer: Peer):
         """Sends all private messages to the peer"""
-        queued_messages = peer.user.queued_private_messages
-        peer.user.queued_private_messages = []
-        for queued_message in queued_messages:
-            await peer.send_message(queued_message.to_protocol_message())
+        for queued_message in peer.user.queued_private_messages:
+            await peer.send_message(
+                queued_message.to_protocol_message(is_direct=False))
 
     async def create_public_room(self, name: str) -> Room:
         """Creates a new private room, should be called when all checks are
@@ -1670,6 +1663,21 @@ class MockServer:
             peer = self.find_peer_by_name(user.name)
             if peer:
                 tasks.append(peer.send_message(message))
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def notify_added_users(self, user: User, message: MessageDataclass):
+        """Sends a protocol message to the users who have the given user in
+        their ``added_users`` list
+        """
+        peers = self.get_valid_peers()
+
+        tasks = []
+        for peer in peers:
+            if user.name not in peer.user.added_users:
+                continue
+
+            tasks.append(peer.send_message(message))
+
         await asyncio.gather(*tasks, return_exceptions=True)
 
     async def grant_membership(self, room: Room, user: User, granting_user: User):
