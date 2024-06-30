@@ -4,7 +4,7 @@ from enum import auto, Enum
 from aioslsk.protocol.messages import PrivateChatMessage
 from aioslsk.user.model import UserStatus
 import typing
-from typing import List, Set, Optional
+from typing import Dict, List, Set, Optional
 from weakref import WeakValueDictionary
 
 
@@ -58,7 +58,7 @@ class User:
     hated_interests: Set[str] = field(default_factory=set)
 
     queued_private_messages: List[QueuedPrivateMessage] = field(default_factory=list)
-    added_users: WeakValueDictionary = field(default_factory=WeakValueDictionary)
+    added_users: Dict[str, 'User'] = field(default_factory=WeakValueDictionary)
 
     # TODO: Investigate what the default values are
     enable_private_rooms: bool = False

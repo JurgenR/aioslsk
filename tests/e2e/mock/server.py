@@ -458,15 +458,6 @@ class MockServer:
         for message in messages:
             await peer.send_message(message)
 
-    async def notify_trackers_status(self, user: User):
-        """Notify the peers tracking the given user of status changes"""
-        message = GetUserStatus.Response(
-            username=user.name,
-            status=user.status.value,
-            privileged=user.privileged
-        )
-        await self.notify_added_users(user, message)
-
     @on_message(ExactFileSearch.Request)
     async def on_exact_file_search(self, message: ExactFileSearch.Request, peer: Peer):
         pass
@@ -1485,7 +1476,11 @@ class MockServer:
         await self.revoke_operator(room, user)
 
     async def send_status_update(self, user: User):
-        """Send a status update after the """
+        """Sends out a status update for the given user to:
+        * The user itself
+        * Users who have the user in their ``add_users`` list
+        * Users who are in the same room as the user
+        """
         peer = self.find_peer_by_name(user.name)
 
         status_message = GetUserStatus.Response(
@@ -1504,7 +1499,7 @@ class MockServer:
             await peer.send_message(status_message)
 
         # Notify users who are tracking the users
-        await self.notify_trackers_status(user)
+        await self.notify_added_users(user, status_message)
 
         # Notify all users in rooms which the user is part of
         for room in self.get_joined_rooms(user):
