@@ -63,9 +63,6 @@ We cannot connect to them, they cannot connect to us:
 .. note::
    Other clients don't seem to adhere to this flow: they don't actually wait for the connection to be established and just fires a :ref:`ConnectToPeer` message to the server at the same time as it tries to establish a connection to the peer.
 
-.. note::
-   Question 1: Why do we need a ticket number for :ref:`PeerInit` ? -> most clients seem to just send ``0``
-
 
 Obfuscation
 -----------
@@ -748,7 +745,6 @@ A request to change the current status of the user
 **Checks:**
 
 * If the requested ``status`` equals the ``status`` of the ``user``: Do nothing
-* TODO: Verify what happens if a non-existant user was added and suddenly logs on
 
 **Actions:**
 
@@ -967,10 +963,6 @@ This is used to acknowledge that a specific private message has been received. I
 
 * ``receiver`` : the user who has received the private message and is using this message to acknowledge he has received it
 
-**Checks:**
-
-* TODO: If the ``chat_id`` does not match some internal state?
-
 **Actions:**
 
 1. If the ``chat_id`` exists in the ``queued_private_messages`` of the ``receiver``
@@ -1018,6 +1010,113 @@ Private Chat Message Multiple Users
                * message : ``message`` value of the message
                * username : Value of the ``name`` value of the ``sender``
                * is_direct : true
+
+
+Global Search
+~~~~~~~~~~~~~
+
+Perform a search query to everyone on the network.
+
+**Message:** :ref:`FileSearch`
+
+**Actors:**
+
+* ``searcher`` : User requesting a global search
+
+**Actions:**
+
+1. Foreach user who is a distributed root:
+
+   :ref:`DistributedServerSearchRequest`
+
+
+Room Search
+-----------
+
+Performs a search on every one in a single room:
+
+1. Searcher send: :ref:`RoomSearch` : with a `ticket`, the `query` and `room` name
+2. Room user receive: :ref:`FileSearch`
+
+
+**Message:** :ref:`RoomSearch`
+
+**Actors:**
+
+* ``searcher`` : User requesting a room search
+
+**Checks:**
+
+* TODO: If the room does not exist
+* TODO: If the user not joined to the room
+* TODO: If the query is empty
+
+**Actions:**
+
+1. Foreach user in the list of ``joined_users``:
+
+   1. :ref:`FileSearch`
+
+      * ``username`` : name of the ``searcher``
+      * ``ticket`` : ``ticket`` parameter of the request message
+      * ``query`` : ``query`` parameter of the request message
+
+
+.. note::
+
+   * TODO: Verify if request is also sent to self
+   * TODO: Verify if it is possible to query non-joined private rooms of which we are member
+
+
+User Search
+-----------
+
+Performs a search query on an individual user
+
+**Message:** :ref:`RoomSearch`
+
+**Actors:**
+
+* ``searcher`` : User requesting to query an individual
+* ``searchee`` : User being queried
+
+**Checks:**
+
+* TODO: User does not exist
+
+**Actions:**
+
+1. To ``searchee``:
+
+   1. :ref:`FileSearch`
+
+      * ``username`` : name of the ``searcher``
+      * ``ticket`` : ``ticket`` parameter of the request message
+      * ``query`` : ``query`` parameter of the request message
+
+
+.. _room-list:
+
+Room List
+~~~~~~~~~
+
+The room list is received after login but can be refreshed by sending another :ref:`RoomList` request.
+
+**Message:** :ref:`RoomList`
+
+**Actions:**
+
+1. :ref:`RoomList`
+
+   * ``rooms`` : public rooms
+   * ``rooms_private_owned`` : private rooms for which we are ``owner``
+   * ``rooms_private`` : private rooms for which we are in the ``members`` list
+   * ``rooms_private_operated`` : private rooms for which we are in the ``operators`` list
+
+.. note::
+   Not all public rooms are listed in the initial :ref:`RoomList` message after login; only rooms with 5 or more ``joined_users``.
+
+   It's not clear where this limit comes from, and possibly if the total amount of public rooms is low those rooms are included anyway (and perhaps if it's high the minimum amount of members increases as well)
 
 
 Room Joining / Creation
@@ -1100,8 +1199,8 @@ Leave Room
 
 **Checks**
 
-* TODO: User is not part of the room
-* TODO: Room does not exist
+* User is not part of the room : Do nothing
+* Room does not exist : Do nothing
 
 **Actions**
 
@@ -2166,25 +2265,6 @@ Private Chat Message
    * Is a message still delivered after the sender is removed?
 
 
-.. _room-list:
-
-Room List
----------
-
-The room list is received after login but can be refreshed by sending another :ref:`RoomList` request. The :ref:`RoomList` message consists of lists of rooms categorized by room type:
-
-* ``rooms`` : public rooms
-* ``rooms_private_owned`` : private rooms for which we are ``owner``
-* ``rooms_private`` : private rooms for which we are in the ``members`` list
-* ``rooms_private_operated`` : private rooms for which we are in the ``operators`` list
-
-.. note::
-   Not all public rooms are listed in the initial :ref:`RoomList` message after login; only rooms with 5 or more ``joined_users``.
-
-   It's not clear where this limit comes from, and possibly if the total amount of public rooms is low those rooms are included anyway (and perhaps if it's high the minimum amount of members increases as well)
-
-
-
 Searching
 =========
 
@@ -2251,35 +2331,6 @@ Attribute table:
 
 .. note::
   Couldn't find any other than these. Number 3 seems to be missing, could this be something used in the past or maybe for video? Theoretically we could invent new attributes here, like something for video, images, extra metadata for music files. The official clients don't seem to do anything with the extra attributes
-
-
-Global Search
--------------
-
-Perform a query to everyone on the network.
-
-1. Searcher: Send :ref:`FileSearch`
-2. Server: Send :ref:`ServerSearchRequest` to distributed network roots (level = 0)
-3. Roots (level 0): Send :ref:`DistributedServerSearchRequest`
-4. Roots children: (level 1): Send :ref:`DistributedSearchRequest`
-
-
-Room Search
------------
-
-Performs a search on every one in a single room:
-
-1. Searcher send: :ref:`RoomSearch` : with a `ticket`, the `query` and `room` name
-2. Room user receive: :ref:`FileSearch`
-
-
-User Search
------------
-
-Searches an individual user:
-
-1. Searcher send :ref:`UserSearch` : with a `ticket`, the `query` and `username`
-2. Target user receive: :ref:`FileSearch`
 
 
 Delivering Search Results
