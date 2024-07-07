@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import random
 from typing import List
 from tests.e2e.mock.peer import Peer
 from tests.e2e.mock.model import Settings
@@ -124,5 +125,48 @@ class RealisticParentsStrategy(DistributedStrategy):
         * If the upload speed is greater than all others? -> that could cause issues
         * If the upload speed is greater than the lowest upload speed of one of
           the branch roots
+        * Probably it's simply a percentage of peers that become branch root.
+          If there are 100 users and the percentage of branch roots should be
+          5% then the 5 users with the top upload speeds are used.
+
+        ----
+
+        The server will mostly pick only peers whose speed exceeds yours. There
+        are peers where it is less, but at least close and not much less. There
+        does not seem to be a correlation on how much more; I've seen potential
+        parents where that have an upload speed that only slightly exceeds the
+        current upload speed. But I've also seen potential parents that greatly
+        exceed the current speed.
+
+        The potential parents with lower speed than the current speed could be
+        explained by the fact that the speed used when selecting the parents is
+        not determined based on the current speed but rather the speed at logon.
+        This requires more investigation however, as I did not go in depth at
+        when the new speed is taken into account after an upload, I just know
+        that it is not immediate. The same could be said about the high speeds
+        but those seem to occur more frequently and the expectation is that most
+        people have around the same speed and higher speeds are rarer anyway,
+        yet they occur much more often than the lower speeds. When graphing out
+        the speeds of potential parents it increases exponentially at a certain
+        point. I'm not sure if it is by design or I'm just looking at how
+        upload speeds are generally divided.
+
+        There is perhaps a smarter mechanism behind it. It cannot be that the
+        server just picks the peers with speeds closest to the current speed as
+        this would create bottlenecks. But I feel like if it were to be random
+        then low speed peers could get assigned to branch roots would also
+        create bottlenecks. It's difficult to determine because when the speed
+        is low there is a large pool of peers to pick from and it's difficult to
+        correlate. At current it does seems random, it could be that weights are
+        assigned based on the current level and/or speed to the random
+        selection process.
         """
-        return []
+        possible_peers = []
+        for peer in self.get_peers_accepting_children():
+            if not peer.user or peer == target_peer:
+                continue
+
+            if peer.user.avg_speed >= target_peer.user.avg_speed:
+                possible_peers.append(peer)
+
+        return random.choices(possible_peers, k=10)

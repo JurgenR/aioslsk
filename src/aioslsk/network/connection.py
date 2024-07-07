@@ -295,9 +295,7 @@ class DataConnection(Connection):
         """
         while not self._is_closing():
             try:
-                message_data = await self.receive_message()
-                if message_data:
-                    message = self.decode_message_data(message_data)
+                message = await self.receive_message_object()
 
             except ConnectionReadError:
                 logger.warning(f"{self.hostname}:{self.port} : read error")
@@ -306,10 +304,18 @@ class DataConnection(Connection):
                 logger.warning(f"{self.hostname}:{self.port} : failed to deserialize message")
 
             else:
+
+                if not message:
+                    return
+
                 # Do not handle messages when closing/closed
-                if not self._is_closing():
-                    if message:
-                        await self._perform_message_callback(message)
+                if self._is_closing():
+                    logger.warning(
+                        f"{self.hostname}:{self.port} : connection is closing, "
+                        f"skipping handling message : {message!r}"
+                    )
+                else:
+                    await self._perform_message_callback(message)
 
     async def _read_message(self) -> bytes:
         if not self._reader:
@@ -324,14 +330,18 @@ class DataConnection(Connection):
         _, message_len = uint32.deserialize(0, message_len_buf)
 
         async with atimeout(self.read_timeout):
-            message = await self._reader.readexactly(message_len)  #
+            message = await self._reader.readexactly(message_len)
 
         return header + message
 
     async def receive_message_object(self) -> Optional[MessageDataclass]:
         message_data = await self.receive_message()
+
         if message_data:
-            return self.decode_message_data(message_data)
+            message = self.decode_message_data(message_data)
+            logger.debug(f"{self.hostname}:{self.port} : received message : {message!r}")
+            return message
+
         else:
             return None
 
@@ -377,7 +387,6 @@ class DataConnection(Connection):
         return data
 
     async def _perform_message_callback(self, message: MessageDataclass):
-        logger.debug(f"{self.hostname}:{self.port} : received message : {message!r}")
         try:
             await self.network.on_message_received(message, self)
         except Exception:

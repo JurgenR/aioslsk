@@ -218,11 +218,11 @@ Obfuscated port: this part seems to be optional, either it can be omitted comple
 
 :Code: 2 (0x02)
 :Send:
-   1. **uint32**: listening port
+   1. **uint32**: listening_port
    2. Optional:
 
-      1. **uint32**: has obfuscated listening port
-      2. **uint32**: obfuscated listening port
+      1. **uint32**: has_obfuscated_port
+      2. **uint32**: obfuscated_port
 
 
 .. _GetPeerAddress:
@@ -240,12 +240,12 @@ If the peer does not exist we will receive a response with IP address, port set 
    1. **string**: username
 :Receive:
    1. **string**: username
-   2. **uint32**: IP address
-   3. **uint32**: listening port
+   2. **uint32**: ip
+   3. **uint32**: port
    4. Optional:
 
-      1. **uint32**: has obfuscated listening port
-      2. **uint16**: obfuscated listening port
+      1. **uint32**: has_obfuscated_port
+      2. **uint16**: obfuscated_port
 
 
 .. _AddUser:
@@ -253,7 +253,11 @@ If the peer does not exist we will receive a response with IP address, port set 
 AddUser (Code 5)
 ----------------
 
-Track a user
+When a user is added with this message the server will automatically send user status updates using the :ref:`GetUserStatus` message.
+
+When a user sends a message to multiple users using the :ref:`PrivateChatMessageUsers` message then this message will only be received if the sender was added first using this message.
+
+To remove a user use the :ref:`RemoveUser` message. Keep in mind that you will still receive status updates in case you are joined in the same room with the user.
 
 :Code: 5 (0x05)
 :Send:
@@ -275,7 +279,7 @@ Track a user
 RemoveUser (Code 6)
 -------------------
 
-Untrack a user
+Remove the tracking of user status which was previously added with the :ref:`AddUser` message.
 
 :Code: 6 (0x06)
 :Send:
@@ -287,7 +291,7 @@ Untrack a user
 GetUserStatus (Code 7)
 ----------------------
 
-Get the user status, we will get updates on this automatically if we have performed AddUser
+Get the user status, we will get updates on this automatically if we have performed :ref:`AddUser`
 
 :Code: 5 (0x05)
 :Send:
@@ -1493,7 +1497,7 @@ List of operators for a private room.
 PrivateChatMessageUsers (Code 149)
 ----------------------------------
 
-Send a private message to a list of users
+Send a private message to a list of users. This message will only be received by users who have added you using the :ref:`AddUser` message first.
 
 :Code: 149 (0x95)
 :Send:

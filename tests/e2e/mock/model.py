@@ -1,9 +1,11 @@
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import auto, Enum
+from aioslsk.protocol.messages import PrivateChatMessage
 from aioslsk.user.model import UserStatus
 import typing
-from typing import List, Set, Optional
+from typing import Dict, List, Set, Optional
+from weakref import WeakValueDictionary
 
 
 @dataclass
@@ -17,10 +19,27 @@ class Settings:
     wishlist_interval: int = 720
 
 
+@dataclass(frozen=True)
+class QueuedPrivateMessage:
+    chat_id: int
+    username: str
+    message: str
+    timestamp: int
+
+    def to_protocol_message(self, is_direct: bool = False) -> PrivateChatMessage:
+        return PrivateChatMessage.Response(
+            chat_id=self.chat_id,
+            timestamp=self.timestamp,
+            username=self.username,
+            message=self.message,
+            is_direct=is_direct
+        )
+
+
 @dataclass
 class User:
     name: str
-    password: str = None
+    password: str = ''
     privileges_time_left: int = 0
     is_admin: bool = False
 
@@ -38,6 +57,9 @@ class User:
     interests: Set[str] = field(default_factory=set)
     hated_interests: Set[str] = field(default_factory=set)
 
+    queued_private_messages: List[QueuedPrivateMessage] = field(default_factory=list)
+    added_users: Dict[str, 'User'] = field(default_factory=WeakValueDictionary)
+
     # TODO: Investigate what the default values are
     enable_private_rooms: bool = False
     enable_parent_search: bool = False
@@ -51,6 +73,7 @@ class User:
     def reset(self):
         """Sets the user to offline and resets all values"""
         self.status = UserStatus.OFFLINE
+        self.added_users = WeakValueDictionary()
 
         self.port = None
         self.obfuscated_port = None

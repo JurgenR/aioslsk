@@ -7,6 +7,7 @@ import socket
 import time
 from typing import Dict, Generator, List, Optional, Set, Type, TypeVar
 import typing
+from weakref import WeakSet
 
 from aioslsk.events import on_message, build_message_map
 from aioslsk.user.model import UserStatus
@@ -55,6 +56,7 @@ from aioslsk.protocol.messages import (
     Ping,
     PotentialParents,
     PrivateChatMessage,
+    PrivateChatMessageAck,
     PrivateChatMessageUsers,
     PrivateRoomDropMembership,
     PrivateRoomDropOwnership,
@@ -99,7 +101,13 @@ from tests.e2e.mock.constants import (
 )
 from tests.e2e.mock.distributed import DistributedStrategy, EveryoneRootStrategy
 from tests.e2e.mock.messages import AdminMessage
-from tests.e2e.mock.model import User, Room, RoomStatus, Settings
+from tests.e2e.mock.model import (
+    QueuedPrivateMessage,
+    Room,
+    RoomStatus,
+    Settings,
+    User,
+)
 from tests.e2e.mock.peer import Peer
 
 
@@ -142,7 +150,6 @@ class MockServer:
         self.users: List[User] = []
         self.rooms: List[Room] = []
         self.peers: List[Peer] = []
-        self.track_map: Dict[str, Set[str]] = {}
         self.excluded_search_phrases: List[str] = excluded_search_phrases
         self.distributed_strategy: DistributedStrategy = self._create_distributed_strategy(distributed_strategy_class)
         self.distributed_parent_task: Optional[asyncio.Task] = None
@@ -428,7 +435,7 @@ class MockServer:
             self._create_room_list_message(user, min_users=min_users)
         ]
 
-        # Following is done in 2 loops deliberatly
+        # Following is done in 2 loops deliberatly to keep order of messages
         # PrivateRoomMembers (excludes owner, includes operators)
         user_private_rooms = self.get_user_private_rooms(user)
         for room in user_private_rooms:
@@ -451,108 +458,71 @@ class MockServer:
         for message in messages:
             await peer.send_message(message)
 
-    async def notify_trackers_status(self, user: User):
-        """Notify the peers tracking the given user of status changes"""
-        if user.name not in self.track_map:
-            return
-
-        message = GetUserStatus.Response(
-            username=user.name,
-            status=user.status.value,
-            privileged=user.privileged
-        )
-
-        tasks = []
-        for tracker_name in self.track_map[user.name]:
-            tracker_peer = self.find_peer_by_name(tracker_name)
-            if tracker_peer:
-                tasks.append(tracker_peer.send_message(message))
-
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-    async def notify_trackers(self, user: User):
-        """Notify the peers tracking the given user of changes"""
-        if user.name not in self.track_map:
-            return
-
-        tasks = []
-        message = AddUser.Response(
-            user.name,
-            exists=True,
-            status=user.status.value,
-            user_stats=UserStats(
-                avg_speed=user.avg_speed,
-                uploads=user.uploads,
-                shared_file_count=user.shared_file_count,
-                shared_folder_count=user.shared_folder_count
-            ),
-            country_code=user.country
-        )
-
-        for username in self.track_map[user.name]:
-            for peer in self.get_valid_peers():
-                if peer.user.name == username:
-                    tasks.append(peer.send_message(message))
-
-        await asyncio.gather(*tasks, return_exceptions=True)
-
     @on_message(ExactFileSearch.Request)
-    async def on_ExactFileSearch(self, message: ExactFileSearch.Request, peer: Peer):
+    async def on_exact_file_search(self, message: ExactFileSearch.Request, peer: Peer):
         pass
 
     @on_message(Login.Request)
     async def on_login(self, message: Login.Request, peer: Peer):
+        # Ignore hash mismatch
+        if message.md5hash != calc_md5(message.username + message.password):
+            pass
+
         # Check if username entered is valid
         if not message.username:
-            await peer.send_message(Login.Response(
-                success=False,
-                reason='INVALIDUSERNAME'
-            ))
+            await peer.send_message(
+                Login.Response(
+                    success=False,
+                    reason='INVALIDUSERNAME'
+                )
+            )
             return
 
         # Check if we have a user, if so check the password
         user = self.find_user_by_name(message.username)
         if user and message.password != user.password:
-            await peer.send_message(Login.Response(
-                success=False,
-                reason='INVALIDPASS'
-            ))
+            await peer.send_message(
+                Login.Response(
+                    success=False,
+                    reason='INVALIDPASS'
+                )
+            )
             return
 
-        # Login is successful, just need to check if we need to create a new user
-        # or this user is already logged in elsewhere
-        if user:
-            # Check if there is another peer
-            other_peer = self.find_peer_by_name(message.username)
-            if other_peer:
-                other_peer.user = None
-                await other_peer.send_message(Kicked.Response())
-                await other_peer.disconnect()
-        else:
-            # Create a new user if we did not have it yet
+        # Create a new user if we did not have it yet
+        if not user:
             user = User(message.username, password=message.password)
             self.users.append(user)
 
-        # Send success response and set user/peer
+        # Check if there is another peer
+        other_peer = self.find_peer_by_name(message.username)
+        if other_peer:
+            other_peer.user = None
+            await other_peer.send_message(Kicked.Response())
+            await other_peer.disconnect()
 
+        # Link the user to the peer
         peer.user = user
-        user.status = UserStatus.ONLINE
-        # TODO: Check if tracking users are notified (and if the initial status
-        # is actually online or the last status the user had)
 
-        await peer.send_message(Login.Response(
-            success=True,
-            greeting='',
-            ip=peer.hostname,
-            md5hash=calc_md5(message.password),
-            privileged=False
-        ))
+        user.status = UserStatus.ONLINE
+        await self.send_status_update(user)
+
+        await peer.send_message(
+            Login.Response(
+                success=True,
+                greeting='',
+                ip=peer.hostname,
+                md5hash=calc_md5(message.password),
+                privileged=user.privileged
+            )
+        )
 
         # Send all post login messages
         # NOTE: the room list should only contain rooms with 5 or more joined
         # users after login. Ignoring for now since there won't be much rooms
         # during testing
-        await self.send_room_list_update(peer.user)
+        await self.send_queued_private_messages(peer)
+        await self.send_room_list_update(user)
         await peer.send_message(
             ParentMinSpeed.Response(self.settings.parent_min_speed))
         await peer.send_message(
@@ -566,6 +536,9 @@ class MockServer:
 
     @on_message(SetListenPort.Request)
     async def on_listen_port(self, message: SetListenPort.Request, peer: Peer):
+        if peer.user is None:
+            return
+
         peer.user.port = message.port
         peer.user.obfuscated_port = message.obfuscated_port
 
@@ -585,17 +558,19 @@ class MockServer:
     @on_message(AddUser.Request)
     async def on_add_user(self, message: AddUser.Request, peer: Peer):
         """
-        TODO: Investigate
-        * Empty username
-        * Track user already tracked
+        Behaviour:
+        * Empty username -> user cannot exist
+        * Track user already tracked -> user only gets 1 update
         """
-        # To be verified: track user even if it does not exist
-        if message.username in self.track_map:
-            self.track_map[message.username].add(peer.user.name)
-        else:
-            self.track_map[message.username] = {peer.user.name}
+        if not peer.user:
+            return
 
         if (user := self.find_user_by_name(message.username)) is not None:
+            # Add only to the added_users if the user exists and he is not
+            # himself
+            if message.username != peer.user.name:
+                peer.user.added_users[message.username] = user
+
             await peer.send_message(
                 AddUser.Response(
                     message.username,
@@ -621,66 +596,83 @@ class MockServer:
 
     @on_message(PrivateChatMessageUsers.Request)
     async def on_private_chat_message_users(self, message: PrivateChatMessageUsers.Request, peer: Peer):
-        """User sends a private message to multiple users
-
-        TODO: Investigate:
-        * Empty list
-        * Empty message
-        * One/multiple of the users does not exist
-        * One/multiple of the users is not connected
-        """
-        timestamp = int(time.time())
-        messages = []
-        for username in message.usernames:
-            if (user := self.find_user_by_name(username)) is None:
-                continue
-
-            if (receiving_peer := self.find_peer_by_name(username)) is None:
-                continue
-
-            messages.append(receiving_peer.send_message(
-                PrivateChatMessage.Response(
-                    next(self.chat_id_gen),
-                    timestamp,
-                    message=message.message,
-                    username=peer.user.name,
-                    is_direct=peer.user.is_admin
-                )
-            ))
-
-        asyncio.gather(*messages, return_exceptions=True)
-
-    @on_message(PrivateChatMessage.Request)
-    async def on_chat_private_message(self, message: PrivateChatMessage.Request, peer: Peer):
-        """User sends a private message to a another user
-
-        TODO: Investigate:
-        * Empty username
-        * Empty message
-        * User does not exist
-        * Does message get queued and sent if user is valid but not online
-        * Trimming of messages?
-        """
+        """User sends a private message to multiple users"""
         if not peer.user:
             return
 
-        # Do nothing when sending u user that does not exist
-        if self.find_user_by_name(message.username) is None:
-            return
+        timestamp = int(time.time())
+        chat_id = next(self.chat_id_gen)
 
-        # User exists but is currently not connected
-        if (peer_receiver := self.find_peer_by_name(message.username)) is None:
-            return
+        tasks = []
+        for username in message.usernames:
 
-        await peer_receiver.send_message(
-            PrivateChatMessage.Response(
-                next(self.chat_id_gen),
-                timestamp=int(time.time()),
-                message=message.message,
+            # Skip users in the list that do not exist
+            if (user_receiver := self.find_user_by_name(username)) is None:
+                continue
+
+            # Skip sending a message if sender is not in the added users of the
+            # receiver
+            if peer.user.name not in user_receiver.added_users:
+                continue
+
+            # TODO: Verify if a new chat ID is generated for each user
+            private_message = QueuedPrivateMessage(
+                chat_id=chat_id,
                 username=peer.user.name,
-                is_direct=peer.user.is_admin
+                message=message.message,
+                timestamp=timestamp
             )
+            user_receiver.queued_private_messages.append(private_message)
+
+            if (peer_receiver := self.find_peer_by_name(username)) is not None:
+                tasks.append(
+                    peer_receiver.send_message(
+                        private_message.to_protocol_message(is_direct=True)
+                    )
+                )
+
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    @on_message(PrivateChatMessage.Request)
+    async def on_chat_private_message(self, message: PrivateChatMessage.Request, peer: Peer):
+        """User sends a private message to a another user"""
+        if not peer.user:
+            return
+
+        # Do nothing when sending to a user that does not exist
+        if (user_receiver := self.find_user_by_name(message.username)) is None:
+            return
+
+        private_message = QueuedPrivateMessage(
+            chat_id=next(self.chat_id_gen),
+            username=peer.user.name,
+            message=message.message,
+            timestamp=int(time.time())
         )
+        user_receiver.queued_private_messages.append(private_message)
+
+        # If there is a peer for that user, send the message with is_direct=True
+        if (peer_receiver := self.find_peer_by_name(message.username)) is not None:
+            await peer_receiver.send_message(
+                private_message.to_protocol_message(is_direct=True)
+            )
+
+    @on_message(PrivateChatMessageAck.Request)
+    async def on_chat_private_message_ack(
+        self, message: PrivateChatMessageAck.Request, peer: Peer):
+
+        if not peer.user:
+            return
+
+        to_remove = []
+        for queued_message in peer.user.queued_private_messages:
+            if queued_message.chat_id == message.chat_id:
+                to_remove.append(queued_message)
+
+        peer.user.queued_private_messages = [
+            queued_pmessage for queued_pmessage in peer.user.queued_private_messages
+            if queued_pmessage not in to_remove
+        ]
 
     @on_message(RoomChatMessage.Request)
     async def on_chat_room_message(self, message: RoomChatMessage.Request, peer: Peer):
@@ -708,7 +700,7 @@ class MockServer:
         if room_futures:
             await asyncio.gather(*room_futures, return_exceptions=True)
 
-        # Send to public chat
+        # Send public chat messages to users who have it enabled
         public_futures = []
         if room.status == RoomStatus.PUBLIC:
             public_message = PublicChatMessage.Response(
@@ -728,9 +720,13 @@ class MockServer:
         if not peer.user:
             return
 
-        if message.username in self.track_map:
-            if peer.user.name in self.track_map[message.username]:
-                self.track_map[message.username].remove(peer.user.name)
+        # Ignore removing self (this check technically isn't necessary because
+        # it is not possible to track self but is done for clarity)
+        if peer.user.name == message.username:
+            return
+
+        if message.username in peer.user.added_users:
+            del peer.user.added_users[message.username]
 
     @on_message(GetUserStatus.Request)
     async def on_get_user_status(self, message: GetUserStatus.Request, peer: Peer):
@@ -740,6 +736,14 @@ class MockServer:
                     username=message.username,
                     status=user.status.value,
                     privileged=user.privileged
+                )
+            )
+        else:
+            await peer.send_message(
+                GetUserStatus.Response(
+                    username=message.username,
+                    status=UserStatus.OFFLINE.value,
+                    privileged=False
                 )
             )
 
@@ -757,21 +761,35 @@ class MockServer:
                     )
                 )
             )
+        else:
+            await peer.send_message(
+                GetUserStats.Response(
+                    username=message.username,
+                    user_stats=UserStats(
+                        avg_speed=0,
+                        uploads=0,
+                        shared_file_count=0,
+                        shared_folder_count=0
+                    )
+                )
+            )
 
     @on_message(SharedFoldersFiles.Request)
     async def on_shared_folders_files(self, message: SharedFoldersFiles.Request, peer: Peer):
         peer.user.shared_folder_count = message.shared_folder_count
         peer.user.shared_file_count = message.shared_file_count
 
+        await self.send_stats_update(peer.user)
+
     @on_message(SetStatus.Request)
     async def on_set_status(self, message: SetStatus.Request, peer: Peer):
-        """
-        TODO: Investigates
-        * Invalid status (also try offline)
-        TODO:
-        * Send GetUserStatus message to users in rooms
-        """
         if not peer.user:
+            return
+
+        if message.status not in (UserStatus.AWAY.value, UserStatus.ONLINE.value):
+            return
+
+        if peer.user.status == message.status:
             return
 
         peer.user.status = UserStatus(message.status)
@@ -779,19 +797,19 @@ class MockServer:
 
     @on_message(GetPeerAddress.Request)
     async def on_get_peer_address(self, message: GetPeerAddress.Request, peer: Peer):
-        for other_peer in self.peers:
-            if other_peer.user.name == message.username:
-                await peer.send_message(
-                    GetPeerAddress.Response(
-                        message.username,
-                        other_peer.hostname,
-                        port=other_peer.user.port,
-                        obfuscated_port_amount=1 if other_peer.user.obfuscated_port else 0,
-                        obfuscated_port=other_peer.user.obfuscated_port
-                    )
-                )
-                break
 
+        other_peer = self.find_peer_by_name(message.username)
+
+        if other_peer is not None:
+            await peer.send_message(
+                GetPeerAddress.Response(
+                    message.username,
+                    other_peer.hostname,
+                    port=other_peer.user.port,
+                    obfuscated_port_amount=1 if other_peer.user.obfuscated_port else 0,
+                    obfuscated_port=other_peer.user.obfuscated_port
+                )
+            )
         else:
             await peer.send_message(
                 GetPeerAddress.Response(
@@ -871,7 +889,7 @@ class MockServer:
             query=message.query
         )
 
-        await self.notify_room_users(room, message)
+        await self.notify_room_joined_users(room, message)
 
     @on_message(UserSearch.Request)
     async def on_user_search(self, message: UserSearch.Request, peer: Peer):
@@ -943,7 +961,7 @@ class MockServer:
                 room=room.name,
                 username=peer.user.name
             )
-            await self.notify_room_users(room, remove_message)
+            await self.notify_room_joined_users(room, remove_message)
 
         # Only set the ticker if it was not an empty string (pure spaces is fine)
         if message.ticker:
@@ -955,7 +973,7 @@ class MockServer:
                 ticker=message.ticker
             )
 
-        await self.notify_room_users(room, add_message)
+        await self.notify_room_joined_users(room, add_message)
 
     @on_message(GetGlobalRecommendations.Request)
     async def on_get_global_recommendations(self, message: GetGlobalRecommendations.Request, peer: Peer):
@@ -1050,11 +1068,11 @@ class MockServer:
     @on_message(GetItemSimilarUsers.Request)
     async def on_get_item_similar_users(self, message: GetItemSimilarUsers.Request, peer: Peer):
         """
-        TODO:
-        * What's the max?
-
         Behaviour:
         * Includes self
+
+        TODO:
+        * What's the max?
         """
         similar_users = []
         for other_peer in self.get_valid_peers():
@@ -1071,6 +1089,7 @@ class MockServer:
     @on_message(GetSimilarUsers.Request)
     async def on_get_similar_users(self, message: GetSimilarUsers.Request, peer: Peer):
         """
+        Behaviour:
         * Only online / away users
         * List is returned unsorted
         * Excludes self
@@ -1106,30 +1125,34 @@ class MockServer:
         * No whitespace trimming is done
         * Non-existing user returns empty recommendations
         """
-        interests = []
-        hated_interests = []
-        if user := self.find_user_by_name(message.username):
-            interests = list(user.interests)
-            hated_interests = list(user.hated_interests)
-
-        await peer.send_message(
-            GetUserInterests.Response(
-                message.username,
-                interests,
-                hated_interests
+        if (user := self.find_user_by_name(message.username)) is not None:
+            await peer.send_message(
+                GetUserInterests.Response(
+                    username=message.username,
+                    interests=list(user.interests),
+                    hated_interests=list(user.hated_interests)
+                )
             )
-        )
+
+        else:
+            await peer.send_message(
+                GetUserInterests.Response(
+                    username=message.username,
+                    interests=[],
+                    hated_interests=[]
+                )
+            )
 
     @on_message(AddInterest.Request)
     async def on_add_interest(self, message: AddInterest.Request, peer: Peer):
         """
         Behaviour:
-        - Returns nothing when accepted
-        - Empty string is accepted and returned through GetUserInterests
-        - Duplicates are ignored (GetUserInterests will only return 1)
+        * Returns nothing when accepted
+        * Empty string is accepted and returned through GetUserInterests
+        * Duplicates are ignored (GetUserInterests will only return 1)
 
         To investigate:
-        - Input error: Longest possible?
+        * Input error: Longest possible?
         """
         peer.user.interests.add(message.interest)
 
@@ -1137,11 +1160,11 @@ class MockServer:
     async def on_remove_interest(self, message: RemoveInterest.Request, peer: Peer):
         """
         Behaviour:
-        - Returns nothing when accepted
-        - Removing an interest that is not an interest does nothing (no error)
+        * Returns nothing when accepted
+        * Removing an interest that is not an interest does nothing (no error)
 
         To investigate:
-        - Input error: Longest possible?
+        * Input error: Longest possible?
         """
         peer.user.interests.discard(message.interest)
 
@@ -1155,20 +1178,11 @@ class MockServer:
 
     @on_message(SendUploadSpeed.Request)
     async def on_send_upload_speed(self, message: SendUploadSpeed.Request, peer: Peer):
-        """
-        TODO: Investigate
-        * Formula used for calculation
-        """
-        if peer.user.uploads == 0:
-            peer.user.avg_speed = message.speed
-        else:
-            new_speed = (peer.user.avg_speed * peer.user.uploads) + message.speed
-            new_speed /= (peer.user.uploads + 1)
-            peer.user.avg_speed = int(new_speed)
+        new_speed = (peer.user.avg_speed * peer.user.uploads) + message.speed
+        new_speed /= (peer.user.uploads + 1)
+        peer.user.avg_speed = int(new_speed)
 
         peer.user.uploads += 1
-
-        await self.notify_trackers(peer.user)
 
     @on_message(TogglePrivateRoomInvites.Request)
     async def on_toggle_private_rooms(self, message: TogglePrivateRoomInvites.Request, peer: Peer):
@@ -1462,15 +1476,34 @@ class MockServer:
         await self.revoke_operator(room, user)
 
     async def send_status_update(self, user: User):
-        await self.notify_trackers_status(user)
+        """Sends out a status update for the given user to:
+        * The user itself
+        * Users who have the user in their ``add_users`` list
+        * Users who are in the same room as the user
+        """
+        peer = self.find_peer_by_name(user.name)
 
         status_message = GetUserStatus.Response(
             username=user.name,
             status=user.status.value,
             privileged=user.privileged
         )
+
+        # Notify the user who is changing his status. Not applicable for statuses:
+        # * OFFLINE: user disconnected and thus will not receive the message
+        #            anyway
+        # * ONLINE: message is not sent during logon. This causes the message
+        #           not to be sent when setting status from Away to Online.
+        #           This is intentional
+        if user.status not in (UserStatus.OFFLINE, UserStatus.ONLINE):
+            await peer.send_message(status_message)
+
+        # Notify users who are tracking the users
+        await self.notify_added_users(user, status_message)
+
+        # Notify all users in rooms which the user is part of
         for room in self.get_joined_rooms(user):
-            await self.notify_room_users(room, status_message)
+            await self.notify_room_joined_users(room, status_message)
 
     async def send_stats_update(self, user: User):
         stats_message = GetUserStats.Response(
@@ -1483,7 +1516,13 @@ class MockServer:
             )
         )
         for room in self.get_joined_rooms(user):
-            await self.notify_room_users(room, stats_message)
+            await self.notify_room_joined_users(room, stats_message)
+
+    async def send_queued_private_messages(self, peer: Peer):
+        """Sends all private messages to the peer"""
+        for queued_message in peer.user.queued_private_messages:
+            await peer.send_message(
+                queued_message.to_protocol_message(is_direct=False))
 
     async def create_public_room(self, name: str) -> Room:
         """Creates a new private room, should be called when all checks are
@@ -1542,7 +1581,7 @@ class MockServer:
             slots_free=peer.user.slots_free,
             country_code=peer.user.country
         )
-        await self.notify_room_users(room, user_joined_message)
+        await self.notify_room_joined_users(room, user_joined_message)
 
         # Report to the user he has joined successfully (no mistake)
         await peer.send_message(
@@ -1592,7 +1631,7 @@ class MockServer:
         await peer.send_message(LeaveRoom.Response(room.name))
 
         user_left_message = UserLeftRoom.Response(room.name, peer.user.name)
-        await self.notify_room_users(room, user_left_message)
+        await self.notify_room_joined_users(room, user_left_message)
 
     async def notify_room_owner(self, room: Room, message: str):
         """Sends an admin message to the room owner"""
@@ -1612,13 +1651,28 @@ class MockServer:
                 tasks.append(peer.send_message(message))
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def notify_room_users(self, room: Room, message: MessageDataclass):
+    async def notify_room_joined_users(self, room: Room, message: MessageDataclass):
         """Sends a protocol message to all joined users in the given room"""
         tasks = []
         for user in room.joined_users:
             peer = self.find_peer_by_name(user.name)
             if peer:
                 tasks.append(peer.send_message(message))
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def notify_added_users(self, user: User, message: MessageDataclass):
+        """Sends a protocol message to the users who have the given user in
+        their ``added_users`` list
+        """
+        peers = self.get_valid_peers()
+
+        tasks = []
+        for peer in peers:
+            if user.name not in peer.user.added_users:
+                continue
+
+            tasks.append(peer.send_message(message))
+
         await asyncio.gather(*tasks, return_exceptions=True)
 
     async def grant_membership(self, room: Room, user: User, granting_user: User):
@@ -1694,7 +1748,7 @@ class MockServer:
         # ALSO NOTIFY JOINED USERS (don't know why)
         message = PrivateRoomGrantOperator.Response(room.name, user.name)
         await self.notify_room_members(room, message)
-        await self.notify_room_users(room, message)
+        await self.notify_room_joined_users(room, message)
 
         # Send message to the user being granted operator
         target_peer = self.find_peer_by_name(user.name)
@@ -1723,7 +1777,7 @@ class MockServer:
         # ALSO NOTIFY JOINED USERS (don't know why)
         message = PrivateRoomRevokeOperator.Response(room.name, user.name)
         await self.notify_room_members(room, message)
-        await self.notify_room_users(room, message)
+        await self.notify_room_joined_users(room, message)
 
         # Send message to the user being revoked operator
         target_peer = self.find_peer_by_name(user.name)
