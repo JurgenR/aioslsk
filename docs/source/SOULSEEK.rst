@@ -25,7 +25,7 @@ All peer connections use the TCP protocol. The SoulSeek protocol defines 3 types
 
 To accept connections from incoming peers there should be at least one listening port opened. However newer clients will open two ports: a non-obfuscated and an obfuscated port.
 
-The obfuscated port is not mandatory and is usually just the obfuscated port + 1. Normally any port can be picked, both ports can be made known to the server using the :ref:`SetListenPort` message.
+The obfuscated port is not mandatory and is usually just the obfuscated port + 1. Normally any port can be picked, both ports can be made known to the server using the :ref:`SetListenPort` message. How obfuscation works is described in the :ref:`obfuscation` section
 
 When a peer connection is accepted on the obfuscated port all messaging should be obfuscated with each their own key, this only applies to peer connection though (``P``). Distributed (``D``) and file (``F``) connections are not obfuscated aside from the :ref:`peer-init-messages`.
 
@@ -41,13 +41,22 @@ We can connect to them:
 
 1. Attempt to connect to the peer -> connection established
 2. Generate a ticket number
-3. Send :ref:`PeerInit` over the peer connection (ticket, username, connection_type)
+3. Send :ref:`PeerInit` over the peer connection
+
+   * ``ticket``
+   * ``username``
+   * ``connection_type``
 
 We cannot connect to them, but they can connect to us:
 
 1. Attempt to connect to the peer -> connection failure
-2. Generate a ticket number, story the associated information (username, connection_type)
-3. Send :ref:`ConnectToPeer` to the server(ticket, username, connection_type)
+2. Generate a ticket number, store the associated information (username, connection_type)
+3. Send :ref:`ConnectToPeer` to the server
+
+   * ``ticket``
+   * ``username``
+   * ``connection_type``
+
 4. Incoming connection from peer -> connection is established
 5. Receive :ref:`PeerPierceFirewall` over the peer connection (ticket)
 6. Look up the ticket and associated information
@@ -56,13 +65,43 @@ We cannot connect to them, they cannot connect to us:
 
 1. Attempt to connect to the peer -> connection failure
 2. Generate a ticket number
-3. Send :ref:`ConnectToPeer` command to the server (ticket, username, connection_type)
+3. Send :ref:`ConnectToPeer` command to the server
+
+   * ``ticket``
+   * ``username``
+   * ``connection_type``
+
 4. Nothing should happen here, as they cannot connect to us
-5. Receive :ref:`CannotConnect` from server (ticket)
+5. Other peer sends :ref:`CannotConnect` to the server
+
+   * ``ticket`` : ``ticket`` parameter from the :ref:`ConnectToPeer` message
+
+6. Receive :ref:`CannotConnect` from server (ticket)
 
 .. note::
+
    Other clients don't seem to adhere to this flow: they don't actually wait for the connection to be established and just fires a :ref:`ConnectToPeer` message to the server at the same time as it tries to establish a connection to the peer.
 
+
+Delivering Search Results
+-------------------------
+
+Delivery of search results is the same process for all kinds of search messages:
+
+1. Receive :ref:`FileSearch` from the server
+
+   * ``ticket``
+   * ``username``
+
+2. If the query matches:
+
+  1. Initialize peer connection (``P``) for the ``username`` from the request
+  2. Send :ref:`PeerSearchReply`
+
+     * ``ticket`` from the original search request and query matches
+
+
+.. _obfuscation:
 
 Obfuscation
 -----------
@@ -169,6 +208,29 @@ XOR the third 4 bytes of the message (``4a a3 74 57``) with the rotated key:
 +-----+----+----+----+----+
 |     | e8 | 03 | 00 | 00 |
 +-----+----+----+----+----+
+
+
+Delivering Search Results
+-------------------------
+
+Delivery of search results is the same process for all kinds of search messages:
+
+* :ref:`FileSearch` from the server in case the searcher used :ref:`UserSearch` or :ref:`RoomSearch`
+* :ref:`ServerSearchRequest` from the server in case we are branch root
+* :ref:`DistributedServerSearchRequest`, :ref:`DistributedSearchRequest` from the distributed peer in case we are in the distributed network
+
+1. Receive search request. All messages contain:
+
+   * ``ticket``
+   * ``username``
+   * ``query``
+
+2. If the query matches:
+
+  1. Initialize peer connection (``P``) for the ``username`` from the request
+  2. Send :ref:`PeerSearchReply`
+
+     * ``ticket`` : from the original search request and file data
 
 
 Distributed Flows
@@ -2331,15 +2393,3 @@ Attribute table:
 
 .. note::
   Couldn't find any other than these. Number 3 seems to be missing, could this be something used in the past or maybe for video? Theoretically we could invent new attributes here, like something for video, images, extra metadata for music files. The official clients don't seem to do anything with the extra attributes
-
-
-Delivering Search Results
--------------------------
-
-Delivery of search results is the same process for all kinds of search messages:
-
-1. Receive :ref:`FileSearch`. Containing `ticket` and `username`
-2. If the query matches:
-
-   1. Initialize peer connection (``P``) for the `username` from the request
-   2. Send :ref:`PeerSearchReply` : `ticket` from the original search request and query matches
