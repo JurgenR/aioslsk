@@ -657,6 +657,13 @@ class ParentIP(ServerMessage):
         ip: str = field(metadata={'type': ipaddr})
 
 
+class Unknown80(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x50)
+
+
 class ParentMinSpeed(ServerMessage):
 
     @dataclass(order=True)
@@ -695,6 +702,14 @@ class MinParentsInCache(ServerMessage):
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x58)
         amount: int = field(metadata={'type': uint32})
+
+
+class DistributedDistributeInterval(ServerMessage):
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x59)
+        interval: int = field(metadata={'type': uint32})
 
 
 class DistributedAliveInterval(ServerMessage):
@@ -865,7 +880,7 @@ class RemoveHatedInterest(ServerMessage):
 
 class RoomSearch(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x78)
         room: str = field(metadata={'type': string})
@@ -875,7 +890,7 @@ class RoomSearch(ServerMessage):
 
 class SendUploadSpeed(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x79)
         speed: int = field(metadata={'type': uint32})
@@ -883,12 +898,12 @@ class SendUploadSpeed(ServerMessage):
 
 class GetUserPrivileges(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7A)
         username: int = field(metadata={'type': string})
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7A)
         username: int = field(metadata={'type': string})
@@ -897,7 +912,7 @@ class GetUserPrivileges(ServerMessage):
 
 class GiveUserPrivileges(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7B)
         username: str = field(metadata={'type': string})
@@ -906,7 +921,7 @@ class GiveUserPrivileges(ServerMessage):
 
 class PrivilegesNotification(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7C)
         notification_id: int = field(metadata={'type': uint32})
@@ -915,7 +930,7 @@ class PrivilegesNotification(ServerMessage):
 
 class PrivilegesNotificationAck(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7D)
         notification_id: int = field(metadata={'type': uint32})
@@ -923,7 +938,7 @@ class PrivilegesNotificationAck(ServerMessage):
 
 class BranchLevel(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7E)
         level: int = field(metadata={'type': uint32})
@@ -931,7 +946,7 @@ class BranchLevel(ServerMessage):
 
 class BranchRoot(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7F)
         username: str = field(metadata={'type': string})
@@ -939,7 +954,7 @@ class BranchRoot(ServerMessage):
 
 class ChildDepth(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x81)
         depth: int = field(metadata={'type': uint32})
@@ -947,14 +962,14 @@ class ChildDepth(ServerMessage):
 
 class ResetDistributed(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x82)
 
 
 class PrivateRoomMembers(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x85)
         room: str = field(metadata={'type': string})
@@ -963,13 +978,13 @@ class PrivateRoomMembers(ServerMessage):
 
 class PrivateRoomGrantMembership(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x86)
         room: str = field(metadata={'type': string})
         username: str = field(metadata={'type': string})
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x86)
         room: str = field(metadata={'type': string})
@@ -978,13 +993,13 @@ class PrivateRoomGrantMembership(ServerMessage):
 
 class PrivateRoomRevokeMembership(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x87)
         room: str = field(metadata={'type': string})
         username: str = field(metadata={'type': string})
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x87)
         room: str = field(metadata={'type': string})
@@ -993,7 +1008,7 @@ class PrivateRoomRevokeMembership(ServerMessage):
 
 class PrivateRoomDropMembership(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x88)
         room: str = field(metadata={'type': string})
@@ -1001,7 +1016,7 @@ class PrivateRoomDropMembership(ServerMessage):
 
 class PrivateRoomDropOwnership(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x89)
         room: str = field(metadata={'type': string})
@@ -1009,7 +1024,7 @@ class PrivateRoomDropOwnership(ServerMessage):
 
 class PrivateRoomMembershipGranted(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x8B)
         room: str = field(metadata={'type': string})
@@ -1017,7 +1032,7 @@ class PrivateRoomMembershipGranted(ServerMessage):
 
 class PrivateRoomMembershipRevoked(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x8C)
         room: str = field(metadata={'type': string})
@@ -1025,12 +1040,12 @@ class PrivateRoomMembershipRevoked(ServerMessage):
 
 class TogglePrivateRoomInvites(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x8D)
         enable: bool = field(metadata={'type': boolean})
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x8D)
         enabled: bool = field(metadata={'type': boolean})
@@ -1038,7 +1053,7 @@ class TogglePrivateRoomInvites(ServerMessage):
 
 class NewPassword(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x8E)
         password: str = field(metadata={'type': string})
@@ -1046,13 +1061,13 @@ class NewPassword(ServerMessage):
 
 class PrivateRoomGrantOperator(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x8F)
         room: str = field(metadata={'type': string})
         username: str = field(metadata={'type': string})
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x8F)
         room: str = field(metadata={'type': string})
@@ -1061,13 +1076,13 @@ class PrivateRoomGrantOperator(ServerMessage):
 
 class PrivateRoomRevokeOperator(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x90)
         room: str = field(metadata={'type': string})
         username: str = field(metadata={'type': string})
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x90)
         room: str = field(metadata={'type': string})
@@ -1076,7 +1091,7 @@ class PrivateRoomRevokeOperator(ServerMessage):
 
 class PrivateRoomOperatorGranted(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x91)
         room: str = field(metadata={'type': string})
@@ -1084,7 +1099,7 @@ class PrivateRoomOperatorGranted(ServerMessage):
 
 class PrivateRoomOperatorRevoked(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x92)
         room: str = field(metadata={'type': string})
@@ -1092,7 +1107,7 @@ class PrivateRoomOperatorRevoked(ServerMessage):
 
 class PrivateRoomOperators(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x94)
         room: str = field(metadata={'type': string})
@@ -1101,7 +1116,7 @@ class PrivateRoomOperators(ServerMessage):
 
 class PrivateChatMessageUsers(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x95)
         usernames: List[str] = field(metadata={'type': array, 'subtype': string})
@@ -1110,21 +1125,21 @@ class PrivateChatMessageUsers(ServerMessage):
 
 class EnablePublicChat(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x96)
 
 
 class DisablePublicChat(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x97)
 
 
 class PublicChatMessage(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x98)
         room: str = field(metadata={'type': string})
@@ -1134,12 +1149,12 @@ class PublicChatMessage(ServerMessage):
 
 class GetRelatedSearches(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x99)
         query: str = field(metadata={'type': string})
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x99)
         query: str = field(metadata={'type': string})
@@ -1148,7 +1163,7 @@ class GetRelatedSearches(ServerMessage):
 
 class ExcludedSearchPhrases(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0xA0)
         phrases: List[str] = field(metadata={'type': array, 'subtype': string})
@@ -1156,13 +1171,13 @@ class ExcludedSearchPhrases(ServerMessage):
 
 class CannotConnect(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x03E9)
         ticket: int = field(metadata={'type': uint32})
         username: Optional[str] = field(default=None, metadata={'type': string, 'optional': True})
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x03E9)
         ticket: int = field(metadata={'type': uint32})
@@ -1171,7 +1186,7 @@ class CannotConnect(ServerMessage):
 
 class CannotCreateRoom(ServerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x03EB)
         room: str = field(metadata={'type': string})
@@ -1181,7 +1196,7 @@ class CannotCreateRoom(ServerMessage):
 
 class PeerPierceFirewall(PeerInitializationMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint8] = uint8(0x00)
         ticket: int = field(metadata={'type': uint32})
@@ -1201,7 +1216,7 @@ class _PeerInitTicket(uint32):
 
 class PeerInit(PeerInitializationMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint8] = uint8(0x01)
         username: str = field(metadata={'type': string})
@@ -1213,7 +1228,7 @@ class PeerInit(PeerInitializationMessage):
 
 class PeerSharesRequest(PeerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x04)
         # Museek docs: PeerSharesReply has an unknown uint32. The assumption is
@@ -1228,7 +1243,7 @@ class PeerSharesRequest(PeerMessage):
 
 class PeerSharesReply(PeerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x05)
         directories: List[DirectoryData] = field(
@@ -1253,7 +1268,7 @@ class PeerSharesReply(PeerMessage):
 
 class PeerSearchReply(PeerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x09)
         username: str = field(metadata={'type': string})
@@ -1282,14 +1297,14 @@ class PeerSearchReply(PeerMessage):
 
 class PeerUserInfoRequest(PeerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x0F)
 
 
 class PeerUserInfoReply(PeerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x10)
         description: str = field(metadata={'type': string})
@@ -1304,7 +1319,7 @@ class PeerUserInfoReply(PeerMessage):
 class PeerDirectoryContentsRequest(PeerMessage):
     """Request the contents of a directory"""
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x24)
         ticket: int = field(metadata={'type': uint32})
@@ -1319,7 +1334,7 @@ class PeerDirectoryContentsReply(PeerMessage):
     :todo: verify was happens if we pass multiple directories
     """
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x25)
         ticket: int = field(metadata={'type': uint32})
@@ -1336,7 +1351,7 @@ class PeerDirectoryContentsReply(PeerMessage):
 
 class PeerTransferRequest(PeerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x28)
         direction: int = field(metadata={'type': uint32})
@@ -1347,7 +1362,7 @@ class PeerTransferRequest(PeerMessage):
 
 class PeerTransferReply(PeerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x29)
         ticket: int = field(metadata={'type': uint32})
@@ -1358,7 +1373,7 @@ class PeerTransferReply(PeerMessage):
 
 class PeerTransferQueue(PeerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x2B)
         filename: str = field(metadata={'type': string})
@@ -1366,7 +1381,7 @@ class PeerTransferQueue(PeerMessage):
 
 class PeerPlaceInQueueReply(PeerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x2C)
         filename: str = field(metadata={'type': string})
@@ -1375,7 +1390,7 @@ class PeerPlaceInQueueReply(PeerMessage):
 
 class PeerUploadFailed(PeerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x2E)
         filename: str = field(metadata={'type': string})
@@ -1383,7 +1398,7 @@ class PeerUploadFailed(PeerMessage):
 
 class PeerTransferQueueFailed(PeerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x32)
         filename: str = field(metadata={'type': string})
@@ -1392,7 +1407,7 @@ class PeerTransferQueueFailed(PeerMessage):
 
 class PeerPlaceInQueueRequest(PeerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x33)
         filename: str = field(metadata={'type': string})
@@ -1400,7 +1415,7 @@ class PeerPlaceInQueueRequest(PeerMessage):
 
 class PeerUploadQueueNotification(PeerMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x34)
 
@@ -1409,14 +1424,25 @@ class PeerUploadQueueNotification(PeerMessage):
 
 class DistributedPing(DistributedMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint8] = uint8(0x00)
 
 
+class DistributedInit(DistributedMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint8] = uint8(0x01)
+        unknown1: int = field(metadata={'type': uint32})
+        unknown2: int = field(metadata={'type': uint32})
+        unknown3: str = field(metadata={'type': uint8})
+        port: int = field(metadata={'type': uint32})
+
+
 class DistributedSearchRequest(DistributedMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint8] = uint8(0x03)
         # Should always be 0x31
@@ -1428,7 +1454,7 @@ class DistributedSearchRequest(DistributedMessage):
 
 class DistributedBranchLevel(DistributedMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint8] = uint8(0x04)
         level: int = field(metadata={'type': uint32})
@@ -1436,7 +1462,7 @@ class DistributedBranchLevel(DistributedMessage):
 
 class DistributedBranchRoot(DistributedMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint8] = uint8(0x05)
         username: str = field(metadata={'type': string})
@@ -1444,7 +1470,7 @@ class DistributedBranchRoot(DistributedMessage):
 
 class DistributedChildDepth(DistributedMessage):
 
-    @dataclass
+    @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint8] = uint8(0x07)
         depth: int = field(metadata={'type': uint32})
