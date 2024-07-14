@@ -690,6 +690,10 @@ The :ref:`Login` message is the first message a peer needs to send to the server
 
 **Input Checks:**
 
+* If ``client_version`` is less than TBD
+
+   1. :ref:`function-server-info-message` : message : "Your connection is restricted: You cannot search or chat. Your client version is too old. You need to upgrade to the latest version. Close this client, download new version from http://www.slsknet.org, install it and reconnect."
+
 * If ``username`` is empty:
 
   1. Send :ref:`Login`
@@ -697,7 +701,7 @@ The :ref:`Login` message is the first message a peer needs to send to the server
      * success : false
      * reason : ``INVALIDPASS``
 
-* If ``password`` is empty : Continue
+* If ``password`` is empty : Continue (there are some reference to a fail reason called ``EMPTYPASSWORD`` but isn't used)
 * If ``md5hash`` parameter mismatches with the MD5 hash of the ``username + password`` parameters : Continue
 
 **Checks:**
