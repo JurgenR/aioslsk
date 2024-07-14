@@ -20,7 +20,7 @@ SERVER_CONNECT_TIMEOUT: float = 30
 SERVER_LOGIN_TIMEOUT: float = 30
 SERVER_PING_INTERVAL: float = 5 * 60
 SERVER_RESPONSE_TIMEOUT: float = 30
-DISCONNECT_TIMEOUT: float = 10
+DISCONNECT_TIMEOUT: float = 5
 PATH_SEPERATOR_PATTERN = re.compile(r"[\\/]+")
 """Pattern for splitting/normalizing remote paths"""
 UPNP_DEFAULT_CHECK_INTERVAL: int = 600

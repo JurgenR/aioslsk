@@ -129,7 +129,9 @@ class ListeningConnection(Connection):
             if self._server is not None:
                 if self._server.is_serving():
                     self._server.close()
-                await self._server.wait_closed()
+
+                async with atimeout(DISCONNECT_TIMEOUT):
+                    await self._server.wait_closed()
 
         except Exception as exc:
             logger.warning(
