@@ -241,7 +241,7 @@ Obtaining a parent
 
 When :ref:`ToggleParentSearch` is enabled then every 60 seconds the server will send the client a :ref:`PotentialParents` command (containing a maximum of 10 possible parents) until we disable our search for a parent using the :ref:`ToggleParentSearch` command. The :ref:`PotentialParents` command contains a list with each entry containing: username, IP address and port. Upon receiving this command the client will attempt to open up a connection to each of the IP addresses in the list to find a suitable parent.
 
-After establishing a distributed connection with one of the potential parents the peer will send out a :ref:`DistributedBranchLevel` and :ref:`DistributedBranchRoot` over the distributed connection. If the peer is selected to be the parent the other potential parents are disconnected and the following messages are then send to the server to let it know where we are in the hierarchy:
+After establishing a distributed connection with one of the potential parents the peer will send out a :ref:`DistributedBranchLevel` and optionally, if the branch level is non-zero, :ref:`DistributedBranchRoot` over the distributed connection. If the peer is selected to be the parent the other potential parents are disconnected and the following messages are then send to the server to let it know where we are in the hierarchy:
 
 * :ref:`BranchLevel` : BranchLevel from the parent + 1
 * :ref:`BranchRoot` : The BranchRoot received from the parent as-is
@@ -251,16 +251,12 @@ After establishing a distributed connection with one of the potential parents th
 Once the parent is set it will start sending us search requests or if we are branch root the server will send us search requests.
 
 .. note::
-   Branch Root is not always sent when the potential parent has branch level 0. In this case the branch root value is implied from the connected user.
-
-.. note::
-   The implementation currently differs from the original clients. The implementation will make the first peer that sends a :ref:`DistributedBranchLevel` and :ref:`DistributedBranchRoot` (except if level was 0, see above).
+   The implementation currently differs from the original clients. The implementation will make the first peer that sends a :ref:`DistributedBranchLevel` and :ref:`DistributedBranchRoot` (except if level was 0, see above). Others clients decide the parent based on the first search request received.
 
 
 List of open questions:
 
 * If the parent is disconnected, are the children disconnected as well? If no, are the new branch root/level values re-advertised?
-* Is it possible to force becoming branch root?
 
 
 Obtaining children

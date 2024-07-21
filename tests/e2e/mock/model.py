@@ -19,6 +19,20 @@ class Settings:
     wishlist_interval: int = 720
 
 
+@dataclass
+class MockVariables:
+    """Variables that modify the behaviour of the mock server for easier
+    debugging / investigation
+    """
+
+    upload_speed: int = 0
+    """Default upload speed assigned to users"""
+    search_interval: float = 0.0
+    """Interval at which a server search request is sent over the distributed
+    network
+    """
+
+
 @dataclass(frozen=True)
 class QueuedPrivateMessage:
     chat_id: int
@@ -63,7 +77,7 @@ class User:
     # TODO: Investigate what the default values are
     enable_private_rooms: bool = False
     enable_parent_search: bool = False
-    enable_public_chat: bool = False
+    enable_public_chat: bool = False  # Verified
     accept_children: bool = False
 
     @property

@@ -7,7 +7,6 @@ import socket
 import time
 from typing import Dict, Generator, List, Optional, Set, Type, TypeVar
 import typing
-from weakref import WeakSet
 
 from aioslsk.events import on_message, build_message_map
 from aioslsk.user.model import UserStatus
@@ -102,6 +101,7 @@ from tests.e2e.mock.constants import (
 from tests.e2e.mock.distributed import DistributedStrategy, EveryoneRootStrategy
 from tests.e2e.mock.messages import AdminMessage
 from tests.e2e.mock.model import (
+    MockVariables,
     QueuedPrivateMessage,
     Room,
     RoomStatus,
@@ -112,13 +112,18 @@ from tests.e2e.mock.peer import Peer
 
 
 logging.basicConfig(level=logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s [%(name)s] [%(levelname)s] %(message)s')
+root_logger = logging.getLogger()
+for handler in root_logger.handlers:
+    handler.setFormatter(formatter)
+
 logger = logging.getLogger(__name__)
 
 
 T = TypeVar('T', bound='DistributedStrategy')
 
 
-def chat_id_generator(initial: int = 1) -> Generator[int, None, None]:
+def ticket_generator(initial: int = 1) -> Generator[int, None, None]:
     idx = initial
     while True:
         idx += 1
@@ -141,7 +146,9 @@ class MockServer:
             self, hostname: str = '0.0.0.0', ports: Set[int] = {2416},
             excluded_search_phrases: List[str] = DEFAULT_EXCLUDED_SEARCH_PHRASES,
             potential_parent_interval: int = 0,
-            distributed_strategy_class: Type[DistributedStrategy] = EveryoneRootStrategy):
+            distributed_strategy_class: Type[DistributedStrategy] = EveryoneRootStrategy,
+            mock_variables: Optional[MockVariables] = None):
+
         self.hostname: str = hostname
         self.ports: Set[int] = ports
         self.connections: Dict[int, asyncio.Server] = {}
@@ -150,18 +157,24 @@ class MockServer:
         self.users: List[User] = []
         self.rooms: List[Room] = []
         self.peers: List[Peer] = []
+
         self.excluded_search_phrases: List[str] = excluded_search_phrases
         self.distributed_strategy: DistributedStrategy = self._create_distributed_strategy(distributed_strategy_class)
+        self.mock_variables: MockVariables = mock_variables or MockVariables()
+
+        self.chat_id_gen = ticket_generator()
+        self.MESSAGE_MAP = build_message_map(self)
+
+        self.periodic_search_task: Optional[asyncio.Task] = None
         self.distributed_parent_task: Optional[asyncio.Task] = None
 
         if potential_parent_interval > 0:
             self.distributed_parent_task = asyncio.create_task(
                 self.distributed_parent_job(interval=potential_parent_interval))
 
-        self.chat_id_gen = chat_id_generator()
-
-        self.MESSAGE_MAP = build_message_map(self)
-        self.message_log: List[MessageDataclass] = []
+        if mock_variables.search_interval > 0:
+            self.periodic_search_task = asyncio.create_task(
+                self.search_request_job(interval=mock_variables.search_interval))
 
     def _create_distributed_strategy(self, strategy_cls: Type[T]) -> T:
         return strategy_cls(self.settings, self.peers)
@@ -172,15 +185,13 @@ class MockServer:
     async def notify_potential_parents(self):
         """Notifies all peers of their potential parents"""
         messages = []
-        for peer in self.peers:
-            if not peer.user:
-                continue
-
+        for peer in self.get_valid_peers():
             if not peer.user.enable_parent_search:
                 continue
 
             potential_parents = self.distributed_strategy.get_potential_parents(peer)
             if not potential_parents:
+                logger.debug(f"no potential parents for peer {peer.user.name}")
                 continue
 
             message = PotentialParents.Response(
@@ -197,11 +208,32 @@ class MockServer:
 
         await asyncio.gather(*messages, return_exceptions=True)
 
-    async def distributed_parent_job(self, interval: int = 60):
-        """Period job for sending out potential parents"""
+    async def distributed_parent_job(self, interval: float = 60):
+        """Periodic job for sending out potential parents"""
         while True:
             await asyncio.sleep(interval)
+            logger.info("sending out potential parents")
             await self.notify_potential_parents()
+
+    async def search_request_job(self, interval: float = 5):
+        """Periodic job for sending out dummy search requests"""
+        generator = ticket_generator()
+        while True:
+            await asyncio.sleep(interval)
+
+            ticket = next(generator)
+            message = ServerSearchRequest.Response(
+                0x03,
+                0x31,
+                'searching_user',
+                ticket,
+                f"dummy search request {ticket}"
+            )
+
+            await asyncio.gather(
+                *[peer.send_message(message) for peer in self.distributed_strategy.get_roots()],
+                return_exceptions=True
+            )
 
     async def connect(self, start_serving: bool = False):
         tasks = [
@@ -247,12 +279,17 @@ class MockServer:
     async def accept_peer(self, listening_port: int, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         hostname, port = writer.get_extra_info('peername')
         logger.debug(f"{self.hostname}:{listening_port} : accepted connection {hostname}:{port}")
+
         peer = Peer(hostname, port, self, reader, writer)
-        self.peers.append(peer)
         peer.start_reader_loop()
+        peer.connect_time = time.monotonic()
+
+        self.peers.append(peer)
 
     async def on_peer_disconnected(self, peer: Peer):
         """Called when a peer is disconnected"""
+        peer.connect_time = 0.0
+
         logger.info(f"disconnected peer : {peer!r}")
         if peer in self.peers:
             self.peers.remove(peer)
@@ -273,9 +310,7 @@ class MockServer:
 
     def get_valid_peers(self) -> List[Peer]:
         """Returns all peers which are logged in (user set)"""
-        return [
-            peer for peer in self.peers if peer.user
-        ]
+        return [peer for peer in self.peers if peer.user]
 
     def find_peer_by_name(self, username: str) -> Optional[Peer]:
         for peer in self.peers:
@@ -491,7 +526,13 @@ class MockServer:
 
         # Create a new user if we did not have it yet
         if not user:
-            user = User(message.username, password=message.password)
+            user = User(
+                name=message.username,
+                password=message.password,
+                # Assign default values for testing
+                avg_speed=self.mock_variables.upload_speed,
+                uploads=int(self.mock_variables.upload_speed * 0.05)
+            )
             self.users.append(user)
 
         # Check if there is another peer
@@ -1854,7 +1895,24 @@ class MockServer:
         return counter
 
 
+def _get_distributed_strategy_class(name: str) -> Type[DistributedStrategy]:
+    for strategy_cls in DistributedStrategy.__subclasses__():
+        if strategy_cls.get_name() == name:
+            return strategy_cls
+
+    raise ValueError(f'invalid distributed strategy : {name}')
+
+
 async def main(args):
+    # Parse mock variables
+    prefix = 'mock_'
+    mock_vars = {
+        name[len(prefix):]: value for name, value in vars(args).items()
+        if name.startswith(prefix)
+    }
+
+    distributed_strategy_cls = _get_distributed_strategy_class(args.distributed_strategy)
+
     admin_users = [
         User(name='admin0', password='pass0', is_admin=True),
     ]
@@ -1865,8 +1923,9 @@ async def main(args):
 
     mock_server = MockServer(
         ports=set(args.port),
-        distributed_strategy_class=args.distributed_strategy,
-        potential_parent_interval=args.potential_parent_interval
+        distributed_strategy_class=distributed_strategy_cls,
+        potential_parent_interval=args.potential_parent_interval,
+        mock_variables=MockVariables(**mock_vars)
     )
     mock_server.users.extend(admin_users + privileged_users)
 
@@ -1879,20 +1938,13 @@ async def main(args):
 
 
 if __name__ == '__main__':
-    def _get_distributed_strategy_class(name: str) -> Type[DistributedStrategy]:
-        for strategy_cls in DistributedStrategy.__subclasses__():
-            if strategy_cls.get_name() == name:
-                return strategy_cls
-
-        raise ValueError(f'invalid distributed strategy : {name}')
-
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--port',
         help=(
-            "Port(s) to listen on. Multiple ports can be provided can be useful "
-            "when testing different clients"
+            "Port(s) to listen on. Multiple ports can be provided which can be "
+            "useful when testing different clients"
         ),
         nargs="+",
         type=int,
@@ -1902,7 +1954,6 @@ if __name__ == '__main__':
         '--distributed-strategy',
         help="Distributed strategy to use. Default is to treat everyone as a root",
         default='everyone_root',
-        type=_get_distributed_strategy_class,
         choices=[
             strategy_cls.get_name()
             for strategy_cls in DistributedStrategy.__subclasses__()
@@ -1912,10 +1963,30 @@ if __name__ == '__main__':
         '--potential-parent-interval',
         help=(
             "Interval in seconds at which potential parents will be announced to "
-            "peers looking for a parent. Use a value of 0 or below to disable"
+            "peers looking for a parent. Use a value of 0 or less to disable"
         ),
         default=0,
         type=int
+    )
+
+    # Mock variables argument group
+    mock_vars_group = parser.add_argument_group(title="Mock variables")
+    mock_vars_group.add_argument(
+        '--mock-upload-speed',
+        help=(
+            "Assign a default average upload speed to users connecting. Useful "
+            "when testing distributed connections"
+        ),
+        default=0,
+        type=float
+    )
+    mock_vars_group.add_argument(
+        '--mock-search-interval',
+        help=(
+            "Periodically send a search request through the distributed network"
+        ),
+        default=0,
+        type=float
     )
 
     args = parser.parse_args()
