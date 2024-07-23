@@ -1406,6 +1406,10 @@ Notify the server who our branch root user is in the distributed network
 ChildDepth (Code 129)
 ---------------------
 
+See :ref:`DistributedChildDepth`
+
+Note: SoulSeekQt sends the ``depth`` as a ``uint8``
+
 :Code: 129 (0x81)
 :Status: DEPRECATED
 :Send:
@@ -2103,7 +2107,7 @@ Distributed branch root
 DistributedChildDepth (Code 7)
 ------------------------------
 
-How many children the peer has (unverified). This is sent by some clients to the parent after they are added and updates are sent afterwards. Usage is unknown.
+Used by SoulSeek NS and still passed on by SoulSeekQt, sent to the parent upon connecting to that parent (although unclear what happens when a peer attaches to another parent while already having children). The parent should increase the ``depth`` by 1 until it reaches the branch root, which should increase by 1 and send it to the server as a :ref:`ChildDepth` message.
 
 :Code: 7 (0x07)
 :Status: DEPRECATED
