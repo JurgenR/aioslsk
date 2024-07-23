@@ -19,7 +19,7 @@ TRANSFER_REPLY_TIMEOUT = 30
 SERVER_CONNECT_TIMEOUT: float = 30
 SERVER_LOGIN_TIMEOUT: float = 30
 SERVER_PING_INTERVAL: float = 5 * 60
-SERVER_RESPONSE_TIMEOUT: float = 30
+SERVER_READ_TIMEOUT: float = SERVER_PING_INTERVAL * 2
 DISCONNECT_TIMEOUT: float = 5
 PATH_SEPERATOR_PATTERN = re.compile(r"[\\/]+")
 """Pattern for splitting/normalizing remote paths"""

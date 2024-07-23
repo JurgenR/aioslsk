@@ -1,7 +1,7 @@
 from __future__ import annotations
 from aiofiles.threadpool.binary import AsyncBufferedIOBase, AsyncBufferedReader
 import asyncio
-from async_timeout import timeout as atimeout
+from async_timeout import Timeout, timeout as atimeout
 from enum import auto, Enum
 from typing import Callable, List, Optional, TYPE_CHECKING, Union
 import logging
@@ -13,6 +13,7 @@ from ..constants import (
     PEER_CONNECT_TIMEOUT,
     PEER_READ_TIMEOUT,
     SERVER_CONNECT_TIMEOUT,
+    SERVER_READ_TIMEOUT,
     TRANSFER_TIMEOUT,
 )
 from ..exceptions import (
@@ -192,6 +193,7 @@ class DataConnection(Connection):
         self._reader_task: Optional[asyncio.Task] = None
         self.read_timeout: Optional[float] = None
         self._queued_messages: List[asyncio.Task] = []
+        self._read_timeout_object: Optional[Timeout] = None
 
     def get_connecting_ip(self) -> str:
         """Gets the IP address being used to connect to the server/peer.
@@ -291,6 +293,13 @@ class DataConnection(Connection):
 
             return None
 
+    def _increase_read_timeout(self):
+        if self.read_timeout and self._read_timeout_object:
+            try:
+                self._read_timeout_object.shift(self.read_timeout)
+            except RuntimeError:
+                pass
+
     async def _message_reader_loop(self):
         """Message reader loop. This will loop until the connection is closed or
         the network is closed
@@ -325,13 +334,13 @@ class DataConnection(Connection):
 
         header_size = HEADER_SIZE_OBFUSCATED if self.obfuscated else HEADER_SIZE_UNOBFUSCATED
 
-        async with atimeout(self.read_timeout):
+        async with atimeout(self.read_timeout) as self._read_timeout_object:
             header = await self._reader.readexactly(header_size)
 
         message_len_buf = obfuscation.decode(header) if self.obfuscated else header
         _, message_len = uint32.deserialize(0, message_len_buf)
 
-        async with atimeout(self.read_timeout):
+        async with atimeout(self.read_timeout) as self._read_timeout_object:
             message = await self._reader.readexactly(message_len)
 
         return header + message
@@ -404,7 +413,7 @@ class DataConnection(Connection):
         """
         try:
             if timeout:
-                async with atimeout(timeout):
+                async with atimeout(timeout) as self._read_timeout_object:
                     return await reader_func()
             else:
                 return await reader_func()
@@ -483,6 +492,9 @@ class DataConnection(Connection):
             await self.disconnect(CloseReason.WRITE_ERROR)
             raise ConnectionWriteError(f"{self.hostname}:{self.port} : exception during writing") from exc
 
+        else:
+            self._increase_read_timeout()
+
     def deserialize_message(self, message_data: bytes) -> MessageDataclass:
         """Should be called after a full message has been received. This method
         should parse the message
@@ -499,9 +511,12 @@ class DataConnection(Connection):
 
 class ServerConnection(DataConnection):
 
+    def __init__(self, hostname: str, port: int, network: Network, obfuscated: bool = False):
+        super().__init__(hostname, port, network, obfuscated)
+        self.read_timeout = SERVER_READ_TIMEOUT
+
     async def connect(self, timeout: float = SERVER_CONNECT_TIMEOUT):
         await super().connect(timeout=timeout)
-        # self.start_reader_task()
 
     def deserialize_message(self, message_data: bytes) -> MessageDataclass:
         return ServerMessage.deserialize_response(message_data)
@@ -513,6 +528,7 @@ class PeerConnection(DataConnection):
             self, hostname: str, port: int, network: Network, obfuscated: bool = False,
             username: Optional[str] = None, connection_type: str = PeerConnectionType.PEER,
             incoming: bool = False):
+
         super().__init__(hostname, port, network, obfuscated=obfuscated)
         self.incoming: bool = incoming
         self.connection_state = PeerConnectionState.AWAITING_INIT
@@ -610,7 +626,7 @@ class PeerConnection(DataConnection):
 
         except asyncio.TimeoutError as exc:
             await self.disconnect(CloseReason.TIMEOUT)
-            raise ConnectionReadError(f"{self.hostname}:{self.port} : timeout writing") from exc
+            raise ConnectionReadError(f"{self.hostname}:{self.port} : timeout reading data") from exc
 
         except Exception as exc:
             await self.disconnect(CloseReason.READ_ERROR)
