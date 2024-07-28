@@ -3,12 +3,13 @@ from aiofiles.threadpool.binary import AsyncBufferedIOBase, AsyncBufferedReader
 import asyncio
 from async_timeout import Timeout, timeout as atimeout
 from enum import auto, Enum
-from typing import Callable, List, Optional, TYPE_CHECKING, Union
+from typing import Any, Callable, Coroutine, List, Optional, TYPE_CHECKING, Union
 import logging
 import socket
 import struct
 
 from ..constants import (
+    DEFAULT_READ_TIMEOUT,
     DISCONNECT_TIMEOUT,
     PEER_CONNECT_TIMEOUT,
     PEER_READ_TIMEOUT,
@@ -183,16 +184,20 @@ class ListeningConnection(Connection):
 class DataConnection(Connection):
     """Connection for message and data transfer"""
 
-    def __init__(self, hostname: str, port: int, network: Network, obfuscated: bool = False):
+    def __init__(
+            self, hostname: str, port: int, network: Network,
+            obfuscated: bool = False, read_timeout: float = DEFAULT_READ_TIMEOUT):
         super().__init__(hostname, port, network)
         self.obfuscated = obfuscated
 
         self._reader: Optional[asyncio.StreamReader] = None
         self._writer: Optional[asyncio.StreamWriter] = None
         self._reader_task: Optional[asyncio.Task] = None
-        self.read_timeout: Optional[float] = None
+
         self._queued_messages: List[asyncio.Task] = []
         self._read_timeout_object: Optional[Timeout] = None
+
+        self.read_timeout: float = read_timeout
 
     def get_connecting_ip(self) -> str:
         """Gets the IP address being used to connect to the server/peer.
@@ -307,12 +312,14 @@ class DataConnection(Connection):
                 else:
                     await self._perform_message_callback(message)
 
-    async def _read(self, reader_func, timeout: Optional[float] = None) -> Optional[bytes]:
+    async def _read(
+                self, reader_func: Coroutine[Any, Any, Optional[bytes]],
+                timeout: Optional[float] = None) -> Optional[bytes]:
         """Read data from the connection using the passed ``reader_func``. When
         an error occurs during reading the connection will be CLOSED
 
-        :param reader_func: callable that reads the data
-        :return: the return value of the `reader_func`, ``None`` if EOF
+        :param reader_func: coroutine that reads the data
+        :return: the return value of the ``reader_func``, ``None`` if EOF
         :raise ConnectionReadError: upon any kind of read error/timeout
         """
         try:
@@ -376,7 +383,7 @@ class DataConnection(Connection):
     async def _read_until_eof(self) -> bytes:
         return await self._reader.read(-1)  # type: ignore[union-attr]
 
-    async def receive_until_eof(self, raise_exception: bool = True) -> bytes:
+    async def receive_until_eof(self, raise_exception: bool = True) -> Optional[bytes]:
         """Receives data until the other end closes the connection. If
         ``raise_exception`` parameter is set to ``True`` other read errors are
         treated as EOF as well
@@ -522,9 +529,13 @@ class DataConnection(Connection):
 
 class ServerConnection(DataConnection):
 
-    def __init__(self, hostname: str, port: int, network: Network, obfuscated: bool = False):
-        super().__init__(hostname, port, network, obfuscated)
-        self.read_timeout = SERVER_READ_TIMEOUT
+    def __init__(
+            self, hostname: str, port: int, network: Network,
+            obfuscated: bool = False, read_timeout: float = SERVER_READ_TIMEOUT):
+
+        super().__init__(
+            hostname, port, network,
+            obfuscated=obfuscated, read_timeout=read_timeout)
 
     async def connect(self, timeout: float = SERVER_CONNECT_TIMEOUT):
         await super().connect(timeout=timeout)
@@ -538,15 +549,17 @@ class PeerConnection(DataConnection):
     def __init__(
             self, hostname: str, port: int, network: Network, obfuscated: bool = False,
             username: Optional[str] = None, connection_type: str = PeerConnectionType.PEER,
-            incoming: bool = False):
+            incoming: bool = False, read_timeout: float = PEER_READ_TIMEOUT):
 
-        super().__init__(hostname, port, network, obfuscated=obfuscated)
+        super().__init__(
+            hostname, port, network,
+            obfuscated=obfuscated, read_timeout=read_timeout)
+
         self.incoming: bool = incoming
         self.connection_state = PeerConnectionState.AWAITING_INIT
 
         self.username: Optional[str] = username
         self.connection_type: str = connection_type
-        self.read_timeout = PEER_READ_TIMEOUT
 
         self.download_rate_limiter: RateLimiter = UnlimitedRateLimiter()
         self.upload_rate_limiter: RateLimiter = UnlimitedRateLimiter()
