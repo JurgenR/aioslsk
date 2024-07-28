@@ -279,29 +279,6 @@ class DataConnection(Connection):
 
     # Read/write methods
 
-    async def _read_until_eof(self) -> bytes:
-        return await self._reader.read(-1)  # type: ignore[union-attr]
-
-    async def receive_until_eof(self, raise_exception: bool = True) -> bytes:
-        """Receives data until the other end closes the connection. If
-        ``raise_exception`` parameter is set to ``True`` other read errors are
-        treated as EOF as well
-        """
-        if not self._reader:
-            raise ConnectionReadError("cannot read until EOF, connection is not open")
-
-        # Note: _read raises ConnectionReadError also on IncompleteReadError,
-        # however when using StreamReader.read this error can never be raised
-        # and thus this method shouldn't worry about potentially not returning
-        # partial data
-        try:
-            return await self._read(self._read_until_eof)
-        except ConnectionReadError:
-            if raise_exception:
-                raise
-
-            return b''
-
     async def _message_reader_loop(self):
         """Message reader loop. This will loop until the connection is closed or
         the network is closed
@@ -329,6 +306,38 @@ class DataConnection(Connection):
                     )
                 else:
                     await self._perform_message_callback(message)
+
+    async def _read(self, reader_func, timeout: Optional[float] = None) -> Optional[bytes]:
+        """Read data from the connection using the passed ``reader_func``. When
+        an error occurs during reading the connection will be CLOSED
+
+        :param reader_func: callable that reads the data
+        :return: the return value of the `reader_func`, ``None`` if EOF
+        :raise ConnectionReadError: upon any kind of read error/timeout
+        """
+        try:
+            if timeout:
+                async with atimeout(timeout) as self._read_timeout_object:
+                    return await reader_func()
+            else:
+                return await reader_func()
+
+        except asyncio.IncompleteReadError as exc:
+            if exc.partial:
+                await self.disconnect(CloseReason.READ_ERROR)
+                raise ConnectionReadError(
+                    f"{self.hostname}:{self.port} : incomplete read on connection : {exc.partial!r}") from exc
+            else:
+                await self.disconnect(CloseReason.EOF)
+                return None
+
+        except asyncio.TimeoutError as exc:
+            await self.disconnect(CloseReason.TIMEOUT)
+            raise ConnectionReadError(f"{self.hostname}:{self.port} : read timeout") from exc
+
+        except Exception as exc:
+            await self.disconnect(CloseReason.READ_ERROR)
+            raise ConnectionReadError(f"{self.hostname}:{self.port} : exception during reading") from exc
 
     async def _read_message(self) -> bytes:
         if not self._reader:
@@ -364,74 +373,28 @@ class DataConnection(Connection):
         else:
             return None
 
-    def decode_message_data(self, data: bytes) -> MessageDataclass:
-        """De-obfuscates and deserializes message data into a
-        :class:`.MessageDataclass` object. See ``deserialize_message``
+    async def _read_until_eof(self) -> bytes:
+        return await self._reader.read(-1)  # type: ignore[union-attr]
 
-        :param data: message bytes to decode
-        :return: object of :class:`.MessageDataclass`
-        :raise MessageDeserializationError: raised when deserialization failed
+    async def receive_until_eof(self, raise_exception: bool = True) -> bytes:
+        """Receives data until the other end closes the connection. If
+        ``raise_exception`` parameter is set to ``True`` other read errors are
+        treated as EOF as well
         """
-        if self.obfuscated:
-            data = obfuscation.decode(data)
+        if not self._reader:
+            raise ConnectionReadError("cannot read until EOF, connection is not open")
 
+        # Note: _read raises ConnectionReadError also on IncompleteReadError,
+        # however when using StreamReader.read this error can never be raised
+        # and thus this method shouldn't worry about potentially not returning
+        # partial data
         try:
-            message = self.deserialize_message(data)
-        except Exception as exc:
-            logger.exception(f"{self.hostname}:{self.port} : failed to deserialize message : {data.hex()}")
-            raise MessageDeserializationError("failed to deserialize message") from exc
+            return await self._read(self._read_until_eof)
+        except ConnectionReadError:
+            if raise_exception:
+                raise
 
-        return message
-
-    def encode_message_data(self, message: Union[bytes, MessageDataclass]) -> bytes:
-        """Serializes the :class:`.MessageDataclass` or ``bytes`` and obfuscates
-        the contents. See ``serialize_message``
-
-        :return: `bytes` object
-        :raise MessageSerializationError: raised when serialization failed
-        """
-        try:
-            data = self.serialize_message(message)
-        except Exception as exc:
-            logger.exception(f"{self.hostname}:{self.port} : failed to serialize message : {message!r}")
-            raise MessageSerializationError("failed to serialize Message") from exc
-
-        if self.obfuscated:
-            data = obfuscation.encode(data)
-
-        return data
-
-    async def _read(self, reader_func, timeout: Optional[float] = None) -> Optional[bytes]:
-        """Read data from the connection using the passed ``reader_func``. When
-        an error occurs during reading the connection will be CLOSED
-
-        :param reader_func: callable that reads the data
-        :return: the return value of the `reader_func`, ``None`` if EOF
-        :raise ConnectionReadError: upon any kind of read error/timeout
-        """
-        try:
-            if timeout:
-                async with atimeout(timeout) as self._read_timeout_object:
-                    return await reader_func()
-            else:
-                return await reader_func()
-
-        except asyncio.IncompleteReadError as exc:
-            if exc.partial:
-                await self.disconnect(CloseReason.READ_ERROR)
-                raise ConnectionReadError(
-                    f"{self.hostname}:{self.port} : incomplete read on connection : {exc.partial!r}") from exc
-            else:
-                await self.disconnect(CloseReason.EOF)
-                return None
-
-        except asyncio.TimeoutError as exc:
-            await self.disconnect(CloseReason.TIMEOUT)
-            raise ConnectionReadError(f"{self.hostname}:{self.port} : read timeout") from exc
-
-        except Exception as exc:
-            await self.disconnect(CloseReason.READ_ERROR)
-            raise ConnectionReadError(f"{self.hostname}:{self.port} : exception during reading") from exc
+            return b''
 
     def queue_message(self, message: Union[bytes, MessageDataclass]) -> asyncio.Task:
         task = asyncio.create_task(
@@ -488,6 +451,43 @@ class DataConnection(Connection):
 
         else:
             self._increase_read_timeout()
+
+    def encode_message_data(self, message: Union[bytes, MessageDataclass]) -> bytes:
+        """Serializes the :class:`.MessageDataclass` or ``bytes`` and obfuscates
+        the contents. See ``serialize_message``
+
+        :return: `bytes` object
+        :raise MessageSerializationError: raised when serialization failed
+        """
+        try:
+            data = self.serialize_message(message)
+        except Exception as exc:
+            logger.exception(f"{self.hostname}:{self.port} : failed to serialize message : {message!r}")
+            raise MessageSerializationError("failed to serialize Message") from exc
+
+        if self.obfuscated:
+            data = obfuscation.encode(data)
+
+        return data
+
+    def decode_message_data(self, data: bytes) -> MessageDataclass:
+        """De-obfuscates and deserializes message data into a
+        :class:`.MessageDataclass` object. See ``deserialize_message``
+
+        :param data: message bytes to decode
+        :return: object of :class:`.MessageDataclass`
+        :raise MessageDeserializationError: raised when deserialization failed
+        """
+        if self.obfuscated:
+            data = obfuscation.decode(data)
+
+        try:
+            message = self.deserialize_message(data)
+        except Exception as exc:
+            logger.exception(f"{self.hostname}:{self.port} : failed to deserialize message : {data.hex()}")
+            raise MessageDeserializationError("failed to deserialize message") from exc
+
+        return message
 
     def deserialize_message(self, message_data: bytes) -> MessageDataclass:
         """Should be called after a full message has been received. This method
