@@ -121,7 +121,6 @@ class ListeningConnection(Connection):
         self.obfuscated: bool = obfuscated
 
         self._server: Optional[asyncio.AbstractServer] = None
-        self.connections_accepted: int = 0
 
     async def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
         logger.debug(f"{self.hostname}:{self.port} : disconnecting : {reason.name}")
@@ -269,9 +268,11 @@ class DataConnection(Connection):
             self._writer = None
 
     def start_reader_task(self):
+        """Starts the message reader task"""
         self._reader_task = asyncio.create_task(self._message_reader_loop())
 
     def stop_reader_task(self):
+        """Stops the message reader task if it exists"""
         if self._reader_task is not None:
             self._reader_task.cancel()
             self._reader_task = None
@@ -281,24 +282,25 @@ class DataConnection(Connection):
     async def _read_until_eof(self) -> bytes:
         return await self._reader.read(-1)  # type: ignore[union-attr]
 
-    async def receive_until_eof(self, raise_exception: bool = True) -> Optional[bytes]:
+    async def receive_until_eof(self, raise_exception: bool = True) -> bytes:
+        """Receives data until the other end closes the connection. If
+        ``raise_exception`` parameter is set to ``True`` other read errors are
+        treated as EOF as well
+        """
         if not self._reader:
             raise ConnectionReadError("cannot read until EOF, connection is not open")
 
+        # Note: _read raises ConnectionReadError also on IncompleteReadError,
+        # however when using StreamReader.read this error can never be raised
+        # and thus this method shouldn't worry about potentially not returning
+        # partial data
         try:
             return await self._read(self._read_until_eof)
         except ConnectionReadError:
             if raise_exception:
                 raise
 
-            return None
-
-    def _increase_read_timeout(self):
-        if self.read_timeout and self._read_timeout_object:
-            try:
-                self._read_timeout_object.shift(self.read_timeout)
-            except RuntimeError:
-                pass
+            return b''
 
     async def _message_reader_loop(self):
         """Message reader loop. This will loop until the connection is closed or
@@ -334,18 +336,24 @@ class DataConnection(Connection):
 
         header_size = HEADER_SIZE_OBFUSCATED if self.obfuscated else HEADER_SIZE_UNOBFUSCATED
 
-        async with atimeout(self.read_timeout) as self._read_timeout_object:
-            header = await self._reader.readexactly(header_size)
+        header = await self._reader.readexactly(header_size)
 
         message_len_buf = obfuscation.decode(header) if self.obfuscated else header
         _, message_len = uint32.deserialize(0, message_len_buf)
 
-        async with atimeout(self.read_timeout) as self._read_timeout_object:
-            message = await self._reader.readexactly(message_len)
+        message = await self._reader.readexactly(message_len)
 
         return header + message
 
+    async def receive_message(self) -> Optional[bytes]:
+        """Receives a single raw message"""
+        return await self._read(self._read_message, timeout=self.read_timeout)
+
     async def receive_message_object(self) -> Optional[MessageDataclass]:
+        """Receives a single message and parses it to a :class:`.MessageDataclass`
+
+        :return: The parsed message, ``None`` if the connection returned EOF
+        """
         message_data = await self.receive_message()
 
         if message_data:
@@ -356,16 +364,12 @@ class DataConnection(Connection):
         else:
             return None
 
-    async def receive_message(self) -> Optional[bytes]:
-        """Receives a single raw message"""
-        return await self._read(self._read_message)
-
     def decode_message_data(self, data: bytes) -> MessageDataclass:
-        """De-obfuscates and deserializes message data into a `MessageDataclass`
-        object. See `deserialize_message`
+        """De-obfuscates and deserializes message data into a
+        :class:`.MessageDataclass` object. See ``deserialize_message``
 
         :param data: message bytes to decode
-        :return: object of `MessageDataclass`
+        :return: object of :class:`.MessageDataclass`
         :raise MessageDeserializationError: raised when deserialization failed
         """
         if self.obfuscated:
@@ -380,8 +384,8 @@ class DataConnection(Connection):
         return message
 
     def encode_message_data(self, message: Union[bytes, MessageDataclass]) -> bytes:
-        """Serializes the `MessageDataclass` or `bytes` and obfuscates the
-        contents. See `serialize_message`
+        """Serializes the :class:`.MessageDataclass` or ``bytes`` and obfuscates
+        the contents. See ``serialize_message``
 
         :return: `bytes` object
         :raise MessageSerializationError: raised when serialization failed
@@ -397,18 +401,12 @@ class DataConnection(Connection):
 
         return data
 
-    async def _perform_message_callback(self, message: MessageDataclass):
-        try:
-            await self.network.on_message_received(message, self)
-        except Exception:
-            logger.exception(f"error during callback : {message!r}")
-
     async def _read(self, reader_func, timeout: Optional[float] = None) -> Optional[bytes]:
-        """Read data from the connection using the passed `reader_func`. When an
-        error occurs during reading the connection will be CLOSED
+        """Read data from the connection using the passed ``reader_func``. When
+        an error occurs during reading the connection will be CLOSED
 
         :param reader_func: callable that reads the data
-        :return: the return value of the `reader_func`, None if EOF
+        :return: the return value of the `reader_func`, ``None`` if EOF
         :raise ConnectionReadError: upon any kind of read error/timeout
         """
         try:
@@ -449,10 +447,6 @@ class DataConnection(Connection):
             self.queue_message(message)
             for message in messages
         ]
-
-    def _cancel_queued_messages(self):
-        for qmessage_task in self._queued_messages:
-            qmessage_task.cancel()
 
     async def send_message(self, message: Union[bytes, MessageDataclass]):
         """Sends a message or a set of bytes over the connection. In case an
@@ -508,6 +502,23 @@ class DataConnection(Connection):
         else:
             return message
 
+    def _increase_read_timeout(self):
+        if self.read_timeout and self._read_timeout_object:
+            try:
+                self._read_timeout_object.shift(self.read_timeout)
+            except RuntimeError:
+                pass
+
+    async def _perform_message_callback(self, message: MessageDataclass):
+        try:
+            await self.network.on_message_received(message, self)
+        except Exception:
+            logger.exception(f"error during callback : {message!r}")
+
+    def _cancel_queued_messages(self):
+        for qmessage_task in self._queued_messages:
+            qmessage_task.cancel()
+
 
 class ServerConnection(DataConnection):
 
@@ -546,13 +557,13 @@ class PeerConnection(DataConnection):
     def set_connection_state(self, state: PeerConnectionState):
         """Sets the current connection state.
 
-        If the current state is AWAITING_INIT and the connection type is a
-        distributed or file connection the `obfuscated` flag for this connection
-        will be set to `False`
+        If the current state is ``AWAITING_INIT`` and the connection type is a
+        distributed or file connection the ``obfuscated`` flag for this
+        connection will be set to ``False``
 
-        If the state goes to the ESTABLISHED state the message reader task will
-        be started. In all other cases it will be stopped (in case the task was
-        running)
+        If the state goes to the ``ESTABLISHED`` state the message reader task
+        will be started. In all other cases it will be stopped (in case the
+        task was running)
 
         :param state: The new state of the connection
         """
@@ -615,7 +626,8 @@ class PeerConnection(DataConnection):
         :param timeout: timeout in seconds
         :raise ConnectionReadError: in case timeout occured on an error on the
             socket
-        :return: `bytes` object containing the received data
+        :return: `bytes` object containing the received data or ``None`` in case
+            the connection reached EOF
         """
         if not self._reader:
             raise ConnectionReadError("cannot read data, connection is not open")
@@ -640,7 +652,8 @@ class PeerConnection(DataConnection):
                 return data
 
     async def receive_file(
-            self, file_handle: AsyncBufferedIOBase, filesize: int, callback: Optional[Callable[[bytes], None]] = None):
+            self, file_handle: AsyncBufferedIOBase, filesize: int,
+            callback: Optional[Callable[[bytes], None]] = None):
         """Receives a file on the current connection and writes it to the given
         `file_handle`
 
