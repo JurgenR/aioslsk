@@ -5,6 +5,7 @@ from typing import List
 DEFAULT_LISTENING_HOST: str = '0.0.0.0'
 DEFAULT_PARENT_MIN_SPEED: int = 1
 DEFAULT_PARENT_SPEED_RATIO: int = 50
+DEFAULT_READ_TIMEOUT: float = 60
 PEER_CONNECT_TIMEOUT: float = 10
 """Direct connection timeout"""
 PEER_INDIRECT_CONNECT_TIMEOUT: float = 60
@@ -19,7 +20,7 @@ TRANSFER_REPLY_TIMEOUT = 30
 SERVER_CONNECT_TIMEOUT: float = 30
 SERVER_LOGIN_TIMEOUT: float = 30
 SERVER_PING_INTERVAL: float = 5 * 60
-SERVER_RESPONSE_TIMEOUT: float = 30
+SERVER_READ_TIMEOUT: float = SERVER_PING_INTERVAL * 2
 DISCONNECT_TIMEOUT: float = 5
 PATH_SEPERATOR_PATTERN = re.compile(r"[\\/]+")
 """Pattern for splitting/normalizing remote paths"""
