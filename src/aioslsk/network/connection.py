@@ -313,7 +313,7 @@ class DataConnection(Connection):
                     await self._perform_message_callback(message)
 
     async def _read(
-                self, reader_func: Coroutine[Any, Any, Optional[bytes]],
+                self, reader_func: Callable[[], Coroutine[Any, Any, Optional[bytes]]],
                 timeout: Optional[float] = None) -> Optional[bytes]:
         """Read data from the connection using the passed ``reader_func``. When
         an error occurs during reading the connection will be CLOSED
