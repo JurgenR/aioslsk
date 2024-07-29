@@ -549,11 +549,14 @@ class PeerConnection(DataConnection):
     def __init__(
             self, hostname: str, port: int, network: Network, obfuscated: bool = False,
             username: Optional[str] = None, connection_type: str = PeerConnectionType.PEER,
-            incoming: bool = False, read_timeout: float = PEER_READ_TIMEOUT):
+            incoming: bool = False, read_timeout: float = PEER_READ_TIMEOUT,
+            transfer_read_timeout: float = TRANSFER_TIMEOUT):
 
         super().__init__(
             hostname, port, network,
             obfuscated=obfuscated, read_timeout=read_timeout)
+
+        self.transfer_read_timeout: float = transfer_read_timeout
 
         self.incoming: bool = incoming
         self.connection_state = PeerConnectionState.AWAITING_INIT
@@ -629,14 +632,13 @@ class PeerConnection(DataConnection):
         _, offset = uint64.deserialize(0, data)
         return offset
 
-    async def receive_data(self, n_bytes: int, timeout: float = TRANSFER_TIMEOUT) -> Optional[bytes]:
+    async def receive_data(self, n_bytes: int) -> Optional[bytes]:
         """Receives given amount of bytes on the connection.
 
         In case of error the socket will be disconnected. If no data is received
         it is assumed to be EOF and the connection will be disconnected.
 
         :param n_bytes: amount of bytes to receive
-        :param timeout: timeout in seconds
         :raise ConnectionReadError: in case timeout occured on an error on the
             socket
         :return: `bytes` object containing the received data or ``None`` in case
@@ -646,7 +648,7 @@ class PeerConnection(DataConnection):
             raise ConnectionReadError("cannot read data, connection is not open")
 
         try:
-            async with atimeout(timeout):
+            async with atimeout(self.transfer_read_timeout) as self._read_timeout_object:
                 data = await self._reader.read(n_bytes)
 
         except asyncio.TimeoutError as exc:
