@@ -172,9 +172,9 @@ class MockServer:
             self.distributed_parent_task = asyncio.create_task(
                 self.distributed_parent_job(interval=potential_parent_interval))
 
-        if mock_variables.search_interval > 0:
+        if self.mock_variables.search_interval > 0:
             self.periodic_search_task = asyncio.create_task(
-                self.search_request_job(interval=mock_variables.search_interval))
+                self.search_request_job(interval=self.mock_variables.search_interval))
 
     def _create_distributed_strategy(self, strategy_cls: Type[T]) -> T:
         return strategy_cls(self.settings, self.peers)
