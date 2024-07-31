@@ -5,15 +5,15 @@ This file contains 2 types of messages:
 * Server
 
     Request : used from client to server. A client will only use the
-        `serialize` method of these messages
+        ``serialize`` method of these messages
     Response : used from server to client. A client will only use the
-        `deserialize` method of these messages
+        ``deserialize`` method of these messages
 
 * Peer
 
     Request : peer messages only consist of request type messages. The client
-        should use the `deserialize` method of these messages upon receiving
-        data from another peer and the `serialize` method when sending to
+        should use the ``deserialize`` method of these messages upon receiving
+        data from another peer and the ``serialize`` method when sending to
         another peer
 """
 from dataclasses import dataclass, field
@@ -211,6 +211,32 @@ class GetUserStatus(ServerMessage):
         privileged: bool = field(metadata={'type': boolean})
 
 
+class IgnoreUser(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x0B)
+        username: str = field(metadata={'type': string})
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x0B)
+        username: str = field(metadata={'type': string})
+
+
+class UnignoreUser(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x0C)
+        username: str = field(metadata={'type': string})
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x0C)
+        username: str = field(metadata={'type': string})
+
+
 class RoomChatMessage(ServerMessage):
 
     @dataclass(order=True)
@@ -352,6 +378,16 @@ class PrivateChatMessageAck(ServerMessage):
         chat_id: int = field(metadata={'type': uint32})
 
 
+class FileSearchRoom(ServerMessage):
+
+    @dataclass(order=True)
+    class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x19)
+        ticket: int = field(metadata={'type': uint32})
+        room_id: int = field(metadata={'type': uint32})
+        query: str = field(metadata={'type': string})
+
+
 class FileSearch(ServerMessage):
 
     @dataclass(order=True)
@@ -380,6 +416,10 @@ class Ping(ServerMessage):
 
     @dataclass(order=True)
     class Request(MessageDataclass):
+        MESSAGE_ID: ClassVar[uint32] = uint32(0x20)
+
+    @dataclass(order=True)
+    class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x20)
 
 
@@ -1327,12 +1367,6 @@ class PeerDirectoryContentsRequest(PeerMessage):
 
 
 class PeerDirectoryContentsReply(PeerMessage):
-    """Reply to a directory contents request. Although the returned directories
-    is a list it will only contain one element, the intention was probably to
-    let this method recurse down but doesn't seem like they ever did.
-
-    :todo: verify was happens if we pass multiple directories
-    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):

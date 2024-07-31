@@ -1,18 +1,20 @@
 from __future__ import annotations
 from aiofiles.threadpool.binary import AsyncBufferedIOBase, AsyncBufferedReader
 import asyncio
-from async_timeout import timeout as atimeout
+from async_timeout import Timeout, timeout as atimeout
 from enum import auto, Enum
-from typing import Callable, List, Optional, TYPE_CHECKING, Union
+from typing import Any, Callable, Coroutine, List, Optional, TYPE_CHECKING, Union
 import logging
 import socket
 import struct
 
 from ..constants import (
+    DEFAULT_READ_TIMEOUT,
     DISCONNECT_TIMEOUT,
     PEER_CONNECT_TIMEOUT,
     PEER_READ_TIMEOUT,
     SERVER_CONNECT_TIMEOUT,
+    SERVER_READ_TIMEOUT,
     TRANSFER_TIMEOUT,
 )
 from ..exceptions import (
@@ -120,7 +122,6 @@ class ListeningConnection(Connection):
         self.obfuscated: bool = obfuscated
 
         self._server: Optional[asyncio.AbstractServer] = None
-        self.connections_accepted: int = 0
 
     async def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
         logger.debug(f"{self.hostname}:{self.port} : disconnecting : {reason.name}")
@@ -183,15 +184,20 @@ class ListeningConnection(Connection):
 class DataConnection(Connection):
     """Connection for message and data transfer"""
 
-    def __init__(self, hostname: str, port: int, network: Network, obfuscated: bool = False):
+    def __init__(
+            self, hostname: str, port: int, network: Network,
+            obfuscated: bool = False, read_timeout: float = DEFAULT_READ_TIMEOUT):
         super().__init__(hostname, port, network)
         self.obfuscated = obfuscated
 
         self._reader: Optional[asyncio.StreamReader] = None
         self._writer: Optional[asyncio.StreamWriter] = None
         self._reader_task: Optional[asyncio.Task] = None
-        self.read_timeout: Optional[float] = None
+
         self._queued_messages: List[asyncio.Task] = []
+        self._read_timeout_object: Optional[Timeout] = None
+
+        self.read_timeout: float = read_timeout
 
     def get_connecting_ip(self) -> str:
         """Gets the IP address being used to connect to the server/peer.
@@ -267,29 +273,16 @@ class DataConnection(Connection):
             self._writer = None
 
     def start_reader_task(self):
+        """Starts the message reader task"""
         self._reader_task = asyncio.create_task(self._message_reader_loop())
 
     def stop_reader_task(self):
+        """Stops the message reader task if it exists"""
         if self._reader_task is not None:
             self._reader_task.cancel()
             self._reader_task = None
 
     # Read/write methods
-
-    async def _read_until_eof(self) -> bytes:
-        return await self._reader.read(-1)  # type: ignore[union-attr]
-
-    async def receive_until_eof(self, raise_exception: bool = True) -> Optional[bytes]:
-        if not self._reader:
-            raise ConnectionReadError("cannot read until EOF, connection is not open")
-
-        try:
-            return await self._read(self._read_until_eof)
-        except ConnectionReadError:
-            if raise_exception:
-                raise
-
-            return None
 
     async def _message_reader_loop(self):
         """Message reader loop. This will loop until the connection is closed or
@@ -319,92 +312,19 @@ class DataConnection(Connection):
                 else:
                     await self._perform_message_callback(message)
 
-    async def _read_message(self) -> bytes:
-        if not self._reader:
-            raise ConnectionReadError("cannot read message, connection is not open")
+    async def _read(
+                self, reader_func: Callable[[], Coroutine[Any, Any, Optional[bytes]]],
+                timeout: Optional[float] = None) -> Optional[bytes]:
+        """Read data from the connection using the passed ``reader_func``. When
+        an error occurs during reading the connection will be CLOSED
 
-        header_size = HEADER_SIZE_OBFUSCATED if self.obfuscated else HEADER_SIZE_UNOBFUSCATED
-
-        async with atimeout(self.read_timeout):
-            header = await self._reader.readexactly(header_size)
-
-        message_len_buf = obfuscation.decode(header) if self.obfuscated else header
-        _, message_len = uint32.deserialize(0, message_len_buf)
-
-        async with atimeout(self.read_timeout):
-            message = await self._reader.readexactly(message_len)
-
-        return header + message
-
-    async def receive_message_object(self) -> Optional[MessageDataclass]:
-        message_data = await self.receive_message()
-
-        if message_data:
-            message = self.decode_message_data(message_data)
-            logger.debug(f"{self.hostname}:{self.port} : received message : {message!r}")
-            return message
-
-        else:
-            return None
-
-    async def receive_message(self) -> Optional[bytes]:
-        """Receives a single raw message"""
-        return await self._read(self._read_message)
-
-    def decode_message_data(self, data: bytes) -> MessageDataclass:
-        """De-obfuscates and deserializes message data into a `MessageDataclass`
-        object. See `deserialize_message`
-
-        :param data: message bytes to decode
-        :return: object of `MessageDataclass`
-        :raise MessageDeserializationError: raised when deserialization failed
-        """
-        if self.obfuscated:
-            data = obfuscation.decode(data)
-
-        try:
-            message = self.deserialize_message(data)
-        except Exception as exc:
-            logger.exception(f"{self.hostname}:{self.port} : failed to deserialize message : {data.hex()}")
-            raise MessageDeserializationError("failed to deserialize message") from exc
-
-        return message
-
-    def encode_message_data(self, message: Union[bytes, MessageDataclass]) -> bytes:
-        """Serializes the `MessageDataclass` or `bytes` and obfuscates the
-        contents. See `serialize_message`
-
-        :return: `bytes` object
-        :raise MessageSerializationError: raised when serialization failed
-        """
-        try:
-            data = self.serialize_message(message)
-        except Exception as exc:
-            logger.exception(f"{self.hostname}:{self.port} : failed to serialize message : {message!r}")
-            raise MessageSerializationError("failed to serialize Message") from exc
-
-        if self.obfuscated:
-            data = obfuscation.encode(data)
-
-        return data
-
-    async def _perform_message_callback(self, message: MessageDataclass):
-        try:
-            await self.network.on_message_received(message, self)
-        except Exception:
-            logger.exception(f"error during callback : {message!r}")
-
-    async def _read(self, reader_func, timeout: Optional[float] = None) -> Optional[bytes]:
-        """Read data from the connection using the passed `reader_func`. When an
-        error occurs during reading the connection will be CLOSED
-
-        :param reader_func: callable that reads the data
-        :return: the return value of the `reader_func`, None if EOF
+        :param reader_func: coroutine that reads the data
+        :return: the return value of the ``reader_func``, ``None`` if EOF
         :raise ConnectionReadError: upon any kind of read error/timeout
         """
         try:
             if timeout:
-                async with atimeout(timeout):
+                async with atimeout(timeout) as self._read_timeout_object:
                     return await reader_func()
             else:
                 return await reader_func()
@@ -426,6 +346,63 @@ class DataConnection(Connection):
             await self.disconnect(CloseReason.READ_ERROR)
             raise ConnectionReadError(f"{self.hostname}:{self.port} : exception during reading") from exc
 
+    async def _read_message(self) -> bytes:
+        if not self._reader:
+            raise ConnectionReadError("cannot read message, connection is not open")
+
+        header_size = HEADER_SIZE_OBFUSCATED if self.obfuscated else HEADER_SIZE_UNOBFUSCATED
+
+        header = await self._reader.readexactly(header_size)
+
+        message_len_buf = obfuscation.decode(header) if self.obfuscated else header
+        _, message_len = uint32.deserialize(0, message_len_buf)
+
+        message = await self._reader.readexactly(message_len)
+
+        return header + message
+
+    async def receive_message(self) -> Optional[bytes]:
+        """Receives a single raw message"""
+        return await self._read(self._read_message, timeout=self.read_timeout)
+
+    async def receive_message_object(self) -> Optional[MessageDataclass]:
+        """Receives a single message and parses it to a :class:`.MessageDataclass`
+
+        :return: The parsed message, ``None`` if the connection returned EOF
+        """
+        message_data = await self.receive_message()
+
+        if message_data:
+            message = self.decode_message_data(message_data)
+            logger.debug(f"{self.hostname}:{self.port} : received message : {message!r}")
+            return message
+
+        else:
+            return None
+
+    async def _read_until_eof(self) -> bytes:
+        return await self._reader.read(-1)  # type: ignore[union-attr]
+
+    async def receive_until_eof(self, raise_exception: bool = True) -> Optional[bytes]:
+        """Receives data until the other end closes the connection. If
+        ``raise_exception`` parameter is set to ``True`` other read errors are
+        treated as EOF as well
+        """
+        if not self._reader:
+            raise ConnectionReadError("cannot read until EOF, connection is not open")
+
+        # Note: _read raises ConnectionReadError also on IncompleteReadError,
+        # however when using StreamReader.read this error can never be raised
+        # and thus this method shouldn't worry about potentially not returning
+        # partial data
+        try:
+            return await self._read(self._read_until_eof)
+        except ConnectionReadError:
+            if raise_exception:
+                raise
+
+            return b''
+
     def queue_message(self, message: Union[bytes, MessageDataclass]) -> asyncio.Task:
         task = asyncio.create_task(
             self.send_message(message),
@@ -440,10 +417,6 @@ class DataConnection(Connection):
             self.queue_message(message)
             for message in messages
         ]
-
-    def _cancel_queued_messages(self):
-        for qmessage_task in self._queued_messages:
-            qmessage_task.cancel()
 
     async def send_message(self, message: Union[bytes, MessageDataclass]):
         """Sends a message or a set of bytes over the connection. In case an
@@ -483,6 +456,46 @@ class DataConnection(Connection):
             await self.disconnect(CloseReason.WRITE_ERROR)
             raise ConnectionWriteError(f"{self.hostname}:{self.port} : exception during writing") from exc
 
+        else:
+            self._increase_read_timeout()
+
+    def encode_message_data(self, message: Union[bytes, MessageDataclass]) -> bytes:
+        """Serializes the :class:`.MessageDataclass` or ``bytes`` and obfuscates
+        the contents. See ``serialize_message``
+
+        :return: `bytes` object
+        :raise MessageSerializationError: raised when serialization failed
+        """
+        try:
+            data = self.serialize_message(message)
+        except Exception as exc:
+            logger.exception(f"{self.hostname}:{self.port} : failed to serialize message : {message!r}")
+            raise MessageSerializationError("failed to serialize Message") from exc
+
+        if self.obfuscated:
+            data = obfuscation.encode(data)
+
+        return data
+
+    def decode_message_data(self, data: bytes) -> MessageDataclass:
+        """De-obfuscates and deserializes message data into a
+        :class:`.MessageDataclass` object. See ``deserialize_message``
+
+        :param data: message bytes to decode
+        :return: object of :class:`.MessageDataclass`
+        :raise MessageDeserializationError: raised when deserialization failed
+        """
+        if self.obfuscated:
+            data = obfuscation.decode(data)
+
+        try:
+            message = self.deserialize_message(data)
+        except Exception as exc:
+            logger.exception(f"{self.hostname}:{self.port} : failed to deserialize message : {data.hex()}")
+            raise MessageDeserializationError("failed to deserialize message") from exc
+
+        return message
+
     def deserialize_message(self, message_data: bytes) -> MessageDataclass:
         """Should be called after a full message has been received. This method
         should parse the message
@@ -496,12 +509,36 @@ class DataConnection(Connection):
         else:
             return message
 
+    def _increase_read_timeout(self):
+        if self.read_timeout and self._read_timeout_object:
+            try:
+                self._read_timeout_object.shift(self.read_timeout)
+            except RuntimeError:
+                pass
+
+    async def _perform_message_callback(self, message: MessageDataclass):
+        try:
+            await self.network.on_message_received(message, self)
+        except Exception:
+            logger.exception(f"error during callback : {message!r}")
+
+    def _cancel_queued_messages(self):
+        for qmessage_task in self._queued_messages:
+            qmessage_task.cancel()
+
 
 class ServerConnection(DataConnection):
 
+    def __init__(
+            self, hostname: str, port: int, network: Network,
+            obfuscated: bool = False, read_timeout: float = SERVER_READ_TIMEOUT):
+
+        super().__init__(
+            hostname, port, network,
+            obfuscated=obfuscated, read_timeout=read_timeout)
+
     async def connect(self, timeout: float = SERVER_CONNECT_TIMEOUT):
         await super().connect(timeout=timeout)
-        # self.start_reader_task()
 
     def deserialize_message(self, message_data: bytes) -> MessageDataclass:
         return ServerMessage.deserialize_response(message_data)
@@ -512,14 +549,20 @@ class PeerConnection(DataConnection):
     def __init__(
             self, hostname: str, port: int, network: Network, obfuscated: bool = False,
             username: Optional[str] = None, connection_type: str = PeerConnectionType.PEER,
-            incoming: bool = False):
-        super().__init__(hostname, port, network, obfuscated=obfuscated)
+            incoming: bool = False, read_timeout: float = PEER_READ_TIMEOUT,
+            transfer_read_timeout: float = TRANSFER_TIMEOUT):
+
+        super().__init__(
+            hostname, port, network,
+            obfuscated=obfuscated, read_timeout=read_timeout)
+
+        self.transfer_read_timeout: float = transfer_read_timeout
+
         self.incoming: bool = incoming
         self.connection_state = PeerConnectionState.AWAITING_INIT
 
         self.username: Optional[str] = username
         self.connection_type: str = connection_type
-        self.read_timeout = PEER_READ_TIMEOUT
 
         self.download_rate_limiter: RateLimiter = UnlimitedRateLimiter()
         self.upload_rate_limiter: RateLimiter = UnlimitedRateLimiter()
@@ -530,13 +573,13 @@ class PeerConnection(DataConnection):
     def set_connection_state(self, state: PeerConnectionState):
         """Sets the current connection state.
 
-        If the current state is AWAITING_INIT and the connection type is a
-        distributed or file connection the `obfuscated` flag for this connection
-        will be set to `False`
+        If the current state is ``AWAITING_INIT`` and the connection type is a
+        distributed or file connection the ``obfuscated`` flag for this
+        connection will be set to ``False``
 
-        If the state goes to the ESTABLISHED state the message reader task will
-        be started. In all other cases it will be stopped (in case the task was
-        running)
+        If the state goes to the ``ESTABLISHED`` state the message reader task
+        will be started. In all other cases it will be stopped (in case the
+        task was running)
 
         :param state: The new state of the connection
         """
@@ -589,28 +632,28 @@ class PeerConnection(DataConnection):
         _, offset = uint64.deserialize(0, data)
         return offset
 
-    async def receive_data(self, n_bytes: int, timeout: float = TRANSFER_TIMEOUT) -> Optional[bytes]:
+    async def receive_data(self, n_bytes: int) -> Optional[bytes]:
         """Receives given amount of bytes on the connection.
 
         In case of error the socket will be disconnected. If no data is received
         it is assumed to be EOF and the connection will be disconnected.
 
         :param n_bytes: amount of bytes to receive
-        :param timeout: timeout in seconds
         :raise ConnectionReadError: in case timeout occured on an error on the
             socket
-        :return: `bytes` object containing the received data
+        :return: `bytes` object containing the received data or ``None`` in case
+            the connection reached EOF
         """
         if not self._reader:
             raise ConnectionReadError("cannot read data, connection is not open")
 
         try:
-            async with atimeout(timeout):
+            async with atimeout(self.transfer_read_timeout) as self._read_timeout_object:
                 data = await self._reader.read(n_bytes)
 
         except asyncio.TimeoutError as exc:
             await self.disconnect(CloseReason.TIMEOUT)
-            raise ConnectionReadError(f"{self.hostname}:{self.port} : timeout writing") from exc
+            raise ConnectionReadError(f"{self.hostname}:{self.port} : timeout reading data") from exc
 
         except Exception as exc:
             await self.disconnect(CloseReason.READ_ERROR)
@@ -624,7 +667,8 @@ class PeerConnection(DataConnection):
                 return data
 
     async def receive_file(
-            self, file_handle: AsyncBufferedIOBase, filesize: int, callback: Optional[Callable[[bytes], None]] = None):
+            self, file_handle: AsyncBufferedIOBase, filesize: int,
+            callback: Optional[Callable[[bytes], None]] = None):
         """Receives a file on the current connection and writes it to the given
         `file_handle`
 
