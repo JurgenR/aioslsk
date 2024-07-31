@@ -69,7 +69,7 @@ FileData
 4. **string**: extension
 5. Array of file attributes:
 
-   1. **Attribute**: attributes
+   1. :ref:`Attribute`: attributes
 
 
 .. _DirectoryData:
@@ -80,7 +80,7 @@ DirectoryData
 1. **string**: name
 2. Array of file data:
 
-   1. **FileData**: files
+   1. :ref:`FileData`: files
 
 
 .. _UserStats:
@@ -287,7 +287,7 @@ To remove a user use the :ref:`RemoveUser` message. Keep in mind that you will s
    3. if exists==true
 
       1. **uint32**: status
-      2. **UserStats**: user_stats
+      2. :ref:`UserStats`: user_stats
       3. Optional:
 
          1. **string**: country_code
@@ -338,7 +338,7 @@ Sent when we want to ignore a user. Received when another user ignores us
    1. **string**: username
 
 
-.. _IgnoreUser:
+.. _UnignoreUser:
 
 UnignoreUser (Code 12)
 ----------------------
@@ -397,7 +397,7 @@ Used when we want to join a chat room. If the chat room does not exist it will b
 
    4. Array of user stats:
 
-      1. **UserStats**: users_stats
+      1. :ref:`UserStats`: users_stats
 
    5. Array of upload slots free:
 
@@ -443,7 +443,7 @@ Received when a user joined a room
    1. **string**: room_name
    2. **string**: username
    3. **uint32**: status
-   4. **UserStats**: user_stats
+   4. :ref:`UserStats`: user_stats
    5. **uint32**: slots_free
    6. **string**: country_code
 
@@ -535,7 +535,7 @@ Deprecated message for searching a room
 :Send:
    1. **uint32**: ticket
    2. **uint32**: room_id
-   2. **string**: query
+   3. **string**: query
 
 
 .. _FileSearch:
@@ -644,7 +644,7 @@ Request a user's statistics. This message will be received automatically for use
    1. **string**: username
 :Receive:
    1. **string**: username
-   2. **UserStats**: user_stats
+   2. :ref:`UserStats`: user_stats
 
 
 .. _Kicked:
@@ -935,7 +935,7 @@ Gets all users on the server, no longer used
 
    3. Array of user stats:
 
-      1. **UserStats**: users_stats
+      1. :ref:`UserStats`: users_stats
 
    4. Array of upload slots free:
 
@@ -1891,12 +1891,12 @@ Response to PeerSharesRequest. The response should include empty parent director
 
    1. Array of directories:
 
-      1. **DirectoryData**: directories
+      1. :ref:`DirectoryData`: directories
 
    2. **uint32**: unknown: always 0
    3. Optional: Array of locked directories:
 
-      1. **DirectoryData**: locked_directories
+      1. :ref:`DirectoryData`: locked_directories
 
 
 .. _PeerSearchReply:
@@ -1915,7 +1915,7 @@ Response to a search request
    2. **uint32**: ticket
    3. Array of results:
 
-      1. **FileData**: results
+      1. :ref:`FileData`: results
 
    4. **boolean**: has_slots_free
    5. **uint32**: avg_speed
@@ -1923,7 +1923,7 @@ Response to a search request
    7. **uint32**: unknown: always 0
    8. Optional: Array of locked results:
 
-      1. **FileData**: locked_results
+      1. :ref:`FileData`: locked_results
 
 
 .. _PeerUserInfoRequest:
@@ -1992,7 +1992,7 @@ Although the returned directories is an array it will only contain one element a
    2. **string**: directory
    3. Array of directory data:
 
-      1. **:ref:`DirectoryData`**: directories
+      1. :ref:`DirectoryData`: directories
 
 
 .. _PeerTransferRequest:
