@@ -38,7 +38,7 @@ def create_client(tmp_path: Path, username: str, port: int) -> SoulSeekClient:
 
     # settings.set('credentials.username', username)
     # settings.set('credentials.password', DEFAULT_PASSWORD)
-    settings.network.server.hostname = 'localhost'
+    settings.network.server.hostname = '127.0.0.1'
     settings.network.server.port = DEFAULT_SERVER_PORT
     settings.network.server.reconnect.auto = False
     settings.network.listening.port = port
