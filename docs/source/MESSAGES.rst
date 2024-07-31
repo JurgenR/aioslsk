@@ -33,7 +33,7 @@ The components of the messages use a little-endian byte order.
 String
 ------
 
-``string``` datatype consists of a ``uint32`` denoting its length followed by the list of bytes. Strings will be UTF-8 encoded / decoded before sending
+``string`` datatype consists of a ``uint32`` denoting its length followed by the list of bytes. Strings will be UTF-8 encoded / decoded before sending
 
 Array
 -----
@@ -69,7 +69,7 @@ FileData
 4. **string**: extension
 5. Array of file attributes:
 
-   1. **Attribute**: attributes
+   1. :ref:`Attribute`: attributes
 
 
 .. _DirectoryData:
@@ -80,7 +80,7 @@ DirectoryData
 1. **string**: name
 2. Array of file data:
 
-   1. **FileData**: files
+   1. :ref:`FileData`: files
 
 
 .. _UserStats:
@@ -231,7 +231,7 @@ SetListenPort (Code 2)
 
 Advertise our listening ports to the server
 
-Obfuscated port: this part seems to be optional, either it can be omitted completely or both values set to 0
+Obfuscated port: this part seems to be optional, either it can be omitted completely or both values set to ``0``
 
 :Code: 2 (0x02)
 :Status: USED
@@ -248,10 +248,9 @@ Obfuscated port: this part seems to be optional, either it can be omitted comple
 GetPeerAddress (Code 3)
 -----------------------
 
-Retrieve the IP address/port of a peer. Obfuscated port: this part seems to be optional, either it can be omitted completely or both values set to ``0``
+Retrieve the IP address/port of a peer. Obfuscated port: this part is optional, either it can be omitted completely or both values set to ``0`` to indicate there is no obfuscated port
 
-If the peer does not exist we will receive a response with IP address, port set to ``0``
-
+If the peer does the server will respond with IP address set to ``0.0.0.0``, port set to ``0``
 
 :Code: 3 (0x03)
 :Status: USED
@@ -288,7 +287,7 @@ To remove a user use the :ref:`RemoveUser` message. Keep in mind that you will s
    3. if exists==true
 
       1. **uint32**: status
-      2. **UserStats**: user_stats
+      2. :ref:`UserStats`: user_stats
       3. Optional:
 
          1. **string**: country_code
@@ -324,6 +323,36 @@ Get the user status. The server will automatically send updates for users that w
    3. **boolean**: privileged
 
 
+.. _IgnoreUser:
+
+IgnoreUser (Code 11)
+--------------------
+
+Sent when we want to ignore a user. Received when another user ignores us
+
+:Code: 11 (0x0B)
+:Status: DEPRECATED, DEFUNCT
+:Send:
+   1. **string**: username
+:Receive:
+   1. **string**: username
+
+
+.. _UnignoreUser:
+
+UnignoreUser (Code 12)
+----------------------
+
+Sent when we want to unignore a user. Received when another user unignores us
+
+:Code: 12 (0x0C)
+:Status: DEPRECATED, DEFUNCT
+:Send:
+   1. **string**: username
+:Receive:
+   1. **string**: username
+
+
 .. _RoomChatMessage:
 
 RoomChatMessage (Code 13)
@@ -347,7 +376,7 @@ Used when sending a message to a room or receiving a message from someone (inclu
 JoinRoom (Code 14)
 ------------------
 
-Used when we want to join a chat room. If the chat room does not exist it will be created
+Used when we want to join a chat room. If the chat room does not exist it will be created. Upon successfully joining the room the server will send the response message
 
 :Code: 14 (0x0E)
 :Status: USED
@@ -368,7 +397,7 @@ Used when we want to join a chat room. If the chat room does not exist it will b
 
    4. Array of user stats:
 
-      1. **UserStats**: users_stats
+      1. :ref:`UserStats`: users_stats
 
    5. Array of upload slots free:
 
@@ -414,7 +443,7 @@ Received when a user joined a room
    1. **string**: room_name
    2. **string**: username
    3. **uint32**: status
-   4. **UserStats**: user_stats
+   4. :ref:`UserStats`: user_stats
    5. **uint32**: slots_free
    6. **string**: country_code
 
@@ -494,6 +523,21 @@ Acknowledge we have received a private message after receiving a :ref:`PrivateCh
    1. **uint32**: chat_id
 
 
+.. _FileSearchRoom:
+
+FileSearchRoom (Code 25)
+------------------------
+
+Deprecated message for searching a room
+
+:Code: 25 (0x19)
+:Status: DEPRECATED, DEFUNCT
+:Send:
+   1. **uint32**: ticket
+   2. **uint32**: room_id
+   3. **string**: query
+
+
 .. _FileSearch:
 
 FileSearch (Code 26)
@@ -517,7 +561,7 @@ This message is received when another user performed a :ref:`RoomSearch` or :ref
 SetStatus (Code 28)
 -------------------
 
-Update our status
+Used to update the online status. Possible values for ``status``: online = 2, away = 1
 
 :Code: 28 (0x1C)
 :Status: USED
@@ -532,15 +576,22 @@ Ping (Code 32)
 
 Send a ping to the server to let it know we are still alive (every 5 minutes)
 
+Older server versions would respond to this message with the response message.
+
 :Code: 32 (0x20)
 :Status: USED
 :Send: Nothing
+:Receive: Nothing
 
 
 .. _SendConnectTicket:
 
 SendConnectTicket (Code 33)
 ---------------------------
+
+Deprecated predecessor to :ref:`ConnectToPeer`. A peer would send this message to the server when wanting to create a connection to another peer, the server would then pass to this to the
+
+The value of the ``ticket`` parameter would be used in the :ref:`PeerInit` message.
 
 :Code: 33 (0x21)
 :Status: DEPRECATED, DEFUNCT
@@ -557,12 +608,12 @@ SendConnectTicket (Code 33)
 SendDownloadSpeed (Code 34)
 ---------------------------
 
-Sent by old clients after download has completed. No longer used.
+Sent by old clients after download has completed. :ref:`SendUploadSpeed` should be used instead. The ``speed`` value should be in bytes per second
 
 :Code: 34 (0x22)
 :Status: DEPRECATED, DEFUNCT
 :Send:
-   1. **string**: ticket
+   1. **string**: username
    2. **uint32**: speed
 
 
@@ -571,7 +622,7 @@ Sent by old clients after download has completed. No longer used.
 SharedFoldersFiles (Code 35)
 ----------------------------
 
-Let the server know the amount of files and directories we are sharing. This would be returned in several messages, for example the :ref:`GetUserStats` and :ref:`AddUser` messages
+Let the server know the amount of files and directories we are sharing. These would be returned in several messages, for example the :ref:`GetUserStats` and :ref:`AddUser` messages
 
 :Code: 35 (0x23)
 :Status: USED
@@ -585,7 +636,7 @@ Let the server know the amount of files and directories we are sharing. This wou
 GetUserStats (Code 36)
 ----------------------
 
-Request a user's statistics. This message will be received automatically for user's with which we share a room
+Request a user's statistics. This message will be received automatically for users with which we share a room
 
 :Code: 36 (0x24)
 :Status: USED
@@ -593,7 +644,7 @@ Request a user's statistics. This message will be received automatically for use
    1. **string**: username
 :Receive:
    1. **string**: username
-   2. **UserStats**: user_stats
+   2. :ref:`UserStats`: user_stats
 
 
 .. _Kicked:
@@ -694,7 +745,7 @@ Request the server to send a list of recommendations and unrecommendations. A ma
 GetInterests (Code 55)
 ----------------------
 
-Request the server the list of interests it currently has stored for us. This was sent by older clients during logon, presumably to sync the interests on the client and the server. Deprecated as the client should just advertise all interests after logon.
+Request the server the list of interests it currently has stored for us. This was sent by older clients during logon, presumably to sync the interests on the client and the server. Deprecated as the client should just advertise all interests after logon using the :ref:`AddInterest` and :ref:`AddHatedInterest` messages
 
 Not known whether the server still responds to this command
 
@@ -711,6 +762,8 @@ Not known whether the server still responds to this command
 
 GetGlobalRecommendations (Code 56)
 ----------------------------------
+
+Get the global list of recommendations. This does not take into account interests or hated interests that were previously added and is just a ranking of interests that other users have set
 
 :Code: 56 (0x38)
 :Status: DEPRECATED
@@ -731,6 +784,8 @@ GetGlobalRecommendations (Code 56)
 
 GetUserInterests (Code 57)
 --------------------------
+
+Get the interests and hated interests of a particular user
 
 :Code: 57 (0x39)
 :Status: DEPRECATED
@@ -777,7 +832,7 @@ The command type has only ever been seen as having value ``admin``, the ``argume
 RoomList (Code 64)
 ------------------
 
-Request or receive the list of rooms. This message will be initially sent after logging on but can also be manually requested afterwards. The initial message after logon will only return a limited number of public rooms (potentially only the rooms with 5 or more users).
+Request or receive the list of rooms. This message will be initially sent after logging on but can also be manually requested afterwards. The initial message after logon will only return a limited number of public rooms (only the rooms with 5 or more users).
 
 Parameter ``rooms_private`` excludes private rooms of which we are owner
 
@@ -823,9 +878,9 @@ ExactFileSearch (Code 65)
 
 Used by older clients but doesn't return anything. The ``pathname`` is optional but is still required to be sent.
 
-For the message sending: The first 4 parameters are definitely correct, the client will send 5 bytes however they are always 0.
+For the message sending: The first 4 parameters are verified, the meaning of the final 5 bytes is unknown
 
-For the message receiving: message is never seen and is based
+For the message receiving: message is never seen and is based on other documentation (PySlsk)
 
 :Code: 65 (0x41)
 :Status: DEPRECATED, DEFUNCT
@@ -880,7 +935,7 @@ Gets all users on the server, no longer used
 
    3. Array of user stats:
 
-      1. **UserStats**: users_stats
+      1. :ref:`UserStats`: users_stats
 
    4. Array of upload slots free:
 
@@ -919,7 +974,7 @@ Tunnel a message through the server to a user
 PrivilegedUsers (Code 69)
 -------------------------
 
-Indicates whether we want to receive :ref:`PotentialParents` messages from the server. A message should be sent to disable if we have found a parent
+List of users with privileges sent after login
 
 :Code: 69 (0x45)
 :Status: USED
@@ -952,7 +1007,7 @@ IP address of the parent. Not sent by newer clients
 :Code: 73 (0x49)
 :Status: DEPRECATED
 :Send:
-   1. **uint32**: ip_address
+   1. **ip_address**: ip_address
 
 
 .. _Unknown80:
@@ -960,7 +1015,7 @@ IP address of the parent. Not sent by newer clients
 Unknown80 (Code 80)
 -------------------
 
-Unknown message used by the first client versions. The client would establish 2 connections to the server: to one it would send the :ref:`Login` message, to the other this message would be sent. This second connection seemed to be related to the distributed network as the client would automatically disconnect after :ref:`DistributedAliveInterval` had been reached. It would seem like the server would be the client's parent in this case.
+Unknown message used by old client versions. The client would establish 2 connections to the server: to one it would send the :ref:`Login` message, to the other this message would be sent. This second connection seemed to be related to the distributed network as the client would automatically disconnect after :ref:`DistributedAliveInterval` had been reached. It would seem like the server would be the client's parent in this case.
 
 After an interval determined by :ref:`DistributionInterval` the client would send another message over this connection which is described below. There's many unknowns in this message and even the types are unknown as many values were just 0, only known value is the last value which is the second listening port these clients used.
 
@@ -985,6 +1040,8 @@ Distribution message (code as ``uint8``):
 ParentMinSpeed (Code 83)
 ------------------------
 
+Used for calculating the maximum amount of children we can have in the distributed network. If our average upload speed is below this value then we should accept no children. The average upload speed should be determined by the upload speed returned by :ref:`GetUserStats` (with our own username)
+
 :Code: 83 (0x53)
 :Status: USED
 :Receive:
@@ -995,6 +1052,8 @@ ParentMinSpeed (Code 83)
 
 ParentSpeedRatio (Code 84)
 --------------------------
+
+Used for calculating the maximum amount of children we can have in the distributed network.
 
 :Code: 84 (0x54)
 :Status: USED
@@ -1032,7 +1091,7 @@ SearchInactivityTimeout (Code 87)
 MinParentsInCache (Code 88)
 ---------------------------
 
-Amount of parents (received through :ref:`PotentialParents`) we should keep in cache. Message has not been seen yet being sent by the server
+Amount of parents (received through :ref:`PotentialParents`) we should keep in cache. Message has not been seen being sent by the server
 
 :Code: 88 (0x58)
 :Status: DEPRECATED, DEFUNCT
@@ -1043,7 +1102,7 @@ Amount of parents (received through :ref:`PotentialParents`) we should keep in c
 .. _DistributionInterval:
 
 DistributionInterval (Code 89)
------------------------------
+------------------------------
 
 :Code: 89 (0x59)
 :Status: DEPRECATED, DEFUNCT
@@ -1056,7 +1115,7 @@ DistributionInterval (Code 89)
 DistributedAliveInterval (Code 90)
 ----------------------------------
 
-Interval at which a :ref:`DistributedPing` message should be sent to the children. Most clients don't adhere to this.
+Interval at which a :ref:`DistributedPing` message should be sent to the children. Most clients don't send this message out
 
 :Code: 90 (0x5A)
 :Status: DEPRECATED
@@ -1093,6 +1152,8 @@ Checks whether the requesting user has privileges, `time_left` will be `0` in ca
 ServerSearchRequest (Code 93)
 -----------------------------
 
+
+
 :Code: 93 (0x5D)
 :Status: USED
 :Receive:
@@ -1108,7 +1169,7 @@ ServerSearchRequest (Code 93)
 AcceptChildren (Code 100)
 -------------------------
 
-Tell the server we are not accepting any distributed children, the server *should* take this into account when sending :ref:`PotentialParents` messages to other peers.
+Tell the server whether or not we are accepting any distributed children, the server *should* take this into account when sending :ref:`PotentialParents` messages to other peers.
 
 :Code: 100 (0x64)
 :Status: USED
@@ -1136,7 +1197,7 @@ PotentialParents (Code 102)
 WishlistSearch (Code 103)
 -------------------------
 
-Perform a wishlist search
+Perform a wishlist search. The interval at which a client should send this message is determined by the :ref:`WishlistInterval` message
 
 :Code: 103 (0x67)
 :Status: USED
@@ -1150,7 +1211,7 @@ Perform a wishlist search
 WishlistInterval (Code 104)
 ---------------------------
 
-The server lets us know at what interval we should perform wishlist searches
+The server lets us know at what interval we should perform wishlist searches (:ref:`WishlistSearch`). Sent by the server after logon
 
 :Code: 104 (0x68)
 :Status: USED
@@ -1163,6 +1224,8 @@ The server lets us know at what interval we should perform wishlist searches
 
 GetSimilarUsers (Code 110)
 --------------------------
+
+Get a list of similar users
 
 :Code: 110 (0x6E)
 :Status: DEPRECATED
@@ -1178,6 +1241,8 @@ GetSimilarUsers (Code 110)
 
 GetItemRecommendations (Code 111)
 ---------------------------------
+
+Get a list of recommendations based on a single interest
 
 :Code: 111 (0x6F)
 :Status: DEPRECATED
@@ -1268,7 +1333,7 @@ Add or update a ticker for a room (room wall)
 
 .. note::
 
-   Empty ``ticker`` value is not accepted by some clients. However, the server does accepts it and clears the ticker from the room
+   An empty ``ticker`` value is not allowed in most clients. However, the server does accept it and clears the ticker from the room
 
 
 .. _AddHatedInterest:
@@ -1289,7 +1354,7 @@ Adds an hated interest. This is used when requesting recommendations (eg.: :ref:
 RemoveHatedInterest (Code 118)
 ------------------------------
 
-Removes a hated interest previously added with :ref:`AddInterest` message
+Removes a hated interest previously added with :ref:`AddHatedInterest` message
 
 :Code: 118 (0x76)
 :Status: DEPRECATED
@@ -1302,7 +1367,7 @@ Removes a hated interest previously added with :ref:`AddInterest` message
 RoomSearch (Code 120)
 ---------------------
 
-Perform a search query on all users in the given room, this can only be performed if the room was joined first. The server will send a :ref:`FileSearch` to every user in that room
+Perform a search query on all users in the given room, this can only be performed if the room was joined first. The server will send a :ref:`FileSearch` to every user in the requested room
 
 :Code: 120 (0x78)
 :Status: USED
@@ -1317,9 +1382,9 @@ Perform a search query on all users in the given room, this can only be performe
 SendUploadSpeed (Code 121)
 --------------------------
 
-Send upload speed, sent to the server right after an upload completed. ``speed`` parameter should be in bytes per second. This is not the global average uploads speed but rather the upload speed for that particular transfer. After this message has been sent the
+Sent to the server right after an upload completed. ``speed`` parameter should be in bytes per second. This should not be the global average upload speed but rather the upload speed for that particular transfer. After this message has been sent the server will recalculate the average speed and increase the amount of uploads for your user.
 
-In exception cases, for example if a transfer was failed midway then resumed, only the speed of the resumed part is taken into account.
+In exception cases, for example if a transfer was failed midway then resumed, only the speed of the resumed part is taken into account. However this might be client dependent.
 
 :Code: 121 (0x79)
 :Status: USED
@@ -1680,7 +1745,7 @@ Disables public chat, see :ref:`PublicChatMessage`
 PublicChatMessage (Code 152)
 ----------------------------
 
-Chat message from all public rooms, use :ref:`EnablePublicChat` and :ref:`DisablePublicChat` to disable / enable receiving these messages.
+When public chat is enabled all messages sent to public rooms will also be sent to us using this message. Use :ref:`EnablePublicChat` and :ref:`DisablePublicChat` to disable or enable receiving these messages.
 
 :Code: 152 (0x98)
 :Status: USED
@@ -1766,7 +1831,7 @@ These are the first messages sent after connecting to a peer.
 PeerPierceFirewall (Code 0)
 ---------------------------
 
-Sent after connection was successfully established in response to a ConnectToPeer message. The `ticket` used here should be the ticket from that ConnectToPeer message
+Sent after connection was successfully established in response to a ConnectToPeer message. The ``ticket`` used here should be the ticket from that :ref:`ConnectToPeer` message
 
 :Code: 0 (0x00)
 :Status: USED
@@ -1779,7 +1844,9 @@ Sent after connection was successfully established in response to a ConnectToPee
 PeerInit (Code 1)
 -----------------
 
-Sent after direct connection was successfully established (not as a response to a ConnectToPeer received from the server)
+Sent after direct connection was successfully established (not as a response to a :ref:`ConnectToPeer` received from the server)
+
+The ``ticket`` is usually 0 and was filled in with ``ticket`` value from the :ref:`SendConnectTicket` message by older versions of the client
 
 :Code: 1 (0x01)
 :Status: USED
@@ -1824,12 +1891,12 @@ Response to PeerSharesRequest. The response should include empty parent director
 
    1. Array of directories:
 
-      1. **DirectoryData**: directories
+      1. :ref:`DirectoryData`: directories
 
    2. **uint32**: unknown: always 0
    3. Optional: Array of locked directories:
 
-      1. **DirectoryData**: locked_directories
+      1. :ref:`DirectoryData`: locked_directories
 
 
 .. _PeerSearchReply:
@@ -1848,7 +1915,7 @@ Response to a search request
    2. **uint32**: ticket
    3. Array of results:
 
-      1. **FileData**: results
+      1. :ref:`FileData`: results
 
    4. **boolean**: has_slots_free
    5. **uint32**: avg_speed
@@ -1856,7 +1923,7 @@ Response to a search request
    7. **uint32**: unknown: always 0
    8. Optional: Array of locked results:
 
-      1. **FileData**: locked_results
+      1. :ref:`FileData`: locked_results
 
 
 .. _PeerUserInfoRequest:
@@ -1876,7 +1943,7 @@ Request information from the peer
 PeerUserInfoReply (Code 16)
 ---------------------------
 
-Response to PeerUserInfoRequest
+Response to :ref:`PeerUserInfoRequest`. Possible values for ``upload_permissions`` can be found :ref:`here <table-upload-permissions>`
 
 :Code: 16 (0x10)
 :Status: USED
@@ -1887,8 +1954,8 @@ Response to PeerUserInfoRequest
 
       1. **bytearr**: picture
 
-   4. **uint32**: slots_free
-   5. **uint32**: total_uploads
+   4. **uint32**: upload_slots
+   5. **uint32**: queue_size
    6. **boolean**: has_slots_free
    7. Optional:
 
@@ -1900,7 +1967,7 @@ Response to PeerUserInfoRequest
 PeerDirectoryContentsRequest (Code 36)
 --------------------------------------
 
-Request the file contents of a directory
+Request the file contents of a directory.
 
 :Code: 36 (0x24)
 :Status: USED
@@ -1911,25 +1978,29 @@ Request the file contents of a directory
 
 .. _PeerDirectoryContentsReply:
 
-PeerDirectoryContentsReply (Code 36)
---------------------------------------
+PeerDirectoryContentsReply (Code 37)
+------------------------------------
 
-Request the file contents of a directory
+Reply to :ref:`PeerDirectoryContentsRequest`.
 
-:Code: 36 (0x24)
+Although the returned directories is an array it will only contain one element and will not list files from subdirectories.
+
+:Code: 37 (0x25)
 :Status: USED
 :Send/Receive:
    1. **uint32**: ticket
    2. **string**: directory
    3. Array of directory data:
 
-      1. **DirectoryData**: directories
+      1. :ref:`DirectoryData`: directories
 
 
 .. _PeerTransferRequest:
 
 PeerTransferRequest (Code 40)
 -----------------------------
+
+``filesize`` can be omitted if the direction==1 however a value of ``0`` can be used in this case as well
 
 :Code: 40 (0x28)
 :Status: USED
@@ -1939,7 +2010,7 @@ PeerTransferRequest (Code 40)
    3. **string**: filename
    4. Optional:
 
-      1. **uint64**: filesize . Can be omitted if the direction==1 however a value of `0` can be used in this case as well
+      1. **uint64**: filesize
 
 
 .. _PeerTransferReply:
@@ -1966,7 +2037,7 @@ PeerTransferReply (Code 41)
 PeerTransferQueue (Code 43)
 ---------------------------
 
-Request to place the provided transfer of `filename` in the queue
+Request to place the provided transfer of ``filename`` in the queue
 
 :Code: 43 (0x2B)
 :Status: USED
@@ -1979,7 +2050,7 @@ Request to place the provided transfer of `filename` in the queue
 PeerPlaceInQueueReply (Code 44)
 -------------------------------
 
-Response to PeerPlaceInQueueRequest
+Response to :ref:`PeerPlaceInQueueRequest`
 
 :Code: 44 (0x2C)
 :Status: USED
