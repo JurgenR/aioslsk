@@ -1121,13 +1121,28 @@ Set Distributed Level
 
 * ``user`` : User setting his distributed level
 
-**Checks:**
-
-
-
 **Actions:**
 
 1. Assign the ``level`` to the ``distributed_tree[user.name].level`` field
+
+
+Set Child Depth
+~~~~~~~~~~~~~~~
+
+**Message:** :ref:`DistributedChildDepth`
+
+**Actors:**
+
+* ``user`` : User setting the child depth
+
+**Actions:**
+
+1. Assign the ``depth`` to the ``distributed_tree[user.name].child_depth`` field
+
+
+.. note::
+
+   It's not actually known what the server does with this value, possibly it only sets the ``child_depth`` value if a value is received that is greater than what is currently stored
 
 
 Global Search
