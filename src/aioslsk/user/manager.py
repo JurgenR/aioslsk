@@ -159,8 +159,8 @@ class UserManager(BaseManager):
         return TrackingFlag(0)
 
     def set_tracking_flag(self, user: User, flag: TrackingFlag = TrackingFlag.REQUESTED) -> bool:
-        """Set given tracking flag for the user. This method returns `True` if
-        the user previously had not tracking flags set.
+        """Set given tracking flag for the user. This method returns ``True`` if
+        the user previously had no tracking flags set.
         """
         tracked_user = self._get_tracked_user_object(user)
         had_tracking_flag = tracked_user.flags != TrackingFlag(0)
@@ -168,8 +168,8 @@ class UserManager(BaseManager):
         return not had_tracking_flag
 
     def unset_tracking_flag(self, user: User, flag: TrackingFlag) -> bool:
-        """Unset given tracking flag. This method returns `True` if the user has
-        no tracking flags left
+        """Unset given tracking flag. This method returns ``True`` if the user
+        still has tracking flags left
         """
         tracked_user = self._tracked_users[user.name]
         tracked_user.flags &= ~flag
@@ -178,7 +178,7 @@ class UserManager(BaseManager):
     async def track_user(self, username: str, flag: TrackingFlag = TrackingFlag.REQUESTED):
         """Starts tracking a user. The method sends a tracking request to the
         server if it is the first tracking flag being sent or the tracking flag
-        is `TrackingFlag.REQUESTED`
+        is ``TrackingFlag.REQUESTED``
 
         :param username: user to track
         :param flag: tracking flag to add from the user
@@ -195,7 +195,7 @@ class UserManager(BaseManager):
     async def untrack_user(self, username: str, flag: TrackingFlag = TrackingFlag.REQUESTED):
         """Removes the given flag from the user and untracks the user (send
         :class:`.RemoveUser` message) in case none of the AddUser tracking flags
-        are set or the removed tracking flag is `TrackingFlag.REQUESTED`.
+        are set or the removed tracking flag is ``TrackingFlag.REQUESTED``.
 
         The user will be removed from the tracked users if there are no flags
         left, if there is still a reference left to the user it will remain
