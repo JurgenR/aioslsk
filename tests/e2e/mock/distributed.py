@@ -1,16 +1,20 @@
 from abc import ABC, abstractmethod
 from math import ceil
 import random
-from typing import List
+from typing import Dict, List
 from tests.e2e.mock.peer import Peer
-from tests.e2e.mock.model import Settings
+from tests.e2e.mock.model import DistributedValues, Settings
 
 
 class DistributedStrategy(ABC):
 
-    def __init__(self, settings: Settings, peers: List[Peer]):
+    def __init__(
+            self, settings: Settings, peers: List[Peer],
+            distributed_tree: Dict[str, DistributedValues]):
+
         self.settings: Settings = settings
         self.peers: List[Peer] = peers
+        self.tree: Dict[str, DistributedValues] = distributed_tree
 
     @classmethod
     @abstractmethod
@@ -28,7 +32,7 @@ class DistributedStrategy(ABC):
     def get_potential_roots(self) -> List[Peer]:
         return [
             peer for peer in self._get_valid_peers()
-            if peer.branch_level == 0
+            if self.tree[peer.user.name].level == 0
         ]
 
     def _get_valid_peers(self) -> List[Peer]:
@@ -117,17 +121,18 @@ class ChainParentsStrategy(DistributedStrategy):
         return 'chain'
 
     def get_potential_parents(self, target_peer: Peer) -> List[Peer]:
+        accepting_peers = self._get_peers_accepting_children()
         try:
             max_level = max([
-                peer.branch_level for peer in self._get_peers_accepting_children()
+                self.tree[peer.user.name].level for peer in accepting_peers
                 if peer != target_peer
             ])
         except ValueError:
             return []
 
         return [
-            peer for peer in self._get_peers_accepting_children()
-            if peer.branch_level == max_level and peer != target_peer
+            peer for peer in accepting_peers
+            if self.tree[peer.user.name].level == max_level and peer != target_peer
         ]
 
 

@@ -36,10 +36,6 @@ class Peer:
         self.client_version: Optional[int] = None
         self.minor_version: Optional[int] = None
 
-        self.branch_level: Optional[int] = None
-        self.branch_root: Optional[str] = None
-        self.child_depth: Optional[int] = None
-
         self.connect_time: float = 0.0
 
     async def disconnect(self):
