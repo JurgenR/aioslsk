@@ -444,7 +444,7 @@ class MockServer:
             )
         )
 
-    def _create_room_list_message(self, user: User, min_users: Optional[int] = None):
+    def _create_room_list_message(self, user: User, min_users: int = 1):
         public_rooms: List[Room] = []
         private_rooms: List[Room] = []
         private_rooms_owned: List[Room] = []
@@ -462,10 +462,7 @@ class MockServer:
 
             elif room.status == RoomStatus.PUBLIC:
 
-                if min_users:
-                    if len(room.joined_users) >= min_users:
-                        public_rooms.append(room)
-                else:
+                if len(room.joined_users) >= min_users:
                     public_rooms.append(room)
 
         return RoomList.Response(
@@ -478,7 +475,7 @@ class MockServer:
             rooms_private_operated=[room.name for room in private_rooms_operated]
         )
 
-    async def send_room_list(self, peer: Peer, min_users: Optional[int] = None):
+    async def send_room_list(self, peer: Peer, min_users: int = 1):
         """Send the room list for the user
 
         :param min_users: Optional minimum amount of joined users for public
