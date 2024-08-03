@@ -161,7 +161,7 @@ Search
 +======================+===============+=============================================================================================+=========+
 | searches.max_results | integer       | Maximum amount of search results returned when replying to search requests from other peers | 100     |
 +----------------------+---------------+---------------------------------------------------------------------------------------------+---------+
-| searches.wishlist    | array[string] | List of wishlist items. Should be a dictionary with 2 keys: `query` and `enabled`           | <empty> |
+| searches.wishlist    | array[string] | List of wishlist items. Should be a dictionary with 2 keys: ``query`` and ``enabled``       | <empty> |
 +----------------------+---------------+---------------------------------------------------------------------------------------------+---------+
 
 
@@ -183,7 +183,7 @@ Debug
 +----------------------------+---------------------+----------------------------------------------------+---------+
 |         Parameter          |        Type         |                    Description                     | Default |
 +============================+=====================+====================================================+=========+
-| debug.search_for_parent    | boolean             | Toggle searching for a distributed parent          | false   |
+| debug.search_for_parent    | boolean             | Toggle searching for a distributed parent          | true    |
 +----------------------------+---------------------+----------------------------------------------------+---------+
 | debug.user_ip_overrides    | map[string, string] | Mapping of username and IP addresses, overrides    | <empty> |
 +----------------------------+---------------------+----------------------------------------------------+---------+

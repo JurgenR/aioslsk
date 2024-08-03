@@ -19,11 +19,13 @@ async def set_upload_speed_for_client(mock_server: MockServer, client: SoulSeekC
 
 
 async def set_upload_speed_for_clients(mock_server: MockServer, clients: List[SoulSeekClient], value: int = 10000):
-    """Sets a dummy upload speed on the mock server for all clients"""
-    tasks = []
-    for client in clients:
-        tasks.append(set_upload_speed_for_client(mock_server, client, value=value))
-    await asyncio.gather(*tasks)
+    """Sets a dummy upload speed on the mock server for all clients. This is
+    necessary in order for the clients to accept children
+    """
+    await asyncio.gather(*[
+        set_upload_speed_for_client(mock_server, client, value=value)
+        for client in clients
+    ])
 
 
 class TestE2EDistributed:
@@ -81,7 +83,7 @@ class TestE2EDistributed:
         await wait_until_client_has_parent(client1)
         await wait_until_peer_has_parent(mock_server, client1_user, 0, client1_user)
 
-        await mock_server.send_potential_parents(client2_user)
+        await mock_server.send_potential_parents(client2_user, [client1_user])
 
         await wait_until_client_has_parent(client2)
         await wait_until_peer_has_parent(mock_server, client2_user, 1, client1_user)
@@ -124,14 +126,14 @@ class TestE2EDistributed:
 
         ### Make CLIENT 1 parent of CLIENT 2
 
-        await mock_server.send_potential_parents(client2_user)
+        await mock_server.send_potential_parents(client2_user, [client1_user])
 
         await wait_until_client_has_parent(client2)
         await wait_until_peer_has_parent(mock_server, client2_user, 1, client1_user)
 
         ### Make CLIENT 2 parent of CLIENT 3
 
-        await mock_server.send_potential_parents(client3_user)
+        await mock_server.send_potential_parents(client3_user, [client2_user])
 
         await wait_until_client_has_parent(client3)
         await wait_until_peer_has_parent(mock_server, client3_user, 2, client1_user)
@@ -194,12 +196,12 @@ class TestE2EDistributed:
         client1.searches.received_searches.clear()
 
         ### Make CLIENT 1 parent of CLIENT 2
-        await mock_server.send_potential_parents(client2_user)
+        await mock_server.send_potential_parents(client2_user, [client1_user])
         await wait_until_client_has_parent(client2)
         await wait_until_peer_has_parent(mock_server, client2_user, 1, client1_user)
 
         ### Make CLIENT 2 parent of CLIENT 3
-        await mock_server.send_potential_parents(client3_user)
+        await mock_server.send_potential_parents(client3_user, [client2_user])
         await wait_until_client_has_parent(client3)
         await wait_until_peer_has_parent(mock_server, client3_user, 2, client1_user)
 

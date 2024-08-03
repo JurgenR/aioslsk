@@ -25,6 +25,7 @@ from .protocol.messages import (
     AcceptChildren,
     BranchLevel,
     BranchRoot,
+    ChildDepth,
     DistributedAliveInterval,
     DistributedBranchLevel,
     DistributedBranchRoot,
@@ -68,7 +69,6 @@ class DistributedPeer:
     """
     branch_level: Optional[int] = None
     branch_root: Optional[str] = None
-    child_depth: Optional[int] = None
 
 
 class DistributedNetwork(BaseManager):
@@ -260,10 +260,15 @@ class DistributedNetwork(BaseManager):
         root, level = self._get_advertised_branch_values()
         logger.info(f"notifying server of our parent : level={level} root={root}")
 
+        search_for_parent = False if self.parent else True
+
+        if not self._settings.debug.search_for_parent:
+            search_for_parent = False
+
         await self._network.send_server_messages(*[
             BranchLevel.Request(level),
             BranchRoot.Request(root),
-            ToggleParentSearch.Request(False if self.parent else True)
+            ToggleParentSearch.Request(search_for_parent)
         ])
 
     async def _notify_children_of_branch_values(self):
@@ -300,17 +305,27 @@ class DistributedNetwork(BaseManager):
         if not peer.connection:
             return
 
-        logger.debug(f"adding distributed connection as child : {peer!r}")
         self.children.append(peer)
         # Let the child know where we are in the distributed tree
         root, level = self._get_advertised_branch_values()
 
         await peer.connection.send_message(DistributedBranchLevel.Request(level))
-        await peer.connection.send_message(DistributedBranchRoot.Request(root))
+        if level != 0:
+            await peer.connection.send_message(DistributedBranchRoot.Request(root))
+
+        logger.debug(
+            f"added distributed connection as child "
+            f"({len(self.children)}/{self._max_children} children) : {peer!r}"
+        )
 
     def _remove_child(self, peer: DistributedPeer):
         logger.info(f"removing child : {peer!r}")
         self.children.remove(peer)
+
+        logger.debug(
+            f"removed distributed connection as child "
+            f"({len(self.children)}/{self._max_children} children) : {peer!r}"
+        )
 
     def _potential_parent_task_callback(self, username: str, task: asyncio.Task):
         """Callback for potential parent handling task. This callback simply
@@ -465,7 +480,15 @@ class DistributedNetwork(BaseManager):
             logger.warning(f"distributed peer object not found for connection: {connection} : {message}")
             return
 
-        peer.child_depth = message.depth
+        # Not essential but might be needed for backward compatibility
+        if self.parent and self.parent.connection:
+            await self.parent.connection.send_message(
+                DistributedChildDepth.Request(message.depth + 1)
+            )
+        else:
+            await self._network.send_server_messages(
+                ChildDepth.Request(message.depth + 1)
+            )
 
     @on_message(DistributedSearchRequest.Request)
     async def _on_distributed_search_request(

@@ -40,6 +40,8 @@ class Peer:
         self.branch_root: Optional[str] = None
         self.child_depth: Optional[int] = None
 
+        self.connect_time: float = 0.0
+
     async def disconnect(self):
         logger.debug(f"{self.hostname}:{self.port} : disconnecting")
         self.stop_reader_loop()
