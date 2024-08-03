@@ -420,9 +420,14 @@ class UserManager(BaseManager):
         self._session = event.session
         await self._network.send_server_messages(
             CheckPrivileges.Request(),
-            SetStatus.Request(UserStatus.ONLINE.value),
+            SetStatus.Request(UserStatus.ONLINE.value)
         )
+        # Due to a bug in the protocol a GetUserStatus message for ourself is
+        # never returned and it needs to be set manually
+        self.get_self().status = UserStatus.ONLINE
 
+        # Tracking does not actually work for the self user from a server point
+        # of view but is kept here for convenience
         await self.track_user(self._session.user.name, TrackingFlag.FRIEND)
 
         # Perform AddUser for all in the friendlist
