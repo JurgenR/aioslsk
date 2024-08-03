@@ -791,6 +791,9 @@ class SetStatusCommand(BaseCommand[None, None]):
         await client.network.send_server_messages(
             SetStatus.Request(self.status.value)
         )
+        # Due to a bug in the protocol a GetUserStatus message for ourself is
+        # never returned and it needs to be set manually
+        client.users.get_self().status = self.status
 
 
 class SetNewPasswordCommand(BaseCommand[None, None]):
