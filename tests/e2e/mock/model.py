@@ -51,6 +51,13 @@ class QueuedPrivateMessage:
 
 
 @dataclass
+class DistributedValues:
+    root: str = ''
+    level: int = 0
+    child_depth: int = 0
+
+
+@dataclass
 class User:
     name: str
     password: str = ''
@@ -84,7 +91,10 @@ class User:
     def privileged(self) -> bool:
         return self.privileges_time_left > 0
 
-    def reset(self):
+    def login(self):
+        self.status = UserStatus.ONLINE
+
+    def logout(self):
         """Sets the user to offline and resets all values"""
         self.status = UserStatus.OFFLINE
         self.added_users = WeakValueDictionary()

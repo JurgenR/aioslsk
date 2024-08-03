@@ -118,6 +118,10 @@ class EventBus:
         self._events: Dict[Type[Event], List[Tuple[int, EventListener]]] = {}
 
     def register(self, event_class: Type[E], listener: EventListener, priority: int = 100):
+        """Registers an event listener to listen on an event class. The order in
+        which the listeners are called can be managed using the ``priority``
+        parameter
+        """
         entry = (priority, listener)
         try:
             self._events[event_class].append(entry)

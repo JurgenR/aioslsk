@@ -8,7 +8,7 @@ import time
 from typing import Dict, Generator, List, Optional, Set, Type, TypeVar
 import typing
 
-from aioslsk.events import on_message, build_message_map
+from aioslsk.events import build_message_map
 from aioslsk.user.model import UserStatus
 from aioslsk.protocol.primitives import (
     calc_md5,
@@ -74,6 +74,7 @@ from aioslsk.protocol.messages import (
     RemoveHatedInterest,
     RemoveInterest,
     RemoveUser,
+    ResetDistributed,
     RoomChatMessage,
     RoomList,
     RoomSearch,
@@ -101,6 +102,7 @@ from tests.e2e.mock.constants import (
 from tests.e2e.mock.distributed import DistributedStrategy, EveryoneRootStrategy
 from tests.e2e.mock.messages import AdminMessage
 from tests.e2e.mock.model import (
+    DistributedValues,
     MockVariables,
     QueuedPrivateMessage,
     Room,
@@ -140,6 +142,17 @@ def remove_0_values(counter: typing.Counter[str]):
         del counter[to_remove]
 
 
+def on_message(message_class: Type[MessageDataclass], require_user: bool = True):
+    """Decorator for methods listening to specific `MessageData` events
+    """
+    def register(event_func):
+        event_func._registered_message = message_class
+        event_func._require_user = require_user
+        return event_func
+
+    return register
+
+
 class MockServer:
 
     def __init__(
@@ -157,6 +170,7 @@ class MockServer:
         self.users: List[User] = []
         self.rooms: List[Room] = []
         self.peers: List[Peer] = []
+        self.distributed_tree: Dict[str, DistributedValues] = {}
 
         self.excluded_search_phrases: List[str] = excluded_search_phrases
         self.distributed_strategy: DistributedStrategy = self._create_distributed_strategy(distributed_strategy_class)
@@ -177,7 +191,7 @@ class MockServer:
                 self.search_request_job(interval=self.mock_variables.search_interval))
 
     def _create_distributed_strategy(self, strategy_cls: Type[T]) -> T:
-        return strategy_cls(self.settings, self.peers)
+        return strategy_cls(self.settings, self.peers, self.distributed_tree)
 
     def set_distributed_strategy(self, strategy_cls: Type[DistributedStrategy]):
         self.distributed_strategy = self._create_distributed_strategy(strategy_cls)
@@ -295,7 +309,9 @@ class MockServer:
             self.peers.remove(peer)
 
         if peer.user:
-            peer.user.reset()
+            peer.user.logout()
+            self.distributed_tree.pop(peer.user.name, None)
+
             # Leave all rooms
             for room in self.get_joined_rooms(peer.user):
                 await self.leave_room(room, peer)
@@ -306,7 +322,13 @@ class MockServer:
     async def on_peer_message(self, message, peer: Peer):
         """Called when a peer receives a message"""
         if message.__class__ in self.MESSAGE_MAP:
-            await self.MESSAGE_MAP[message.__class__](message, peer)
+            method = self.MESSAGE_MAP[message.__class__]
+
+            if method._require_user:
+                if peer.user is not None:
+                    logger.debug(f"ignoring message {message}, peer has no valid user : {peer!r}")
+
+            await method(message, peer)
 
     def get_valid_peers(self) -> List[Peer]:
         """Returns all peers which are logged in (user set)"""
@@ -513,7 +535,7 @@ class MockServer:
     async def on_exact_file_search(self, message: ExactFileSearch.Request, peer: Peer):
         pass
 
-    @on_message(Login.Request)
+    @on_message(Login.Request, require_user=False)
     async def on_login(self, message: Login.Request, peer: Peer):
         # Ignore hash mismatch
         if message.md5hash != calc_md5(message.username + message.password):
@@ -561,7 +583,9 @@ class MockServer:
         # Link the user to the peer
         peer.user = user
 
-        user.status = UserStatus.ONLINE
+        user.login()
+        self.distributed_tree[user.name] = DistributedValues(root=user.name)
+
         await self.send_status_update(user)
 
         await peer.send_message(
@@ -593,17 +617,11 @@ class MockServer:
 
     @on_message(SetListenPort.Request)
     async def on_listen_port(self, message: SetListenPort.Request, peer: Peer):
-        if peer.user is None:
-            return
-
         peer.user.port = message.port
         peer.user.obfuscated_port = message.obfuscated_port
 
     @on_message(CheckPrivileges.Request)
     async def on_check_privileges(self, message: CheckPrivileges.Request, peer: Peer):
-        if peer.user is None:
-            return
-
         await peer.send_message(CheckPrivileges.Response(
             peer.user.privileges_time_left
         ))
@@ -619,9 +637,6 @@ class MockServer:
         * Empty username -> user cannot exist
         * Track user already tracked -> user only gets 1 update
         """
-        if not peer.user:
-            return
-
         if (user := self.find_user_by_name(message.username)) is not None:
             # Add only to the added_users if the user exists and he is not
             # himself
@@ -654,9 +669,6 @@ class MockServer:
     @on_message(PrivateChatMessageUsers.Request)
     async def on_private_chat_message_users(self, message: PrivateChatMessageUsers.Request, peer: Peer):
         """User sends a private message to multiple users"""
-        if not peer.user:
-            return
-
         timestamp = int(time.time())
         chat_id = next(self.chat_id_gen)
 
@@ -693,9 +705,6 @@ class MockServer:
     @on_message(PrivateChatMessage.Request)
     async def on_chat_private_message(self, message: PrivateChatMessage.Request, peer: Peer):
         """User sends a private message to a another user"""
-        if not peer.user:
-            return
-
         # Do nothing when sending to a user that does not exist
         if (user_receiver := self.find_user_by_name(message.username)) is None:
             return
@@ -718,9 +727,6 @@ class MockServer:
     async def on_chat_private_message_ack(
         self, message: PrivateChatMessageAck.Request, peer: Peer):
 
-        if not peer.user:
-            return
-
         to_remove = []
         for queued_message in peer.user.queued_private_messages:
             if queued_message.chat_id == message.chat_id:
@@ -733,9 +739,6 @@ class MockServer:
 
     @on_message(RoomChatMessage.Request)
     async def on_chat_room_message(self, message: RoomChatMessage.Request, peer: Peer):
-        if not peer.user:
-            return
-
         if (room := self.find_room_by_name(message.room)) is None:
             return
 
@@ -774,9 +777,6 @@ class MockServer:
 
     @on_message(RemoveUser.Request)
     async def on_remove_user(self, message: RemoveUser.Request, peer: Peer):
-        if not peer.user:
-            return
-
         # Ignore removing self (this check technically isn't necessary because
         # it is not possible to track self but is done for clarity)
         if peer.user.name == message.username:
@@ -840,9 +840,6 @@ class MockServer:
 
     @on_message(SetStatus.Request)
     async def on_set_status(self, message: SetStatus.Request, peer: Peer):
-        if not peer.user:
-            return
-
         if message.status not in (UserStatus.AWAY.value, UserStatus.ONLINE.value):
             return
 
@@ -898,15 +895,19 @@ class MockServer:
 
     @on_message(BranchLevel.Request)
     async def on_branch_level(self, message: BranchLevel.Request, peer: Peer):
-        peer.branch_level = message.level
+        self.distributed_tree[peer.user.name].level = message.level
 
     @on_message(BranchRoot.Request)
     async def on_branch_root(self, message: BranchRoot.Request, peer: Peer):
-        peer.branch_root = message.username
+        if not self.find_peer_by_name(message.username):
+            await peer.send_message(ResetDistributed.Response())
+            return
+
+        self.distributed_tree[peer.user.name].root = message.username
 
     @on_message(ChildDepth.Request)
     async def on_child_depth(self, message: ChildDepth.Request, peer: Peer):
-        peer.child_depth = message.depth
+        self.distributed_tree[peer.user.name].child_depth = message.depth
 
     @on_message(CannotConnect.Request)
     async def on_cannot_connect(self, message: CannotConnect.Request, peer: Peer):
@@ -931,9 +932,6 @@ class MockServer:
         * Empty roomname
         * Is search sent to self?
         """
-        if peer.user is None:
-            return
-
         if (room := self.find_room_by_name(message.room)) is None:
             return
 
@@ -958,9 +956,6 @@ class MockServer:
         * Empty query
         * Empty username
         """
-        if peer.user is None:
-            return
-
         if (user := self.find_user_by_name(message.username)) is None:
             return
 
@@ -999,9 +994,6 @@ class MockServer:
 
     @on_message(SetRoomTicker.Request)
     async def on_room_ticker_set(self, message: SetRoomTicker.Request, peer: Peer):
-        if peer.user is None:
-            return
-
         if (room := self.find_room_by_name(message.room)) is None:
             return
 

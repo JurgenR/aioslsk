@@ -21,26 +21,6 @@ async def wait_for_clients_connected(mock_server: MockServer, amount: int = 2, t
         raise Exception(f"timeout waiting for {amount} peers to have registered to server")
 
 
-async def wait_for_peers_distributed_advertised(mock_server: MockServer, timeout: float = 10):
-    """Waits for all peers connected the server to have advertised their place
-    in the distributed network
-
-    These values are one of the last one's sent and indicate that the client is
-    more or less done initializing
-    """
-    start_time = time.time()
-    while time.time() < start_time + timeout:
-        if all(
-            peer.branch_root is not None and peer.branch_level is not None
-            for peer in mock_server.peers
-        ):
-            break
-        else:
-            await asyncio.sleep(0.05)
-    else:
-        raise Exception("timeout waiting for peers to have branch values")
-
-
 async def wait_until_client_has_parent(client: SoulSeekClient, timeout: float = 10):
     start_time = time.time()
     while time.time() < start_time + timeout:
@@ -55,13 +35,21 @@ async def wait_until_client_has_parent(client: SoulSeekClient, timeout: float = 
 async def wait_until_peer_has_parent(
         mock_server: MockServer, username: str, level: int, root: str,
         timeout: float = 10):
-    """Waits until the peer with given `username` has reported its parent values
+    """Waits until the peer with given ``username`` has reported its parent values
     """
-    start_time = time.time()
     peer = mock_server.find_peer_by_name(username)
+
     expected = (level, root, False)
+
+    start_time = time.time()
     while time.time() < start_time + timeout:
-        if (peer.branch_level, peer.branch_root, peer.user.enable_parent_search) == expected:
+        actual = (
+            mock_server.distributed_tree[username].root,
+            mock_server.distributed_tree[username].level,
+            peer.user.enable_parent_search
+        )
+
+        if actual != expected:
             break
         else:
             await asyncio.sleep(0.05)
@@ -90,7 +78,6 @@ async def wait_until_clients_initialized(mock_server: MockServer, amount: int = 
     set with branch values on the server
     """
     await wait_for_clients_connected(mock_server, amount)
-    await wait_for_peers_distributed_advertised(mock_server)
 
 
 async def wait_for_listener_awaited(listener: AsyncMock, timeout: float = 10):

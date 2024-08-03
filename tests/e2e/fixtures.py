@@ -1,4 +1,5 @@
 import asyncio
+from async_timeout import timeout as atimeout
 import os
 from pathlib import Path
 import pytest_asyncio
@@ -6,6 +7,7 @@ import shutil
 from typing import AsyncGenerator, List
 
 from aioslsk.client import SoulSeekClient
+from aioslsk.events import SessionInitializedEvent
 from aioslsk.shares.model import DirectoryShareMode
 from aioslsk.settings import (
     Settings,
@@ -62,6 +64,27 @@ def create_client(tmp_path: Path, username: str, port: int) -> SoulSeekClient:
     return client
 
 
+async def _client_start_and_scan(client: SoulSeekClient, timeout: float = 3):
+    """Starts the client, logs in, scans the shares and waits for client to be
+    logged on
+    """
+    init_event = asyncio.Event()
+
+    def set_event(session_init_event):
+        init_event.set()
+
+    # Wait for the complete session initialization to be complete
+    client.events.register(
+        SessionInitializedEvent, set_event, priority=999999)
+
+    await client.start()
+    await client.login()
+    await client.shares.scan()
+
+    async with atimeout(timeout):
+        await init_event.wait()
+
+
 @pytest_asyncio.fixture
 async def mock_server() -> AsyncGenerator[MockServer, None]:
     server = MockServer(hostname=DEFAULT_SERVER_HOSTNAME, ports={DEFAULT_SERVER_PORT})
@@ -83,9 +106,7 @@ async def client_1(tmp_path: Path) -> AsyncGenerator[SoulSeekClient, None]:
     client = create_client(tmp_path, 'user0', 40000)
 
     try:
-        await client.start()
-        await client.login()
-        await client.shares.scan()
+        await _client_start_and_scan(client)
     except Exception:
         await client.stop()
         raise
@@ -100,9 +121,7 @@ async def client_2(tmp_path: Path) -> AsyncGenerator[SoulSeekClient, None]:
     client = create_client(tmp_path, 'user1', 41000)
 
     try:
-        await client.start()
-        await client.login()
-        await client.shares.scan()
+        await _client_start_and_scan(client)
     except Exception:
         await client.stop()
         raise
@@ -114,11 +133,6 @@ async def client_2(tmp_path: Path) -> AsyncGenerator[SoulSeekClient, None]:
 
 @pytest_asyncio.fixture
 async def clients(tmp_path: Path, request) -> AsyncGenerator[List[SoulSeekClient], None]:
-    async def client_start_and_scan(client: SoulSeekClient):
-        await client.start()
-        await client.login()
-        await client.shares.scan()
-
     clients: List[SoulSeekClient] = []
 
     for idx in range(request.param):
@@ -129,7 +143,7 @@ async def clients(tmp_path: Path, request) -> AsyncGenerator[List[SoulSeekClient
         )
 
     start_results = await asyncio.gather(*[
-        client_start_and_scan(client) for client in clients])
+        _client_start_and_scan(client) for client in clients])
 
     if any(isinstance(result, Exception) for result in start_results):
         for client in clients:
