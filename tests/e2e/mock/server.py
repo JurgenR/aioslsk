@@ -375,13 +375,29 @@ class MockServer:
 
         await peer.send_message(message)
 
-    async def send_potential_parents(self, username: str):
+    async def send_potential_parents(
+            self, username: str, potential_parents: List[str] = None):
         """This is a utility method used for testing to send the potential
         parents to the peer with given username
 
         :param username: Username of the peer to send the potential parents to
+        :param potential_parents: List of usernames that should be sent out as
+            potential parents. If ``None`` use the distributed strategy to
+            determine the users
         """
         peer = self.find_peer_by_name(username)
+
+        if potential_parents is None:
+            pparent_peers = self.distributed_strategy.get_potential_parents(peer)
+        else:
+            pparent_peers = []
+            for pparent_username in potential_parents:
+                pparent_peer = self.find_peer_by_name(pparent_username)
+
+                if not pparent_peer:
+                    raise Exception(f"no peer object for user {pparent_username}")
+
+                pparent_peers.append(pparent_peer)
 
         message = PotentialParents.Response(
             entries=[
@@ -390,7 +406,7 @@ class MockServer:
                     ip=pparent.hostname,
                     port=pparent.user.port
                 )
-                for pparent in self.distributed_strategy.get_potential_parents(peer)
+                for pparent in pparent_peers
             ]
         )
         await peer.send_message(message)
