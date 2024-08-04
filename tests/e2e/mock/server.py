@@ -325,8 +325,9 @@ class MockServer:
             method = self.MESSAGE_MAP[message.__class__]
 
             if method._require_user:
-                if peer.user is not None:
+                if not peer.user:
                     logger.debug(f"ignoring message {message}, peer has no valid user : {peer!r}")
+                    return
 
             await method(message, peer)
 
