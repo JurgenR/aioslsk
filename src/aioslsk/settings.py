@@ -132,3 +132,33 @@ class Settings(BaseSettings, validate_assignment=True):
     interests: InterestsSettings = Field(default_factory=InterestsSettings)
     transfers: TransfersSettings = Field(default_factory=TransfersSettings)
     debug: DebugSettings = Field(default_factory=DebugSettings)
+
+
+def _main(args):
+    import json
+    import sys
+
+    if args.command == 'generate':
+        settings = Settings(
+            credentials=CredentialsSettings(
+                username=args.username,
+                password=args.password
+            )
+        )
+
+        dump = settings.model_dump(mode='json')
+        json.dump(dump, sys.stdout, indent=2)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Setting file tools")
+    subparsers = parser.add_subparsers(dest='command')
+
+    gen_parser = subparsers.add_parser('generate')
+    gen_parser.add_argument('--username', '-u', default="TestUser")
+    gen_parser.add_argument('--password', '-p', default="Pass0")
+
+    args = parser.parse_args()
+    _main(args)
