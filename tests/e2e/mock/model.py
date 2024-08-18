@@ -10,6 +10,8 @@ from weakref import WeakValueDictionary
 
 @dataclass
 class Settings:
+    """Server configuration variables"""
+
     parent_min_speed: int = 1
     parent_speed_ratio: int = 50
     min_parents_in_cache: int = 10
@@ -17,20 +19,29 @@ class Settings:
     search_inactivity_timeout: int = 0
     distributed_alive_interval: int = 0
     wishlist_interval: int = 720
+    min_room_users_initial: int = 1
+    min_room_users: int = 1
 
 
 @dataclass
 class MockVariables:
-    """Variables that modify the behaviour of the mock server for easier
-    debugging / investigation
-    """
+    """Variables that modify the behaviour of the mock server for easier debugging / investigation"""
 
-    upload_speed: int = 0
-    """Default upload speed assigned to users"""
-    search_interval: float = 0.0
-    """Interval at which a server search request is sent over the distributed
-    network
-    """
+    upload_speed: int = field(
+        default=0,
+        metadata={
+            'doc': (
+                "Assign a default average upload speed to users connecting. "
+                "Useful when testing distributed connections"
+            )
+        }
+    )
+    search_interval: float = field(
+        default=0.0,
+        metadata={
+            'doc': "Periodically send a search request through the distributed network"
+        }
+    )
 
 
 @dataclass(frozen=True)
