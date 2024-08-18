@@ -1934,8 +1934,8 @@ def _create_argument_group(
     group = parser.add_argument_group(title=dataclass_cls.__doc__)
 
     for dc_field in fields(dataclass_cls):
-        arg_prefix = f'{prefix}-' if prefix else ''
-        arg_name = f'--{arg_prefix}{dc_field.name.replace('_', '-')}'
+        arg_prefix = f"{prefix}-" if prefix else ""
+        arg_name = f"--{arg_prefix}{dc_field.name.replace('_', '-')}"
 
         group.add_argument(
             arg_name,
