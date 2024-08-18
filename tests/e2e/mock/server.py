@@ -1,5 +1,7 @@
+import argparse
 import asyncio
 from collections import Counter
+from dataclasses import fields
 from functools import partial
 import logging
 import re
@@ -123,6 +125,7 @@ logger = logging.getLogger(__name__)
 
 
 T = TypeVar('T', bound='DistributedStrategy')
+S = TypeVar('S')
 
 
 def ticket_generator(initial: int = 1) -> Generator[int, None, None]:
@@ -160,12 +163,13 @@ class MockServer:
             excluded_search_phrases: List[str] = DEFAULT_EXCLUDED_SEARCH_PHRASES,
             potential_parent_interval: int = 0,
             distributed_strategy_class: Type[DistributedStrategy] = EveryoneRootStrategy,
+            settings: Optional[Settings] = None,
             mock_variables: Optional[MockVariables] = None):
 
         self.hostname: str = hostname
         self.ports: Set[int] = ports
         self.connections: Dict[int, asyncio.Server] = {}
-        self.settings: Settings = Settings()
+        self.settings: Settings = settings or Settings()
 
         self.users: List[User] = []
         self.rooms: List[Room] = []
@@ -486,7 +490,7 @@ class MockServer:
             self._create_room_list_message(peer.user, min_users=min_users)
         )
 
-    async def send_room_list_update(self, user: User, min_users: Optional[int] = None):
+    async def send_room_list_update(self, user: User, min_users: int = 1):
         """Sends a user an updated room list
 
         * RoomList
@@ -601,7 +605,8 @@ class MockServer:
         # users after login. Ignoring for now since there won't be much rooms
         # during testing
         await self.send_queued_private_messages(peer)
-        await self.send_room_list_update(user)
+        await self.send_room_list_update(
+            user, min_users=self.settings.min_room_users_initial)
         await peer.send_message(
             ParentMinSpeed.Response(self.settings.parent_min_speed))
         await peer.send_message(
@@ -626,7 +631,8 @@ class MockServer:
 
     @on_message(RoomList.Request)
     async def on_room_list(self, message: RoomList.Request, peer: Peer):
-        await self.send_room_list(peer)
+        await self.send_room_list(
+            peer, min_users=self.settings.min_room_users)
 
     @on_message(AddUser.Request)
     async def on_add_user(self, message: AddUser.Request, peer: Peer):
@@ -1325,7 +1331,8 @@ class MockServer:
                     self.rooms.append(room)
 
                 if is_private:
-                    await self.send_room_list_update(peer.user)
+                    await self.send_room_list_update(
+                        peer.user, self.settings.min_room_users)
 
         # Join the user to the room
         if peer.user not in room.joined_users:
@@ -1588,7 +1595,8 @@ class MockServer:
         room = Room(name=name, owner=user)
         self.rooms.append(room)
 
-        await self.send_room_list_update(user)
+        await self.send_room_list_update(
+            user, min_users=self.settings.min_room_users)
         return room
 
     async def send_room_tickers(self, room: Room, peer: Peer):
@@ -1739,7 +1747,8 @@ class MockServer:
         target_peer = self.find_peer_by_name(user.name)
         if target_peer:
             await target_peer.send_message(PrivateRoomMembershipGranted.Response(room.name))
-            await self.send_room_list_update(target_peer.user)
+            await self.send_room_list_update(
+                target_peer.user, self.settings.min_room_users)
 
         # Notify owner
         if granting_user in room.operators:
@@ -1783,7 +1792,8 @@ class MockServer:
         # Leave the room if the user is joined and send private room updates
         if target_peer:
             await self.leave_room(room, target_peer)
-            await self.send_room_list_update(user)
+            await self.send_room_list_update(
+                user, min_users=self.settings.min_room_users)
 
     async def grant_operator(self, room: Room, user: User):
         """Grants operator privileges to a user in a private room"""
@@ -1801,7 +1811,8 @@ class MockServer:
         target_peer = self.find_peer_by_name(user.name)
         if target_peer:
             await target_peer.send_message(PrivateRoomOperatorGranted.Response(room.name))
-            await self.send_room_list_update(target_peer.user)
+            await self.send_room_list_update(
+                target_peer.user, min_users=self.settings.min_room_users)
 
         # Notify the owner
         await self.notify_room_owner(
@@ -1830,7 +1841,8 @@ class MockServer:
         target_peer = self.find_peer_by_name(user.name)
         if target_peer:
             await target_peer.send_message(PrivateRoomOperatorRevoked.Response(room.name))
-            await self.send_room_list_update(target_peer.user)
+            await self.send_room_list_update(
+                target_peer.user, min_users=self.settings.min_room_users)
 
         # Notify the owner
         await self.notify_room_owner(
@@ -1909,13 +1921,49 @@ def _get_distributed_strategy_class(name: str) -> Type[DistributedStrategy]:
     raise ValueError(f'invalid distributed strategy : {name}')
 
 
+def _create_argument_group(
+        parser: argparse.ArgumentParser, dataclass_cls: Type[S],
+        prefix: Optional[str] = None):
+    """Creates an argparse argument group for a dataclass
+
+    :param parser: argument parser instance to add the argument group to
+    :param dataclass_cls: dataclass type for which to create the group
+    :param prefix: optional parameter prefix
+    """
+
+    group = parser.add_argument_group(title=dataclass_cls.__doc__)
+
+    for dc_field in fields(dataclass_cls):
+        dc_field_name = dc_field.name.replace('_', '-')
+        arg_prefix = f"{prefix}-" if prefix else ""
+        arg_name = f"--{arg_prefix}{dc_field_name}"
+
+        group.add_argument(
+            arg_name,
+            type=dc_field.type,
+            default=dc_field.default,
+            help=dc_field.metadata.get('doc', None)
+        )
+
+
+def _parse_argument_group(args, dataclass_cls: Type[S], prefix: Optional[str] = None) -> S:
+    """Parses an argument group into a dataclass"""
+    arg_prefix = f'{prefix}_' if prefix else ''
+
+    variables = vars(args)
+
+    dataclass_vars = {}
+    for dc_field in fields(dataclass_cls):
+        arg_name = arg_prefix + dc_field.name
+        dataclass_vars[dc_field.name] = variables[arg_name]
+
+    return dataclass_cls(**dataclass_vars)
+
+
 async def main(args):
     # Parse mock variables
-    prefix = 'mock_'
-    mock_vars = {
-        name[len(prefix):]: value for name, value in vars(args).items()
-        if name.startswith(prefix)
-    }
+    settings = _parse_argument_group(args, Settings)
+    mock_variables = _parse_argument_group(args, MockVariables, prefix='mock')
 
     distributed_strategy_cls = _get_distributed_strategy_class(args.distributed_strategy)
 
@@ -1931,7 +1979,8 @@ async def main(args):
         ports=set(args.port),
         distributed_strategy_class=distributed_strategy_cls,
         potential_parent_interval=args.potential_parent_interval,
-        mock_variables=MockVariables(**mock_vars)
+        settings=settings,
+        mock_variables=mock_variables
     )
     mock_server.users.extend(admin_users + privileged_users)
 
@@ -1944,7 +1993,6 @@ async def main(args):
 
 
 if __name__ == '__main__':
-    import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--port',
@@ -1975,25 +2023,8 @@ if __name__ == '__main__':
         type=int
     )
 
-    # Mock variables argument group
-    mock_vars_group = parser.add_argument_group(title="Mock variables")
-    mock_vars_group.add_argument(
-        '--mock-upload-speed',
-        help=(
-            "Assign a default average upload speed to users connecting. Useful "
-            "when testing distributed connections"
-        ),
-        default=0,
-        type=float
-    )
-    mock_vars_group.add_argument(
-        '--mock-search-interval',
-        help=(
-            "Periodically send a search request through the distributed network"
-        ),
-        default=0,
-        type=float
-    )
+    _create_argument_group(parser, dataclass_cls=Settings)
+    _create_argument_group(parser, dataclass_cls=MockVariables, prefix='mock')
 
     args = parser.parse_args()
 
