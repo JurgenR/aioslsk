@@ -486,7 +486,7 @@ class MockServer:
             self._create_room_list_message(peer.user, min_users=min_users)
         )
 
-    async def send_room_list_update(self, user: User, min_users: Optional[int] = None):
+    async def send_room_list_update(self, user: User, min_users: int = 1):
         """Sends a user an updated room list
 
         * RoomList
