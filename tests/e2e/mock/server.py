@@ -438,16 +438,38 @@ class MockServer:
         )
         await peer.send_message(message)
 
-    async def send_admin_message(self, message: str, peer: Peer):
-        await peer.send_message(
-            PrivateChatMessage.Response(
-                chat_id=next(self.chat_id_gen),
-                timestamp=int(time.time()),
-                message=message,
-                username='server',
-                is_direct=True
-            )
+    async def send_private_message(
+            self, message: str, sender: str, receivers: List[str]):
+        """Sends a private message to one or more users"""
+
+        queued_message = QueuedPrivateMessage(
+            chat_id=next(self.chat_id_gen),
+            username=sender,
+            timestamp=int(time.time()),
+            message=message
         )
+        protocol_message = queued_message.to_protocol_message(is_direct=True)
+
+        to_send = []
+        for receiver in receivers:
+            # Always queue the message
+            if user := self.find_user_by_name(receiver):
+                user.queued_private_messages.append(queued_message)
+
+            # Send direct message if user is online
+            if peer := self.find_peer_by_name(receiver):
+                to_send.append(peer.send_message(protocol_message))
+
+        await asyncio.gather(*to_send, return_exceptions=True)
+
+    async def send_admin_message(self, message: str, peer: Peer):
+        await self.send_private_message(message, 'server', [peer.user.name])
+
+    async def send_queued_private_messages(self, peer: Peer):
+        """Sends all queued private messages to the peer"""
+        for queued_message in peer.user.queued_private_messages:
+            await peer.send_message(
+                queued_message.to_protocol_message(is_direct=False))
 
     def _create_room_list_message(self, user: User, min_users: int = 1):
         public_rooms: List[Room] = []
@@ -672,11 +694,12 @@ class MockServer:
 
     @on_message(PrivateChatMessageUsers.Request)
     async def on_private_chat_message_users(self, message: PrivateChatMessageUsers.Request, peer: Peer):
-        """User sends a private message to multiple users"""
-        timestamp = int(time.time())
-        chat_id = next(self.chat_id_gen)
+        """User sends a private message to multiple users
 
-        tasks = []
+        TODO: Check if message is sent multiple times if username is provided
+        multiple times
+        """
+        receivers = []
         for username in message.usernames:
 
             # Skip users in the list that do not exist
@@ -688,44 +711,26 @@ class MockServer:
             if peer.user.name not in user_receiver.added_users:
                 continue
 
-            # TODO: Verify if a new chat ID is generated for each user
-            private_message = QueuedPrivateMessage(
-                chat_id=chat_id,
-                username=peer.user.name,
-                message=message.message,
-                timestamp=timestamp
-            )
-            user_receiver.queued_private_messages.append(private_message)
+            receivers.append(username)
 
-            if (peer_receiver := self.find_peer_by_name(username)) is not None:
-                tasks.append(
-                    peer_receiver.send_message(
-                        private_message.to_protocol_message(is_direct=True)
-                    )
-                )
-
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await self.send_private_message(
+            message=message.message,
+            sender=peer.user.name,
+            receivers=receivers
+        )
 
     @on_message(PrivateChatMessage.Request)
     async def on_chat_private_message(self, message: PrivateChatMessage.Request, peer: Peer):
         """User sends a private message to a another user"""
         # Do nothing when sending to a user that does not exist
-        if (user_receiver := self.find_user_by_name(message.username)) is None:
+        if self.find_user_by_name(message.username) is None:
             return
 
-        private_message = QueuedPrivateMessage(
-            chat_id=next(self.chat_id_gen),
-            username=peer.user.name,
+        await self.send_private_message(
             message=message.message,
-            timestamp=int(time.time())
+            sender=peer.user.name,
+            receivers=[message.username]
         )
-        user_receiver.queued_private_messages.append(private_message)
-
-        # If there is a peer for that user, send the message with is_direct=True
-        if (peer_receiver := self.find_peer_by_name(message.username)) is not None:
-            await peer_receiver.send_message(
-                private_message.to_protocol_message(is_direct=True)
-            )
 
     @on_message(PrivateChatMessageAck.Request)
     async def on_chat_private_message_ack(
@@ -1571,12 +1576,6 @@ class MockServer:
         )
         for room in self.get_joined_rooms(user):
             await self.notify_room_joined_users(room, stats_message)
-
-    async def send_queued_private_messages(self, peer: Peer):
-        """Sends all private messages to the peer"""
-        for queued_message in peer.user.queued_private_messages:
-            await peer.send_message(
-                queued_message.to_protocol_message(is_direct=False))
 
     async def create_public_room(self, name: str) -> Room:
         """Creates a new private room, should be called when all checks are
