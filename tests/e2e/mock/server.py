@@ -458,7 +458,7 @@ class MockServer:
 
             # Send direct message if user is online
             if isinstance(receiver, Peer):
-                to_send.append(peer.send_message(protocol_message))
+                to_send.append(receiver.send_message(protocol_message))
             else:
                 if peer := self.find_peer_by_name(receiver):
                     to_send.append(peer.send_message(protocol_message))
