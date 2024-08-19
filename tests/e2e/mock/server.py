@@ -7,7 +7,7 @@ import logging
 import re
 import socket
 import time
-from typing import Dict, Generator, List, Optional, Set, Type, TypeVar, Union
+from typing import Dict, Generator, List, Optional, Set, Type, TypeVar
 import typing
 
 from aioslsk.events import build_message_map
@@ -439,7 +439,7 @@ class MockServer:
         await peer.send_message(message)
 
     async def send_private_message(
-            self, message: str, sender: str, receivers: List[Union[str, Peer]]):
+            self, message: str, sender: str, receivers: List[str]):
         """Sends a private message to one or more users"""
 
         queued_message = QueuedPrivateMessage(
@@ -457,16 +457,19 @@ class MockServer:
                 user.queued_private_messages.append(queued_message)
 
             # Send direct message if user is online
-            if isinstance(receiver, Peer):
-                to_send.append(receiver.send_message(protocol_message))
-            else:
-                if peer := self.find_peer_by_name(receiver):
-                    to_send.append(peer.send_message(protocol_message))
+            if peer := self.find_peer_by_name(receiver):
+                to_send.append(peer.send_message(protocol_message))
 
         await asyncio.gather(*to_send, return_exceptions=True)
 
     async def send_admin_message(self, message: str, peer: Peer):
-        await self.send_private_message(message, 'server', [peer])
+        await self.send_private_message(message, 'server', [peer.user.name])
+
+    async def send_queued_private_messages(self, peer: Peer):
+        """Sends all queued private messages to the peer"""
+        for queued_message in peer.user.queued_private_messages:
+            await peer.send_message(
+                queued_message.to_protocol_message(is_direct=False))
 
     def _create_room_list_message(self, user: User, min_users: int = 1):
         public_rooms: List[Room] = []
@@ -1573,12 +1576,6 @@ class MockServer:
         )
         for room in self.get_joined_rooms(user):
             await self.notify_room_joined_users(room, stats_message)
-
-    async def send_queued_private_messages(self, peer: Peer):
-        """Sends all private messages to the peer"""
-        for queued_message in peer.user.queued_private_messages:
-            await peer.send_message(
-                queued_message.to_protocol_message(is_direct=False))
 
     async def create_public_room(self, name: str) -> Room:
         """Creates a new private room, should be called when all checks are
