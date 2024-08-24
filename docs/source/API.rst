@@ -44,10 +44,52 @@ aioslsk.settings
     :members:
 
 
+aioslsk.base_manager
+====================
+
+.. automodule:: aioslsk.base_manager
+    :members:
+
+
+aioslsk.constants
+=================
+
+.. automodule:: aioslsk.constants
+    :members:
+
+
 aioslsk.distributed
 ===================
 
 .. automodule:: aioslsk.distributed
+    :members:
+
+
+aioslsk.peer
+============
+
+.. automodule:: aioslsk.peer
+    :members:
+
+
+aioslsk.server
+==============
+
+.. automodule:: aioslsk.server
+    :members:
+
+
+aioslsk.session
+===============
+
+.. automodule:: aioslsk.session
+    :members:
+
+
+aioslsk.utils
+=============
+
+.. automodule:: aioslsk.utils
     :members:
 
 
@@ -118,6 +160,27 @@ aioslsk.room.manager
 ====================
 
 .. automodule:: aioslsk.room.manager
+    :members:
+
+
+aioslsk.search.model
+====================
+
+.. automodule:: aioslsk.search.model
+    :members:
+
+
+aioslsk.search.manager
+======================
+
+.. automodule:: aioslsk.search.manager
+    :members:
+
+
+aioslsk.interest.manager
+========================
+
+.. automodule:: aioslsk.interest.manager
     :members:
 
 
