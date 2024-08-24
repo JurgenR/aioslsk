@@ -1,7 +1,7 @@
 import os
 from typing import Dict, List, Optional, Set
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings
 
 from .constants import (
@@ -80,9 +80,39 @@ class CredentialsSettings(BaseModel, validate_assignment=True):
         return bool(self.username) and self.password is not None
 
 
-class SearchSettings(BaseModel, validate_assignment=True):
+class SearchSendSettings(BaseModel, validate_assignment=True):
+    store_results: bool = True
+
+
+class SearchReceiveSettings(BaseModel, validate_assignment=True):
+    store_amount: int = 500
     max_results: int = 100
+
+
+class SearchSettings(BaseModel, validate_assignment=True):
+    send: SearchSendSettings = Field(default_factory=SearchSendSettings)
+    receive: SearchReceiveSettings = Field(default_factory=SearchReceiveSettings)
     wishlist: List[WishlistSettingEntry] = Field(default_factory=list)
+
+    @model_validator(mode='before')
+    @classmethod
+    def handle_max_result_alias(cls, values: Dict):
+        if 'max_results' in values:
+            value = values.pop('max_results')
+            if 'receive' not in values:
+                values['receive'] = {}
+
+            values['receive']['max_results'] = value
+
+        return values
+
+    @property
+    def max_results(self) -> int:
+        return self.receive.max_results
+
+    @max_results.setter
+    def max_results(self, value: int):
+        self.receive.max_results = value
 
 
 class TransferLimitSettings(BaseModel, validate_assignment=True):

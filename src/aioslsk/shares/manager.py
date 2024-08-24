@@ -78,10 +78,10 @@ def scan_directory(
     finishes (see https://stackoverflow.com/a/72726998/1419478). In this case
     you should manually assign it again
 
-    :param shared_directory: `SharedDirectory` instance
-    :param children: list of `SharedDirectory` instances, the items in this list
-        will not be returned and should be scanned individually
-    :return: set of `SharedItem` objects found during the scan
+    :param shared_directory: :class:`.SharedDirectory` instance
+    :param children: list of :class:`.SharedDirectory` instances, the items in
+        this list will not be returned and should be scanned individually
+    :return: set of :class:`.SharedItem` objects found during the scan
     """
     children = children or []
     shared_items = set()
@@ -112,7 +112,7 @@ def scan_directory(
 
 
 def extract_attributes(filepath: str) -> ItemAttributes:
-    """Attempts to extract attributes from the file at `filepath`. If there was
+    """Attempts to extract attributes from the file at ``filepath``. If there was
     an error attempting to extract the attributes this method will log a warning
     and return an empty list of attributes
     """
@@ -156,6 +156,7 @@ class SharesManager(BaseManager):
             self, settings: Settings, event_bus: EventBus,
             network: Network, cache: Optional[SharesCache] = None,
             executor_factory: Optional[ExecutorFactory] = None):
+
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._network: Network = network
@@ -187,7 +188,7 @@ class SharesManager(BaseManager):
     def generate_alias(self, path: str, offset: int = 0) -> str:
         """Generates a directory alias for the given path, this method will be
         called recursively increasing the offset in case the alias is already
-        found in the `shared_directories`.
+        found in the ``shared_directories``.
 
         The hardware address is mixed in to avoid getting the same alias for the
         same directory on different machines. Admittedly this is a lousy
@@ -283,7 +284,7 @@ class SharesManager(BaseManager):
         """Gets the absolute path the to download directory configured from the
         settings
 
-        :return: Absolute path of the value of the `shares.download` setting
+        :return: Absolute path of the value of the ``shares.download`` setting
         """
         download_dir = self._settings.shares.download
         return os.path.abspath(download_dir)
@@ -312,7 +313,7 @@ class SharesManager(BaseManager):
         in the cache but does not exist on disk a :class:`.FileNotFoundError` is
         raised
 
-        If a `username` is passed this will also check if the file is locked
+        If a ``username`` is passed this will also check if the file is locked
         and raise a :class:`.FileNotSharedError` if the file is not accessible
         for that user
 
@@ -344,10 +345,11 @@ class SharesManager(BaseManager):
             self, shared_directory: str,
             share_mode: DirectoryShareMode = DirectoryShareMode.EVERYONE,
             users: Optional[List[str]] = None) -> SharedDirectory:
-        """Adds a shared directory. This method will call `generate_alias` and
-        add the directory to the directory map. This method will not scan the
-        directory, for scanning see the :meth:`scan`, :meth:`scan_directory_files`
-        and :meth:`scan_directory_file_attributes` methods.
+        """Adds a shared directory. This method will call :meth:`generate_alias`
+        and add the directory to the directory map. This method will not scan
+        the directory, for scanning see the :meth:`scan`,
+        :meth:`scan_directory_files` and :meth:`scan_directory_file_attributes`
+        methods.
 
         :param shared_directory: path of the shared directory
         :param share_mode: the share mode for the directory
@@ -489,10 +491,10 @@ class SharesManager(BaseManager):
             return True
 
     async def scan_directory_files(self, shared_directory: SharedDirectory):
-        """Scans the files for the given `shared_directory`
+        """Scans the files for the given ``shared_directory``
 
         :param shared_directory: :class:`.SharedDirectory` instance to scan
-        :raise SharedDirectoryError: raised when the passed `shared_directory`
+        :raise SharedDirectoryError: raised when the passed ``shared_directory``
             was not added to the manager
         """
         loop = asyncio.get_running_loop()
@@ -583,7 +585,7 @@ class SharesManager(BaseManager):
 
     async def scan(self):
         """Scan the files and their attributes for all directories currently
-        defined in the `shared_directories`
+        defined in the ``shared_directories``
 
         This method will emit a :class:`.ScanCompleteEvent` on the event bus
         and report the shares to the server
@@ -617,8 +619,8 @@ class SharesManager(BaseManager):
             self, query: Union[str, SearchQuery],
             username: Optional[str] = None,
             excluded_search_phrases: Optional[List[str]] = None) -> Tuple[List[SharedItem], List[SharedItem]]:
-        """Performs a query on the `shared_directories` returning the matching
-        items. If `username` is passed this method will return a list of
+        """Performs a query on the ``shared_directories`` returning the matching
+        items. If ``username`` is passed this method will return a list of
         visible results and list of locked results. If `None` the second list
         will always be empty.
 
@@ -702,7 +704,7 @@ class SharesManager(BaseManager):
             else:
                 to_keep.add(found_item)
 
-            if len(to_keep) >= self._settings.searches.max_results:
+            if len(to_keep) >= self._settings.searches.receive.max_results:
                 break
 
         found_items = to_keep
@@ -723,7 +725,7 @@ class SharesManager(BaseManager):
     def get_stats(self) -> Tuple[int, int]:
         """Gets the total amount of shared directories and files.
 
-        :return: directory and file count as a `tuple`
+        :return: directory and file count as a ``tuple``
         """
         file_count = sum(
             len(directory.items) for directory in self._shared_directories
@@ -738,7 +740,7 @@ class SharesManager(BaseManager):
         """Calculates the local download path for a remote path returned by
         another peer.
 
-        :return: tuple of the directory and file name
+        :return: ``tuple`` of the directory and file name
         """
         download_dir = self.get_download_directory()
 
@@ -765,7 +767,8 @@ class SharesManager(BaseManager):
 
         :param username: username of the user requesting the shares reply, this
             is used to determine the locked results
-        :return: tuple with two lists: public directories and locked directories
+        :return: ``tuple`` with two lists: public directories and locked
+            directories
         """
         def list_unique_directories(directories: List[SharedDirectory]) -> Dict[Tuple[str, ...], List[SharedItem]]:
             response_dirs: Dict[Tuple[str, ...], List[SharedItem]] = {}
@@ -878,7 +881,7 @@ class SharesManager(BaseManager):
         return children
 
     def is_directory_locked(self, directory: SharedDirectory, username: str) -> bool:
-        """Checks if the shared directory is locked for the given `username`"""
+        """Checks if the shared directory is locked for the given ``username``"""
         if directory.share_mode == DirectoryShareMode.FRIENDS:
             return username not in self._settings.users.friends
         elif directory.share_mode == DirectoryShareMode.USERS:
@@ -886,7 +889,7 @@ class SharesManager(BaseManager):
         return False
 
     def is_item_locked(self, item: SharedItem, username: str) -> bool:
-        """Checks if the shared item is locked for the given `username`"""
+        """Checks if the shared item is locked for the given ``username``"""
         return self.is_directory_locked(item.shared_directory, username)
 
     async def report_shares(self):
