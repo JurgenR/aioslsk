@@ -77,7 +77,7 @@ ListeningConnections = Tuple[Optional[ListeningConnection], Optional[ListeningCo
 
 class ListeningConnectionErrorMode(enum.Enum):
     """Error mode for listening connections. During initialization of the
-    network the `connect_listening_connections` method will raise an error
+    network the ``connect_listening_connections`` method will raise an error
     depending on the error mode
     """
     ALL = 'all'
@@ -208,7 +208,7 @@ class Network:
     async def connect_listening_ports(self):
         """This method will attempt to connect both listening ports (if
         configured) but will raise an exception depending on the settings
-        `network.listening.error_mode` setting. All other listening connections
+        ``network.listening.error_mode`` setting. All other listening connections
         will be disconnected before raising the error
 
         :raise ListeningConnectionFailedError: if an error occurred connecting
@@ -276,8 +276,8 @@ class Network:
     def get_listening_ports(self) -> Tuple[int, int]:
         """Gets the currently connected listening ports
 
-        :return: `tuple` with 2 elements: the non-obfuscated- and obfuscated
-            ports. If either is not connected or not configured `0` will be
+        :return: ``tuple`` with 2 elements: the non-obfuscated- and obfuscated
+            ports. If either is not connected or not configured ``0`` will be
             returned for this port
         """
         def get_port(conn: Optional[ListeningConnection]):
@@ -407,7 +407,7 @@ class Network:
         """This job ensures the UPnP port mappings are maintained.
 
         The interval that the mapping is checked is configured through the
-        `network.upnp.check_interval` setting. This setting represents the max
+        ``network.upnp.check_interval`` setting. This setting represents the max
         interval, the check interval could be shorter if the job detects that
         the lease duration of a port is about to expire
         """
@@ -473,7 +473,7 @@ class Network:
 
     def select_port(self, port, obfuscated_port) -> Tuple[int, bool]:
         """Selects the port used for making a connection. This attempts to take
-        into account the `network.peer.obfuscate` parameter however falls back
+        into account the ``network.peer.obfuscate`` parameter however falls back
         on using whatever port is available if necessary
 
         :param port: available non-obfuscated port
@@ -495,19 +495,19 @@ class Network:
             self, username: str, typ: str, ip: Optional[str] = None, port: Optional[int] = None,
             obfuscate: bool = False,
             initial_state: PeerConnectionState = PeerConnectionState.ESTABLISHED) -> PeerConnection:
-        """Creates a new peer connection to the given `username` and connection
-        type.
+        """Creates a new peer connection to the given ``username`` and
+        connection type.
 
-        Optionally this method takes `ip`, `port` and `obfuscate` parameters. If
-        not given it will be requested to the server (GetPeerAddress) before
-        attempting connection
+        Optionally this method takes ``ip``, ``port`` and ``obfuscate``
+        parameters. If not given it will be requested to the server
+        (GetPeerAddress) before attempting connection
 
         :param username: username of the peer
         :param typ: connection type ('P', 'D', 'F')
         :param ip: optional ip address of the peer
         :param port: optional port of the peer
         :param obfuscate: whether to obfuscate the connection. Should be used in
-            combination with the `ip` and `port`
+            combination with the ``ip`` and ``port``
         :return: an object of `PeerConnection`
         :raise PeerConnectionError: when establishing a peer connection has
             failed
@@ -555,7 +555,7 @@ class Network:
         return connection
 
     async def _get_peer_address(self, username: str) -> Tuple[str, int, int]:
-        """Requests the peer address for the given `username` from the server.
+        """Requests the peer address for the given ``username`` from the server.
 
         :raise PeerConnectionError: if no IP address or no valid ports were
             returned
@@ -579,12 +579,13 @@ class Network:
         return response.ip, response.port, response.obfuscated_port
 
     async def get_peer_connection(self, username: str, typ: str = PeerConnectionType.PEER) -> PeerConnection:
-        """Gets a peer connection for the given `username`. It will first try to
-        re-use an existing connection, otherwise it will create a new connection
+        """Gets a peer connection for the given ``username``. It will first try
+        to re-use an existing connection, otherwise it will create a new
+        connection
 
         :param username: username of the peer to connect to
         :param typ: Type of connection to create or reuse
-        :return: A `PeerConnection` instance
+        :return: A :class:`.PeerConnection` instance
         """
         connections = self.get_active_peer_connections(username, typ)
         if connections:
@@ -603,13 +604,13 @@ class Network:
     def create_server_response_future(
             self, message_class: Type[T], fields: Optional[Dict[str, Any]] = None) -> ExpectedResponse:
         """Creates a future for a server message to arrive, the message must
-        match the `message_class` and fields defined in the keyword arguments.
+        match the ``message_class`` and fields defined in the keyword arguments.
 
         The future will be stored by the current class and will be removed once
         the future is complete or cancelled.
 
-        :param message_class: The expected `MessageDataClass`
-        :return: `ExpectedResponse` object
+        :param message_class: The expected :class:`.MessageDataClass`
+        :return: :class:`.ExpectedResponse` object
         """
         fields = fields or {}
         future = ExpectedResponse(
@@ -632,7 +633,7 @@ class Network:
 
         :param message_class: Class of the expected server message
         :param fields: Optional matchers for the message fields
-        :return: The `MessageData` object corresponding to the response
+        :return: The :class:`.MessageData` object corresponding to the response
         """
         future = self.create_server_response_future(
             message_class=message_class,
@@ -650,14 +651,14 @@ class Network:
     def create_peer_response_future(
             self, peer: str, message_class: Type[T], fields: Optional[Dict[str, Any]] = None) -> ExpectedResponse:
         """Creates a future for a peer message to arrive, the message must match
-        the `message_class` and fields defined in the keyword arguments and
-        must be coming from a connection by `peer`.
+        the ``message_class`` and fields defined in the keyword arguments and
+        must be coming from a connection by ``peer``.
 
         The future will be stored by the current class and will be removed once
         the future is complete or cancelled.
 
         :param peer: name of the peer for which the message should be received
-        :return: `ExpectedResponse` object
+        :return: :class:`.ExpectedResponse` object
         """
         fields = fields or {}
         future = ExpectedResponse(
@@ -672,6 +673,7 @@ class Network:
 
     async def wait_for_peer_message(
             self, peer: str, message_class: Type[T], fields: Optional[Dict[str, Any]] = None, timeout: float = 60) -> T:
+
         future = self.create_peer_response_future(
             peer=peer,
             message_class=message_class,
@@ -691,7 +693,7 @@ class Network:
         connection types.
 
         :param username: username of the peer
-        :param typ: type of the connection (from `PeerConnectionType`)
+        :param typ: type of the connection (from :class:`.PeerConnectionType`)
         :return: list of connections for that matches the parameters
         """
         return [
@@ -708,12 +710,11 @@ class Network:
         :param typ: peer connection type
         :return: list of PeerConnection instances
         """
-        return list(
-            filter(
-                lambda conn: conn.state == ConnectionState.CONNECTED and conn.connection_state == PeerConnectionState.ESTABLISHED,  # noqa: E501
-                self.get_peer_connections(username, typ)
-            )
-        )
+        return [
+            conn
+            for conn in self.get_peer_connections(username, typ)
+            if conn.state == ConnectionState.CONNECTED and conn.connection_state == PeerConnectionState.ESTABLISHED
+        ]
 
     def remove_peer_connection(self, connection: PeerConnection):
         if connection in self.peer_connections:
@@ -723,7 +724,7 @@ class Network:
 
     @on_message(ConnectToPeer.Response)
     async def _on_connect_to_peer(self, message: ConnectToPeer.Response, connection: ServerConnection):
-        """Handles a ConnectToPeer request coming from another peer"""
+        """Handles a :class:`ConnectToPeer` request coming from another peer"""
         task = asyncio.create_task(
             self._handle_connect_to_peer(message),
             name=f'connect-to-peer-{task_counter()}'
@@ -735,9 +736,9 @@ class Network:
 
     async def _make_direct_connection(
             self, ticket: int, username: str, typ: str, ip: str, port: int, obfuscate: bool) -> PeerConnection:
-        """Attempts to make a direct connection to the peer and send a `PeerInit`
-        message. This will be the first step in case we are the one initiating
-        the connection
+        """Attempts to make a direct connection to the peer and send a
+        :class:`.PeerInit` message. This will be the first step in case we are
+        the one initiating the connection
         """
         logger.debug(f"attempting to connect to peer : {username!r} {ip}:{port}")
         connection = PeerConnection(
@@ -760,14 +761,16 @@ class Network:
 
     async def _make_indirect_connection(
             self, ticket: int, username: str, typ: str) -> PeerConnection:
-        """Attempts to make an indirect connection by sending a `ConnectToPeer`
-        message to the server. The method will wait for an incoming connection
-        with a `PeerPierceFirewall` message containing the provided ticket or a
-        `CannotConnect` message from the server.
+        """Attempts to make an indirect connection by sending a
+        :class:`.ConnectToPeer` message to the server. The method will wait for
+        an incoming connection with a :class:`.PeerPierceFirewall` message
+        containing the provided ticket or a :class:`.CannotConnect` message from
+        the server.
 
-        :return: `PeerConnection` object in case of success
+        :return: :class:`.PeerConnection` object in case of success
         :raise PeerConnectionError: in case timeout was reached or we received a
-            `CannotConnect` message from the server containing the `ticket`
+            :class:`.CannotConnect` message from the server containing the
+            ``ticket``
         """
         # Wait for either a established connection with PeerPierceFirewall or a
         # CannotConnect from the server
@@ -819,13 +822,13 @@ class Network:
     async def _handle_connect_to_peer(self, message: ConnectToPeer.Response):
         """Handles an indirect connection request received from the server.
 
-        A task is created for this coroutine when a `ConnectToPeer` message is
-        received.
+        A task is created for this coroutine when a :class:`.ConnectToPeer`
+        message is received.
 
-        A `PeerInitializedEvent` will be emitted if the connection has been
-        successfully established
+        A :class:`.PeerInitializedEvent` will be emitted if the connection has
+        been successfully established
 
-        :param message: received `ConnectToPeer` message
+        :param message: received :class:`.ConnectToPeer` message
         """
         ip = self._ip_overrides.get(message.username, message.ip)
         port, obfuscate = self.select_port(message.port, message.obfuscated_port)
@@ -866,19 +869,19 @@ class Network:
     async def send_peer_messages(
             self, username: str, *messages: Union[bytes, MessageDataclass],
             raise_on_error: bool = True):
-        """Sends a list of messages to the peer with given `username`. This uses
-        `get_peer_connection` and will attempt to re-use a connection or create
-        a new peer (P) connection
+        """Sends a list of messages to the peer with given ``username``. This
+        uses ``get_peer_connection`` and will attempt to re-use a connection or
+        create a new peer (P) connection
 
         :param username: Peer username to send the messages to
         :param messages: List of messages to send
-        :param raise_on_error: When `True` an exception is raised when a message
-            failed to send, if `False` a list of tuples with the result for each
-            message will be returned
+        :param raise_on_error: When ``True`` an exception is raised when a
+            message failed to send, if ``False`` a list of tuples with the
+            result for each message will be returned
         :return: a list of tuples containing the sent messages and the result
-            of the sent messages. If `None` is returned for a message it was
+            of the sent messages. If ``None`` is returned for a message it was
             successfully sent, otherwise the result will contain the exception.
-            `None` if the `raise_on_error` is `True`
+            `None` if the ``raise_on_error`` is ``True``
         """
         connection = await self.get_peer_connection(username)
         results = await asyncio.gather(
@@ -901,13 +904,13 @@ class Network:
         """Sends a list of messages to the server
 
         :param messages: List of messages to send
-        :param raise_on_error: When `True` an exception is raised when a message
-            failed to send, if `False` a list of tuples with the result for each
-            message will be returned
+        :param raise_on_error: When ``True`` an exception is raised when a
+            message failed to send, if ``False`` a list of tuples with the
+            result for each message will be returned
         :return: a list of tuples containing the sent messages and the result
             of the sent messages. If `None` is returned for a message it was
             successfully sent, otherwise the result will contain the exception.
-            `None` if the `raise_on_error` is `True`
+            ``None`` if the ``raise_on_error`` is ``True``
         """
         results = await asyncio.gather(
             *[self.server_connection.send_message(message) for message in messages],
@@ -921,7 +924,7 @@ class Network:
             self, state: ConnectionState, connection: Connection,
             close_reason: CloseReason = CloseReason.UNKNOWN):
         """Called when the state of a connection changes. This method calls 3
-        private method based on the type of `connection` that was passed
+        private method based on the type of ``connection`` that was passed
 
         :param state: the new state the connection has received
         :param connection: the connection for which the state changed
@@ -995,12 +998,12 @@ class Network:
 
         In case of PeerPierceFirewall we look for an associated future object
         for the ticket provided in the message; there should be a task waiting
-        for it to be completed (see `_make_indirect_connection`). Full
+        for it to be completed (see ``_make_indirect_connection``). Full
         initialization of the connection should be done in that method.
 
         In any other case we disconnect the connection.
 
-        :param connection: the accepted `PeerConnection`
+        :param connection: the accepted :class:`.PeerConnection`
         """
         self.peer_connections.append(connection)
 
@@ -1053,7 +1056,7 @@ class Network:
             await connection.disconnect(CloseReason.REQUESTED)
 
     async def on_message_received(self, message: MessageDataclass, connection: DataConnection):
-        """Method called by `connection` instances when a message is received
+        """Method called by ``connection`` instances when a message is received
 
         :param message: Received message instance
         :param connection: Connection on which the message was received

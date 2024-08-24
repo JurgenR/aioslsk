@@ -39,7 +39,7 @@ class SearchQuery:
     @classmethod
     def parse(cls, query: str) -> 'SearchQuery':
         """Parses the given query string into terms and creates a new
-        `SearchQuery` object
+        :class:`.SearchQuery` object
         """
         obj = cls(query)
 
