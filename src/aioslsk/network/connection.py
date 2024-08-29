@@ -90,21 +90,23 @@ class PeerConnectionState(Enum):
 
 class Connection:
 
+    _CLOSING_STATES: tuple[ConnectionState, ConnectionState] = (
+        ConnectionState.CLOSING, ConnectionState.CLOSED)
+
     def __init__(self, hostname: str, port: int, network: Network):
         self.hostname: str = hostname
         self.port: int = port
         self.network: Network = network
         self.state: ConnectionState = ConnectionState.UNINITIALIZED
+        self._is_closing: bool = False
 
     async def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
         raise NotImplementedError()
 
     async def set_state(self, state: ConnectionState, close_reason: CloseReason = CloseReason.UNKNOWN):
         self.state = state
+        self._is_closing = state in self._CLOSING_STATES
         await self.network.on_state_changed(state, self, close_reason=close_reason)
-
-    def _is_closing(self) -> bool:
-        return self.state in (ConnectionState.CLOSING, ConnectionState.CLOSED)
 
     def __repr__(self) -> str:
         return (
@@ -288,7 +290,7 @@ class DataConnection(Connection):
         """Message reader loop. This will loop until the connection is closed or
         the network is closed
         """
-        while not self._is_closing():
+        while not self._is_closing:
             try:
                 message = await self.receive_message_object()
 
@@ -304,7 +306,7 @@ class DataConnection(Connection):
                     return
 
                 # Do not handle messages when closing/closed
-                if self._is_closing():
+                if self._is_closing:
                     logger.warning(
                         f"{self.hostname}:{self.port} : connection is closing, "
                         f"skipping handling message : {message!r}"
@@ -427,7 +429,7 @@ class DataConnection(Connection):
         :param message: message to be sent over the connection
         :raise ConnectionWriteError: error or timeout occured during writing
         """
-        if self._is_closing():
+        if self._is_closing:
             logger.warning(
                 f"{self.hostname}:{self.port} : not sending message, connection is closing / closed : {message!r}")
             return
