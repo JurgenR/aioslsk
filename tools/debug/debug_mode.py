@@ -45,7 +45,8 @@ def make_logging_config(directory: str):
         'version': 1,
         'formatters': {
             'simple': {
-                'format': '[%(asctime)s][%(levelname)-8s][%(module)s][%(thread)d]: %(message)s'
+                'format': '[%(asctime)s][%(levelname)-8s][%(module)s][%(thread)d]: %(message)s',
+                'connection': '[%(asctime)s][%(levelname)-8s][%(module)s][%(thread)d]: %(message)s'
             }
         },
         'handlers': {
@@ -173,6 +174,7 @@ class REPLThread(threading.Thread):
 
 if __name__ == '__main__':
     DEFAULT_SETTINGS_FILE = os.path.join(SCRIPT_DIR, 'settings.json')
+    DEFAULT_LOG_CONFIG_FILE = os.path.join(SCRIPT_DIR, 'logging_config.json')
 
     import argparse
     parser = argparse.ArgumentParser()
@@ -184,6 +186,14 @@ if __name__ == '__main__':
         '--settings',
         help="Optional path to a settings.json file",
         default=DEFAULT_SETTINGS_FILE
+    )
+    parser.add_argument(
+        '--log-config',
+        help="Optional path to a logging configuration file. This must be a JSON file",
+        default=DEFAULT_LOG_CONFIG_FILE
+    )
+    parser.add_argument(
+        '--log-auto-path'
     )
     args = parser.parse_args()
 
