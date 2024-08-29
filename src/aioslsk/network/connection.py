@@ -90,7 +90,7 @@ class PeerConnectionState(Enum):
 
 class Connection:
 
-    _CLOSING_STATES: tuple[ConnectionState] = (
+    _CLOSING_STATES: tuple[ConnectionState, ConnectionState] = (
         ConnectionState.CLOSING, ConnectionState.CLOSED)
 
     def __init__(self, hostname: str, port: int, network: Network):
