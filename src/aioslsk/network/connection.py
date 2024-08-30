@@ -41,12 +41,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_RECV_BUF_SIZE = 8
-"""Default amount of bytes to recv from the socket"""
-TRANSFER_RECV_BUF_SIZE = 1024 * 8
-"""Default amount of bytes to recv during file transfer"""
-TRANSFER_SEND_BUF_SIZE = 1024 * 8
-"""Default amount of bytes to send during file transfer"""
+
 HEADER_SIZE_OBFUSCATED: int = obfuscation.KEY_SIZE + struct.calcsize('I')
 HEADER_SIZE_UNOBFUSCATED: int = struct.calcsize('I')
 

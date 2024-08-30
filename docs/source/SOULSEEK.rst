@@ -1094,7 +1094,7 @@ Private Chat Message Multiple Users
 Set Distributed Root
 ~~~~~~~~~~~~~~~~~~~~
 
-**Message:** :ref:`DistributedRoot`
+**Message:** :ref:`BranchRoot`
 
 **Actors:**
 
@@ -1115,7 +1115,7 @@ Set Distributed Root
 Set Distributed Level
 ~~~~~~~~~~~~~~~~~~~~~
 
-**Message:** :ref:`DistributedLevel`
+**Message:** :ref:`BranchLevel`
 
 **Actors:**
 

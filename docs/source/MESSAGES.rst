@@ -1481,6 +1481,8 @@ Note: SoulSeekQt sends the ``depth`` as a ``uint8``
    1. **uint32**: depth
 
 
+.. _ResetDistributed:
+
 ResetDistributed (Code 130)
 ---------------------------
 
