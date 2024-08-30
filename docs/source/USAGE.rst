@@ -7,10 +7,12 @@ Starting the client
 
 .. warning::
 
-    The server has an anti-DDOS mechanism, be careful when connecting and disconnecting too quickly or you will get banned
+    The server has an anti-DDOS mechanism, be careful when connecting and disconnecting too quickly
+    or you will get banned
 
 
-Before starting the client, ensure you create a settings object where you have configured at least the `credentials` section:
+Before starting the client, ensure you create a settings object where you have configured at least
+the ``credentials`` section:
 
 .. code-block:: python
 
@@ -24,10 +26,12 @@ Before starting the client, ensure you create a settings object where you have c
         )
     )
 
-It's also recommended to configure a listening port and a downloads directory. For the full list of configuration options see: :doc:`./SETTINGS`
+It's also recommended to configure a listening port and a downloads directory. For the full list of
+configuration soptions see: :doc:`./SETTINGS`
 
 
-Next create and start the client. Calling :meth:`.SoulSeekClient.start` will connect the listening ports and to the server. Next perform a login and, for example, send a private message:
+Next create and start the client. Calling :meth:`.SoulSeekClient.start` will connect the listening
+ports and to the server. Next perform a login and, for example, send a private message:
 
 .. code-block:: python
 
@@ -69,9 +73,15 @@ The client can also use the a context manager to automatically start and stop th
 Commands and Events
 ===================
 
-Command objects are used to send requests to the server. Waiting for a response is optional because the protocol does not have a proper error handling, sometimes error messages will be returned as a private message from the ``server`` user, sometimes no error will be returned at all (eg.: when joining a room).
+Command objects are used to send requests to the server. Waiting for a response is optional because
+the protocol does not have a proper error handling, sometimes error messages will be returned as a
+private message from the ``server`` user, sometimes no error will be returned at all (eg.: when
+joining a room).
 
-The list of built-in commands can be found in the :mod:`aioslsk.commands` module but it is of course possible to create your own commands by extending :class:`.BaseCommand`. Commands can be used with the client's :func:`.SoulSeekClient.execute` command or simply by calling the client itself. An example of setting the user status:
+The list of built-in commands can be found in the :mod:`aioslsk.commands` module but it is of course
+possible to create your own commands by extending :class:`.BaseCommand`. Commands can be used with
+the client's :meth:`.SoulSeekClient.execute` command or simply by calling the client itself. An
+example of setting the user status:
 
 .. code-block:: python
 
@@ -96,7 +106,9 @@ Example getting a response:
         GetUserStatusCommand('someone'), response=True)
 
 
-The library also has an array of events to listen for in the :mod:`aioslsk.events` module, callbacks can be registered through :func:`.SoulSeekClient.events.register` providing the event to listen for and the callback:
+The library also has an array of events to listen for in the :mod:`aioslsk.events` module, callbacks
+can be registered through :func:`.SoulSeekClient.events.register` providing the event to listen for
+and the callback:
 
 .. code-block:: python
 
@@ -114,7 +126,11 @@ The library also has an array of events to listen for in the :mod:`aioslsk.event
 Searching
 =========
 
-The protocol implements 3 types of search: network, room and user.
+Making Requests
+---------------
+
+The protocol implements 3 types of search: network, room and user. Following example shows how to
+start a search request for each of the types:
 
 .. code-block:: python
 
@@ -123,6 +139,20 @@ The protocol implements 3 types of search: network, room and user.
     global_request: SearchRequest = await client.searches.search('my query')
     room_request: SearchRequest = await client.searches.search_room('cool_room', 'my room query')
     user_request: SearchRequest = await client.searches.search_user('other_user', 'my user query')
+
+
+Search requests are stored internally and should be removed when no longer needed:
+
+.. code-block:: python
+
+    request: SearchRequest = await client.searches.search('my query')
+    # Print Current list of search requests
+    print(f"Search request made : {client.searches.requests}")
+
+    # Remove a search request
+    client.searches.remove_request(request)
+
+After removal there will be no more :class:`SearchResultEvent`s emitted for the removed request
 
 
 Listen to the :class:`.SearchResultEvent` to receive search results:
@@ -137,7 +167,7 @@ Listen to the :class:`.SearchResultEvent` to receive search results:
     client.register(SearchResultEvent, search_result_listener)
 
 
-Full list of search results can always be accessed through the returned object or the client:
+Full list of search results can be accessed through the returned object or the client:
 
 .. code-block:: python
 
@@ -150,6 +180,18 @@ Full list of search results can always be accessed through the returned object o
     await asyncio.sleep(5)
 
     print(f"results: {request.results}")
+
+
+Received Search Requests
+------------------------
+
+The client will participate in the distributed network which means it will automatically connect to
+other peers from which it will receive search requests and pass these on to other peers.
+
+An event will be emitted whenever search request is received (:class:`.SearchRequestReceivedEvent`)
+which contains the username, query and how many results were returned. The library will by default
+store a limited number of search requests which can be accessed through the :attr:`.SearchManager.received_searches`
+attribute. The amount of stored search requests can be configured using the ``searches.receive.store_amount`` setting.
 
 
 Transfers
@@ -168,7 +210,9 @@ To start downloading a file:
     # The following will attempt to start the download in the background
     transfer: Transfer = await client.transfers.download(search_result.username, search_result.shared_items[0].filename)
 
-Transfers can be paused or aborted, aborting will remove the partially downloaded file. To resume the paused transfer call the :meth:`.TransferManager.queue` method. Aborted transfers can be requeued as well but since the file was removed the transfer will be restarted from the beginning:
+Transfers can be paused or aborted, aborting will remove the partially downloaded file. To resume
+the paused transfer call the :meth:`.TransferManager.queue` method. Aborted transfers can be
+requeued as well but since the file was removed the transfer will be restarted from the beginning:
 
 .. code-block:: python
 
@@ -229,11 +273,14 @@ Setting Limits
 
 There are 3 limits currently in place:
 
-- `sharing.limits.upload_slots` : Maximum amount of uploads at a time
-- `sharing.limits.upload_speed_kbps` : Maximum upload speed
-- `sharing.limits.download_speed_kbps` : Maximum download speed
+- ``sharing.limits.upload_slots`` : Maximum amount of uploads at a time
+- ``sharing.limits.upload_speed_kbps`` : Maximum upload speed
+- ``sharing.limits.download_speed_kbps`` : Maximum download speed
 
-The initial limits will be read from the settings. When lowering for example `sharing.limits.upload_slots` the limit will be applied as soon as it changes in the settings and the amount of current uploads drops to the new limit (uploads in progress will be completed). For the speed limits a method needs to be called before they can are applied:
+The initial limits will be read from the settings. When lowering for example
+``sharing.limits.upload_slots`` the limit will be applied as soon as it changes in the settings and
+the amount of current uploads drops to the new limit (uploads in progress will be completed). For
+the speed limits a method needs to be called before they can are applied:
 
 .. code-block:: python
 
@@ -251,7 +298,8 @@ The initial limits will be read from the settings. When lowering for example `sh
 Room Management
 ===============
 
-The :class:`.RoomManager` is responsible for :class:`.Room` object storage and management. All rooms are stored returned by the server are accessible through the object instance:
+The :class:`.RoomManager` is responsible for :class:`.Room` object storage and management. All rooms
+are stored returned by the server are accessible through the object instance:
 
 .. code-block:: python
 
@@ -261,7 +309,8 @@ The :class:`.RoomManager` is responsible for :class:`.Room` object storage and m
     print(f"Currently in {len(client.rooms.get_joined_rooms())} rooms")
 
 
-Public and private rooms can be joined using the name of the room or an instance of the room. The server will create the room if it does not exist:
+Public and private rooms can be joined using the name of the room or an instance of the room. The
+server will create the room if it does not exist:
 
 .. code-block:: python
 
@@ -300,7 +349,8 @@ To receive room messages listen to the :class:`.RoomMessageEvent`:
     client.events.register(RoomMessageEvent, room_message_listener)
 
 
-Several commands and events specific to private rooms are available. See the :mod:`aioslsk.commands` and :mod:`aioslsk.events` references
+Several commands and events specific to private rooms are available. See the :mod:`aioslsk.commands` and
+:mod:`aioslsk.events` references
 
 
 Private Messages
@@ -327,7 +377,9 @@ To receive private message listen for the :class:`.PrivateMessageEvent`:
 Sharing
 =======
 
-The client provides a mechanism for scanning and caching the files you want to share. Directories you wish to share can be :ref:`added and removed on the fly <shares_add_remove_scan>` or provided through the settings:
+The client provides a mechanism for scanning and caching the files you want to share. Directories
+you wish to share can be :ref:`added and removed on the fly <shares_add_remove_scan>` or provided
+through the settings:
 
 .. code-block:: python
 
@@ -364,7 +416,9 @@ The client provides a mechanism for scanning and caching the files you want to s
     )
 
 
-When providing a shares cache the client will automatically read and store the shared items based on what you configured. This example shows how to use the a cache that stores the files using Python's :py:mod:`shelve` module:
+When providing a shares cache the client will automatically read and store the shared items based
+on what you configured. This example shows how to use the a cache that stores the files using
+Python's :py:mod:`shelve` module:
 
 .. code-block:: python
 
@@ -405,7 +459,8 @@ When providing a shares cache the client will automatically read and store the s
 Adding / Removing / Scanning Directories
 ----------------------------------------
 
-It is possible to add, remove or update shared directories on the fly. Following example shows how to add, remove and scan individual or all directories:
+It is possible to add, remove or update shared directories on the fly. Following example shows how
+to add, remove and scan individual or all directories:
 
 .. code-block:: python
 
@@ -433,13 +488,18 @@ It is possible to add, remove or update shared directories on the fly. Following
     # Removing a shared directory
     client.shares.remove_shared_directory(shared_dir)
 
-When rescanning an individual or all directories newly found items will be added and items that are no longer found will be removed. Attributes will be scanned for the newly found files and files that have been modified.
+When rescanning an individual or all directories newly found items will be added and items that are
+no longer found will be removed. Attributes will be scanned for the newly found files and files that
+have been modified.
 
 
 Defining a custom executor for scanning
 ---------------------------------------
 
-By default the :py:mod:`asyncio` executor is used for scanning shares. You can play around with using different types of executors by using the `executor_factory` parameter when creating the client. The client will call the factory to create a new executor each time the client is started and will destroy it when :meth:`.SoulSeekClient.stop` is called.
+By default the :py:mod:`asyncio` executor is used for scanning shares. You can play around with
+using different types of executors by using the `executor_factory` parameter when creating the
+client. The client will call the factory to create a new executor each time the client is started
+and will destroy it when :meth:`.SoulSeekClient.stop` is called.
 
 Following example shows how to use a :py:class:`concurrent.futures.ProcessPoolExecutor`:
 
@@ -454,7 +514,8 @@ Following example shows how to use a :py:class:`concurrent.futures.ProcessPoolEx
             executor_factory=ProcessPoolExecutor
         )
 
-Another example using :py:class:`concurrent.futures.ThreadPoolExecutor` with a limited number of threads, in this case a maximum of 3 threads:
+Another example using :py:class:`concurrent.futures.ThreadPoolExecutor` with a limited number of
+threads, in this case a maximum of 3 threads:
 
 .. code-block:: python
 
@@ -474,7 +535,10 @@ Another example using :py:class:`concurrent.futures.ThreadPoolExecutor` with a l
 File naming
 -----------
 
-The :class:`.SharesManager` is also responsible for figuring out where downloads should be stored to and what to do with duplicate file names. By default the original filename will be used for the local file, when a file already exists a number will be added to name, for example: `my song.mp3` to `my song (1).mp3`. It is possible to implement your own naming strategies.
+The :class:`.SharesManager` is also responsible for figuring out where downloads should be stored to
+and what to do with duplicate file names. By default the original filename will be used for the
+local file, when a file already exists a number will be added to name, for example: ``my song.mp3``
+to ``my song (1).mp3``. It is possible to implement your own naming strategies.
 
 Example a strategy that places files in a directory containing the current date:
 
@@ -501,7 +565,9 @@ Example a strategy that places files in a directory containing the current date:
 User Management
 ===============
 
-The :class:`.UserManager` is responsible for :class:`.User` object storage and management. The library holds a weak reference to user objects and will update that object with incoming data, thus in order to keep a user a reference can be maintained for it.
+The :class:`.UserManager` is responsible for :class:`.User` object storage and management. The
+library holds a weak reference to user objects and will update that object with incoming data, thus
+in order to keep a user a reference can be maintained for it.
 
 .. code-block:: python
 
@@ -521,7 +587,8 @@ The :class:`.UserManager` is responsible for :class:`.User` object storage and m
     print(f"User {user.name} is sharing {user.shared_file_count} files")
 
 
-If necessary you can clear certain parameters for a user, the following code will clear the :attr:`.User.picture` and :attr:`.User.description` attributes:
+If necessary you can clear certain parameters for a user, the following code will clear the
+:attr:`.User.picture` and :attr:`.User.description` attributes:
 
 .. code-block:: python
 
@@ -540,27 +607,32 @@ User Tracking
 
 The server will send user updates in the following situations:
 
-1. A user has been added with the AddUser_ message
+1. A user has been added with the :ref:`AddUser` message
 
-    * Automatic user status / privileges updates
+   * Automatic user status / privileges updates
 
 2. A user is part of the same room you are in
 
-    * Automatic user status / privileges updates
-    * Automatic user shares updates (amount of files / directories shared)
+   * Automatic user status / privileges updates
+   * Automatic user shares updates (amount of files / directories shared)
 
-Tracking of a user using the AddUser_ message can be undone using the RemoveUser_ message. Whenever the server sends an update for a user an event will be emitted, the following events can be listened to:
+Tracking of a user using the :ref:`AddUser` message can be undone using the :ref:`RemoveUser`
+message. Whenever the server sends an update for a user an event will be emitted, the following
+events can be listened to:
 
 * :class:`.UserStatusUpdateEvent`
 * :class:`.UserStatsUpdateEvent`
 
-There are multiple situations where the library keeps track of a user, internally they are stored as flags:
+There are multiple situations where the library keeps track of a user, internally they are stored as
+flags:
 
 * Requested: User has requested to track a user
 * Friends: Friends will be automatically tracked (see users-friends_ section below)
 * Transfers: Users for which there are unfinished transfers will be tracked to make decisions on upload priority
 
-When the last tracking flag is removed the library will issue a RemoveUser_ message to the server and updates will no longer be received. Following example shows how to track/untrack a user and getting the tracking flags:
+When the last tracking flag is removed the library will issue a :ref:`RemoveUser` message to the
+server and updates will no longer be received. Following example shows how to track/untrack a user
+and getting the tracking flags:
 
 .. code-block:: python
 
@@ -579,7 +651,8 @@ When the last tracking flag is removed the library will issue a RemoveUser_ mess
     # Stop tracking a user
     client.users.untrack_user('interesting user')
 
-Sending the command does not necessarily mean the tracking of the user was successful, if the user we attempted to track does not exist then the tracking will fail. Events related to tracking:
+Sending the command does not necessarily mean the tracking of the user was successful, if the user
+we attempted to track does not exist then the tracking will fail. Events related to tracking:
 
 * :class:`.UserTrackingEvent`
 * :class:`.UserTrackingFailedEvent`
@@ -628,7 +701,9 @@ Adding a friend on the fly means adding it to friends set and requesting to trac
 Interests and Recommendations
 =============================
 
-Interests and hated interests are defined in the settings (``interests`` section) are automatically advertised to the server after logging on. Commands can be used to add or remove them while after being logged in:
+Interests and hated interests are defined in the settings (``interests`` section) are automatically
+advertised to the server after logging on. Commands can be used to add or remove them while after
+being logged in:
 
 .. code-block:: python
 
@@ -648,7 +723,8 @@ Interests and hated interests are defined in the settings (``interests`` section
     await client(RemoveHatedInterestCommand('unfunny jokes'))
 
 
-Recommendations can be requested and listened for using the commands and events. There are several commands and events, this example is for getting item recommendations:
+Recommendations can be requested and listened for using the commands and events. There are several
+commands and events, this example is for getting item recommendations:
 
 .. code-block:: python
 
@@ -667,7 +743,9 @@ Recommendations can be requested and listened for using the commands and events.
 Protocol Messages
 =================
 
-It is possible to send messages directly to the server or a peer instead of using the shorthand methods. For this the :attr:`.SoulSeekClient.network` parameter of the client can be used, example for sending the :class:`.GetUserStatus` message to the server:
+It is possible to send messages directly to the server or a peer instead of using the shorthand
+methods. For this the :attr:`.SoulSeekClient.network` parameter of the client can be used, example
+for sending the :class:`.GetUserStatus` message to the server:
 
 .. code-block:: python
 
@@ -681,7 +759,8 @@ It is possible to send messages directly to the server or a peer instead of usin
         GetUserStatus.Request("user two")
     )
 
-For peers it works the same way, except you need to provide the username as the first parameter and then the messages you want to send:
+For peers it works the same way, except you need to provide the username as the first parameter and
+then the messages you want to send:
 
 .. code-block:: python
 
@@ -695,4 +774,9 @@ For peers it works the same way, except you need to provide the username as the 
         PeerUserInfoRequest.Request()
     )
 
-Keep in mind that sending a messages to peers is more unreliable than sending to the server. The :meth:`.Network.send_peer_messages` method will raise an exception if a connection to the peer failed. Both :meth:`.Network.send_peer_messages` and :meth:`.Network.send_server_messages` have an parameter called `raise_on_error`, when set to `True` an exception will be raised otherwise the methods will return a list containing tuples containing the message and the result of the message attempted to send, `None` in case of success and an `Exception` object in case of failure.
+Keep in mind that sending a messages to peers is more unreliable than sending to the server. The
+:meth:`.Network.send_peer_messages` method will raise an exception if a connection to the peer
+failed. Both :meth:`.Network.send_peer_messages` and :meth:`.Network.send_server_messages` have a
+parameter called ``raise_on_error``, when set to ``True`` an exception will be raised otherwise the
+methods will return a list containing tuples containing the message and the result of the message
+attempted to send, ``None`` in case of success and an ``Exception`` object in case of failure.
