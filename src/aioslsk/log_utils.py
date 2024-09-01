@@ -1,6 +1,5 @@
-from collections.abc import Collection
 import logging
-from typing import List, Type, Union
+from typing import Collection, List, Type, Union
 from .exceptions import AioSlskException
 from .protocol.primitives import MessageDataclass
 from .protocol import messages

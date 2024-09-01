@@ -354,7 +354,6 @@ class MessageDataclass(ProtocolDataclass):
         message = super().serialize()
 
         if compress:
-            message_len_before = len(message)
             message = zlib.compress(message)
 
         message = self.MESSAGE_ID.serialize() + message

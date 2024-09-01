@@ -8,7 +8,6 @@ from typing import (
     Any,
     Callable,
     Coroutine,
-    Dict,
     List,
     Optional,
     TYPE_CHECKING,
@@ -173,7 +172,7 @@ class ListeningConnection(Connection):
 
         except OSError:
             await self.disconnect(CloseReason.CONNECT_FAILED)
-            raise ConnectionFailedError(f"failed to connect")
+            raise ConnectionFailedError(f"{self.hostname}:{self.port} : failed to connect")
 
         await self.set_state(ConnectionState.CONNECTED)
 
