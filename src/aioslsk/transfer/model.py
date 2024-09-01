@@ -24,7 +24,7 @@ class TransferDirection(Enum):
 @dataclass(frozen=True, eq=True)
 class TransferProgressSnapshot:
     """Represents the current progress of a transfer, used for reporting
-    progress back to the user through a :class:`aioslsk.events.TransferProgressEvent`
+    progress back to the user through a :class:`.TransferProgressEvent`
     """
     state: TransferState.State
     bytes_transfered: int
@@ -173,11 +173,14 @@ class Transfer:
 
     async def transition(self, state: TransferState):
         """Transitions the state of the transfer and notifies the
-        `state_listeners`. This is an internal method and should not be used
+        ``state_listeners``. This is an internal method and should not be used
         directly.
         """
         old_state = self.state
-        logger.debug(f"transitioning transfer state from {old_state.VALUE.name} to {state.VALUE.name}")
+        logger.debug(
+            "transitioning transfer state from %s to %s",
+            old_state.VALUE.name, state.VALUE.name
+        )
         self.state = state
 
         for listener in self.state_listeners:

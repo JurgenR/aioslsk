@@ -33,37 +33,40 @@ class UPNP:
             target=(SSDP_IP_V4, SSDP_PORT),
             timeout=timeout
         )
-        logger.debug(f"found {len(devices)} IGD devices")
+        logger.info("found %d IGD devices", len(devices))
         return devices
 
     async def _search_callback(self, devices: List[IgdDevice], headers):
         if headers['ST'] not in IgdDevice.DEVICE_TYPES:
             return
 
-        logger.info(f"found Internet Gateway Device : {headers!r}")
+        logger.info("found Internet Gateway Device : %r", headers)
         device = await self._factory.async_create_device(headers['LOCATION'])
 
         devices.append(IgdDevice(device, None))
 
     async def get_mapped_ports(self, device: IgdDevice) -> List[PortMappingEntry]:
         entry_count = await device.async_get_port_mapping_number_of_entries()
+
         if entry_count:
-            logger.debug(f"found {entry_count} mapped ports on device {device.name!r}")
+            logger.debug("found %d mapped ports on device %r", entry_count, device.name)
             return await self._get_mapped_ports_known(device, entry_count)
+
         else:
             return await self._get_mapped_ports_unknown(device)
 
     async def _get_mapped_ports_known(self, device: IgdDevice, count: int) -> List[PortMappingEntry]:
         entries = []
         for idx in range(count):
-            logger.debug(f"getting port map with index {idx} on device {device.name!r}")
+            logger.debug("getting port map with index %d on device %r", idx, device.name)
             try:
                 entry = await device.async_get_generic_port_mapping_entry(idx)
+
             except Exception as exc:
-                logger.debug(f"failed to get entry {idx} on device : {device.name!r}", exc_info=exc)
+                logger.debug("failed to get entry %d on device : %r", idx, device.name, exc_info=exc)
 
             else:
-                logger.debug(f"got entry for index {idx} on device {device.name!r} : {entry!r}")
+                logger.debug("got entry for index %d on device %r : %r", idx, device.name, entry)
                 if entry:
                     entries.append(entry)
 
@@ -76,26 +79,25 @@ class UPNP:
         entries = []
         idx = 0
         while True:
-            logger.debug(f"getting port map with index {idx} on device {device.name!r}")
+            logger.debug("getting port map with index %d on device %r", idx, device.name)
             try:
                 entry = await device.async_get_generic_port_mapping_entry(idx)
 
             except UpnpActionResponseError as exc:
                 # SpecifiedArrayIndexInvalid
                 if not (exc.status == 500 and exc.error_code == 713):
-                    logger.debug(f"failed to get entry {idx} on device : {device.name!r}", exc_info=exc)
+                    logger.debug("failed to get entry %d on device : %r", idx, device.name, exc_info=exc)
 
                 break
 
             except Exception as exc:
-
-                logger.debug(f"failed to get entry {idx} on device : {device.name!r}", exc_info=exc)
+                logger.debug("failed to get entry %d on device : %r", idx, device.name, exc_info=exc)
                 break
 
             else:
                 if entry is None:
                     break
-                logger.debug(f"got entry for index {idx} on device {device.name!r} : {entry!r}")
+                logger.debug("got entry for index %d on device %r : %r", idx, device.name, entry)
                 entries.append(entry)
                 idx += 1
 
@@ -104,6 +106,7 @@ class UPNP:
     async def map_port(
             self, device: IgdDevice, internal_ip: str, port: int,
             lease_duration: int = UPNP_DEFAULT_LEASE_DURATION):
+
         action = device._any_action(UPNP_MAPPING_SERVICES, "AddPortMapping")
         if not action:
             raise ValueError(f"device {device.name} has no 'AddPortMapping' service")

@@ -23,6 +23,13 @@ aioslsk.events
     :members:
 
 
+aioslsk.log_utils
+=================
+
+.. automodule:: aioslsk.log_utils
+    :members:
+
+
 aioslsk.naming
 ==============
 

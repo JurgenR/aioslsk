@@ -324,7 +324,7 @@ class TransferManager(BaseManager):
         except InvalidStateTransition:
             pass
         except Exception:
-            logger.exception(f"error aborting transfer before removal : {transfer}")
+            logger.exception("error aborting transfer before removal : %s", transfer)
         finally:
             self._transfers.remove(transfer)
             await self._event_bus.emit(TransferRemovedEvent(transfer))
@@ -577,10 +577,10 @@ class TransferManager(BaseManager):
     async def _add_transfer(self, transfer: Transfer) -> Transfer:
         for queued_transfer in self._transfers:
             if queued_transfer == transfer:
-                logger.info(f"skip adding transfer, already exists : {queued_transfer}")
+                logger.info("skip adding transfer, already exists : %s", queued_transfer)
                 return queued_transfer
 
-        logger.info(f"adding transfer : {transfer}")
+        logger.info("adding transfer : %s", transfer)
         transfer.state_listeners.append(self)
         self._transfers.append(transfer)
         await self._event_bus.emit(TransferAddedEvent(transfer))
@@ -612,9 +612,9 @@ class TransferManager(BaseManager):
 
     async def _queue_remotely(self, transfer: Transfer):
         """Remotely queue the given transfer. If the message was successfully
-        delivered the `remotely_queued` flag will be set for the transfer
+        delivered the ``remotely_queued`` flag will be set for the transfer
         """
-        logger.debug(f"attempting to queue transfer remotely : {transfer}")
+        logger.debug("attempting to queue transfer remotely : %s", transfer)
         try:
             await self._network.send_peer_messages(
                 transfer.username,
@@ -622,7 +622,7 @@ class TransferManager(BaseManager):
             )
 
         except (ConnectionWriteError, PeerConnectionError) as exc:
-            logger.debug(f"failed to queue transfer remotely : {transfer} : {exc!r}")
+            logger.debug("failed to queue transfer remotely : %s : %r", transfer, exc)
             async with transfer._state_lock:
                 transfer.increase_queue_attempts()
                 await transfer.state.queue()
@@ -636,7 +636,7 @@ class TransferManager(BaseManager):
         """Requests the place in queue for the given transfer. The method will
         return the value in case of success and return the value
 
-        :return: place in queue or `None` in case of error
+        :return: place in queue or ``None`` in case of error
         :raise RequestPlaceFailedError: when the request failed to send to the
             peer or waiting for a response timed out
         """
@@ -646,7 +646,7 @@ class TransferManager(BaseManager):
                 PeerPlaceInQueueRequest.Request(transfer.remote_path)
             )
         except ConnectionWriteError:
-            logger.info(f"failed to request place in queue of transfer : {transfer}")
+            logger.info("failed to request place in queue of transfer : %s", transfer)
             raise RequestPlaceFailedError("failed to request place in queue")
 
         try:
@@ -659,8 +659,10 @@ class TransferManager(BaseManager):
                     }
                 )
         except asyncio.TimeoutError:
-            logger.info(f"timeout receiving response to place in queue for transfer : {transfer}")
+            logger.warning(
+                "timeout receiving response to place in queue for transfer : %s", transfer)
             raise RequestPlaceFailedError("failed to request place in queue")
+
         else:
             transfer.place_in_queue = response.place
             return response.place
@@ -689,7 +691,9 @@ class TransferManager(BaseManager):
                 )
             )
         except ConnectionWriteError:
-            logger.warn(f"failed to send transfer reply for ticket {request.ticket} and transfer : {transfer}")
+            logger.warning(
+                "failed to send transfer reply for ticket %d and transfer : %s", request.ticket, transfer)
+
             async with transfer._state_lock:
                 await transfer.state.queue()
             return
@@ -716,7 +720,7 @@ class TransferManager(BaseManager):
             await file_connection.send_message(uint64(offset).serialize())
 
         except ConnectionWriteError:
-            logger.warning(f"failed to send offset: {transfer}")
+            logger.warning("failed to send offset : %d : %s", offset, transfer)
             async with transfer._state_lock:
                 if transfer.is_upload():
                     await transfer.state.fail()
@@ -738,7 +742,7 @@ class TransferManager(BaseManager):
         """Notifies the peer we are ready to upload the file for the given
         transfer
         """
-        logger.debug(f"initializing upload {transfer}")
+        logger.debug("initializing upload : %s", transfer)
         async with transfer._state_lock:
             await transfer.state.initialize()
 
@@ -756,7 +760,8 @@ class TransferManager(BaseManager):
             )
 
         except (ConnectionWriteError, PeerConnectionError) as exc:
-            logger.debug(f"failed to send request to upload : {transfer} : {exc!r}")
+            logger.debug("failed to send request to upload : %s : %r", transfer, exc)
+
             async with transfer._state_lock:
                 await transfer.state.queue()
             return
@@ -772,7 +777,7 @@ class TransferManager(BaseManager):
                 )
 
         except asyncio.TimeoutError:
-            logger.debug(f"timeout waiting for transfer reply : {transfer}")
+            logger.debug("timeout waiting for transfer reply : %s", transfer)
             async with transfer._state_lock:
                 await transfer.state.queue()
             return
@@ -791,7 +796,7 @@ class TransferManager(BaseManager):
             )
 
         except PeerConnectionError:
-            logger.info(f"failed to create peer connection for transfer : {transfer}")
+            logger.info("failed to create peer connection for transfer : %s", transfer)
             async with transfer._state_lock:
                 await transfer.state.queue()
             return
@@ -800,7 +805,7 @@ class TransferManager(BaseManager):
         try:
             await connection.send_message(uint32(ticket).serialize())
         except ConnectionWriteError:
-            logger.info(f"failed to send transfer ticket : {transfer}")
+            logger.info("failed to send transfer ticket : %d : %s", ticket, transfer)
             async with transfer._state_lock:
                 await transfer.state.queue()
             return
@@ -812,12 +817,12 @@ class TransferManager(BaseManager):
             offset = await connection.receive_transfer_offset()
         except ConnectionReadError:
             async with transfer._state_lock:
-                logger.info(f"failed to receive transfer offset : {transfer}")
+                logger.info("failed to receive transfer offset : %s", transfer)
                 await transfer.state.queue()
             return
 
         else:
-            logger.debug(f"received offset {offset} for transfer : {transfer}")
+            logger.debug("received offset for transfer : %d : %s", offset, transfer)
             transfer.set_offset(offset)
 
         await self._upload_file(transfer, connection)
@@ -830,9 +835,9 @@ class TransferManager(BaseManager):
 
     async def _upload_file(self, transfer: Transfer, connection: PeerConnection):
         """Uploads the transfer over the connection. This method will set the
-        appropriate states on the passed `transfer` and `connection` objects.
+        appropriate states on the passed ``transfer`` and ``connection`` objects
 
-        :param transfer: `Transfer` object
+        :param transfer: :class:`.Transfer` object
         :param connection: connection on which file should be sent
         """
         connection.set_connection_state(PeerConnectionState.TRANSFERRING)
@@ -852,15 +857,19 @@ class TransferManager(BaseManager):
                 )
 
         except OSError:
-            logger.exception(f"error opening local file : {transfer.local_path}")
+            logger.exception("error opening local file : %s", transfer.local_path)
+
             async with transfer._state_lock:
                 await transfer.state.fail(reason=Reasons.FILE_READ_ERROR)
+
             await connection.disconnect(CloseReason.REQUESTED)
 
         except ConnectionWriteError:
-            logger.exception(f"error writing to socket for transfer : {transfer}")
+            logger.warning("error writing to socket for transfer : %s", transfer)
+
             async with transfer._state_lock:
                 await transfer.state.fail()
+
             # Possible this needs to be put in a task or just queued, if the
             # peer went offline it's possible we are hogging the _current_task
             # for nothing (sending the peer message could time out)
@@ -869,6 +878,7 @@ class TransferManager(BaseManager):
                     transfer.username,
                     PeerUploadFailed.Request(transfer.remote_path)
                 )
+
             except PeerConnectionError:
                 logger.info("failed to send PeerUploadFailed message (possibly peer went offline)")
 
@@ -878,15 +888,18 @@ class TransferManager(BaseManager):
             raise
 
         except AioSlskException:
-            logger.exception(f"failed to upload transfer : {transfer}")
+            logger.exception("failed to upload transfer : %s", transfer)
             async with transfer._state_lock:
                 await transfer.state.fail(Reasons.FILE_NOT_SHARED)
+
             await connection.disconnect(CloseReason.REQUESTED)
+
             try:
                 await self._network.send_peer_messages(
                     transfer.username,
                     PeerUploadFailed.Request(transfer.remote_path)
                 )
+
             except PeerConnectionError:
                 logger.info("failed to send PeerUploadFailed message (possibly peer went offline)")
 
@@ -908,10 +921,11 @@ class TransferManager(BaseManager):
         try:
             await self._prepare_download_path(transfer)
         except OSError:
-            logger.exception(f"failed to create path {transfer.local_path}")
+            logger.exception("failed to create path : %s", transfer.local_path)
             await connection.disconnect(CloseReason.REQUESTED)
             async with transfer._state_lock:
                 await transfer.state.fail(reason=Reasons.FILE_READ_ERROR)
+
             return
 
         connection.set_connection_state(PeerConnectionState.TRANSFERRING)
@@ -935,20 +949,21 @@ class TransferManager(BaseManager):
                 )
 
         except OSError:
-            logger.exception(f"error opening local file : {transfer.local_path}")
+            logger.exception("error opening local file : %s", transfer.local_path)
             async with transfer._state_lock:
                 await transfer.state.fail(reason=Reasons.FILE_READ_ERROR)
+
             await connection.disconnect(CloseReason.REQUESTED)
 
-        except ConnectionReadError:
-            logger.exception(f"error reading from socket : {transfer!r}")
+        except ConnectionReadError as exc:
+            logger.warning("error reading from socket : %s", transfer, exc_info=exc)
             async with transfer._state_lock:
                 await transfer.state.incomplete()
 
         except asyncio.CancelledError:
             # Aborted or program shut down. The state does not need to be set
             # here as this usually occurs during a state transition (aborting)
-            logger.debug(f"requested to cancel transfer: {transfer}")
+            logger.debug("requested to cancel transfer: %s", transfer)
             await connection.disconnect(CloseReason.REQUESTED)
             raise
 
@@ -1015,11 +1030,13 @@ class TransferManager(BaseManager):
                 )
             )
             return
+
         elif transfer.state.VALUE == TransferState.QUEUED:
-            logger.warning(f"ignoring queue request for transfer that is already being processed : {transfer}")
+            logger.warning("ignoring queue request for transfer that is already being processed : %s", transfer)
             return
+
         elif transfer.is_processing():
-            logger.warning(f"ignoring queue request for transfer that is already being processed : {transfer}")
+            logger.warning("ignoring queue request for transfer that is already being processed : %s", transfer)
             return
 
         # Check if the shared file exists
@@ -1061,19 +1078,21 @@ class TransferManager(BaseManager):
             except (ConnectionReadError, asyncio.TimeoutError) as exc:
                 # Connection should automatically be closed
                 logger.warning(
-                    f"failed to receive transfer ticket on file connection : "
-                    f"{connection.hostname}:{connection.port}",
+                    "failed to receive transfer ticket on file connection : %s:%d",
+                    connection.hostname, connection.port,
                     exc_info=exc
                 )
                 return
 
             try:
                 self._file_connection_futures[ticket].set_result(connection)
+
             except KeyError:
-                logger.warning(f"did not find a task waiting for file connection with ticket : {ticket}")
+                logger.warning("did not find a task waiting for file connection with ticket : %d", ticket)
                 await connection.disconnect(CloseReason.REQUESTED)
+
             except asyncio.InvalidStateError:
-                logger.warning(f"file connection for ticket {ticket} was already fulfilled")
+                logger.warning("file connection for ticket {ticket} was already fulfilled : %d", ticket)
                 await connection.disconnect(CloseReason.REQUESTED)
 
     async def _on_session_initialized(self, event: SessionInitializedEvent):
@@ -1099,6 +1118,7 @@ class TransferManager(BaseManager):
                 message.filename,
                 TransferDirection(message.direction)
             )
+
         except ValueError:
             transfer = None
 
@@ -1127,7 +1147,7 @@ class TransferManager(BaseManager):
                 return
 
             if transfer is None:
-                # Got a request to upload, possibly without prior PeerTransferQueue
+                # Got a request to upload, without prior PeerTransferQueue
                 # message. Kindly put it in queue
                 transfer = Transfer(
                     connection.username,
@@ -1252,9 +1272,10 @@ class TransferManager(BaseManager):
                 TransferDirection.UPLOAD
             )
         except ValueError:
-            logger.error(
-                f"PeerPlaceInQueueRequest : could not find transfer (upload) for "
-                f"{filename} from {connection.username}"
+            logger.warning(
+                "PeerPlaceInQueueRequest : could not find transfer (upload) for %s from %s",
+                filename,
+                connection.username
             )
         else:
             place = self.get_place_in_queue(transfer)
@@ -1276,9 +1297,10 @@ class TransferManager(BaseManager):
                 TransferDirection.DOWNLOAD
             )
         except ValueError:
-            logger.error(
-                f"PeerPlaceInQueueReply : could not find transfer (download) for "
-                f"{message.filename} from {connection.username}"
+            logger.warning(
+                "PeerPlaceInQueueReply : could not find transfer (download) for %s from %s",
+                message.filename,
+                connection.username
             )
         else:
             transfer.place_in_queue = message.place
@@ -1301,9 +1323,10 @@ class TransferManager(BaseManager):
                 TransferDirection.DOWNLOAD
             )
         except ValueError:
-            logger.error(
-                f"PeerUploadFailed : could not find transfer (download) for "
-                f"{message.filename} from {connection.username}"
+            logger.warning(
+                "PeerUploadFailed : could not find transfer (download) for %s from %s",
+                message.filename,
+                connection.username
             )
         else:
             transfer.remotely_queued = False
@@ -1323,11 +1346,13 @@ class TransferManager(BaseManager):
         try:
             transfer = self.get_transfer(
                 connection.username, filename, TransferDirection.DOWNLOAD)
+
         except ValueError:
-            logger.error(
-                f"PeerTransferQueueFailed : could not find transfer for "
-                f"{filename} from {connection.username}"
+            logger.warning(
+                "PeerTransferQueueFailed : could not find transfer for %s from %s",
+                filename, connection.username
             )
+
         else:
             async with transfer._state_lock:
                 await transfer.state.fail(reason=reason)

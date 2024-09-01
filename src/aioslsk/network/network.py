@@ -266,7 +266,7 @@ class Network:
         connections.extend(self.peer_connections)
         connections.extend(conn for conn in self.listening_connections if conn)
 
-        logger.info(f"waiting for network disconnect : {len(connections)} connections")
+        logger.info("waiting for network disconnect : %d connections", len(connections))
         await asyncio.gather(
             *[conn.disconnect(CloseReason.REQUESTED) for conn in connections],
             return_exceptions=True
@@ -358,7 +358,7 @@ class Network:
                     continue
 
                 else:
-                    logger.info(f"will attempt to reconnect to server in {timeout} seconds")
+                    logger.info("will attempt to reconnect to server in %d seconds", timeout)
                     await asyncio.sleep(timeout)
                     try:
                         await self.connect_server()
@@ -389,7 +389,9 @@ class Network:
             await asyncio.sleep(10)
             count = len(self.peer_connections)
             logger.info(
-                f"currently {count} peer connections ({len(self._create_peer_connection_tasks)} tasks)")
+                "currently %d peer connections (%d tasks)",
+                count, len(self._create_peer_connection_tasks)
+            )
 
     async def start_upnp_job(self):
         if self._upnp_task is None:
@@ -433,7 +435,7 @@ class Network:
             devices = await self._upnp.search_igd_devices(
                 ip_address, timeout=self._settings.network.upnp.search_timeout
             )
-            logger.info(f"found {len(devices)} devices for UPnP port mapping")
+            logger.info("found %d devices for UPnP port mapping", len(devices))
             lease_expirations = []
 
             for device in devices:
@@ -442,24 +444,35 @@ class Network:
                     try:
                         mapping = filter_mapped_port(
                             device_mapped_ports, ip_address, port)
+
                     except ValueError:
                         try:
-                            logger.info(f"UPnP: mapping port {ip_address}:{port} on device {device.name}")
+                            logger.info(
+                                "UPnP: mapping port %s:%d on device %s",
+                                ip_address, port, device.name
+                            )
                             await self._upnp.map_port(
                                 device, ip_address, port,
                                 lease_duration=self._settings.network.upnp.lease_duration
                             )
+
                         except Exception as exc:
                             logger.warning(
-                                f"UPnP: failed to map port {ip_address}:{port} on device {device.name}",
+                                "UPnP: failed to map port %s:%d on device %s",
+                                ip_address, port, device.name,
                                 exc_info=exc
                             )
+
                         else:
-                            logger.info(f"UPnP: mapped port {ip_address}:{port} on device {device.name}")
+                            logger.info(
+                                "UPnP: mapped port %s:%d on device %s",
+                                ip_address, port, device.name
+                            )
 
                     except Exception as exc:
                         logger.warning(
-                            f"UPnP: failed to get port mapping {ip_address}:{port} on device {device.name}",
+                            "UPnP: failed to get port mapping %s:%d on device %s",
+                            ip_address, port, device.name,
                             exc_info=exc
                         )
                     else:
@@ -468,7 +481,7 @@ class Network:
 
             next_check = min(
                 lease_expirations + [self._settings.network.upnp.check_interval])
-            logger.debug(f"UPnP: rechecking port mapping in {next_check} seconds")
+            logger.info("UPnP: rechecking port mapping in %d seconds", next_check)
             await asyncio.sleep(next_check)
 
     def select_port(self, port, obfuscated_port) -> Tuple[int, bool]:
@@ -531,7 +544,9 @@ class Network:
 
         except NetworkError as exc:
             logger.debug(
-                f"direct connection ({typ}) to peer failed : {username} {ip}:{port} : {exc!r}")
+                "direct connection (%s) to peer failed : %s %s:%d : %r",
+                typ, username, ip, port, exc
+            )
 
             # Make indirect connection
             try:
@@ -540,8 +555,7 @@ class Network:
                 )
 
             except NetworkError as exc:
-                logger.debug(
-                    f"indirect connection to peer failed : {username} : {exc!r}")
+                logger.debug("indirect connection to peer failed : %s : %r", username, exc)
                 raise PeerConnectionError(
                     f"failed to connect to peer {username} ({typ=}, {ticket=})")
 
@@ -569,11 +583,11 @@ class Network:
         )
 
         if response.ip == '0.0.0.0':
-            logger.warning(f"GetPeerAddress : no address returned for username : {username}")
+            logger.warning("GetPeerAddress : no address returned for username : %s", username)
             raise PeerConnectionError(f"no address for user : {username}")
 
         elif not response.port and not response.obfuscated_port:
-            logger.warning(f"GetPeerAddress : no valid ports found for user : {username}")
+            logger.warning("GetPeerAddress : no valid ports found for user : %s", username)
             raise PeerConnectionError(f"no valid ports for user : {username}")
 
         return response.ip, response.port, response.obfuscated_port
@@ -598,7 +612,7 @@ class Network:
             self._expected_response_futures.remove(expected_response)
 
     def _remove_connection_future(self, ticket: int, connection_future: asyncio.Future):
-        logger.debug(f"removing expected incoming connection with {ticket=}")
+        logger.debug("removing expected incoming connection with ticket : %d", ticket)
         self._expected_connection_futures.pop(ticket)
 
     def create_server_response_future(
@@ -740,7 +754,7 @@ class Network:
         :class:`.PeerInit` message. This will be the first step in case we are
         the one initiating the connection
         """
-        logger.debug(f"attempting to connect to peer : {username!r} {ip}:{port}")
+        logger.debug("attempting to connect to peer : %r %s:%d", username, ip, port)
         connection = PeerConnection(
             ip, port, self,
             connection_type=typ,
@@ -1045,14 +1059,18 @@ class Network:
                 connection_future = self._expected_connection_futures[ticket]
             except KeyError:
                 logger.warning(
-                    f"{connection.hostname}:{connection.port} : unknown pierce firewall ticket : {ticket}")
+                    "%s:%d : unknown pierce firewall ticket : %d",
+                    connection.hostname, connection.port, ticket
+                )
                 await connection.disconnect(CloseReason.REQUESTED)
             else:
                 connection_future.set_result(connection)
 
         else:
             logger.warning(
-                f"{connection.hostname}:{connection.port} : unknown peer init message : {peer_init_message}")
+                "%s:%d : unknown peer init message : %s",
+                connection.hostname, connection.port, peer_init_message
+            )
             await connection.disconnect(CloseReason.REQUESTED)
 
     async def on_message_received(self, message: MessageDataclass, connection: DataConnection):
@@ -1082,11 +1100,11 @@ class Network:
         try:
             task.result()
         except asyncio.CancelledError:
-            logger.debug(f"cancelled ConnectToPeer request : {message}")
+            logger.debug("cancelled ConnectToPeer request : %d", message)
         except Exception as exc:
-            logger.warning(f"failed to fulfill ConnectToPeer request : {exc!r} : {message}")
+            logger.warning("failed to fulfill ConnectToPeer request : %s : %r", message, exc)
         else:
-            logger.info(f"successfully fulfilled ConnectToPeer request : {message}")
+            logger.info("successfully fulfilled ConnectToPeer request : %s", message)
         finally:
             self._create_peer_connection_tasks.remove(task)
 

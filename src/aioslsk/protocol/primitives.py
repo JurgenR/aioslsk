@@ -354,9 +354,7 @@ class MessageDataclass(ProtocolDataclass):
         message = super().serialize()
 
         if compress:
-            message_len_before = len(message)
             message = zlib.compress(message)
-            logger.debug(f"compressed {message_len_before} to {len(message)} bytes")
 
         message = self.MESSAGE_ID.serialize() + message
         return uint32(len(message)).serialize() + message
@@ -381,16 +379,16 @@ class MessageDataclass(ProtocolDataclass):
             raise ValueError(f"message id mismatch {message_id} != {cls.MESSAGE_ID}")
 
         if decompress:
-            message_len_before = len(message)
             message = zlib.decompress(message[pos:])
-            logger.debug(f"decompressed {message_len_before} to {len(message)} bytes")
-
             pos, obj = super().deserialize(0, message)
         else:
             pos, obj = super().deserialize(pos, message)
 
         if has_unparsed_bytes(pos, message):
-            logger.warning(f"message has {len(message[pos:])} unparsed bytes : {message!r}")
+            logger.warning(
+                "message has %d unparsed bytes : %r",
+                len(message[pos:]), message
+            )
 
         return obj
 

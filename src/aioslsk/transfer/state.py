@@ -17,12 +17,12 @@ async def _remove_local_file(transfer: 'Transfer'):
         return
 
     if transfer.local_path:
-        logger.info(f"removing file at {transfer.local_path}")
+        logger.info("removing file from filesystem : %s", transfer.local_path)
         try:
             if await asyncos.path.exists(transfer.local_path):
                 await asyncos.remove(transfer.local_path)
         except OSError:
-            logger.warning(f"failed to remove file during abort : {transfer.local_path}")
+            logger.warning("failed to remove file during abort : %s", transfer.local_path)
 
         transfer.local_path = None
 
@@ -81,43 +81,43 @@ class TransferState:
 
     async def fail(self, reason: Optional[str] = None) -> bool:
         logger.warning(
-            f"attempted to make undefined state transition from {self.VALUE.name} to {self.FAILED.name}")
+            "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.FAILED.name)
         return False
 
     async def abort(self) -> bool:
         logger.warning(
-            f"attempted to make undefined state transition from {self.VALUE.name} to {self.ABORTED.name}")
+            "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.ABORTED.name)
         return False
 
     async def queue(self, remotely: bool = False) -> bool:
         logger.warning(
-            f"attempted to make undefined state transition from {self.VALUE.name} to {self.QUEUED.name}")
+            "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.QUEUED.name)
         return False
 
     async def initialize(self) -> bool:
         logger.warning(
-            f"attempted to make undefined state transition from {self.VALUE.name} to {self.INITIALIZING.name}")
+            "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.INITIALIZING.name)
         return False
 
     async def complete(self) -> bool:
         logger.warning(
-            f"attempted to make undefined state transition from {self.VALUE.name} to {self.COMPLETE.name}")
+            "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.COMPLETE.name)
         return False
 
     async def incomplete(self) -> bool:
         logger.warning(
-            f"attempted to make undefined state transition from {self.VALUE.name} to {self.INCOMPLETE.name}")
+            "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.INCOMPLETE.name)
         return False
 
     async def start_transferring(self) -> bool:
         new_state = self.UPLOADING if self.transfer.is_upload() else self.DOWNLOADING
         logger.warning(
-            f"attempted to make undefined state transition from {self.VALUE.name} to {new_state.name}")
+            "attempted to make undefined state transition from %s to %s", self.VALUE.name, new_state.name)
         return False
 
     async def pause(self) -> bool:
         logger.warning(
-            f"attempted to make undefined state transition from {self.VALUE.name} to {self.PAUSED.name}")
+            "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.PAUSED.name)
         return False
 
     def __repr__(self) -> str:

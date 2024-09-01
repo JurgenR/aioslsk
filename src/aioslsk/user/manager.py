@@ -116,11 +116,11 @@ class UserManager(BaseManager):
         return self.get_user_object(self._session.user.name)
 
     def get_user_object(self, username: str) -> User:
-        """Gets a `User` object for given `username`, if the user is not stored
-        it will be created and stored
+        """Gets a :class:`.User` object for given ``username``, if the user is
+        not stored it will be created and stored
 
         :param username: Name of the user
-        :return: a `User` object
+        :return: a :class:`.User` object
         """
         if username not in self._users:
             user = User(

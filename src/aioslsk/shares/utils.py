@@ -75,6 +75,6 @@ def convert_items_to_file_data(shared_items: List[SharedItem], use_full_path=Tru
                 convert_item_to_file_data(shared_item, use_full_path=use_full_path)
             )
         except OSError:
-            logger.exception(f"failed to convert to result : {shared_item!r}")
+            logger.warning("failed to convert to result : %r", shared_item)
 
     return file_datas

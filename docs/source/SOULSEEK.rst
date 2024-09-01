@@ -1164,7 +1164,7 @@ Perform a search query to everyone on the network.
 
 
 Room Search
------------
+~~~~~~~~~~~
 
 Performs a search on every one in a single room:
 
@@ -1202,7 +1202,7 @@ Performs a search on every one in a single room:
 
 
 User Search
------------
+~~~~~~~~~~~
 
 Performs a search query on an individual user
 
@@ -1796,7 +1796,7 @@ Keep a ``counter`` (initially empty) to keep track of a ``score`` for each of th
 
 
 Examples
-````````
+++++++++
 
 Following examples are to illustrate how the algorithm works:
 

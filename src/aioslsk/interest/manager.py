@@ -1,5 +1,4 @@
 import asyncio
-import logging
 
 from ..base_manager import BaseManager
 from ..events import (
@@ -29,9 +28,6 @@ from ..network.connection import ServerConnection
 from ..network.network import Network
 from ..settings import Settings
 from ..user.manager import UserManager
-
-
-logger = logging.getLogger(__name__)
 
 
 class InterestManager(BaseManager):
@@ -81,6 +77,7 @@ class InterestManager(BaseManager):
     @on_message(GetRecommendations.Response)
     async def _on_get_recommendations(
             self, message: GetRecommendations.Response, connection: ServerConnection):
+
         await self._event_bus.emit(
             RecommendationsEvent(
                 recommendations=message.recommendations,
@@ -92,6 +89,7 @@ class InterestManager(BaseManager):
     @on_message(GetGlobalRecommendations.Response)
     async def _on_get_global_recommendations(
             self, message: GetGlobalRecommendations.Response, connection: ServerConnection):
+
         await self._event_bus.emit(
             GlobalRecommendationsEvent(
                 recommendations=message.recommendations,
@@ -103,6 +101,7 @@ class InterestManager(BaseManager):
     @on_message(GetItemRecommendations.Response)
     async def _on_get_item_recommendations(
             self, message: GetItemRecommendations.Response, connection: ServerConnection):
+
         await self._event_bus.emit(
             ItemRecommendationsEvent(
                 item=message.item,

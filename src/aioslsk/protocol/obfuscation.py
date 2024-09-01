@@ -12,7 +12,7 @@ def generate_key() -> bytes:
 
 
 def _rotate_key_orig(key: bytes, const: int = 31) -> bytes:  # pragma: no cover
-    """Rotate the `key` to the right by `const` bits
+    """Rotate the ``key`` to the right by ``const`` bits
 
     :param key: Key to rotate
     :param const: Amount of bits to rotate
@@ -28,7 +28,7 @@ def _rotate_key_orig(key: bytes, const: int = 31) -> bytes:  # pragma: no cover
 
 
 def rotate_key(key: bytes, rot_bits: int = 31) -> bytes:
-    """Rotate the `key` to the right by `const` bits
+    """Rotate the ``key`` to the right by ``const`` bits
 
     :param key: Key to rotate
     :param rot_bits: Amount of bits to rotate
@@ -40,7 +40,7 @@ def rotate_key(key: bytes, rot_bits: int = 31) -> bytes:
 
 
 def decode(data: bytes) -> bytes:
-    """De-obfuscate given `data`, the key should be the first 4 bytes of the
+    """De-obfuscate given ``data``, the key should be the first 4 bytes of the
     data
 
     :param data: Data to be de-obfuscated
@@ -66,8 +66,8 @@ def decode(data: bytes) -> bytes:
 
 
 def encode(data: bytes, key: Optional[bytes] = None) -> bytes:
-    """Obfuscate the given `data` with the provided `key`, if no key is given
-    it will be automatically generated
+    """Obfuscate the given ``data`` with the provided ``key``, if no key is
+    given it will be automatically generated
     """
     # I'm not sure about the endianness. When testing I just used a key which
     # was already converted to little endian. When generating a key the

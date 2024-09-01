@@ -178,7 +178,7 @@ class DistributedNetwork(BaseManager):
 
         :param peer: Peer that should become our parent
         """
-        logger.info(f"set parent : {peer}")
+        logger.info("set parent : %s", peer)
         self.parent = peer
 
         await asyncio.gather(
@@ -235,7 +235,7 @@ class DistributedNetwork(BaseManager):
                 await self._unset_parent()
 
     async def _unset_parent(self):
-        logger.debug(f"unset parent {self.parent!r}")
+        logger.info("unset parent : %s", self.parent)
 
         self.parent = None
 
@@ -258,7 +258,7 @@ class DistributedNetwork(BaseManager):
         server that we are looking for one
         """
         root, level = self._get_advertised_branch_values()
-        logger.info(f"notifying server of our parent : level={level} root={root}")
+        logger.info("notifying server of our parent : level=%d root=%s", level, root)
 
         search_for_parent = False if self.parent else True
 
@@ -285,15 +285,15 @@ class DistributedNetwork(BaseManager):
             return
 
         if not self._accept_children:
-            logger.debug(f"not accepting children, rejecting peer as child: {peer}")
+            logger.debug("not accepting children, rejecting peer as child : %s", peer)
             if peer.connection:  # Satisfy type checker
                 await peer.connection.disconnect(CloseReason.REQUESTED)
             return
 
         if len(self.children) >= self._max_children:
             logger.debug(
-                f"maximum amount of children reached ({len(self.children)} / {self._max_children}), "
-                f"rejecting peer as child: {peer}"
+                "maximum amount of children reached (%d / %d), rejecting peer as child : %s",
+                len(self.children), self._max_children, peer
             )
             if peer.connection:  # Satisfy type checker
                 await peer.connection.disconnect(CloseReason.REQUESTED)
@@ -314,17 +314,17 @@ class DistributedNetwork(BaseManager):
             await peer.connection.send_message(DistributedBranchRoot.Request(root))
 
         logger.debug(
-            f"added distributed connection as child "
-            f"({len(self.children)}/{self._max_children} children) : {peer!r}"
+            "added distributed connection as child (%d / %d children) : %s",
+            len(self.children), self._max_children, peer
         )
 
     def _remove_child(self, peer: DistributedPeer):
-        logger.info(f"removing child : {peer!r}")
+        logger.info("removing child : %r", peer)
         self.children.remove(peer)
 
         logger.debug(
-            f"removed distributed connection as child "
-            f"({len(self.children)}/{self._max_children} children) : {peer!r}"
+            "removed distributed connection as child (%d / %d children) : %s",
+            len(self.children), self._max_children, peer
         )
 
     def _potential_parent_task_callback(self, username: str, task: asyncio.Task):
@@ -335,11 +335,11 @@ class DistributedNetwork(BaseManager):
             task.result()
 
         except asyncio.CancelledError:
-            logger.debug(f"request for potential parent cancelled (username={username})")
+            logger.debug("request for potential parent cancelled (username=%s)", username)
         except Exception as exc:
-            logger.warning(f"request for potential parent failed : {exc!r} (username={username})")
+            logger.warning("request for potential parent failed : %r (username=%s)", exc, username)
         else:
-            logger.info(f"request for potential parent successful (username={username})")
+            logger.info("request for potential parent successful (username=%s)", username)
         finally:
             self._potential_parent_tasks.remove(task)
 
@@ -429,11 +429,11 @@ class DistributedNetwork(BaseManager):
     @on_message(DistributedBranchLevel.Request)
     async def _on_distributed_branch_level(
             self, message: DistributedBranchLevel.Request, connection: PeerConnection):
-        logger.info(f"branch level {message.level!r}: {connection!r}")
+        logger.info("branch level %r : %r", message.level, connection)
 
         peer = self.get_distributed_peer(connection)
         if not peer:
-            logger.warning(f"distributed peer object not found for connection: {connection} : {message}")
+            logger.warning("distributed peer object not found for connection: %s : %s", connection, message)
             return
 
         peer.branch_level = message.level
@@ -446,7 +446,7 @@ class DistributedNetwork(BaseManager):
         if peer != self.parent:
             await self._check_if_new_parent(peer)
         else:
-            logger.info(f"parent advertised new branch level : {message.level}")
+            logger.info("parent advertised new branch level : %d", message.level)
             await self._notify_children_of_branch_values()
 
     @on_message(DistributedBranchRoot.Request)
@@ -456,7 +456,7 @@ class DistributedNetwork(BaseManager):
 
         peer = self.get_distributed_peer(connection)
         if not peer:
-            logger.warning(f"distributed peer object not found for connection: {connection} : {message}")
+            logger.warning("distributed peer object not found for connection: %s : %s", connection, message)
             return
 
         # When we receive branch level 0 we automatically assume the root is the
@@ -469,15 +469,16 @@ class DistributedNetwork(BaseManager):
         if peer != self.parent:
             await self._check_if_new_parent(peer)
         else:
-            logger.info(f"parent advertised new branch root : {message.username}")
+            logger.info("parent advertised new branch root : %s", message.username)
             await self._notify_children_of_branch_values()
 
     @on_message(DistributedChildDepth.Request)
     async def _on_distributed_child_depth(
             self, message: DistributedChildDepth.Request, connection: PeerConnection):
+
         peer = self.get_distributed_peer(connection)
         if not peer:
-            logger.warning(f"distributed peer object not found for connection: {connection} : {message}")
+            logger.warning("distributed peer object not found for connection: %s : %s", connection, message)
             return
 
         # Not essential but might be needed for backward compatibility
@@ -498,8 +499,9 @@ class DistributedNetwork(BaseManager):
     @on_message(DistributedServerSearchRequest.Request)
     async def _on_distributed_server_search_request(
             self, message: DistributedServerSearchRequest.Request, connection: PeerConnection):
+
         if message.distributed_code != DistributedSearchRequest.Request.MESSAGE_ID:
-            logger.warning(f"no handling for server search request with code {message.distributed_code}")
+            logger.warning("no handling for server search request with code : %d", message.distributed_code)
             return
 
         dmessage = DistributedSearchRequest.Request(
@@ -516,15 +518,13 @@ class DistributedNetwork(BaseManager):
             speed = message.user_stats.avg_speed
 
             if self.parent_min_speed is None:
-                logger.debug(
-                    f"using default parent_min_speed: {DEFAULT_PARENT_MIN_SPEED}")
+                logger.debug("using default parent_min_speed: %d", DEFAULT_PARENT_MIN_SPEED)
                 parent_min_speed = DEFAULT_PARENT_MIN_SPEED
             else:
                 parent_min_speed = self.parent_min_speed
 
             if self.parent_speed_ratio is None:
-                logger.debug(
-                    f"using default parent_speed_ratio: {DEFAULT_PARENT_SPEED_RATIO}")
+                logger.debug("using default parent_speed_ratio: %d", DEFAULT_PARENT_SPEED_RATIO)
                 parent_speed_ratio = DEFAULT_PARENT_SPEED_RATIO
             else:
                 parent_speed_ratio = self.parent_speed_ratio
@@ -538,16 +538,16 @@ class DistributedNetwork(BaseManager):
                 self._max_children = self._calculate_max_children(speed, parent_speed_ratio)
 
             logger.debug(
-                f"adjusting distributed children values: "
-                f"accept={self._accept_children}, max_children={self._max_children}"
+                "adjusting distributed child values: accept=%d, max_children=%d",
+                self._accept_children, self._max_children
             )
             await self._network.send_server_messages(
                 AcceptChildren.Request(self._accept_children)
             )
 
     def _has_parent_speed_values(self) -> bool:
-        """Returns `True` if `ParentMinSpeed` and `ParentSpeedRatio` has been
-        received from the server
+        """Returns ``True`` if :class:`.ParentMinSpeed` and
+        :class:`.ParentSpeedRatio` have been received from the server
         """
         return self.parent_min_speed is not None and self.parent_speed_ratio is not None
 
@@ -607,7 +607,7 @@ class DistributedNetwork(BaseManager):
                 # occur
                 if not peer:
                     logger.warning(
-                        f"connection was not registered with the distributed network : {connection!r}")
+                        "connection was not registered with the distributed network : %r", connection)
                     return
 
                 # Check if it was the parent or child that was disconnected

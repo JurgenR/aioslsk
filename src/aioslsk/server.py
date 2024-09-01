@@ -46,7 +46,7 @@ class ServerManager(BaseManager):
             try:
                 await self.send_ping()
             except Exception as exc:
-                logger.warning(f"failed to ping server. exception={exc!r}")
+                logger.warning("failed to ping server. exception=%r", exc)
 
     def _cancel_ping_task(self):
         if self._ping_task is not None:

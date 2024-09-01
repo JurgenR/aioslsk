@@ -152,8 +152,12 @@ Search requests are stored internally and should be removed when no longer neede
     # Remove a search request
     client.searches.remove_request(request)
 
-After removal there will be no more :class:`SearchResultEvent`s emitted for the removed request
+After removal there will be no more :class:`SearchResultEvent` events emitted for the removed
+request
 
+
+Receiving Results
+-----------------
 
 Listen to the :class:`.SearchResultEvent` to receive search results:
 
@@ -780,3 +784,106 @@ failed. Both :meth:`.Network.send_peer_messages` and :meth:`.Network.send_server
 parameter called ``raise_on_error``, when set to ``True`` an exception will be raised otherwise the
 methods will return a list containing tuples containing the message and the result of the message
 attempted to send, ``None`` in case of success and an ``Exception`` object in case of failure.
+
+
+Logging
+=======
+
+The library makes use of the standard Python :py:mod:`logging` module. Generally the log levels
+used have the following meaning:
+
+* ``ERROR`` : Indicates an unexpected error has occurred, this might indicate: there is an error in
+  the library itself, another peer sent us some data that could not be processed or there is some
+  invalid configuration
+* ``WARNING`` : An error has occurred but the library can recover from it. These messages are
+  expected behaviour and can usually be safely ignored. A warning will be logged for example if no
+  connection to a peer could be made
+* ``INFO`` : High level informational messages such as when an action has
+  occurred
+* ``DEBUG`` : Messages which are useful for debugging the library itself. When this log level is
+  enabled all protocol messages will be logged
+
+
+Message Fitering
+----------------
+
+When enabling the ``DEBUG`` level all protocol messages will be logged, the library provides a way
+to filter out certain messages with premade filters defined in the :mod:`aioslsk.log_utils` module,
+these filters can be installed on the logging loggers / handlers using both Python or a logging
+configuration. The example below filters out all incoming room messages:
+
+.. code-block:: python
+
+    import logging
+    from aioslsk.log_utils import MessageFilter
+    from aioslsk.protocol.messages import RoomChatMessage
+
+    logger = logging.getLogger('aioslsk.network.connection')
+    room_filter = MessageFilter([RoomChatMessage.Response])
+    logger.addFilter(room_filter)
+
+The equivelant of this in a logging config file (JSON):
+
+.. code-block:: json
+
+    {
+        "filters": {
+            "filter_search": {
+                "()": "aioslsk.log_utils.MessageFilter",
+                "message_types": [
+                    "RoomChatMessage.Response"
+                ]
+            }
+        },
+        "loggers": {
+            "aioslsk": {
+                "level": "DEBUG",
+                "handlers": [
+                    "file_handler"
+                ],
+                "propagate": false
+            },
+            "aioslsk.network.connection": {
+                "level": "DEBUG",
+                "handlers": [
+                    "file_handler"
+                ],
+                "filters": ["filter_search"],
+                "propagate": false
+            }
+        }
+    }
+
+A common use case is to filter out distributed search messages, a specific filter is available for
+this case: :class:`aioslsk.log_utils.DistributedSearchMessageFilter` :
+
+.. code-block:: json
+
+    {
+        "filters": {
+            "filter_search": {
+                "()": "aioslsk.log_utils.DistributedSearchMessageFilter"
+            }
+        }
+    }
+
+
+.. note::
+
+    A filter can be applied to a logger and on a handler. When using the logger method the filters
+    should be applied to the logger of the :mod:`aioslsk.network.connection` module, applying it to
+    the root ``aioslsk`` logger will not work as filters do not get propagated to child loggers
+
+
+Truncating Messages
+-------------------
+
+At the ``DEBUG`` level all incoming and outgoing messages will be outputted to the logging handler.
+Messages related to file listings such as search results, peer shares responses, directory listings
+can become very long. If you would still like to use this log level but want to truncate the
+messages you can modify the output formatting. Here is an example of a formatting string that
+truncates messages to 1000 characters:
+
+::
+
+    [%(asctime)s][%(levelname)-8s][%(module)s]: %(message).1000s

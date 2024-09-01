@@ -142,8 +142,12 @@ class EventBus:
                         await listener(event)
                     else:
                         listener(event)
+
                 except Exception:
-                    logger.exception(f"exception notifying listener {listener!r} of event {event!r}")
+                    logger.exception(
+                        "exception notifying listener %r of event %r",
+                        listener, event
+                    )
 
 
 # Public events

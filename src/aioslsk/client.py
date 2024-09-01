@@ -227,13 +227,14 @@ class SoulSeekClient:
     async def __call__(
             self, command: BaseCommand[RC, Optional[RT]], response: bool = False,
             timeout: float = DEFAULT_COMMAND_TIMEOUT) -> Optional[RT]:
+
         return await self.execute(command, response=response, timeout=timeout)
 
     async def execute(
             self, command: BaseCommand[RC, Optional[RT]], response: bool = False,
             timeout: float = DEFAULT_COMMAND_TIMEOUT) -> Optional[RT]:
-        """Execute a `BaseCommand`, see the `commands.py` module for a list of
-        possible commands.
+        """Execute a :class:`BaseCommand`, see the :mod:`aioslsk.commands`
+        module for a list of possible commands.
 
         Waiting for a response is optional; the protocol does not always send
         error messages in case of failure. In these cases this method will
@@ -258,8 +259,8 @@ class SoulSeekClient:
 
         :param command: Command class to execute
         :param response: Whether to wait for the response or simply send
-            (default: `False`)
-        :param timeout: Timeout waiting for response (default: `10`)
+            (default: ``False``)
+        :param timeout: Timeout waiting for response (default: ``10``)
         :raise InvalidSessionError: When no logon has been performed
         :return: Optional response depending on how the command was configured
         """

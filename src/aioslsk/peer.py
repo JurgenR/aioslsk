@@ -38,6 +38,7 @@ class PeerManager(BaseManager):
             user_manager: UserManager,
             shares_manager: SharesManager, upload_info_provider: UploadInfoProvider,
             network: Network):
+
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._network: Network = network
@@ -80,7 +81,9 @@ class PeerManager(BaseManager):
             return
 
         logger.info(
-            f"PeerSharesReply : from username {connection.username}, got {len(message.directories)} directories")
+            "PeerSharesReply : from username %s, got %d directories",
+            connection.username, len(message.directories)
+        )
 
         user = self._user_manager.get_user_object(connection.username)
 

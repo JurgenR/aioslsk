@@ -45,8 +45,8 @@ class SharedDirectory:
         return '@@' + self.alias
 
     def get_item_by_remote_path(self, remote_path: str) -> 'SharedItem':
-        """Returns the `SharedItem` instance belonging to the passed
-        `remote_path`
+        """Returns the :class:`.SharedItem` instance belonging to the passed
+        ``remote_path``
 
         :raise FileNotFoundError: when the item cannot be found in the set of
             `items`
