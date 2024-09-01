@@ -429,7 +429,7 @@ class DistributedNetwork(BaseManager):
     @on_message(DistributedBranchLevel.Request)
     async def _on_distributed_branch_level(
             self, message: DistributedBranchLevel.Request, connection: PeerConnection):
-        logger.info(f"branch level {message.level!r}: {connection!r}")
+        logger.info("branch level %r : %r", message.level, connection)
 
         peer = self.get_distributed_peer(connection)
         if not peer:
@@ -446,7 +446,7 @@ class DistributedNetwork(BaseManager):
         if peer != self.parent:
             await self._check_if_new_parent(peer)
         else:
-            logger.info(f"parent advertised new branch level : {message.level}")
+            logger.info("parent advertised new branch level : %d", message.level)
             await self._notify_children_of_branch_values()
 
     @on_message(DistributedBranchRoot.Request)
@@ -469,7 +469,7 @@ class DistributedNetwork(BaseManager):
         if peer != self.parent:
             await self._check_if_new_parent(peer)
         else:
-            logger.info(f"parent advertised new branch root : {message.username}")
+            logger.info("parent advertised new branch root : %s", message.username)
             await self._notify_children_of_branch_values()
 
     @on_message(DistributedChildDepth.Request)

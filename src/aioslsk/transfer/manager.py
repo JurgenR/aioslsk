@@ -659,8 +659,10 @@ class TransferManager(BaseManager):
                     }
                 )
         except asyncio.TimeoutError:
-            logger.info("timeout receiving response to place in queue for transfer : %s", transfer)
+            logger.warning(
+                "timeout receiving response to place in queue for transfer : %s", transfer)
             raise RequestPlaceFailedError("failed to request place in queue")
+
         else:
             transfer.place_in_queue = response.place
             return response.place
@@ -835,7 +837,7 @@ class TransferManager(BaseManager):
         """Uploads the transfer over the connection. This method will set the
         appropriate states on the passed ``transfer`` and ``connection`` objects
 
-        :param transfer: :class:`Transfer` object
+        :param transfer: :class:`.Transfer` object
         :param connection: connection on which file should be sent
         """
         connection.set_connection_state(PeerConnectionState.TRANSFERRING)
@@ -863,7 +865,7 @@ class TransferManager(BaseManager):
             await connection.disconnect(CloseReason.REQUESTED)
 
         except ConnectionWriteError:
-            logger.exception("error writing to socket for transfer : %s", transfer)
+            logger.warning("error writing to socket for transfer : %s", transfer)
 
             async with transfer._state_lock:
                 await transfer.state.fail()
@@ -876,6 +878,7 @@ class TransferManager(BaseManager):
                     transfer.username,
                     PeerUploadFailed.Request(transfer.remote_path)
                 )
+
             except PeerConnectionError:
                 logger.info("failed to send PeerUploadFailed message (possibly peer went offline)")
 
@@ -888,12 +891,15 @@ class TransferManager(BaseManager):
             logger.exception("failed to upload transfer : %s", transfer)
             async with transfer._state_lock:
                 await transfer.state.fail(Reasons.FILE_NOT_SHARED)
+
             await connection.disconnect(CloseReason.REQUESTED)
+
             try:
                 await self._network.send_peer_messages(
                     transfer.username,
                     PeerUploadFailed.Request(transfer.remote_path)
                 )
+
             except PeerConnectionError:
                 logger.info("failed to send PeerUploadFailed message (possibly peer went offline)")
 
@@ -949,8 +955,8 @@ class TransferManager(BaseManager):
 
             await connection.disconnect(CloseReason.REQUESTED)
 
-        except ConnectionReadError:
-            logger.exception("error reading from socket : %s", transfer)
+        except ConnectionReadError as exc:
+            logger.warning("error reading from socket : %s", transfer, exc_info=exc)
             async with transfer._state_lock:
                 await transfer.state.incomplete()
 
@@ -1024,9 +1030,11 @@ class TransferManager(BaseManager):
                 )
             )
             return
+
         elif transfer.state.VALUE == TransferState.QUEUED:
             logger.warning("ignoring queue request for transfer that is already being processed : %s", transfer)
             return
+
         elif transfer.is_processing():
             logger.warning("ignoring queue request for transfer that is already being processed : %s", transfer)
             return
@@ -1139,7 +1147,7 @@ class TransferManager(BaseManager):
                 return
 
             if transfer is None:
-                # Got a request to upload, possibly without prior PeerTransferQueue
+                # Got a request to upload, without prior PeerTransferQueue
                 # message. Kindly put it in queue
                 transfer = Transfer(
                     connection.username,
@@ -1264,7 +1272,7 @@ class TransferManager(BaseManager):
                 TransferDirection.UPLOAD
             )
         except ValueError:
-            logger.error(
+            logger.warning(
                 "PeerPlaceInQueueRequest : could not find transfer (upload) for %s from %s",
                 filename,
                 connection.username
@@ -1289,7 +1297,7 @@ class TransferManager(BaseManager):
                 TransferDirection.DOWNLOAD
             )
         except ValueError:
-            logger.error(
+            logger.warning(
                 "PeerPlaceInQueueReply : could not find transfer (download) for %s from %s",
                 message.filename,
                 connection.username
@@ -1315,7 +1323,7 @@ class TransferManager(BaseManager):
                 TransferDirection.DOWNLOAD
             )
         except ValueError:
-            logger.error(
+            logger.warning(
                 "PeerUploadFailed : could not find transfer (download) for %s from %s",
                 message.filename,
                 connection.username
@@ -1338,11 +1346,13 @@ class TransferManager(BaseManager):
         try:
             transfer = self.get_transfer(
                 connection.username, filename, TransferDirection.DOWNLOAD)
+
         except ValueError:
-            logger.error(
+            logger.warning(
                 "PeerTransferQueueFailed : could not find transfer for %s from %s",
                 filename, connection.username
             )
+
         else:
             async with transfer._state_lock:
                 await transfer.state.fail(reason=reason)

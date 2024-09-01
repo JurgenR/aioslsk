@@ -517,6 +517,7 @@ class SharesManager(BaseManager):
             )
         except Exception:
             logger.exception("exception scanning directory : %r", shared_directory)
+
         else:
             logger.debug("scan found %d files for directory : %r", len(shared_items), shared_directory)
 

@@ -17,7 +17,7 @@ async def _remove_local_file(transfer: 'Transfer'):
         return
 
     if transfer.local_path:
-        logger.info("removing file : %s", transfer.local_path)
+        logger.info("removing file from filesystem : %s", transfer.local_path)
         try:
             if await asyncos.path.exists(transfer.local_path):
                 await asyncos.remove(transfer.local_path)
