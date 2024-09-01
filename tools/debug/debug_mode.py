@@ -8,7 +8,7 @@ To use:
 1. Create a settings.json file with the desired settings under tools/debug/
 2. Run `poetry run python -m tools.debug.debug_mode
 """
-from aioslsk.settings import CredentialsSettings, Settings
+from aioslsk.settings import Settings
 from aioslsk.client import SoulSeekClient
 from aioslsk import commands as cmds
 from aioslsk.transfer.cache import TransferShelveCache
@@ -38,59 +38,6 @@ logger = logging.getLogger(__name__)
 
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
-
-
-def make_logging_config(directory: str):
-    return {
-        'version': 1,
-        'formatters': {
-            'simple': {
-                'format': '[%(asctime)s][%(levelname)-8s][%(module)s][%(thread)d]: %(message)s',
-                'connection': '[%(asctime)s][%(levelname)-8s][%(module)s][%(thread)d]: %(message)s'
-            }
-        },
-        'handlers': {
-            'console': {
-                'class': 'logging.StreamHandler',
-                'level': 'DEBUG',
-                'formatter': 'simple',
-                'stream': 'ext://sys.stderr'
-            },
-            'debug_file_handler': {
-                'class': 'logging.handlers.RotatingFileHandler',
-                'level': 'DEBUG',
-                'formatter': 'simple',
-                'filename': os.path.join(directory, 'slsk.log'),
-                'maxBytes': 10485760,
-                'backupCount': 20,
-                'encoding': 'utf8'
-            }
-        },
-        'loggers': {
-            'aioslsk': {
-                'level': 'DEBUG',
-                'handlers': [
-                    # 'console',
-                    'debug_file_handler'
-                ],
-                'propagate': False
-            },
-            'asyncio': {
-                'level': 'DEBUG',
-                'handlers': [
-                    # 'console',
-                    'debug_file_handler'
-                ],
-                'propagate': False
-            }
-        },
-        'root': {
-            'level': 'DEBUG',
-            'handlers': [
-                'debug_file_handler'
-            ]
-        }
-    }
 
 
 class AsyncIOInteractiveConsole(code.InteractiveConsole):
@@ -174,7 +121,9 @@ class REPLThread(threading.Thread):
 
 if __name__ == '__main__':
     DEFAULT_SETTINGS_FILE = os.path.join(SCRIPT_DIR, 'settings.json')
-    DEFAULT_LOG_CONFIG_FILE = os.path.join(SCRIPT_DIR, 'logging_config.json')
+    # DEFAULT_LOG_CONFIG_FILE = os.path.join(SCRIPT_DIR, 'config', 'log_full.json')
+    DEFAULT_CONFIG_DIR_PATH = os.path.join(SCRIPT_DIR, 'config')
+    LOG_DIR_PATH = os.path.join(SCRIPT_DIR, 'logs')
 
     import argparse
     parser = argparse.ArgumentParser()
@@ -188,24 +137,47 @@ if __name__ == '__main__':
         default=DEFAULT_SETTINGS_FILE
     )
     parser.add_argument(
-        '--log-config',
-        help="Optional path to a logging configuration file. This must be a JSON file",
-        default=DEFAULT_LOG_CONFIG_FILE
+        '--log-config-preset',
+        help="Use one of the provided logging files from the config/ directory",
+        choices=('log_full', 'log_filter_search'),
+        default='log_full'
     )
     parser.add_argument(
-        '--log-auto-path'
+        '--log-config',
+        help=(
+            "Optional path to a JSON logging configuration file. If not set uses "
+            "the --log-config-preset option"
+        )
     )
+
     args = parser.parse_args()
 
 
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    # Load settings and start the client
-    LOG_DIR = os.path.join(SCRIPT_DIR, 'logs', datetime.datetime.now().strftime('%Y%m%d_%H%M%S'))
-    os.makedirs(LOG_DIR, exist_ok=True)
-    logging.config.dictConfig(make_logging_config(LOG_DIR))
+    # Load logging configuration
+    is_custom_config = bool(args.log_config)
+    if is_custom_config:
+        log_config_path = args.log_config
+    else:
+        log_config_path = os.path.join(DEFAULT_CONFIG_DIR_PATH, f'{args.log_config_preset}.json')
 
+    with open(log_config_path, 'r') as fh:
+        log_config = json.load(fh)
+
+    if not is_custom_config:
+        session_dir = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        log_dir = os.path.join(LOG_DIR_PATH, session_dir)
+        os.makedirs(log_dir, exist_ok=True)
+
+        filename = log_config['handlers']['file_handler']['filename']
+        log_config['handlers']['file_handler']['filename'] = os.path.join(log_dir, filename)
+
+    logging.config.dictConfig(log_config)
+
+
+    # Load settings and start the client
     with open(args.settings, 'r') as fh:
         settings_dct = json.load(fh)
 

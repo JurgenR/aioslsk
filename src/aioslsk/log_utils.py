@@ -36,7 +36,7 @@ class MessageFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         if message_type := getattr(record, 'message_type', None):
-            return message_type in self.message_types
+            return message_type not in self.message_types
 
         return True
 

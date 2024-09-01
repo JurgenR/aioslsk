@@ -809,8 +809,8 @@ Message Fitering
 
 When enabling the ``DEBUG`` level all protocol messages will be logged, the library provides a way
 to filter out certain messages with premade filters defined in the :mod:`aioslsk.log_utils` module,
-these filters can be installed on the logger using both Python or a logging configuration. The
-example below filters out all incoming room messages:
+these filters can be installed on the logging loggers / handlers using both Python or a logging
+configuration. The example below filters out all incoming room messages:
 
 .. code-block:: python
 
@@ -818,7 +818,7 @@ example below filters out all incoming room messages:
     from aioslsk.log_utils import MessageFilter
     from aioslsk.protocol.messages import RoomChatMessage
 
-    logger = logging.getLogger('aioslsk')
+    logger = logging.getLogger('aioslsk.network.connection')
     room_filter = MessageFilter([RoomChatMessage.Response])
     logger.addFilter(room_filter)
 
@@ -841,14 +841,38 @@ The equivelant of this in a logging config file (JSON):
                 "handlers": [
                     "file_handler"
                 ],
-                "propagate": false,
-                "filters": ["filter_search"]
+                "propagate": false
+            },
+            "aioslsk.network.connection": {
+                "level": "DEBUG",
+                "handlers": [
+                    "file_handler"
+                ],
+                "filters": ["filter_search"],
+                "propagate": false
             }
         }
     }
 
 A common use case is to filter out distributed search messages, a specific filter is available for
-this case: :class:`aioslsk.log_utils.DistributedSearchMessageFilter`
+this case: :class:`aioslsk.log_utils.DistributedSearchMessageFilter` :
+
+.. code-block:: json
+
+    {
+        "filters": {
+            "filter_search": {
+                "()": "aioslsk.log_utils.DistributedSearchMessageFilter"
+            }
+        }
+    }
+
+
+.. note::
+
+    A filter can be applied to a logger and on a handler. When using the logger method the filters
+    should be applied to the logger of the :mod:`aioslsk.network.connection` module, applying it to
+    the root ``aioslsk`` logger will not work as filters do not get propagated to child loggers
 
 
 Truncating Messages
@@ -862,4 +886,4 @@ truncates messages to 1000 characters:
 
 ::
 
-    [%(asctime)s][%(levelname)-8s][%(module)s]: %(message).20s
+    [%(asctime)s][%(levelname)-8s][%(module)s]: %(message).1000s

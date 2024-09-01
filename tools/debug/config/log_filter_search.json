@@ -1,0 +1,67 @@
+{
+    "version": 1,
+    "formatters": {
+        "simple": {
+            "format": "[%(asctime)s][%(levelname)-8s][%(module)s]: %(message)s"
+        }
+    },
+    "filters": {
+        "filter_search": {
+            "()": "aioslsk.log_utils.MessageFilter",
+            "message_types": [
+                "ServerSearchRequest.Response",
+                "DistributedSearchRequest.Request",
+                "DistributedServerSearchRequest.Request"
+            ]
+        }
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "level": "DEBUG",
+            "formatter": "simple",
+            "stream": "ext://sys.stderr"
+        },
+        "file_handler": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "DEBUG",
+            "formatter": "simple",
+            "filename": "slsk.log",
+            "maxBytes": 10485760,
+            "backupCount": 20,
+            "encoding": "utf8"
+        }
+    },
+    "loggers": {
+        "aioslsk": {
+            "level": "DEBUG",
+            "handlers": [
+                "file_handler"
+            ],
+            "propagate": false
+        },
+        "aioslsk.network.connection": {
+            "level": "DEBUG",
+            "handlers": [
+                "file_handler"
+            ],
+            "filters": [
+                "filter_search"
+            ],
+            "propagate": false
+        },
+        "asyncio": {
+            "level": "DEBUG",
+            "handlers": [
+                "file_handler"
+            ],
+            "propagate": false
+        }
+    },
+    "root": {
+        "level": "DEBUG",
+        "handlers": [
+            "file_handler"
+        ]
+    }
+}
