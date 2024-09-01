@@ -20,7 +20,7 @@ def try_decoding(value: bytes):
         try:
             return value.decode('cp1252')
         except Exception:
-            logger.warning(f"failed to decode string {value!r}")
+            logger.warning("failed to decode string : %r", value)
             raise
 
 
@@ -57,7 +57,7 @@ def get_attribute_string(attributes: List[Attribute]) -> str:
 
 def ticket_generator(initial: int = 1) -> Generator[int, None, None]:
     """Generator for tickets to be used in various protocol messages. The
-    generator will be reset to the `initial` value once the value would exceed
+    generator will be reset to the ``initial`` value once the value would exceed
     2 ^ 32
     """
     idx = initial

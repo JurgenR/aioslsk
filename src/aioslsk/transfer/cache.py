@@ -5,6 +5,7 @@ import shelve
 from typing import List, Protocol
 from .model import Transfer
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,8 +30,8 @@ class TransferNullCache:
 
 
 class TransferShelveCache:
-    """Transfer cache that uses the Python built-in `shelve` module to store
-    transfer objects
+    """Transfer cache that uses the Python built-in :py:mod:`shelve` module to
+    store transfer objects
     """
 
     DEFAULT_FILENAME = 'transfers'
@@ -46,14 +47,14 @@ class TransferShelveCache:
             for _, transfer in database.items():
                 transfers.append(transfer)
 
-        logger.info(f"read {len(transfers)} transfers from : {db_path}")
+        logger.info("read %d transfers from : %s", len(transfers), db_path)
 
         return transfers
 
     def write(self, transfers: List['Transfer']):
         db_path = os.path.join(self.data_directory, self.DEFAULT_FILENAME)
 
-        logger.info(f"writing {len(transfers)} transfers to : {db_path}")
+        logger.info("writing %d transfers to : %s", len(transfers), db_path)
 
         with shelve.open(db_path, flag='c') as database:
             # Update/add transfers
@@ -75,4 +76,4 @@ class TransferShelveCache:
             for key_to_delete in keys_to_delete:
                 database.pop(key_to_delete)
 
-        logger.info(f"successfully wrote {len(transfers)} transfers to : {db_path}")
+        logger.info("successfully wrote %d transfers to : %s", len(transfers), db_path)

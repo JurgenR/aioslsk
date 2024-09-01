@@ -199,7 +199,10 @@ class SearchManager(BaseManager):
         if len(visible) + len(locked) == 0:
             return
 
-        logger.info(f"found {len(visible)}/{len(locked)} results for query {query!r} (username={username!r})")
+        logger.info(
+            "found %d/%d results for query %r (username=%r)",
+            len(visible), len(locked), query, username
+        )
 
         task = asyncio.create_task(
             self._network.send_peer_messages(
@@ -229,13 +232,19 @@ class SearchManager(BaseManager):
 
         except asyncio.CancelledError:
             logger.debug(
-                f"cancelled delivery of search results (ticket={ticket}, username={username}, query={query})")
+                "cancelled delivery of search results (ticket=%d, username=%s, query=%s)",
+                ticket, username, query
+            )
         except Exception as exc:
             logger.warning(
-                f"failed to deliver search results : {exc!r} (ticket={ticket}, username={username}, query={query})")
+                "failed to deliver search results : {exc!r} (ticket=%d, username=%s, query=%s)",
+                exc, ticket, username, query
+            )
         else:
             logger.info(
-                f"delivered search results (ticket={ticket}, username={username}, query={query})")
+                "delivered search results (ticket=%d, username=%s, query=%s)",
+                ticket, username, query
+            )
         finally:
             self._search_reply_tasks.remove(task)
 
@@ -253,7 +262,7 @@ class SearchManager(BaseManager):
                 if qry.search_type != SearchType.WISHLIST
             }
 
-            logger.info(f"starting wishlist search of {len(items)} items")
+            logger.info("starting wishlist search of %d items", len(items))
             # Recreate
             for item in filter(lambda item: item.enabled, items):
                 ticket = next(self._ticket_generator)
@@ -288,7 +297,7 @@ class SearchManager(BaseManager):
             self, message: DistributedServerSearchRequest.Request, connection: PeerConnection):
 
         if message.distributed_code != DistributedSearchRequest.Request.MESSAGE_ID:
-            logger.warning(f"no handling for server search request with code {message.distributed_code}")
+            logger.warning("no handling for server search request with code %d", message.distributed_code)
             return
 
         await self._query_shares_and_reply(message.ticket, message.username, message.query)
@@ -330,8 +339,10 @@ class SearchManager(BaseManager):
         )
         try:
             query = self.requests[message.ticket]
+
         except KeyError:
-            logger.warning(f"search reply ticket does not match any search query : {message.ticket}")
+            logger.warning("search reply ticket does not match any search request : %d", message.ticket)
+
         else:
             if self._settings.searches.send.store_results:
                 query.results.append(search_result)

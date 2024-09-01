@@ -102,7 +102,7 @@ def scan_directory(
             try:
                 modified = os.path.getmtime(os.path.join(directory, filename))
             except OSError:
-                logger.debug(f"could not get modified time for file {filepath!r}")
+                logger.debug("could not get modified time for file : %r ", filepath)
             else:
                 shared_items.add(
                     SharedItem(shared_directory, subdir, filename, modified)
@@ -144,7 +144,7 @@ def extract_attributes(filepath: str) -> ItemAttributes:
 
     except mutagen.MutagenError as exc:
         logger.warning(
-            f"failed retrieve audio file metadata. path={filepath!r}", exc_info=exc)
+            "failed retrieve audio file metadata. path=%r", filepath, exc_info=exc)
 
     return attributes
 
@@ -271,14 +271,15 @@ class SharesManager(BaseManager):
         """Read the directories from the cache"""
         logger.info("reading directories from cache")
         directories = self.cache.read()
-        logger.info(f"read {len(directories)} directories from cache")
+        logger.info("read %d directories from cache", len(directories))
         self._shared_directories = directories
 
     def write_cache(self):
         """Write current shared directories to the cache"""
-        logger.info(f"writing {len(self._shared_directories)} directories to cache")
+        directory_count = len(self._shared_directories)
+        logger.info("writing %d directories to cache", directory_count)
         self.cache.write(self._shared_directories)
-        logger.info(f"successfully wrote {len(self._shared_directories)} directories to cache")
+        logger.info("successfully wrote %d directories to cache", directory_count)
 
     def get_download_directory(self) -> str:
         """Gets the absolute path the to download directory configured from the
@@ -292,7 +293,7 @@ class SharesManager(BaseManager):
     async def create_directory(self, absolute_path: str):
         """Ensures the passed directory exists"""
         if not await asyncos.path.exists(absolute_path):
-            logger.info(f"creating directory : {absolute_path}")
+            logger.info("creating directory : %s", absolute_path)
             await asyncos.makedirs(absolute_path, exist_ok=True)
 
     def rebuild_term_map(self):
@@ -305,7 +306,7 @@ class SharesManager(BaseManager):
         """Builds a list of valid terms for the given shared directory"""
         for item in shared_directory.items:
             self._add_item_to_term_map(item)
-        logger.debug(f"term map contains {len(self._term_map)} terms")
+        logger.debug("term map contains %d terms", len(self._term_map))
 
     async def get_shared_item(self, remote_path: str, username: Optional[str] = None) -> SharedItem:
         """Gets a shared item from the cache based on the given file path. If
@@ -466,8 +467,8 @@ class SharesManager(BaseManager):
         return shared_directory
 
     def get_shared_directory(self, directory: str) -> SharedDirectory:
-        """Calculates the absolute path of given `directory` and looks for the
-        matching :class:`SharedDirectory` instance
+        """Calculates the absolute path of given ``directory`` and looks for the
+        matching :class:`.SharedDirectory` instance
 
         :raise SharedDirectoryError: if the directory is not found
         """
@@ -504,7 +505,7 @@ class SharesManager(BaseManager):
                 "attempted to scan directory which was not added to the manager"
             )
 
-        logger.info(f"scheduling scan for directory : {shared_directory!r})")
+        logger.info("scheduling scan for directory : %r", shared_directory)
         try:
             shared_items: Set[SharedItem] = await loop.run_in_executor(
                 self.executor,
@@ -515,9 +516,9 @@ class SharesManager(BaseManager):
                 )
             )
         except Exception:
-            logger.exception(f"exception scanning directory : {shared_directory!r}")
+            logger.exception("exception scanning directory : %r", shared_directory)
         else:
-            logger.debug(f"scan found {len(shared_items)} files for directory {shared_directory!r}")
+            logger.debug("scan found %d files for directory : %r", len(shared_items), shared_directory)
 
             # When using a ProcessPoolExecutor the `shared_directory` property
             # might be set to None (since objects are cloned instead of passed
@@ -565,15 +566,16 @@ class SharesManager(BaseManager):
                 futures.append(future)
 
         logger.debug(
-            f"scheduled {len(futures)} / {len(shared_directory.items)} items "
-            f"for attribute extracting for directory {shared_directory}")
+            "scheduled %d / %d items for attribute extracting for directory %s",
+            len(futures), len(shared_directory.items), shared_directory
+        )
 
         start = time.perf_counter()
 
         await asyncio.gather(*futures, return_exceptions=True)
 
         logger.debug(
-            f"scanned attributes for {len(futures)} items in {time.perf_counter() - start}s")
+            "scanned attributes for %d items in %f s", len(futures), time.perf_counter() - start)
 
     def _extract_attributes_callback(self, item: SharedItem, future: asyncio.Future):
         try:
@@ -604,7 +606,7 @@ class SharesManager(BaseManager):
         ]
         await asyncio.gather(*attribute_futures)
 
-        logger.info(f"completed scan in {time.perf_counter() - start_time} seconds")
+        logger.info("completed scan in %f seconds", time.perf_counter() - start_time)
         folder_count, file_count = self.get_stats()
         await self._event_bus.emit(
             ScanCompleteEvent(folder_count, file_count)
@@ -696,8 +698,8 @@ class SharesManager(BaseManager):
             for excl_phrase in excl_phrases:
                 if excl_phrase in found_item.get_query_path().lower():
                     logger.debug(
-                        f"removing search result '{found_item.get_absolute_path()}' due to "
-                        f"excluded phrase '{excl_phrase}'"
+                        "removing search result %r due to excluded phrase %r",
+                        found_item.get_absolute_path(), excl_phrase
                     )
                     break
 
@@ -899,7 +901,7 @@ class SharesManager(BaseManager):
             return
 
         folder_count, file_count = self.get_stats()
-        logger.debug(f"reporting shares ({folder_count=}, {file_count=})")
+        logger.debug("reporting shares (folder_count=%d, file_count=%d)", folder_count, file_count)
         await self._network.send_server_messages(
             SharedFoldersFiles.Request(
                 shared_folder_count=folder_count,

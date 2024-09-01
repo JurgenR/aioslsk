@@ -41,11 +41,23 @@ def network():
     return nw
 
 
+class ConcreteConnection(Connection):
+
+    def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
+        pass
+
+
+class ConcreteDataConnection(DataConnection):
+
+    def deserialize_message(self, message_data: bytes) -> MessageDataclass:
+        return LeaveRoom.Response('test_room')
+
+
 class TestConnection:
 
     @pytest.mark.asyncio
     async def test_setState_setStateAndCallback(self, network: Network):
-        connection = Connection('1.2.3.4', 1234, network)
+        connection = ConcreteConnection('1.2.3.4', 1234, network)
         connection.state = ConnectionState.CONNECTED
 
         await connection.set_state(ConnectionState.CLOSED, close_reason=CloseReason.EOF)
@@ -63,7 +75,7 @@ class TestDataConnection:
     # connect
     @pytest.mark.asyncio
     async def test_connectSuccessful_shouldSetState(self, network: Network):
-        connection = DataConnection('1.2.3.4', 1234, network)
+        connection = ConcreteDataConnection('1.2.3.4', 1234, network)
         connection._start_reader_task = Mock()
         reader, writer = Mock(), Mock()
         with patch('asyncio.open_connection', return_value=(reader, writer)) as open_mock:
@@ -76,7 +88,7 @@ class TestDataConnection:
 
     @pytest.mark.asyncio
     async def test_connectUnsuccessful_shouldDisconnectAndRaise(self, network: Network):
-        connection = DataConnection('1.2.3.4', 1234, network)
+        connection = ConcreteDataConnection('1.2.3.4', 1234, network)
         connection.disconnect = AsyncMock()
 
         with patch('asyncio.open_connection', side_effect=OSError) as open_mock:
@@ -90,7 +102,7 @@ class TestDataConnection:
 
     @pytest.mark.asyncio
     async def test_connectTimeout_shouldDisconnectAndRaise(self, network: Network):
-        connection = DataConnection('1.2.3.4', 1234, network)
+        connection = ConcreteDataConnection('1.2.3.4', 1234, network)
         connection.disconnect = AsyncMock()
 
         with patch('aioslsk.network.connection.atimeout', side_effect=TimeoutError):
@@ -287,7 +299,7 @@ class TestDataConnection:
 
     # helpers
     def _create_connection(self, network, state: ConnectionState = ConnectionState.CONNECTED) -> DataConnection:
-        connection = DataConnection('1.2.3.4', 1234, network)
+        connection = ConcreteDataConnection('1.2.3.4', 1234, network)
         connection.state = state
         return connection
 

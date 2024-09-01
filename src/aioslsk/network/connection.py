@@ -1,4 +1,5 @@
 from __future__ import annotations
+import abc
 from aiofiles.threadpool.binary import AsyncBufferedIOBase, AsyncBufferedReader
 import asyncio
 from async_timeout import Timeout, timeout as atimeout
@@ -41,6 +42,7 @@ from ..protocol.messages import (
     PeerMessage,
     ServerMessage,
 )
+from ..log_utils import ConnectionLoggerAdapter
 from ..utils import task_counter
 from .rate_limiter import RateLimiter, UnlimitedRateLimiter
 
@@ -49,6 +51,7 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+adapter = ConnectionLoggerAdapter(logger, {})
 
 
 HEADER_SIZE_OBFUSCATED: int = obfuscation.KEY_SIZE + struct.calcsize('I')
@@ -92,7 +95,7 @@ class PeerConnectionState(Enum):
     """Transfer connections: ready to receive / send data"""
 
 
-class Connection:
+class Connection(abc.ABC):
 
     _CLOSING_STATES: tuple[ConnectionState, ConnectionState] = (
         ConnectionState.CLOSING, ConnectionState.CLOSED)
@@ -102,13 +105,11 @@ class Connection:
         self.port: int = port
         self.network: Network = network
         self.state: ConnectionState = ConnectionState.UNINITIALIZED
-        self.log_info: Dict[str, str] = {
-            'address': f"{self.hostname}:{self.port}"
-        }
         self._is_closing: bool = False
 
+    @abc.abstractmethod
     async def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
-        raise NotImplementedError()
+        ...
 
     async def set_state(self, state: ConnectionState, close_reason: CloseReason = CloseReason.UNKNOWN):
         self.state = state
@@ -133,7 +134,7 @@ class ListeningConnection(Connection):
         self._server: Optional[asyncio.AbstractServer] = None
 
     async def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
-        logger.debug(f"disconnecting : {reason.name}", extra=self.log_info)
+        adapter.debug("disconnecting : %s", reason.name, extra=self.__dict__)
         await self.set_state(ConnectionState.CLOSING, close_reason=reason)
         try:
             if self._server is not None:
@@ -144,12 +145,12 @@ class ListeningConnection(Connection):
                     await self._server.wait_closed()
 
         except Exception as exc:
-            logger.warning(
-                f"exception while disconnecting", extra=self.log_info, exc_info=exc)
+            adapter.warning(
+                "exception while disconnecting", extra=self.__dict__, exc_info=exc)
 
         finally:
             self._server = None
-            logger.debug(f"disconnected : {reason.name}", extra=self.log_info)
+            adapter.info("disconnected : %s", reason.name, extra=self.__dict__)
             await self.set_state(ConnectionState.CLOSED, close_reason=reason)
 
     async def connect(self):
@@ -158,8 +159,7 @@ class ListeningConnection(Connection):
 
         :raise ConnectionFailedError: raised when binding failed
         """
-        logger.info(
-            f"open listening connection", extra=self.log_info)
+        adapter.info("open listening connection", extra=self.__dict__)
         await self.set_state(ConnectionState.CONNECTING)
 
         try:
@@ -179,7 +179,10 @@ class ListeningConnection(Connection):
 
     async def accept(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         hostname, port = writer.get_extra_info('peername')
-        logger.debug(f"accepted connection {hostname}:{port}", extra=self.log_info)
+
+        adapter.debug(
+            "accepted connection : %s:%d", hostname, port, extra=self.__dict__)
+
         connection = PeerConnection(
             hostname, port, self.network,
             obfuscated=self.obfuscated,
@@ -191,7 +194,7 @@ class ListeningConnection(Connection):
         await connection.set_state(ConnectionState.CONNECTED)
 
 
-class DataConnection(Connection):
+class DataConnection(Connection, abc.ABC):
     """Connection for message and data transfer"""
 
     def __init__(
@@ -231,7 +234,7 @@ class DataConnection(Connection):
         :param timeout: timeout in seconds before giving up (default: 30)
         :raise ConnectionFailedError: raised when connection failed or timed out
         """
-        logger.info("connecting", extra=self.log_info)
+        adapter.info("connecting", extra=self.__dict__)
         await self.set_state(ConnectionState.CONNECTING)
 
         try:
@@ -244,7 +247,7 @@ class DataConnection(Connection):
             raise ConnectionFailedError(f"{self.hostname}:{self.port} : failed to connect") from exc
 
         else:
-            logger.debug(f"connected")
+            adapter.debug("connected", extra=self.__dict__)
             await self.set_state(ConnectionState.CONNECTED)
 
     async def disconnect(self, reason: CloseReason = CloseReason.UNKNOWN):
@@ -261,7 +264,7 @@ class DataConnection(Connection):
             return
 
         await self.set_state(ConnectionState.CLOSING, close_reason=reason)
-        logger.debug(f"disconnecting : {reason.name}", extra=self.log_info)
+        adapter.debug("disconnecting : %s", reason.name, extra=self.__dict__)
         self._cancel_queued_messages()
         try:
             if self._writer is not None:
@@ -272,7 +275,8 @@ class DataConnection(Connection):
                     await self._writer.wait_closed()
 
         except Exception as exc:
-            logger.warning(f"exception while disconnecting : {exc!r}", extra=self.log_info)
+            adapter.warning(
+                "exception while disconnecting : %r", exc, extra=self.__dict__)
 
         finally:
             await self.set_state(ConnectionState.CLOSED, close_reason=reason)
@@ -303,10 +307,10 @@ class DataConnection(Connection):
                 message = await self.receive_message_object()
 
             except ConnectionReadError:
-                logger.warning(f"read error")
+                adapter.warning("read error", extra=self.__dict__)
 
             except MessageDeserializationError:
-                logger.warning(f"failed to deserialize message")
+                adapter.warning("failed to deserialize message : %s", message, extra=self.__dict__)
 
             else:
 
@@ -315,17 +319,17 @@ class DataConnection(Connection):
 
                 # Do not handle messages when closing/closed
                 if self._is_closing:
-                    logger.warning(
-                        f"connection is closing, "
-                        f"skipping handling message : {message!r}",
-                        extra=self.log_info
+                    adapter.warning(
+                        "connection is closing, skipping handling message : %s",
+                        message,
+                        extra=self.__dict__
                     )
                 else:
                     await self._perform_message_callback(message)
 
     async def _read(
-                self, reader_func: Callable[[], Coroutine[Any, Any, Optional[bytes]]],
-                timeout: Optional[float] = None) -> Optional[bytes]:
+            self, reader_func: Callable[[], Coroutine[Any, Any, Optional[bytes]]],
+            timeout: Optional[float] = None) -> Optional[bytes]:
         """Read data from the connection using the passed ``reader_func``. When
         an error occurs during reading the connection will be CLOSED
 
@@ -344,22 +348,23 @@ class DataConnection(Connection):
             if exc.partial:
                 await self.disconnect(CloseReason.READ_ERROR)
                 raise ConnectionReadError(
-                    f"incomplete read on connection : {exc.partial!r}", extra=self.log_info) from exc
+                    f"{self.hostname}:{self.port} : incomplete read on connection : {exc.partial!r}") from exc
             else:
                 await self.disconnect(CloseReason.EOF)
                 return None
 
         except asyncio.TimeoutError as exc:
             await self.disconnect(CloseReason.TIMEOUT)
-            raise ConnectionReadError("read timeout", extra=self.log_info) from exc
+            raise ConnectionReadError(f"{self.hostname}:{self.port} : read timeout") from exc
 
         except Exception as exc:
             await self.disconnect(CloseReason.READ_ERROR)
-            raise ConnectionReadError("exception during reading", extra=self.log_info) from exc
+            raise ConnectionReadError(f"{self.hostname}:{self.port} : exception during reading") from exc
 
     async def _read_message(self) -> bytes:
         if not self._reader:
-            raise ConnectionReadError("cannot read message, connection is not open")
+            raise ConnectionReadError(
+                f"{self.hostname}:{self.port} : cannot read message, connection is not open")
 
         header_size = HEADER_SIZE_OBFUSCATED if self.obfuscated else HEADER_SIZE_UNOBFUSCATED
 
@@ -373,7 +378,11 @@ class DataConnection(Connection):
         return header + message
 
     async def receive_message(self) -> Optional[bytes]:
-        """Receives a single raw message"""
+        """Receives a single raw message
+
+        :return: The message as a ``bytes`` object. ``None`` if the connection
+            returned EOF
+        """
         return await self._read(self._read_message, timeout=self.read_timeout)
 
     async def receive_message_object(self) -> Optional[MessageDataclass]:
@@ -385,9 +394,13 @@ class DataConnection(Connection):
 
         if message_data:
             message = self.decode_message_data(message_data)
-            logger.debug(
-                f"received message : {message!r}",
-                extra=self.log_info
+            adapter.debug(
+                "received message : %s",
+                message,
+                extra={
+                    **self.__dict__,
+                    **{'message_type': message.__class__}
+                }
             )
             return message
 
@@ -403,7 +416,8 @@ class DataConnection(Connection):
         treated as EOF as well
         """
         if not self._reader:
-            raise ConnectionReadError("cannot read until EOF, connection is not open")
+            raise ConnectionReadError(
+                f"{self.hostname}:{self.port} : cannot read until EOF, connection is not open")
 
         # Note: _read raises ConnectionReadError also on IncompleteReadError,
         # however when using StreamReader.read this error can never be raised
@@ -442,18 +456,30 @@ class DataConnection(Connection):
         :raise ConnectionWriteError: error or timeout occured during writing
         """
         if self._is_closing:
-            logger.warning(
-                f"not sending message, connection is closing / closed : {message!r}", extra=self.log_info)
+            adapter.warning(
+                "not sending message, connection is closing / closed : %s",
+                message,
+                extra=self.__dict__
+            )
             return
 
         if not self._writer:
-            raise ConnectionWriteError("cannot send message, connection is not open")
+            raise ConnectionWriteError(
+                f"{self.hostname}:{self.port} : cannot send message, connection is not open")
 
-        logger.debug(f"send message : {message!r}", extra=self.log_info)
+        adapter.debug(
+            "send message : %s",
+            message,
+            extra={
+                **self.__dict__,
+                **{'message_type': message.__class__}
+            }
+        )
         # Serialize the message
         try:
             data = self.encode_message_data(message)
         except MessageSerializationError:
+            adapter.exception("failed to serialize message : %s", message)
             return
 
         # Perform actual send
@@ -464,11 +490,11 @@ class DataConnection(Connection):
 
         except asyncio.TimeoutError as exc:
             await self.disconnect(CloseReason.TIMEOUT)
-            raise ConnectionWriteError("write timeout", extra=self.log_info) from exc
+            raise ConnectionWriteError(f"{self.hostname}:{self.port} : write timeout") from exc
 
         except Exception as exc:
             await self.disconnect(CloseReason.WRITE_ERROR)
-            raise ConnectionWriteError("exception during writing", extra=self.log_info) from exc
+            raise ConnectionWriteError(f"{self.hostname}:{self.port} : exception during writing") from exc
 
         else:
             self._increase_read_timeout()
@@ -483,8 +509,7 @@ class DataConnection(Connection):
         try:
             data = self.serialize_message(message)
         except Exception as exc:
-            logger.exception(f"failed to serialize message : {message!r}", extra=self.log_info)
-            raise MessageSerializationError("failed to serialize Message") from exc
+            raise MessageSerializationError("failed to serialize message") from exc
 
         if self.obfuscated:
             data = obfuscation.encode(data)
@@ -505,17 +530,15 @@ class DataConnection(Connection):
         try:
             message = self.deserialize_message(data)
         except Exception as exc:
-            logger.exception(f"failed to deserialize message : {data.hex()}", extra=self.log_info)
             raise MessageDeserializationError("failed to deserialize message") from exc
 
         return message
 
+    @abc.abstractmethod
     def deserialize_message(self, message_data: bytes) -> MessageDataclass:
         """Should be called after a full message has been received. This method
         should parse the message
         """
-        raise NotImplementedError(
-            "'deserialize_message' should be overwritten by a subclass")
 
     def serialize_message(self, message: Union[bytes, MessageDataclass]) -> bytes:
         if isinstance(message, MessageDataclass):
@@ -534,7 +557,7 @@ class DataConnection(Connection):
         try:
             await self.network.on_message_received(message, self)
         except Exception:
-            logger.exception(f"error during callback : {message!r}", extra=self.log_info)
+            adapter.exception("error during callback : %s", message, extra=self.__dict__)
 
     def _cancel_queued_messages(self):
         for qmessage_task in self._queued_messages:
@@ -609,7 +632,7 @@ class PeerConnection(DataConnection):
             # receive_* methods directly. But it can do no harm
             self.stop_reader_task()
 
-        logger.debug(f"setting state to {state}", extra=self.log_info)
+        adapter.debug("setting state to %s", state, extra=self.__dict__)
         self.connection_state = state
 
     async def _read_transfer_ticket(self) -> bytes:
@@ -636,7 +659,7 @@ class PeerConnection(DataConnection):
 
         if data is None:  # pragma: no cover
             raise ConnectionReadError(
-                "couldn't receive transfer ticket, connection closed")
+                f"{self.hostname}:{self.port} : couldn't receive transfer ticket, connection closed")
 
         _, ticket = uint32.deserialize(0, data)
         return ticket
@@ -667,7 +690,8 @@ class PeerConnection(DataConnection):
             case the connection reached EOF
         """
         if not self._reader:
-            raise ConnectionReadError("cannot read data, connection is not open")
+            raise ConnectionReadError(
+                f"{self.hostname}:{self.port} : cannot read data, connection is not open")
 
         try:
             async with atimeout(self.transfer_read_timeout) as self._read_timeout_object:

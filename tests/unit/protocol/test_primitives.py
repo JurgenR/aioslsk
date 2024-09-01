@@ -38,7 +38,7 @@ class TestMessageDataclass:
         SimpleMessage.deserialize(0, data)
         assert len(caplog.records) >= 1
         assert caplog.records[-1].levelname == 'WARNING'
-        assert 'message has 1 unparsed bytes' in caplog.records[-1].msg
+        assert 'message has 1 unparsed bytes' in caplog.records[-1].getMessage()
 
     def test_whenDeserialize_mismatchMessageId_shouldRaise(self):
         data = bytes.fromhex('0400000002000000')

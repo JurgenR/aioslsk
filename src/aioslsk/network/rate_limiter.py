@@ -16,8 +16,8 @@ class RateLimiter(ABC):
 
     @classmethod
     def create_limiter(cls, limit_kbps: int) -> RateLimiter:
-        """Creates a new `RateLimiter` instance based on the provided
-        `limit_kbps`
+        """Creates a new :class:`.RateLimiter` instance based on the provided
+        ``limit_kbps``
         """
         if limit_kbps == 0:
             return UnlimitedRateLimiter()
