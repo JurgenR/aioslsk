@@ -51,7 +51,7 @@ class DistributedSearchMessageFilter(MessageFilter):
         messages.DistributedServerSearchRequest.Request,
     )
 
-    def __init__(self):
+    def __init__(self):  # pragma: no cover
         super().__init__(self.TYPES)
 
 

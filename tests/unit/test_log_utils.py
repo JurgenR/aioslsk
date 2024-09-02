@@ -1,7 +1,8 @@
 import pytest
 from unittest.mock import AsyncMock, Mock
 
-from aioslsk.log_utils import MessageFilter
+from aioslsk.exceptions import AioSlskException
+from aioslsk.log_utils import resolve, ConnectionLoggerAdapter, MessageFilter
 from aioslsk.network.connection import ConnectionState, ServerConnection
 from aioslsk.protocol.messages import JoinRoom, Ping
 
@@ -17,7 +18,23 @@ def connection() -> ServerConnection:
     return connection
 
 
+class TestFunctions:
+
+    def test_resolve(self):
+        assert resolve('Ping.Request') == Ping.Request
+
+    @pytest.mark.parametrize('message_type', ['Fake.Request', 'Ping.Fake'])
+    def test_resolve_nonExistingMessage(self, message_type: str):
+        with pytest.raises(AioSlskException):
+            resolve(message_type)
+
+
 class TestMessageFilter:
+
+    @pytest.mark.asyncio
+    async def test_init_stringList_shouldResolve(self):
+        message_filter = MessageFilter(['Ping.Request'])
+        assert message_filter.message_types == [Ping.Request]
 
     @pytest.mark.asyncio
     async def test_whenSendMatches_shouldFilterMessage(
@@ -83,3 +100,47 @@ class TestMessageFilter:
             await connection.send_message(Ping.Request())
 
         assert len(caplog.records) == 1
+
+
+class TestConnectionLoggerAdapter:
+
+    def test_process_noExtraFields(self, caplog: pytest.LogCaptureFixture):
+        log_message = 'test'
+        adapter = ConnectionLoggerAdapter(caplog, {})
+        msg, _ = adapter.process('test', {})
+
+        assert log_message in msg
+
+    def test_process_minimalFields_shouldLogFields(self, caplog: pytest.LogCaptureFixture):
+        log_message = 'test'
+        adapter = ConnectionLoggerAdapter(caplog, {})
+        msg, _ = adapter.process(
+            log_message,
+            {
+                'extra': {
+                    'hostname': '1.1.1.1',
+                    'port': 1234
+                }
+            }
+        )
+
+        assert log_message in msg
+        assert '[1.1.1.1:1234]' in msg
+
+    def test_process_allFields_shouldLogFields(self, caplog: pytest.LogCaptureFixture):
+        log_message = 'test'
+        adapter = ConnectionLoggerAdapter(caplog, {})
+        msg, _ = adapter.process(
+            log_message,
+            {
+                'extra': {
+                    'hostname': '1.1.1.1',
+                    'port': 1234,
+                    'connection_type': 'F',
+                    'username': 'user1'
+                }
+            }
+        )
+
+        assert log_message in msg
+        assert '[1.1.1.1:1234|F|user1]' in msg

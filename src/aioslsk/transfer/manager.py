@@ -427,7 +427,8 @@ class TransferManager(BaseManager):
             return 0
 
     def get_transfer(self, username: str, remote_path: str, direction: TransferDirection) -> Transfer:
-        """Lookup transfer by `username`, `remote_path` and `transfer` direction
+        """Lookup transfer by ``username``, ``remote_path`` and ``transfer``
+        direction
 
         :param username: Username of the transfer
         :param remote_path: Full remote path of the transfer
@@ -1259,6 +1260,7 @@ class TransferManager(BaseManager):
     @on_message(PeerPlaceInQueueRequest.Request)
     async def _on_peer_place_in_queue_request(
             self, message: PeerPlaceInQueueRequest.Request, connection: PeerConnection):
+
         if not connection.username:
             logger.warning(
                 "got PeerPlaceInQueueRequest for a connection that wasn't properly initialized")
@@ -1271,12 +1273,14 @@ class TransferManager(BaseManager):
                 filename,
                 TransferDirection.UPLOAD
             )
+
         except ValueError:
             logger.warning(
                 "PeerPlaceInQueueRequest : could not find transfer (upload) for %s from %s",
                 filename,
                 connection.username
             )
+
         else:
             place = self.get_place_in_queue(transfer)
             if place:
@@ -1284,7 +1288,9 @@ class TransferManager(BaseManager):
                     PeerPlaceInQueueReply.Request(filename, place))
 
     @on_message(PeerPlaceInQueueReply.Request)
-    async def _on_peer_place_in_queue_reply(self, message: PeerPlaceInQueueReply.Request, connection: PeerConnection):
+    async def _on_peer_place_in_queue_reply(
+            self, message: PeerPlaceInQueueReply.Request, connection: PeerConnection):
+
         if not connection.username:
             logger.warning(
                 "got PeerPlaceInQueueReply for a connection that wasn't properly initialized")
@@ -1296,12 +1302,14 @@ class TransferManager(BaseManager):
                 message.filename,
                 TransferDirection.DOWNLOAD
             )
+
         except ValueError:
             logger.warning(
                 "PeerPlaceInQueueReply : could not find transfer (download) for %s from %s",
                 message.filename,
                 connection.username
             )
+
         else:
             transfer.place_in_queue = message.place
 
@@ -1322,12 +1330,14 @@ class TransferManager(BaseManager):
                 message.filename,
                 TransferDirection.DOWNLOAD
             )
+
         except ValueError:
             logger.warning(
                 "PeerUploadFailed : could not find transfer (download) for %s from %s",
                 message.filename,
                 connection.username
             )
+
         else:
             transfer.remotely_queued = False
             await self.manage_transfers()
