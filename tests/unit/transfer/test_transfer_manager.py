@@ -587,6 +587,7 @@ class TestTransferManager:
     @pytest.mark.asyncio
     async def test_onPeerTransferRequest_nonExistingDownload_shouldReplyCancelled(
             self, manager: TransferManager):
+
         manager.on_transfer_state_changed = AsyncMock()
         username = 'uploader'
         ticket = 123
@@ -629,6 +630,7 @@ class TestTransferManager:
     )
     async def test_onPeerTransferRequest_existingDownload_shouldReply(
             self, manager: TransferManager, state: TransferState.State, expected_reason: Optional[str]):
+
         manager.on_transfer_state_changed = AsyncMock()
         username = 'uploader'
         ticket = 123
@@ -676,6 +678,7 @@ class TestTransferManager:
     )
     async def test_onPeerTransferRequest_existingDownload_shouldReply(
             self, manager: TransferManager, state: TransferState.State, expected_reason: Optional[str]):
+
         manager.on_transfer_state_changed = AsyncMock()
         username = 'uploader'
         ticket = 123
@@ -717,6 +720,7 @@ class TestTransferManager:
     )
     async def test_onPeerTransferRequest_existingDownload_ready_shouldStartDownload(
             self, manager: TransferManager, state: TransferState.State):
+
         manager.on_transfer_state_changed = AsyncMock()
         username = 'uploader'
         ticket = 123
@@ -750,6 +754,7 @@ class TestTransferManager:
     @pytest.mark.asyncio
     async def test_onPeerTransferRequest_existingDownload_fromFailedState_shouldQueueAndStartDownload(
             self, manager: TransferManager):
+
         manager.on_transfer_state_changed = AsyncMock()
         username = 'uploader'
         ticket = 123
@@ -784,6 +789,7 @@ class TestTransferManager:
     def _create_upload(
             self, manager: TransferManager, username: str, state: TransferState.State,
             shared_item: SharedItem) -> Transfer:
+
         return self._create_transfer(
             manager, username, state, shared_item, TransferDirection.UPLOAD)
 
@@ -797,6 +803,7 @@ class TestTransferManager:
     def _create_transfer(
             self, manager: TransferManager, username: str, state: TransferState.State,
             shared_item: SharedItem, direction: TransferDirection) -> Transfer:
+
         transfer = Transfer(
             username=username,
             remote_path=shared_item.get_remote_path(),
