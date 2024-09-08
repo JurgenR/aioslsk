@@ -6,7 +6,7 @@ from async_timeout import timeout as atimeout
 import logging
 from operator import itemgetter
 import os
-from typing import Dict, List, Optional, Set, Tuple, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from ..base_manager import BaseManager
 from .cache import TransferNullCache, TransferCache
@@ -97,8 +97,8 @@ class TransferManager(BaseManager):
         self.cache: TransferCache = cache if cache else TransferNullCache()
         self._ticket_generator = ticket_generator()
 
-        self._transfers: List[Transfer] = []
-        self._file_connection_futures: Dict[int, asyncio.Future] = {}
+        self._transfers: list[Transfer] = []
+        self._file_connection_futures: dict[int, asyncio.Future] = {}
         self._progress_reporting_task: BackgroundTask = BackgroundTask(
             interval=self._settings.transfers.report_interval,
             task_coro=self._progress_reporting_job,
@@ -125,7 +125,7 @@ class TransferManager(BaseManager):
         """Reads the transfers from the caches and corrects the state of those
         transfers
         """
-        transfers: List[Transfer] = self.cache.read()
+        transfers: list[Transfer] = self.cache.read()
         for transfer in transfers:
             # Analyze the current state of the stored transfers and set them to
             # the correct state
@@ -159,7 +159,7 @@ class TransferManager(BaseManager):
     async def start(self):
         await self.start_progress_reporting_task()
 
-    async def stop(self) -> List[asyncio.Task]:
+    async def stop(self) -> list[asyncio.Task]:
         """Cancel all current transfer tasks
 
         :return: a list of tasks that have been cancelled so that they can be
@@ -327,10 +327,10 @@ class TransferManager(BaseManager):
 
         await self.manage_transfers()
 
-    def get_uploads(self) -> List[Transfer]:
+    def get_uploads(self) -> list[Transfer]:
         return [transfer for transfer in self._transfers if transfer.is_upload()]
 
-    def get_downloads(self) -> List[Transfer]:
+    def get_downloads(self) -> list[Transfer]:
         return [transfer for transfer in self._transfers if transfer.is_download()]
 
     def get_upload_slots(self) -> int:
@@ -356,7 +356,7 @@ class TransferManager(BaseManager):
             if transfer.is_upload() and transfer.state == TransferState.QUEUED
         ])
 
-    def get_downloading(self) -> List[Transfer]:
+    def get_downloading(self) -> list[Transfer]:
         """Returns all transfers that are currently downloading or an attempt is
         is made to start downloading
         """
@@ -365,7 +365,7 @@ class TransferManager(BaseManager):
             if transfer.is_download() and transfer.is_processing()
         ]
 
-    def get_uploading(self) -> List[Transfer]:
+    def get_uploading(self) -> list[Transfer]:
         """Returns all transfers that are currently uploading or an attempt is
         is made to start uploading
         """
@@ -374,7 +374,7 @@ class TransferManager(BaseManager):
             if transfer.is_upload() and transfer.is_processing()
         ]
 
-    def get_finished_transfers(self) -> List[Transfer]:
+    def get_finished_transfers(self) -> list[Transfer]:
         """Returns a complete list of transfers that are in a finalized state
         (COMPLETE, ABORTED, FAILED)
         """
@@ -383,7 +383,7 @@ class TransferManager(BaseManager):
             if transfer.is_finalized()
         ]
 
-    def get_unfinished_transfers(self) -> List[Transfer]:
+    def get_unfinished_transfers(self) -> list[Transfer]:
         """Returns a complete list of transfers that are not in a finalized
         state (COMPLETE, ABORTED, FAILED)
         """
@@ -493,20 +493,20 @@ class TransferManager(BaseManager):
                     upload._transfer_task_complete
                 )
 
-    def _get_queued_transfers(self) -> Tuple[List[Transfer], List[Transfer]]:
+    def _get_queued_transfers(self) -> tuple[list[Transfer], list[Transfer]]:
         """Returns all transfers eligable for being initialized
 
         :return: a tuple containing 2 lists: the eligable downloads and eligable
             uploads
         """
-        uploading_users: Set[str] = {
+        uploading_users: set[str] = {
             transfer.username for transfer in self._transfers
             if transfer.is_upload() and transfer.is_processing()
         }
-        users_with_queued_upload: Set[str] = set()
+        users_with_queued_upload: set[str] = set()
 
-        queued_downloads: List[Transfer] = []
-        queued_uploads: List[Transfer] = []
+        queued_downloads: list[Transfer] = []
+        queued_uploads: list[Transfer] = []
         for transfer in self._transfers:
             # Get the user object from the user manager, if the user is tracked
             # this user object will be returned. Otherwise a new user object is
@@ -543,7 +543,7 @@ class TransferManager(BaseManager):
 
         return queued_downloads, queued_uploads
 
-    def _prioritize_uploads(self, uploads: List[Transfer]) -> List[Transfer]:
+    def _prioritize_uploads(self, uploads: list[Transfer]) -> list[Transfer]:
         """Ranks the queued uploads by priority based on certain parameters
 
         :return: sorted list of provided by uploads by priority

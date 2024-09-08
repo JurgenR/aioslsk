@@ -1,25 +1,25 @@
 import os
 import shelve
-from typing import List, Protocol
+from typing import Protocol
 from .model import SharedDirectory
 
 
 class SharesCache(Protocol):
     """Abstract base class for storing shares"""
 
-    def read(self) -> List[SharedDirectory]:
+    def read(self) -> list[SharedDirectory]:
         ...
 
-    def write(self, shared_directories: List[SharedDirectory]):
+    def write(self, shared_directories: list[SharedDirectory]):
         ...
 
 
 class SharesNullCache:
 
-    def read(self) -> List[SharedDirectory]:  # pragma: no cover
+    def read(self) -> list[SharedDirectory]:  # pragma: no cover
         return []
 
-    def write(self, shared_directories: List[SharedDirectory]):  # pragma: no cover
+    def write(self, shared_directories: list[SharedDirectory]):  # pragma: no cover
         pass
 
 
@@ -34,9 +34,9 @@ class SharesShelveCache:
     def _get_index_path(self) -> str:
         return os.path.join(self.data_directory, self.filename)
 
-    def read(self) -> List[SharedDirectory]:
+    def read(self) -> list[SharedDirectory]:
         with shelve.open(self._get_index_path(), 'c') as db:
-            directories: List[SharedDirectory] = db.get('index', list())
+            directories: list[SharedDirectory] = db.get('index', list())
             for directory in directories:
                 new_items = set()
                 for item in directory.items:
@@ -45,6 +45,6 @@ class SharesShelveCache:
                 directory.items = new_items
             return directories
 
-    def write(self, shared_directories: List[SharedDirectory]):
+    def write(self, shared_directories: list[SharedDirectory]):
         with shelve.open(self._get_index_path(), 'c') as db:
             db['index'] = shared_directories

@@ -1,7 +1,6 @@
 import copy
 import os
 from pytest_unordered import unordered
-from typing import List
 import shutil
 
 from aioslsk.transfer.cache import TransferShelveCache
@@ -16,7 +15,7 @@ from aioslsk.transfer.state import (
 RESOURCES = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'resources')
 
 
-def create_transfers() -> List[Transfer]:
+def create_transfers() -> list[Transfer]:
     download = Transfer('user0', '@abcdef\\file.mp3', TransferDirection.DOWNLOAD)
     download.state = CompleteState(download)
     download.start_time = 1.0

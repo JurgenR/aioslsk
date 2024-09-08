@@ -1,7 +1,6 @@
 from __future__ import annotations
 from functools import partial
 from ipaddress import IPv4Address
-from typing import List
 import logging
 from async_upnp_client.aiohttp import AiohttpRequester
 from async_upnp_client.client_factory import UpnpFactory
@@ -24,8 +23,8 @@ class UPNP:
     def __init__(self):
         self._factory: UpnpFactory = UpnpFactory(AiohttpRequester())
 
-    async def search_igd_devices(self, source_ip: str, timeout: int = UPNP_DEFAULT_SEARCH_TIMEOUT) -> List[IgdDevice]:
-        devices: List[IgdDevice] = []
+    async def search_igd_devices(self, source_ip: str, timeout: int = UPNP_DEFAULT_SEARCH_TIMEOUT) -> list[IgdDevice]:
+        devices: list[IgdDevice] = []
         logger.info("starting search for IGD devices")
         await async_search(
             partial(self._search_callback, devices),
@@ -36,7 +35,7 @@ class UPNP:
         logger.info("found %d IGD devices", len(devices))
         return devices
 
-    async def _search_callback(self, devices: List[IgdDevice], headers):
+    async def _search_callback(self, devices: list[IgdDevice], headers):
         if headers['ST'] not in IgdDevice.DEVICE_TYPES:
             return
 
@@ -45,7 +44,7 @@ class UPNP:
 
         devices.append(IgdDevice(device, None))
 
-    async def get_mapped_ports(self, device: IgdDevice) -> List[PortMappingEntry]:
+    async def get_mapped_ports(self, device: IgdDevice) -> list[PortMappingEntry]:
         entry_count = await device.async_get_port_mapping_number_of_entries()
 
         if entry_count:
@@ -55,7 +54,7 @@ class UPNP:
         else:
             return await self._get_mapped_ports_unknown(device)
 
-    async def _get_mapped_ports_known(self, device: IgdDevice, count: int) -> List[PortMappingEntry]:
+    async def _get_mapped_ports_known(self, device: IgdDevice, count: int) -> list[PortMappingEntry]:
         entries = []
         for idx in range(count):
             logger.debug("getting port map with index %d on device %r", idx, device.name)
@@ -72,7 +71,7 @@ class UPNP:
 
         return entries
 
-    async def _get_mapped_ports_unknown(self, device: IgdDevice) -> List[PortMappingEntry]:
+    async def _get_mapped_ports_unknown(self, device: IgdDevice) -> list[PortMappingEntry]:
         """Gets all mapped port entries for the given device when the length of
         the total amount of ports is not known.
         """

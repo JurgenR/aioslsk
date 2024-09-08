@@ -1,6 +1,5 @@
 from abc import ABC
 import asyncio
-from typing import List
 
 
 class BaseManager(ABC):
@@ -23,7 +22,7 @@ class BaseManager(ABC):
         loading the data but before connecting
         """
 
-    async def stop(self) -> List[asyncio.Task]:
+    async def stop(self) -> list[asyncio.Task]:
         """Cancel all running tasks. The implementation of this method should
         simply cancel the task and return, the code calling this method should
         be responsible for awaiting the cancellation

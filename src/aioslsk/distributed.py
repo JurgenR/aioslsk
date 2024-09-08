@@ -3,7 +3,7 @@ from collections import deque
 from dataclasses import dataclass
 from functools import partial
 import logging
-from typing import Deque, List, Optional, Union, Tuple
+from typing import Optional, Union
 
 from .base_manager import BaseManager
 from .constants import (
@@ -86,10 +86,10 @@ class DistributedNetwork(BaseManager):
         """Distributed parent. This variable is `None` if we are looking for a
         parent
         """
-        self.children: List[DistributedPeer] = []
-        self.potential_parents: Deque[str] = deque(
+        self.children: list[DistributedPeer] = []
+        self.potential_parents: deque[str] = deque(
             maxlen=POTENTIAL_PARENTS_CACHE_SIZE)
-        self.distributed_peers: List[DistributedPeer] = []
+        self.distributed_peers: list[DistributedPeer] = []
 
         # State parameters sent by the server
         self.parent_min_speed: Optional[int] = None
@@ -104,7 +104,7 @@ class DistributedNetwork(BaseManager):
 
         self.register_listeners()
 
-        self._potential_parent_tasks: List[asyncio.Task] = []
+        self._potential_parent_tasks: list[asyncio.Task] = []
 
     def register_listeners(self):
         self._event_bus.register(
@@ -118,7 +118,7 @@ class DistributedNetwork(BaseManager):
         self._event_bus.register(
             SessionDestroyedEvent, self._on_session_destroyed)
 
-    def _get_advertised_branch_values(self) -> Tuple[str, int]:
+    def _get_advertised_branch_values(self) -> tuple[str, int]:
         """Returns the advertised branch values. These values are to be sent to
         the children and the server to let them know where we are in the
         distributed tree.
@@ -634,7 +634,7 @@ class DistributedNetwork(BaseManager):
             if child.connection:
                 child.connection.queue_messages(*messages)
 
-    async def stop(self) -> List[asyncio.Task]:
+    async def stop(self) -> list[asyncio.Task]:
         """Cancels all pending tasks
 
         :return: a list of tasks that have been cancelled so that they can be
@@ -642,7 +642,7 @@ class DistributedNetwork(BaseManager):
         """
         return self._cancel_potential_parent_tasks()
 
-    def _cancel_potential_parent_tasks(self) -> List[asyncio.Task]:
+    def _cancel_potential_parent_tasks(self) -> list[asyncio.Task]:
         cancelled_tasks = []
 
         for task in self._potential_parent_tasks:

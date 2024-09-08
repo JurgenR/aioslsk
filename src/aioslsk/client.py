@@ -2,7 +2,7 @@ from __future__ import annotations
 import asyncio
 from async_timeout import timeout as atimeout
 import logging
-from typing import List, Optional
+from typing import Optional
 
 from .base_manager import BaseManager
 from .commands import BaseCommand, RC, RT
@@ -81,7 +81,7 @@ class SoulSeekClient:
         self.searches: SearchManager = self.create_search_manager()
         self.server_manager: ServerManager = self.create_server_manager()
 
-        self.services: List[BaseManager] = [
+        self.services: list[BaseManager] = [
             self.users,
             self.rooms,
             self.interests,

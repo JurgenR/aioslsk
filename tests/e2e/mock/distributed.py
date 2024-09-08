@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from math import ceil
 import random
-from typing import Dict, List
 from tests.e2e.mock.peer import Peer
 from tests.e2e.mock.model import DistributedValues, Settings
 
@@ -9,12 +8,12 @@ from tests.e2e.mock.model import DistributedValues, Settings
 class DistributedStrategy(ABC):
 
     def __init__(
-            self, settings: Settings, peers: List[Peer],
-            distributed_tree: Dict[str, DistributedValues]):
+            self, settings: Settings, peers: list[Peer],
+            distributed_tree: dict[str, DistributedValues]):
 
         self.settings: Settings = settings
-        self.peers: List[Peer] = peers
-        self.tree: Dict[str, DistributedValues] = distributed_tree
+        self.peers: list[Peer] = peers
+        self.tree: dict[str, DistributedValues] = distributed_tree
 
     @classmethod
     @abstractmethod
@@ -22,23 +21,23 @@ class DistributedStrategy(ABC):
         ...
 
     @abstractmethod
-    def get_potential_parents(self, target_peer: Peer) -> List[Peer]:
+    def get_potential_parents(self, target_peer: Peer) -> list[Peer]:
         ...
 
-    def get_roots(self) -> List[Peer]:
+    def get_roots(self) -> list[Peer]:
         """Returns the distributed roots"""
         return self.get_potential_roots()
 
-    def get_potential_roots(self) -> List[Peer]:
+    def get_potential_roots(self) -> list[Peer]:
         return [
             peer for peer in self._get_valid_peers()
             if self.tree[peer.user.name].level == 0
         ]
 
-    def _get_valid_peers(self) -> List[Peer]:
+    def _get_valid_peers(self) -> list[Peer]:
         return [peer for peer in self.peers if peer.user]
 
-    def _get_peers_accepting_children(self) -> List[Peer]:
+    def _get_peers_accepting_children(self) -> list[Peer]:
         """Returns a list of all peers that are:
 
         * Have a valid user assigned
@@ -54,7 +53,7 @@ class DistributedStrategy(ABC):
 
         return eligable_peers
 
-    def sort_peers_by_connect_time(self, peers: List[Peer], reverse: bool = False) -> List[Peer]:
+    def sort_peers_by_connect_time(self, peers: list[Peer], reverse: bool = False) -> list[Peer]:
         peers.sort(
             key=lambda p: p.connect_time,
             reverse=reverse
@@ -69,13 +68,13 @@ class ConnectTimeOldestRootStrategy(DistributedStrategy):
     def get_name(cls) -> str:
         return 'connect_time_oldest_root'
 
-    def get_potential_parents(self, target_peer: Peer) -> List[Peer]:
+    def get_potential_parents(self, target_peer: Peer) -> list[Peer]:
         return [
             peer for peer in self.get_roots()
             if peer != target_peer
         ]
 
-    def get_roots(self) -> List[Peer]:
+    def get_roots(self) -> list[Peer]:
         peers = self.sort_peers_by_connect_time(self.get_potential_roots())
         if not peers:
             return []
@@ -92,7 +91,7 @@ class ConnectTimeChainStrategy(DistributedStrategy):
     def get_name(cls) -> str:
         return 'connect_time_chain'
 
-    def get_potential_parents(self, target_peer: Peer) -> List[Peer]:
+    def get_potential_parents(self, target_peer: Peer) -> list[Peer]:
         peers = [
             peer for peer in self._get_peers_accepting_children()
             if peer != target_peer and peer.connect_time < target_peer.connect_time
@@ -103,7 +102,7 @@ class ConnectTimeChainStrategy(DistributedStrategy):
 
         return self.sort_peers_by_connect_time(peers, reverse=True)[:1]
 
-    def get_roots(self) -> List[Peer]:
+    def get_roots(self) -> list[Peer]:
         peers = self.get_potential_roots()
         if not peers:
             return []
@@ -120,7 +119,7 @@ class ChainParentsStrategy(DistributedStrategy):
     def get_name(cls) -> str:
         return 'chain'
 
-    def get_potential_parents(self, target_peer: Peer) -> List[Peer]:
+    def get_potential_parents(self, target_peer: Peer) -> list[Peer]:
         accepting_peers = self._get_peers_accepting_children()
         try:
             max_level = max([
@@ -143,10 +142,10 @@ class EveryoneRootStrategy(DistributedStrategy):
     def get_name(cls) -> str:
         return 'everyone_root'
 
-    def get_roots(self) -> List[Peer]:
+    def get_roots(self) -> list[Peer]:
         return self.peers
 
-    def get_potential_parents(self, target_peer: Peer) -> List[Peer]:
+    def get_potential_parents(self, target_peer: Peer) -> list[Peer]:
         return []
 
 
@@ -209,7 +208,7 @@ class RealisticParentsStrategy(DistributedStrategy):
     selection process.
     """
 
-    def __init__(self, settings: Settings, peers: List[Peer]):
+    def __init__(self, settings: Settings, peers: list[Peer]):
         super().__init__(settings, peers)
         self.root_percentage: float = 0.01
 
@@ -217,7 +216,7 @@ class RealisticParentsStrategy(DistributedStrategy):
     def get_name(cls) -> str:
         return 'realistic'
 
-    def get_potential_parents(self, target_peer: Peer) -> List[Peer]:
+    def get_potential_parents(self, target_peer: Peer) -> list[Peer]:
         possible_peers = []
         for peer in self._get_peers_accepting_children():
             if peer == target_peer:
@@ -228,7 +227,7 @@ class RealisticParentsStrategy(DistributedStrategy):
 
         return random.choices(possible_peers, k=10)
 
-    def get_roots(self) -> List[Peer]:
+    def get_roots(self) -> list[Peer]:
         roots = sorted(
             self.get_potential_roots(),
             key=lambda p: p.user.avg_speed,

@@ -1,5 +1,4 @@
 import re
-from typing import List
 
 
 DEFAULT_LISTENING_HOST: str = '0.0.0.0'
@@ -27,7 +26,7 @@ PATH_SEPERATOR_PATTERN = re.compile(r"[\\/]+")
 UPNP_DEFAULT_CHECK_INTERVAL: int = 600
 UPNP_DEFAULT_LEASE_DURATION: int = 6 * 60 * 60
 UPNP_DEFAULT_SEARCH_TIMEOUT: int = 10
-UPNP_MAPPING_SERVICES: List[str] = ["WANIPC", "WANPPP"]
+UPNP_MAPPING_SERVICES: list[str] = ["WANIPC", "WANPPP"]
 POTENTIAL_PARENTS_CACHE_SIZE: int = 20
 """Maximum amount of potential parents stored"""
 DEFAULT_COMMAND_TIMEOUT: float = 10

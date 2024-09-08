@@ -3,11 +3,9 @@ from abc import ABC, abstractmethod
 import time
 from typing import (
     Generic,
-    List,
     NamedTuple,
     Optional,
     Union,
-    Tuple,
     TypeVar,
     TYPE_CHECKING,
 )
@@ -77,9 +75,9 @@ RC = TypeVar('RC', bound=Union[MessageDataclass, None])
 RT = TypeVar('RT')
 """Response value type"""
 
-Recommendations = Tuple[List[Recommendation], List[Recommendation]]
-UserInterests = Tuple[List[str], List[str]]
-SharesReply = Tuple[List[DirectoryData], List[DirectoryData]]
+Recommendations = tuple[list[Recommendation], list[Recommendation]]
+UserInterests = tuple[list[str], list[str]]
+SharesReply = tuple[list[DirectoryData], list[DirectoryData]]
 
 
 class UserStatusInfo(NamedTuple):
@@ -171,7 +169,7 @@ class GetUserStatsCommand(BaseCommand[GetUserStats.Response, UserStatsInfo]):
         )
 
 
-class GetRoomListCommand(BaseCommand[RoomList.Response, List[Room]]):
+class GetRoomListCommand(BaseCommand[RoomList.Response, list[Room]]):
 
     async def send(self, client: SoulSeekClient):
         await client.network.send_server_messages(
@@ -184,7 +182,7 @@ class GetRoomListCommand(BaseCommand[RoomList.Response, List[Room]]):
             RoomList.Response
         )
 
-    def handle_response(self, client: SoulSeekClient, response: RoomList.Response) -> List[Room]:
+    def handle_response(self, client: SoulSeekClient, response: RoomList.Response) -> list[Room]:
         return [
             room for name, room in client.rooms.rooms.items()
             if name in response.rooms
@@ -238,7 +236,7 @@ class LeaveRoomCommand(BaseCommand[LeaveRoom.Response, Room]):
         return client.rooms.get_or_create_room(response.room)
 
 
-class GrantRoomMembershipCommand(BaseCommand[PrivateRoomGrantMembership.Response, Tuple[Room, User]]):
+class GrantRoomMembershipCommand(BaseCommand[PrivateRoomGrantMembership.Response, tuple[Room, User]]):
 
     def __init__(self, room: str, username: str):
         self.room: str = room
@@ -260,14 +258,14 @@ class GrantRoomMembershipCommand(BaseCommand[PrivateRoomGrantMembership.Response
         )
 
     def handle_response(
-            self, client: SoulSeekClient, response: PrivateRoomGrantMembership.Response) -> Tuple[Room, User]:
+            self, client: SoulSeekClient, response: PrivateRoomGrantMembership.Response) -> tuple[Room, User]:
         return (
             client.rooms.get_or_create_room(response.room),
             client.users.get_user_object(response.username)
         )
 
 
-class RevokeRoomMembershipCommand(BaseCommand[PrivateRoomRevokeMembership.Response, Tuple[Room, User]]):
+class RevokeRoomMembershipCommand(BaseCommand[PrivateRoomRevokeMembership.Response, tuple[Room, User]]):
 
     def __init__(self, room: str, username: str):
         self.room: str = room
@@ -289,7 +287,7 @@ class RevokeRoomMembershipCommand(BaseCommand[PrivateRoomRevokeMembership.Respon
         )
 
     def handle_response(
-            self, client: SoulSeekClient, response: PrivateRoomRevokeMembership.Response) -> Tuple[Room, User]:
+            self, client: SoulSeekClient, response: PrivateRoomRevokeMembership.Response) -> tuple[Room, User]:
         return (
             client.rooms.get_or_create_room(response.room),
             client.users.get_user_object(response.username)
@@ -329,7 +327,7 @@ class DropRoomOwnershipCommand(BaseCommand[None, None]):
         )
 
 
-class GetItemRecommendationsCommand(BaseCommand[GetItemRecommendations.Response, List[Recommendation]]):
+class GetItemRecommendationsCommand(BaseCommand[GetItemRecommendations.Response, list[Recommendation]]):
 
     def __init__(self, item: str):
         self.item: str = item
@@ -349,7 +347,7 @@ class GetItemRecommendationsCommand(BaseCommand[GetItemRecommendations.Response,
         )
 
     def handle_response(
-            self, client: SoulSeekClient, response: GetItemRecommendations.Response) -> List[Recommendation]:
+            self, client: SoulSeekClient, response: GetItemRecommendations.Response) -> list[Recommendation]:
         return response.recommendations
 
 
@@ -387,7 +385,7 @@ class GetGlobalRecommendationsCommand(BaseCommand[GetGlobalRecommendations.Respo
         return response.recommendations, response.unrecommendations
 
 
-class GetItemSimilarUsersCommand(BaseCommand[GetItemSimilarUsers.Response, List[User]]):
+class GetItemSimilarUsersCommand(BaseCommand[GetItemSimilarUsers.Response, list[User]]):
 
     def __init__(self, item: str):
         self.item: str = item
@@ -406,11 +404,11 @@ class GetItemSimilarUsersCommand(BaseCommand[GetItemSimilarUsers.Response, List[
             }
         )
 
-    def handle_response(self, client: SoulSeekClient, response: GetItemSimilarUsers.Response) -> List[User]:
+    def handle_response(self, client: SoulSeekClient, response: GetItemSimilarUsers.Response) -> list[User]:
         return list(map(client.users.get_user_object, response.usernames))
 
 
-class GetSimilarUsersCommand(BaseCommand[GetSimilarUsers.Response, List[Tuple[User, int]]]):
+class GetSimilarUsersCommand(BaseCommand[GetSimilarUsers.Response, list[tuple[User, int]]]):
 
     async def send(self, client: SoulSeekClient):
         await client.network.send_server_messages(
@@ -423,7 +421,7 @@ class GetSimilarUsersCommand(BaseCommand[GetSimilarUsers.Response, List[Tuple[Us
             GetSimilarUsers.Response
         )
 
-    def handle_response(self, client: SoulSeekClient, response: GetSimilarUsers.Response) -> List[Tuple[User, int]]:
+    def handle_response(self, client: SoulSeekClient, response: GetSimilarUsers.Response) -> list[tuple[User, int]]:
         similar_users = []
         for similar_user in response.users:
             similar_users.append(
@@ -436,7 +434,7 @@ class GetSimilarUsersCommand(BaseCommand[GetSimilarUsers.Response, List[Tuple[Us
         return similar_users
 
 
-class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, Tuple[str, int, Optional[int]]]):
+class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, tuple[str, int, Optional[int]]]):
 
     def __init__(self, username: str):
         self.username: str = username
@@ -456,7 +454,7 @@ class GetPeerAddressCommand(BaseCommand[GetPeerAddress.Response, Tuple[str, int,
         )
 
     def handle_response(
-            self, client: SoulSeekClient, response: GetPeerAddress.Response) -> Tuple[str, int, Optional[int]]:
+            self, client: SoulSeekClient, response: GetPeerAddress.Response) -> tuple[str, int, Optional[int]]:
         return (response.ip, response.port, response.obfuscated_port)
 
 
@@ -633,8 +631,8 @@ class PrivateMessageCommand(BaseCommand[None, None]):
 class PrivateMessageUsersCommand(BaseCommand[None, None]):
     """Sends a private message to multiple users"""
 
-    def __init__(self, usernames: List[str], message: str):
-        self.usernames: List[str] = usernames
+    def __init__(self, usernames: list[str], message: str):
+        self.usernames: list[str] = usernames
         self.message: str = message
 
     async def send(self, client: SoulSeekClient):
@@ -926,7 +924,7 @@ class PeerGetSharesCommand(BaseCommand[PeerSharesReply.Request, SharesReply]):
         return response.directories, locked_dirs
 
 
-class PeerGetDirectoryContentCommand(BaseCommand[PeerDirectoryContentsReply.Request, List[DirectoryData]]):
+class PeerGetDirectoryContentCommand(BaseCommand[PeerDirectoryContentsReply.Request, list[DirectoryData]]):
 
     def __init__(self, username: str, directory: str):
         self.username: str = username
@@ -951,5 +949,5 @@ class PeerGetDirectoryContentCommand(BaseCommand[PeerDirectoryContentsReply.Requ
         )
 
     def handle_response(
-            self, client: SoulSeekClient, response: PeerDirectoryContentsReply.Request) -> List[DirectoryData]:
+            self, client: SoulSeekClient, response: PeerDirectoryContentsReply.Request) -> list[DirectoryData]:
         return response.directories

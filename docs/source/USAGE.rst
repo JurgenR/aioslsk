@@ -242,9 +242,9 @@ A couple of methods are available to retrieve transfers:
 
     from aioslsk.transfer.model import Transfer
 
-    all_transfers = List[Transfer] = client.transfers.transfers
-    downloads: List[Transfer] = client.transfers.get_downloads()
-    uploads: List[Transfer] = client.transfers.get_uploads()
+    all_transfers = list[Transfer] = client.transfers.transfers
+    downloads: list[Transfer] = client.transfers.get_downloads()
+    uploads: list[Transfer] = client.transfers.get_uploads()
 
 
 Events are available to listen for the transfer progress:
@@ -555,7 +555,7 @@ Example a strategy that places files in a directory containing the current date:
     class DatetimeDirectoryStrategy(NamingStrategy):
 
         # Override the apply method
-        def apply(self, remote_path: str, local_dir: str, local_filename: str) -> Tuple[str, str]:
+        def apply(self, remote_path: str, local_dir: str, local_filename: str) -> tuple[str, str]:
             current_datetime = datetime.now().strftime('%Y-%M-%d')
             return os.path.join(local_dir, current_datetime), local_filename
 

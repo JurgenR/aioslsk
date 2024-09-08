@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 import logging
 import time
-from typing import Deque, List, Optional, Tuple
+from typing import Optional
 
 from .state import TransferState, TransferStateListener, VirginState
 
@@ -96,11 +96,11 @@ class Transfer:
         """Snapshot of the transfer progress. Used internally to report progress
         at set intervals
         """
-        self._speed_log: Deque[Tuple[float, int]] = deque(maxlen=SPEED_LOG_ENTRIES)
+        self._speed_log: deque[tuple[float, int]] = deque(maxlen=SPEED_LOG_ENTRIES)
         self._remotely_queue_task: Optional[asyncio.Task] = None
         self._transfer_task: Optional[asyncio.Task] = None
         self._state_lock: asyncio.Lock = asyncio.Lock()
-        self.state_listeners: List[TransferStateListener] = []
+        self.state_listeners: list[TransferStateListener] = []
 
     def __setstate__(self, obj_state):
         """Called when unpickling"""
@@ -279,7 +279,7 @@ class Transfer:
     def is_transfered(self) -> bool:
         return self.filesize == self.bytes_transfered
 
-    def get_tasks(self) -> List[asyncio.Task]:
+    def get_tasks(self) -> list[asyncio.Task]:
         tasks = []
         if self._remotely_queue_task is not None:
             tasks.append(self._remotely_queue_task)
@@ -287,7 +287,7 @@ class Transfer:
             tasks.append(self._transfer_task)
         return tasks
 
-    def cancel_tasks(self) -> List[asyncio.Task]:
+    def cancel_tasks(self) -> list[asyncio.Task]:
         """Cancels all tasks for the transfer, this method returns the tasks
         which have been cancelled
         """

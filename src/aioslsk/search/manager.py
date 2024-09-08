@@ -2,7 +2,7 @@ import asyncio
 from collections import deque
 from functools import partial
 import logging
-from typing import Deque, Dict, List, Optional, Union
+from typing import Optional, Union
 
 from ..base_manager import BaseManager
 from ..events import (
@@ -67,20 +67,20 @@ class SearchManager(BaseManager):
         self._ticket_generator = ticket_generator()
         self._session: Optional[Session] = None
 
-        self.received_searches: Deque[ReceivedSearch] = deque(
+        self.received_searches: deque[ReceivedSearch] = deque(
             list(), maxlen=self._settings.searches.receive.store_amount)
-        self.requests: Dict[int, SearchRequest] = {}
+        self.requests: dict[int, SearchRequest] = {}
 
         # Server variables
         self.search_inactivity_timeout: Optional[int] = None
         self.wishlist_interval: Optional[int] = None
-        self.excluded_search_phrases: List[str] = []
+        self.excluded_search_phrases: list[str] = []
 
         self.register_listeners()
 
         self._MESSAGE_MAP = build_message_map(self)
 
-        self._search_reply_tasks: List[asyncio.Task] = []
+        self._search_reply_tasks: list[asyncio.Task] = []
         self._wishlist_task: BackgroundTask = BackgroundTask(
             interval=600,
             task_coro=self._wishlist_job,
@@ -381,7 +381,7 @@ class SearchManager(BaseManager):
     async def _on_session_destroyed(self, event: SessionDestroyedEvent):
         self._session = None
 
-    async def stop(self) -> List[asyncio.Task]:
+    async def stop(self) -> list[asyncio.Task]:
         """Cancels all pending tasks
 
         :return: a list of tasks that have been cancelled so that they can be
