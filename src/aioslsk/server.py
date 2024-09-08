@@ -1,6 +1,4 @@
-import asyncio
 import logging
-from typing import Optional
 
 from .base_manager import BaseManager
 from .constants import SERVER_PING_INTERVAL
@@ -9,7 +7,7 @@ from .protocol.messages import Ping
 from .network.connection import ConnectionState, ServerConnection
 from .network.network import Network
 from .settings import Settings
-from .utils import task_counter
+from .tasks import BackgroundTask
 
 
 logger = logging.getLogger(__name__)
@@ -23,7 +21,12 @@ class ServerManager(BaseManager):
         self._event_bus: EventBus = event_bus
         self._network: Network = network
 
-        self._ping_task: Optional[asyncio.Task] = None
+        self._ping_task: BackgroundTask = BackgroundTask(
+            interval=SERVER_PING_INTERVAL,
+            task_coro=self._ping_job,
+            preempt_wait=True,
+            name='server-ping-task'
+        )
 
         self.register_listeners()
 
@@ -41,17 +44,10 @@ class ServerManager(BaseManager):
 
     # Job methods
     async def _ping_job(self):
-        while True:
-            await asyncio.sleep(SERVER_PING_INTERVAL)
-            try:
-                await self.send_ping()
-            except Exception as exc:
-                logger.warning("failed to ping server. exception=%r", exc)
-
-    def _cancel_ping_task(self):
-        if self._ping_task is not None:
-            self._ping_task.cancel()
-            self._ping_task = None
+        try:
+            await self.send_ping()
+        except Exception as exc:
+            logger.warning("failed to ping server. exception=%r", exc)
 
     # Listeners
 
@@ -60,11 +56,7 @@ class ServerManager(BaseManager):
             return
 
         if event.state == ConnectionState.CONNECTED:
-            self._ping_task = asyncio.create_task(
-                self._ping_job(),
-                name=f'ping-task-{task_counter()}'
-            )
+            self._ping_task.start()
 
         elif event.state == ConnectionState.CLOSING:
-
-            self._cancel_ping_task()
+            self._ping_task.cancel()

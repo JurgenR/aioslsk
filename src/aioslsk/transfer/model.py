@@ -327,6 +327,7 @@ class Transfer:
     def __eq__(self, other: object):
         if not isinstance(other, Transfer):
             return NotImplemented
+
         other_vars = (other.remote_path, other.username, other.direction, )
         own_vars = (self.remote_path, self.username, self.direction, )
         return other_vars == own_vars

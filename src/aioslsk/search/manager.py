@@ -41,6 +41,7 @@ from ..settings import Settings
 from ..shares.manager import SharesManager
 from ..shares.utils import convert_items_to_file_data
 from ..session import Session
+from ..tasks import BackgroundTask
 from ..transfer.interface import UploadInfoProvider
 from ..utils import task_counter, ticket_generator
 from .model import ReceivedSearch, SearchResult, SearchRequest, SearchType
@@ -56,6 +57,7 @@ class SearchManager(BaseManager):
             self, settings: Settings, event_bus: EventBus,
             shares_manager: SharesManager, upload_info_provider: UploadInfoProvider,
             network: Network):
+
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._network: Network = network
@@ -79,7 +81,11 @@ class SearchManager(BaseManager):
         self._MESSAGE_MAP = build_message_map(self)
 
         self._search_reply_tasks: List[asyncio.Task] = []
-        self._wishlist_task: Optional[asyncio.Task] = None
+        self._wishlist_task: BackgroundTask = BackgroundTask(
+            interval=600,
+            task_coro=self._wishlist_job,
+            name='wishlist-task'
+        )
 
     def register_listeners(self):
         self._event_bus.register(
@@ -248,34 +254,31 @@ class SearchManager(BaseManager):
         finally:
             self._search_reply_tasks.remove(task)
 
-    async def _wishlist_job(self, interval: int):
+    async def _wishlist_job(self):
         """Job handling wishlist queries, this method is intended to be run as
         a task. This method will run at the given ``interval`` (returned by the
         server on start up).
         """
-        while True:
-            items = self._settings.searches.wishlist
+        items = self._settings.searches.wishlist
 
-            # Remove all current wishlist searches
-            self.requests = {
-                ticket: qry for ticket, qry in self.requests.items()
-                if qry.search_type != SearchType.WISHLIST
-            }
+        # Remove all current wishlist searches
+        self.requests = {
+            ticket: qry for ticket, qry in self.requests.items()
+            if qry.search_type != SearchType.WISHLIST
+        }
 
-            logger.info("starting wishlist search of %d items", len(items))
-            # Recreate
-            for item in filter(lambda item: item.enabled, items):
-                ticket = next(self._ticket_generator)
-                self.requests[ticket] = SearchRequest(
-                    ticket,
-                    item.query,
-                    search_type=SearchType.WISHLIST
-                )
-                self._network.queue_server_messages(
-                    WishlistSearch.Request(ticket, item.query)
-                )
-
-            await asyncio.sleep(interval)
+        logger.info("starting wishlist search of %d items", len(items))
+        # Recreate
+        for item in filter(lambda item: item.enabled, items):
+            ticket = next(self._ticket_generator)
+            self.requests[ticket] = SearchRequest(
+                ticket,
+                item.query,
+                search_type=SearchType.WISHLIST
+            )
+            self._network.queue_server_messages(
+                WishlistSearch.Request(ticket, item.query)
+            )
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message
@@ -354,12 +357,12 @@ class SearchManager(BaseManager):
     @on_message(WishlistInterval.Response)
     async def _on_wish_list_interval(self, message: WishlistInterval.Response, connection: ServerConnection):
         self.wishlist_interval = message.interval
-        self._cancel_wishlist_task()
 
-        self._wishlist_task = asyncio.create_task(
-            self._wishlist_job(message.interval),
-            name=f'wishlist-job-{task_counter()}'
-        )
+        if task := self._wishlist_task.cancel():
+            await task
+
+        self._wishlist_task.interval = self.wishlist_interval
+        self._wishlist_task.start()
 
     @on_message(ExcludedSearchPhrases.Response)
     async def _on_excluded_search_phrases(self, message: ExcludedSearchPhrases.Response, connection: ServerConnection):
@@ -370,21 +373,13 @@ class SearchManager(BaseManager):
             return
 
         if event.state == ConnectionState.CLOSING:
-            self._cancel_wishlist_task()
+            self._wishlist_task.cancel()
 
     async def _on_session_initialized(self, event: SessionInitializedEvent):
         self._session = event.session
 
     async def _on_session_destroyed(self, event: SessionDestroyedEvent):
         self._session = None
-
-    def _cancel_wishlist_task(self) -> Optional[asyncio.Task]:
-        task = self._wishlist_task
-        if self._wishlist_task is not None:
-            self._wishlist_task.cancel()
-            self._wishlist_task = None
-            return task
-        return None
 
     async def stop(self) -> List[asyncio.Task]:
         """Cancels all pending tasks
@@ -398,7 +393,7 @@ class SearchManager(BaseManager):
             task.cancel()
             cancelled_tasks.append(task)
 
-        if (wishlist_task := self._cancel_wishlist_task()) is not None:
+        if wishlist_task := self._wishlist_task.cancel():
             cancelled_tasks.append(wishlist_task)
 
         return cancelled_tasks
