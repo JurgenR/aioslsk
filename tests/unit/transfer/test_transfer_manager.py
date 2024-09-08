@@ -100,6 +100,17 @@ class TestTransferManager:
         )
 
     @pytest.mark.asyncio
+    async def test_whenAddTransfer_alreadyExists_shouldNotAdd(self, manager: TransferManager):
+        transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
+        await manager.add(transfer)
+
+        new_transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
+        ret_transfer = await manager.add(new_transfer)
+
+        assert ret_transfer == transfer
+        assert len(manager.transfers) == 1
+
+    @pytest.mark.asyncio
     async def test_whenQueueTransfer_shouldSetQueuedState(self, manager: TransferManager):
         transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
         await manager.add(transfer)

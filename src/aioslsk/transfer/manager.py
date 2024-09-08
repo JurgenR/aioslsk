@@ -57,6 +57,7 @@ from .state import TransferState
 from ..user.model import UserStatus, TrackingFlag
 from ..settings import Settings
 from ..shares.manager import SharesManager
+from ..tasks import BackgroundTask
 from ..user.manager import UserManager
 from ..utils import task_counter, ticket_generator
 
@@ -87,6 +88,7 @@ class TransferManager(BaseManager):
             self, settings: Settings, event_bus: EventBus,
             user_manager: UserManager, shares_manager: SharesManager,
             network: Network, cache: Optional[TransferCache] = None):
+
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._user_manager: UserManager = user_manager
@@ -97,7 +99,11 @@ class TransferManager(BaseManager):
 
         self._transfers: List[Transfer] = []
         self._file_connection_futures: Dict[int, asyncio.Future] = {}
-        self._progress_reporting_task: Optional[asyncio.Task] = None
+        self._progress_reporting_task: BackgroundTask = BackgroundTask(
+            interval=self._settings.transfers.report_interval,
+            task_coro=self._progress_reporting_job,
+            name='transfer-progress-task'
+        )
 
         self._MESSAGE_MAP = build_message_map(self)
 
@@ -163,9 +169,8 @@ class TransferManager(BaseManager):
         for transfer in self.transfers:
             cancelled_tasks.extend(transfer.cancel_tasks())
 
-        if self._progress_reporting_task:
-            cancelled_tasks.append(self._progress_reporting_task)
-            self.stop_progress_reporting_task()
+        if task := self._progress_reporting_task.cancel():
+            cancelled_tasks.append(task)
 
         return cancelled_tasks
 
@@ -175,31 +180,22 @@ class TransferManager(BaseManager):
         defined in the settings. This method is called automatically when
         starting the client
         """
-        if not self._progress_reporting_task:
-            self._progress_reporting_task = asyncio.create_task(
-                self._progress_reporting_job(),
-                name=f'progress-reporting-{task_counter()}'
-            )
+        self._progress_reporting_task.start()
 
     def stop_progress_reporting_task(self):
         """Start the transfer progress reporting task"""
-        if self._progress_reporting_task:
-            self._progress_reporting_task.cancel()
-            self._progress_reporting_task = None
+        self._progress_reporting_task.cancel()
 
     async def _progress_reporting_job(self):
-        while True:
-            updates = []
-            for transfer in self._transfers:
-                previous = transfer.progress_snapshot
-                current = transfer.take_progress_snapshot()
-                if previous != current:
-                    updates.append((transfer, previous, current))
+        updates = []
+        for transfer in self._transfers:
+            previous = transfer.progress_snapshot
+            current = transfer.take_progress_snapshot()
+            if previous != current:
+                updates.append((transfer, previous, current))
 
-            if updates:
-                await self._event_bus.emit(TransferProgressEvent(updates))
-
-            await asyncio.sleep(self._settings.transfers.report_interval)
+        if updates:
+            await self._event_bus.emit(TransferProgressEvent(updates))
 
     async def download(self, username: str, filename: str, paused: bool = False) -> Transfer:
         """Requests to start a downloading the file from the given user
@@ -978,6 +974,7 @@ class TransferManager(BaseManager):
 
     async def on_transfer_state_changed(
             self, transfer: Transfer, old: TransferState.State, new: TransferState.State):
+
         await self.manage_transfers()
 
     async def _on_message_received(self, event: MessageReceivedEvent):
@@ -1048,6 +1045,7 @@ class TransferManager(BaseManager):
         except (FileNotFoundError, FileNotSharedError):
             async with transfer._state_lock:
                 await transfer.state.fail(reason=Reasons.FILE_NOT_SHARED)
+
             connection.queue_message(
                 PeerTransferQueueFailed.Request(
                     filename=message.filename,
@@ -1273,6 +1271,10 @@ class TransferManager(BaseManager):
                 filename,
                 TransferDirection.UPLOAD
             )
+            place = self.get_place_in_queue(transfer)
+            if place:
+                connection.queue_message(
+                    PeerPlaceInQueueReply.Request(filename, place))
 
         except ValueError:
             logger.warning(
@@ -1280,12 +1282,6 @@ class TransferManager(BaseManager):
                 filename,
                 connection.username
             )
-
-        else:
-            place = self.get_place_in_queue(transfer)
-            if place:
-                connection.queue_message(
-                    PeerPlaceInQueueReply.Request(filename, place))
 
     @on_message(PeerPlaceInQueueReply.Request)
     async def _on_peer_place_in_queue_reply(
@@ -1302,6 +1298,7 @@ class TransferManager(BaseManager):
                 message.filename,
                 TransferDirection.DOWNLOAD
             )
+            transfer.place_in_queue = message.place
 
         except ValueError:
             logger.warning(
@@ -1309,9 +1306,6 @@ class TransferManager(BaseManager):
                 message.filename,
                 connection.username
             )
-
-        else:
-            transfer.place_in_queue = message.place
 
     @on_message(PeerUploadFailed.Request)
     async def _on_peer_upload_failed(self, message: PeerUploadFailed.Request, connection: PeerConnection):
@@ -1330,6 +1324,8 @@ class TransferManager(BaseManager):
                 message.filename,
                 TransferDirection.DOWNLOAD
             )
+            transfer.remotely_queued = False
+            await self.manage_transfers()
 
         except ValueError:
             logger.warning(
@@ -1337,10 +1333,6 @@ class TransferManager(BaseManager):
                 message.filename,
                 connection.username
             )
-
-        else:
-            transfer.remotely_queued = False
-            await self.manage_transfers()
 
     @on_message(PeerTransferQueueFailed.Request)
     async def _on_peer_transfer_queue_failed(
@@ -1355,14 +1347,16 @@ class TransferManager(BaseManager):
         reason = message.reason
         try:
             transfer = self.get_transfer(
-                connection.username, filename, TransferDirection.DOWNLOAD)
+                connection.username,
+                filename,
+                TransferDirection.DOWNLOAD
+            )
+
+            async with transfer._state_lock:
+                await transfer.state.fail(reason=reason)
 
         except ValueError:
             logger.warning(
                 "PeerTransferQueueFailed : could not find transfer for %s from %s",
                 filename, connection.username
             )
-
-        else:
-            async with transfer._state_lock:
-                await transfer.state.fail(reason=reason)

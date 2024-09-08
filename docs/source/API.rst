@@ -93,6 +93,13 @@ aioslsk.session
     :members:
 
 
+aioslsk.tasks
+=============
+
+.. automodule:: aioslsk.tasks
+    :members:
+
+
 aioslsk.utils
 =============
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 from async_timeout import timeout as atimeout
 from async_upnp_client.profiles.igd import PortMappingEntry
+from dataclasses import dataclass
 import enum
 from functools import partial
 from ipaddress import IPv4Address
@@ -61,6 +62,7 @@ from ..protocol.messages import (
     SetListenPort,
 )
 from . import upnp
+from ..tasks import BackgroundTask
 from .rate_limiter import RateLimiter
 from ..utils import task_counter, ticket_generator
 
@@ -98,6 +100,7 @@ class ExpectedResponse(asyncio.Future):
             message_class: Type[MessageDataclass],
             peer: Optional[str] = None, fields: Optional[Dict[str, Any]] = None,
             loop: Optional[asyncio.AbstractEventLoop] = None):
+
         super().__init__(loop=loop)
         self.connection_class: Type[Union[PeerConnection, ServerConnection]] = connection_class
         self.message_class: Type[MessageDataclass] = message_class
@@ -130,6 +133,11 @@ class ExpectedResponse(asyncio.Future):
         return True
 
 
+@dataclass
+class WatchdogContext:
+    last_state: ConnectionState
+
+
 class Network:
 
     def __init__(self, settings: Settings, event_bus: EventBus):
@@ -157,10 +165,24 @@ class Network:
         self._ip_overrides: Dict[str, str] = self._settings.debug.ip_overrides
 
         # Operational
-        self._log_connections_task: Optional[asyncio.Task] = None
         self._create_peer_connection_tasks: List[asyncio.Task] = []
-        self._upnp_task: Optional[asyncio.Task] = None
-        self._connection_watchdog_task: Optional[asyncio.Task] = None
+        self._log_connections_task: BackgroundTask = BackgroundTask(
+            interval=10,
+            task_coro=self._log_connections_job,
+            preempt_wait=True,
+            name='log-connections-task'
+        )
+        self._upnp_task: BackgroundTask = BackgroundTask(
+            interval=self._settings.network.upnp.check_interval,
+            task_coro=self._upnp_job,
+            name='upnp-task'
+        )
+        self._connection_watchdog_task: BackgroundTask = BackgroundTask(
+            interval=0.5,
+            task_coro=self._server_connection_watchdog_job,
+            name='server-connection-watchdog-task',
+            context=WatchdogContext(self.server_connection.state)
+        )
 
         self.register_listeners()
 
@@ -198,12 +220,8 @@ class Network:
         await self.connect_listening_ports()
         await self.connect_server()
 
-        log_connections = self._settings.debug.log_connection_count
-        if log_connections and self._log_connections_task is None:
-            self._log_connections_task = asyncio.create_task(
-                self._log_connections_job(),
-                name=f'log-connections-{task_counter()}'
-            )
+        if self._settings.debug.log_connection_count:
+            self._log_connections_task.start()
 
     async def connect_listening_ports(self):
         """This method will attempt to connect both listening ports (if
@@ -337,76 +355,43 @@ class Network:
         for conn in self.peer_connections:
             conn.download_rate_limiter = self._download_rate_limiter
 
-    async def _server_connection_watchdog_job(self):
+    async def _server_connection_watchdog_job(self, context: WatchdogContext):
         """Reconnects to the server if it is closed. This should be started as a
         task and should be cancelled upon request.
         """
         timeout = self._settings.network.server.reconnect.timeout
-        logger.info("starting server connection watchdog")
-        last_state = self.server_connection.state
-        while True:
-            await asyncio.sleep(0.5)
+        if self.server_connection.state == ConnectionState.CLOSED:
 
-            if self.server_connection.state == ConnectionState.CLOSED:
+            if not self._settings.credentials.are_configured():
+                if self.server_connection.state != context.last_state:
+                    logger.warning(
+                        "credentials are not correctly configured in the "
+                        "settings, will not attempt to reconnect"
+                    )
+                return
 
-                if not self._settings.credentials.are_configured():
-                    if self.server_connection.state != last_state:
-                        logger.warning(
-                            "credentials are not correctly configured in the "
-                            "settings, will not attempt to reconnect"
-                        )
-                    continue
-
+            else:
+                logger.info("will attempt to reconnect to server in %d seconds", timeout)
+                await asyncio.sleep(timeout)
+                try:
+                    await self.connect_server()
+                except ConnectionFailedError:
+                    logger.warning("failed to reconnect to server")
                 else:
-                    logger.info("will attempt to reconnect to server in %d seconds", timeout)
-                    await asyncio.sleep(timeout)
-                    try:
-                        await self.connect_server()
-                    except ConnectionFailedError:
-                        logger.warning("failed to reconnect to server")
-                    else:
-                        await self._event_bus.emit(
-                            ServerReconnectedEvent())
+                    await self._event_bus.emit(
+                        ServerReconnectedEvent())
 
-            last_state = self.server_connection.state
-
-    async def start_server_connection_watchdog(self):
-        """Starts the server connection watchdog if it is not already running"""
-        if self._connection_watchdog_task is None:
-            self._connection_watchdog_task = asyncio.create_task(
-                self._server_connection_watchdog_job(),
-                name=f'watchdog-task-{task_counter()}'
-            )
-
-    def stop_server_connection_watchdog(self):
-        """Stops the server connection watchdog if it is running"""
-        if self._connection_watchdog_task is not None:
-            self._connection_watchdog_task.cancel()
-            self._connection_watchdog_task = None
+        context.last_state = self.server_connection.state
 
     async def _log_connections_job(self):
-        while True:
-            await asyncio.sleep(10)
-            count = len(self.peer_connections)
-            logger.info(
-                "currently %d peer connections (%d tasks)",
-                count, len(self._create_peer_connection_tasks)
-            )
-
-    async def start_upnp_job(self):
-        if self._upnp_task is None:
-            self._upnp_task = asyncio.create_task(
-                self._upnp_job(),
-                name=f'upnp-task-{task_counter()}'
-            )
-
-    def stop_upnp_job(self):
-        if self._upnp_task is not None:
-            self._upnp_task.cancel()
-            self._upnp_task = None
+        count = len(self.peer_connections)
+        logger.info(
+            "currently %d peer connections (%d tasks)",
+            count, len(self._create_peer_connection_tasks)
+        )
 
     async def _upnp_job(self):
-        """This job ensures the UPnP port mappings are maintained.
+        """This job ensures the UPnP port mappings are created and maintained.
 
         The interval that the mapping is checked is configured through the
         ``network.upnp.check_interval`` setting. This setting represents the max
@@ -428,61 +413,72 @@ class Network:
             raise ValueError(
                 f"port {internal_ip}:{port} was not mapped on device {device.name}")
 
-        while True:
-            ports = [port for port in self.get_listening_ports() if port]
-            ip_address = self.server_connection.get_connecting_ip()
+        ports = [port for port in self.get_listening_ports() if port]
+        ip_address = self.server_connection.get_connecting_ip()
 
-            devices = await self._upnp.search_igd_devices(
-                ip_address, timeout=self._settings.network.upnp.search_timeout
-            )
-            logger.info("found %d devices for UPnP port mapping", len(devices))
-            lease_expirations = []
+        devices = await self._upnp.search_igd_devices(
+            ip_address, timeout=self._settings.network.upnp.search_timeout
+        )
+        logger.info("found %d devices for UPnP port mapping", len(devices))
+        lease_expirations = []
 
-            for device in devices:
-                device_mapped_ports = await self._upnp.get_mapped_ports(device)
-                for port in ports:
+        for device in devices:
+            device_mapped_ports = await self._upnp.get_mapped_ports(device)
+            for port in ports:
+                try:
+                    mapping = filter_mapped_port(
+                        device_mapped_ports, ip_address, port)
+
+                except ValueError:
                     try:
-                        mapping = filter_mapped_port(
-                            device_mapped_ports, ip_address, port)
-
-                    except ValueError:
-                        try:
-                            logger.info(
-                                "UPnP: mapping port %s:%d on device %s",
-                                ip_address, port, device.name
-                            )
-                            await self._upnp.map_port(
-                                device, ip_address, port,
-                                lease_duration=self._settings.network.upnp.lease_duration
-                            )
-
-                        except Exception as exc:
-                            logger.warning(
-                                "UPnP: failed to map port %s:%d on device %s",
-                                ip_address, port, device.name,
-                                exc_info=exc
-                            )
-
-                        else:
-                            logger.info(
-                                "UPnP: mapped port %s:%d on device %s",
-                                ip_address, port, device.name
-                            )
+                        logger.info(
+                            "UPnP: mapping port %s:%d on device %s",
+                            ip_address, port, device.name
+                        )
+                        await self._upnp.map_port(
+                            device, ip_address, port,
+                            lease_duration=self._settings.network.upnp.lease_duration
+                        )
+                        logger.info(
+                            "UPnP: mapped port %s:%d on device %s",
+                            ip_address, port, device.name
+                        )
 
                     except Exception as exc:
                         logger.warning(
-                            "UPnP: failed to get port mapping %s:%d on device %s",
+                            "UPnP: failed to map port %s:%d on device %s",
                             ip_address, port, device.name,
                             exc_info=exc
                         )
-                    else:
-                        if lease_duration := mapping.lease_duration:
-                            lease_expirations.append(lease_duration.total_seconds())
 
-            next_check = min(
-                lease_expirations + [self._settings.network.upnp.check_interval])
-            logger.info("UPnP: rechecking port mapping in %d seconds", next_check)
-            await asyncio.sleep(next_check)
+                except Exception as exc:
+                    logger.warning(
+                        "UPnP: failed to get port mapping %s:%d on device %s",
+                        ip_address, port, device.name,
+                        exc_info=exc
+                    )
+                else:
+                    if lease_duration := mapping.lease_duration:
+                        lease_expirations.append(lease_duration.total_seconds())
+
+        next_check = min(
+            lease_expirations + [self._settings.network.upnp.check_interval])
+        logger.info("UPnP: rechecking port mapping in %d seconds", next_check)
+        return next_check
+
+    async def start_server_connection_watchdog(self):
+        """Starts the server connection watchdog if it is not already running"""
+        self._connection_watchdog_task.start()
+
+    def stop_server_connection_watchdog(self):
+        """Stops the server connection watchdog if it is running"""
+        self._connection_watchdog_task.cancel()
+
+    async def start_upnp_job(self):
+        self._upnp_task.start()
+
+    def stop_upnp_job(self):
+        self._upnp_task.cancel()
 
     def select_port(self, port, obfuscated_port) -> Tuple[int, bool]:
         """Selects the port used for making a connection. This attempts to take
@@ -958,6 +954,7 @@ class Network:
     async def _on_server_connection_state_changed(
             self, state: ConnectionState, connection: ServerConnection,
             close_reason: CloseReason = CloseReason.UNKNOWN):
+
         if state == ConnectionState.CONNECTED:
             # For registering with UPNP we need to know our own IP first, we can
             # get this from the server connection but we first need to be
@@ -1112,10 +1109,5 @@ class Network:
         for task in self._create_peer_connection_tasks:
             task.cancel()
 
-        if self._log_connections_task is not None:
-            self._log_connections_task.cancel()
-            self._log_connections_task = None
-
-        if self._upnp_task is not None:
-            self._upnp_task.cancel()
-            self._upnp_task = None
+        self._log_connections_task.cancel()
+        self._upnp_task.cancel()
