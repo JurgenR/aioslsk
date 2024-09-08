@@ -2,7 +2,7 @@ import asyncio
 import copy
 from dataclasses import dataclass
 import logging
-from typing import Dict, Optional, Set
+from typing import Optional
 from weakref import WeakValueDictionary
 
 from ..base_manager import BaseManager
@@ -85,8 +85,8 @@ class UserManager(BaseManager):
         self._MESSAGE_MAP = build_message_map(self)
 
         self._users: WeakValueDictionary[str, User] = WeakValueDictionary()
-        self._tracked_users: Dict[str, TrackedUser] = dict()
-        self._privileged_users: Set[str] = set()
+        self._tracked_users: dict[str, TrackedUser] = dict()
+        self._privileged_users: set[str] = set()
 
         self.register_listeners()
 
@@ -101,11 +101,11 @@ class UserManager(BaseManager):
             SessionDestroyedEvent, self._on_session_destroyed)
 
     @property
-    def users(self) -> Dict[str, User]:
+    def users(self) -> dict[str, User]:
         return dict(self._users)
 
     @property
-    def privileged_users(self) -> Set[str]:
+    def privileged_users(self) -> set[str]:
         return self._privileged_users
 
     def get_self(self) -> User:

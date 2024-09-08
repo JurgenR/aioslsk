@@ -9,13 +9,9 @@ from ipaddress import IPv4Address
 import logging
 from typing import (
     Any,
-    Dict,
-    List,
     Optional,
     Union,
-    Tuple,
     TypeVar,
-    Type,
     TYPE_CHECKING
 )
 
@@ -74,7 +70,7 @@ logger = logging.getLogger(__name__)
 
 
 T = TypeVar('T', bound='MessageDataclass')
-ListeningConnections = Tuple[Optional[ListeningConnection], Optional[ListeningConnection]]
+ListeningConnections = tuple[Optional[ListeningConnection], Optional[ListeningConnection]]
 
 
 class ListeningConnectionErrorMode(enum.Enum):
@@ -96,16 +92,16 @@ class ExpectedResponse(asyncio.Future):
     """Future for an expected response message"""
 
     def __init__(
-            self, connection_class: Type[Union[PeerConnection, ServerConnection]],
-            message_class: Type[MessageDataclass],
-            peer: Optional[str] = None, fields: Optional[Dict[str, Any]] = None,
+            self, connection_class: type[Union[PeerConnection, ServerConnection]],
+            message_class: type[MessageDataclass],
+            peer: Optional[str] = None, fields: Optional[dict[str, Any]] = None,
             loop: Optional[asyncio.AbstractEventLoop] = None):
 
         super().__init__(loop=loop)
-        self.connection_class: Type[Union[PeerConnection, ServerConnection]] = connection_class
-        self.message_class: Type[MessageDataclass] = message_class
+        self.connection_class: type[Union[PeerConnection, ServerConnection]] = connection_class
+        self.message_class: type[MessageDataclass] = message_class
         self.peer: Optional[str] = peer
-        self.fields: Dict[str, Any] = {} if fields is None else fields
+        self.fields: dict[str, Any] = {} if fields is None else fields
 
     def matches(self, connection: DataConnection, response: MessageDataclass) -> bool:
         if connection.__class__ != self.connection_class:
@@ -145,13 +141,13 @@ class Network:
         self._event_bus: EventBus = event_bus
         self._upnp = upnp.UPNP()
         self._ticket_generator = ticket_generator()
-        self._expected_response_futures: List[ExpectedResponse] = []
-        self._expected_connection_futures: Dict[int, asyncio.Future] = {}
+        self._expected_response_futures: list[ExpectedResponse] = []
+        self._expected_connection_futures: dict[int, asyncio.Future] = {}
 
         # List of connections
         self.server_connection: ServerConnection = self.create_server_connection()
         self.listening_connections: ListeningConnections = self.create_listening_connections()
-        self.peer_connections: List[PeerConnection] = []
+        self.peer_connections: list[PeerConnection] = []
 
         self._MESSAGE_MAP = build_message_map(self)
 
@@ -162,10 +158,10 @@ class Network:
             self._settings.network.limits.download_speed_kbps)
 
         # Debugging
-        self._ip_overrides: Dict[str, str] = self._settings.debug.ip_overrides
+        self._ip_overrides: dict[str, str] = self._settings.debug.ip_overrides
 
         # Operational
-        self._create_peer_connection_tasks: List[asyncio.Task] = []
+        self._create_peer_connection_tasks: list[asyncio.Task] = []
         self._log_connections_task: BackgroundTask = BackgroundTask(
             interval=10,
             task_coro=self._log_connections_job,
@@ -280,7 +276,7 @@ class Network:
         """
         self._cancel_all_tasks()
 
-        connections: List[Connection] = [self.server_connection]
+        connections: list[Connection] = [self.server_connection]
         connections.extend(self.peer_connections)
         connections.extend(conn for conn in self.listening_connections if conn)
 
@@ -291,7 +287,7 @@ class Network:
         )
         logger.info("network disconnected")
 
-    def get_listening_ports(self) -> Tuple[int, int]:
+    def get_listening_ports(self) -> tuple[int, int]:
         """Gets the currently connected listening ports
 
         :return: ``tuple`` with 2 elements: the non-obfuscated- and obfuscated
@@ -398,7 +394,7 @@ class Network:
         interval, the check interval could be shorter if the job detects that
         the lease duration of a port is about to expire
         """
-        def filter_mapped_port(mapped_ports: List[PortMappingEntry], internal_ip: str, port: int) -> PortMappingEntry:
+        def filter_mapped_port(mapped_ports: list[PortMappingEntry], internal_ip: str, port: int) -> PortMappingEntry:
             expected_values = (True, 'TCP', IPv4Address(internal_ip), port)
             for mapped_port in mapped_ports:
                 values = (
@@ -480,7 +476,7 @@ class Network:
     def stop_upnp_job(self):
         self._upnp_task.cancel()
 
-    def select_port(self, port, obfuscated_port) -> Tuple[int, bool]:
+    def select_port(self, port, obfuscated_port) -> tuple[int, bool]:
         """Selects the port used for making a connection. This attempts to take
         into account the ``network.peer.obfuscate`` parameter however falls back
         on using whatever port is available if necessary
@@ -564,7 +560,7 @@ class Network:
             PeerInitializedEvent(connection, requested=True))
         return connection
 
-    async def _get_peer_address(self, username: str) -> Tuple[str, int, int]:
+    async def _get_peer_address(self, username: str) -> tuple[str, int, int]:
         """Requests the peer address for the given ``username`` from the server.
 
         :raise PeerConnectionError: if no IP address or no valid ports were
@@ -612,7 +608,7 @@ class Network:
         self._expected_connection_futures.pop(ticket)
 
     def create_server_response_future(
-            self, message_class: Type[T], fields: Optional[Dict[str, Any]] = None) -> ExpectedResponse:
+            self, message_class: type[T], fields: Optional[dict[str, Any]] = None) -> ExpectedResponse:
         """Creates a future for a server message to arrive, the message must
         match the ``message_class`` and fields defined in the keyword arguments.
 
@@ -638,7 +634,7 @@ class Network:
         expected_response.add_done_callback(self._remove_response_future)
 
     async def wait_for_server_message(
-            self, message_class: Type[T], fields: Optional[Dict[str, Any]] = None, timeout: float = 10) -> T:
+            self, message_class: type[T], fields: Optional[dict[str, Any]] = None, timeout: float = 10) -> T:
         """Waits for a message from the server
 
         :param message_class: Class of the expected server message
@@ -659,7 +655,7 @@ class Network:
         return response
 
     def create_peer_response_future(
-            self, peer: str, message_class: Type[T], fields: Optional[Dict[str, Any]] = None) -> ExpectedResponse:
+            self, peer: str, message_class: type[T], fields: Optional[dict[str, Any]] = None) -> ExpectedResponse:
         """Creates a future for a peer message to arrive, the message must match
         the ``message_class`` and fields defined in the keyword arguments and
         must be coming from a connection by ``peer``.
@@ -682,7 +678,7 @@ class Network:
         return future
 
     async def wait_for_peer_message(
-            self, peer: str, message_class: Type[T], fields: Optional[Dict[str, Any]] = None, timeout: float = 60) -> T:
+            self, peer: str, message_class: type[T], fields: Optional[dict[str, Any]] = None, timeout: float = 60) -> T:
 
         future = self.create_peer_response_future(
             peer=peer,
@@ -698,7 +694,7 @@ class Network:
 
         return response
 
-    def get_peer_connections(self, username: str, typ: str) -> List[PeerConnection]:
+    def get_peer_connections(self, username: str, typ: str) -> list[PeerConnection]:
         """Returns all connections for peer with given username and peer
         connection types.
 
@@ -712,7 +708,7 @@ class Network:
         ]
 
     def get_active_peer_connections(
-            self, username: str, typ: str) -> List[PeerConnection]:
+            self, username: str, typ: str) -> list[PeerConnection]:
         """Return a list of currently active messaging connections for given
         peer connection type.
 
@@ -901,7 +897,7 @@ class Network:
         if not raise_on_error:
             return list(zip(messages, results))
 
-    def queue_server_messages(self, *messages: Union[bytes, MessageDataclass]) -> List[asyncio.Task]:
+    def queue_server_messages(self, *messages: Union[bytes, MessageDataclass]) -> list[asyncio.Task]:
         """Queues server messages
 
         :param messages: list of messages to queue

@@ -2,7 +2,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-from typing import List, Pattern, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from ..constants import PATH_SEPERATOR_PATTERN
 from ..protocol.primitives import Attribute, FileData
@@ -22,7 +22,7 @@ def normalize_remote_path(path: str) -> str:
     return re.sub(PATH_SEPERATOR_PATTERN, '\\\\', path).rstrip('\\/')
 
 
-def create_term_pattern(term: str, wildcard: bool = False) -> Pattern:
+def create_term_pattern(term: str, wildcard: bool = False) -> re.Pattern:
     """Creates the matching pattern for a single search term of a query"""
     if wildcard:
         return re.compile(
@@ -63,7 +63,7 @@ def convert_item_to_file_data(
     )
 
 
-def convert_items_to_file_data(shared_items: List[SharedItem], use_full_path=True) -> List[FileData]:
+def convert_items_to_file_data(shared_items: list[SharedItem], use_full_path=True) -> list[FileData]:
     """Converts a list of :class:`.SharedItem` instances to a list of
     :class:`.FileData` instances. If an exception occurs when converting the
     item an error will be logged and the item will be omitted from the list

@@ -1,5 +1,6 @@
 from aiofiles import os as asyncos
 import asyncio
+from collections.abc import Callable
 from concurrent.futures import Executor
 from functools import partial
 import logging
@@ -9,15 +10,7 @@ import os
 import re
 import sys
 import time
-from typing import (
-    Callable,
-    Dict,
-    List,
-    Optional,
-    Set,
-    Tuple,
-    Union,
-)
+from typing import Optional, Union
 import uuid
 from weakref import WeakSet
 
@@ -50,7 +43,7 @@ from .utils import convert_items_to_file_data
 
 logger = logging.getLogger(__name__)
 
-ItemAttributes = List[Tuple[int, int]]
+ItemAttributes = list[tuple[int, int]]
 ExecutorFactory = Callable[[], Executor]
 
 _COMPRESSED_FORMATS = [
@@ -69,7 +62,7 @@ _QUERY_CLEAN_PATTERN = re.compile(r"[\W_]")
 
 def scan_directory(
         shared_directory: SharedDirectory,
-        children: Optional[List[SharedDirectory]] = None) -> Set[SharedItem]:
+        children: Optional[list[SharedDirectory]] = None) -> set[SharedItem]:
     """Scans the directory for items to share
 
     Warning: when using ProcessPoolExecutor on this method the returned items
@@ -160,8 +153,8 @@ class SharesManager(BaseManager):
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._network: Network = network
-        self._term_map: Dict[str, WeakSet[SharedItem]] = {}
-        self._shared_directories: List[SharedDirectory] = []
+        self._term_map: dict[str, WeakSet[SharedItem]] = {}
+        self._shared_directories: list[SharedDirectory] = []
         self._session: Optional[Session] = None
 
         self.cache: SharesCache = cache if cache else SharesNullCache()
@@ -223,7 +216,7 @@ class SharesManager(BaseManager):
         if self.executor_factory:
             self.executor = self.executor_factory()
 
-    async def stop(self) -> List[asyncio.Task]:
+    async def stop(self) -> list[asyncio.Task]:
         if self.executor:
             self.executor.shutdown()
             self.executor = None
@@ -242,7 +235,7 @@ class SharesManager(BaseManager):
         will be updated, non-existing directories added, directories that no
         longer exist will be removed
         """
-        new_shared_directories: List[SharedDirectory] = []
+        new_shared_directories: list[SharedDirectory] = []
 
         # Add or update directories
         for directory_entry in self._settings.shares.directories:
@@ -345,7 +338,7 @@ class SharesManager(BaseManager):
     def add_shared_directory(
             self, shared_directory: str,
             share_mode: DirectoryShareMode = DirectoryShareMode.EVERYONE,
-            users: Optional[List[str]] = None) -> SharedDirectory:
+            users: Optional[list[str]] = None) -> SharedDirectory:
         """Adds a shared directory. This method will call :meth:`generate_alias`
         and add the directory to the directory map. This method will not scan
         the directory, for scanning see the :meth:`scan`,
@@ -390,7 +383,7 @@ class SharesManager(BaseManager):
     def update_shared_directory(
             self, directory: Union[str, SharedDirectory],
             share_mode: Optional[DirectoryShareMode] = None,
-            users: Optional[List[str]] = None) -> SharedDirectory:
+            users: Optional[list[str]] = None) -> SharedDirectory:
         """Updates `share_mode` and `users` values for the given directory
 
         :param directory: if a string is given this method will attempt to find
@@ -507,7 +500,7 @@ class SharesManager(BaseManager):
 
         logger.info("scheduling scan for directory : %r", shared_directory)
         try:
-            shared_items: Set[SharedItem] = await loop.run_in_executor(
+            shared_items: set[SharedItem] = await loop.run_in_executor(
                 self.executor,
                 partial(
                     scan_directory,
@@ -554,7 +547,7 @@ class SharesManager(BaseManager):
         loop = asyncio.get_running_loop()
 
         # Schedule the items on the executor
-        futures: List[asyncio.Future] = []
+        futures: list[asyncio.Future] = []
         for item in shared_directory.items:
             if item.attributes is None:
                 future = loop.run_in_executor(
@@ -621,7 +614,7 @@ class SharesManager(BaseManager):
     def query(
             self, query: Union[str, SearchQuery],
             username: Optional[str] = None,
-            excluded_search_phrases: Optional[List[str]] = None) -> Tuple[List[SharedItem], List[SharedItem]]:
+            excluded_search_phrases: Optional[list[str]] = None) -> tuple[list[SharedItem], list[SharedItem]]:
         """Performs a query on the ``shared_directories`` returning the matching
         items. If ``username`` is passed this method will return a list of
         visible results and list of locked results. If `None` the second list
@@ -725,7 +718,7 @@ class SharesManager(BaseManager):
         else:
             return list(found_items), []
 
-    def get_stats(self) -> Tuple[int, int]:
+    def get_stats(self) -> tuple[int, int]:
         """Gets the total amount of shared directories and files.
 
         :return: directory and file count as a ``tuple``
@@ -739,7 +732,7 @@ class SharesManager(BaseManager):
         )
         return dir_count, file_count
 
-    def calculate_download_path(self, remote_path: str) -> Tuple[str, str]:
+    def calculate_download_path(self, remote_path: str) -> tuple[str, str]:
         """Calculates the local download path for a remote path returned by
         another peer.
 
@@ -753,7 +746,7 @@ class SharesManager(BaseManager):
             download_dir
         )
 
-    def get_shared_directories_for_user(self, username: str) -> Tuple[List[SharedDirectory], List[SharedDirectory]]:
+    def get_shared_directories_for_user(self, username: str) -> tuple[list[SharedDirectory], list[SharedDirectory]]:
         public_dirs = []
         locked_dirs = []
         for shared_dir in self._shared_directories:
@@ -764,7 +757,7 @@ class SharesManager(BaseManager):
 
         return public_dirs, locked_dirs
 
-    def create_shares_reply(self, username: str) -> Tuple[List[DirectoryData], List[DirectoryData]]:
+    def create_shares_reply(self, username: str) -> tuple[list[DirectoryData], list[DirectoryData]]:
         """Creates a complete list of the currently shared items as a reply to
         a :class:`.PeerSharesRequest` messages
 
@@ -773,8 +766,8 @@ class SharesManager(BaseManager):
         :return: ``tuple`` with two lists: public directories and locked
             directories
         """
-        def list_unique_directories(directories: List[SharedDirectory]) -> Dict[Tuple[str, ...], List[SharedItem]]:
-            response_dirs: Dict[Tuple[str, ...], List[SharedItem]] = {}
+        def list_unique_directories(directories: list[SharedDirectory]) -> dict[tuple[str, ...], list[SharedItem]]:
+            response_dirs: dict[tuple[str, ...], list[SharedItem]] = {}
 
             for directory in directories:
                 for item in directory.items:
@@ -790,7 +783,7 @@ class SharesManager(BaseManager):
 
             return response_dirs
 
-        def convert_to_directory_shares(directory_map: Dict[Tuple[str, ...], List[SharedItem]]) -> List[DirectoryData]:
+        def convert_to_directory_shares(directory_map: dict[tuple[str, ...], list[SharedItem]]) -> list[DirectoryData]:
             public_shares = []
             for directory, files in directory_map.items():
                 public_shares.append(
@@ -809,7 +802,7 @@ class SharesManager(BaseManager):
 
         return visible_shares, locked_shares
 
-    def create_directory_reply(self, remote_directory: str) -> List[DirectoryData]:
+    def create_directory_reply(self, remote_directory: str) -> list[DirectoryData]:
         """Lists directory data as a response to a directory request. This will
         not contain any information about subdirectories, only the files within
         that directory
@@ -822,7 +815,7 @@ class SharesManager(BaseManager):
         :return: list of directories. Empty if the directory is not shared, a
             list with one entry if the directory is found
         """
-        items: List[SharedItem] = []
+        items: list[SharedItem] = []
 
         remote_dir_parts = tuple(remote_directory.split('\\'))
         remote_dir_parts_len = len(remote_dir_parts)
@@ -865,7 +858,7 @@ class SharesManager(BaseManager):
             if len(values) > 0
         }
 
-    def _get_parent_directories(self, shared_directory: SharedDirectory) -> List[SharedDirectory]:
+    def _get_parent_directories(self, shared_directory: SharedDirectory) -> list[SharedDirectory]:
         """Returns a list of parent shared directories. The parent directories
         will be sorted by length of the absolute path (longest last)
         """

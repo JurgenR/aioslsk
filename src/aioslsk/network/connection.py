@@ -3,16 +3,9 @@ import abc
 from aiofiles.threadpool.binary import AsyncBufferedIOBase, AsyncBufferedReader
 import asyncio
 from async_timeout import Timeout, timeout as atimeout
+from collections.abc import Callable, Coroutine
 from enum import auto, Enum
-from typing import (
-    Any,
-    Callable,
-    Coroutine,
-    List,
-    Optional,
-    TYPE_CHECKING,
-    Union,
-)
+from typing import Any, Optional, TYPE_CHECKING, Union
 import logging
 import socket
 import struct
@@ -206,7 +199,7 @@ class DataConnection(Connection, abc.ABC):
         self._writer: Optional[asyncio.StreamWriter] = None
         self._reader_task: Optional[asyncio.Task] = None
 
-        self._queued_messages: List[asyncio.Task] = []
+        self._queued_messages: list[asyncio.Task] = []
         self._read_timeout_object: Optional[Timeout] = None
 
         self.read_timeout: float = read_timeout
@@ -439,7 +432,7 @@ class DataConnection(Connection, abc.ABC):
         task.add_done_callback(self._queued_messages.remove)
         return task
 
-    def queue_messages(self, *messages: Union[bytes, MessageDataclass]) -> List[asyncio.Task]:
+    def queue_messages(self, *messages: Union[bytes, MessageDataclass]) -> list[asyncio.Task]:
         return [
             self.queue_message(message)
             for message in messages

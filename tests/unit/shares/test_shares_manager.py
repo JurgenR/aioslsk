@@ -15,7 +15,7 @@ import pytest
 from pytest_unordered import unordered
 import os
 import sys
-from typing import Optional, List, Type
+from typing import Optional
 from unittest.mock import patch, AsyncMock
 
 
@@ -163,7 +163,7 @@ class TestSharesManagerQuery:
             ('片仮名', ['item2', 'item3'])
         ]
     )
-    def test_querySimpleTerms_matching(self, manager_query: SharesManager, query: str, expected_items: List[str]):
+    def test_querySimpleTerms_matching(self, manager_query: SharesManager, query: str, expected_items: list[str]):
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
         actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
@@ -200,7 +200,7 @@ class TestSharesManagerQuery:
             ('simple_band', ['item3']),
         ]
     )
-    def test_querySpecialCharactersInTerm_matching(self, manager_query: SharesManager, query: str, expected_items: List[str]):
+    def test_querySpecialCharactersInTerm_matching(self, manager_query: SharesManager, query: str, expected_items: list[str]):
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
         actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
@@ -221,7 +221,7 @@ class TestSharesManagerQuery:
             ('*仮名', ['item2', 'item3']),
         ]
     )
-    def test_queryWildcard_matching(self, manager_query: SharesManager, query: str, expected_items: List[str]):
+    def test_queryWildcard_matching(self, manager_query: SharesManager, query: str, expected_items: list[str]):
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
         actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
@@ -240,7 +240,7 @@ class TestSharesManagerQuery:
             ('simple -片仮名', ['item1'])
         ]
     )
-    def test_queryExcludeTerm(self, manager_query: SharesManager, query: str, expected_items: List[str]):
+    def test_queryExcludeTerm(self, manager_query: SharesManager, query: str, expected_items: list[str]):
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
         actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
@@ -266,7 +266,7 @@ class TestSharesManagerQuery:
             ('simple -singer)_-_don\'t', ['item1', 'item3']),
         ]
     )
-    def test_edgeCases(self, manager_query: SharesManager, query: str, expected_items: List[str]):
+    def test_edgeCases(self, manager_query: SharesManager, query: str, expected_items: list[str]):
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
         actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
@@ -289,7 +289,7 @@ class TestSharesManagerQuery:
             ('song -folk/folkalbum', ['item1', 'item2', 'item3']),
         ]
     )
-    def test_queryTermsWithSlashes(self, manager_query: SharesManager, query: str, expected_items: List[str]):
+    def test_queryTermsWithSlashes(self, manager_query: SharesManager, query: str, expected_items: list[str]):
         expected_items = [SHARED_ITEMS[item_name] for item_name in expected_items]
         actual_items, locked_items = manager_query.query(query)
         assert expected_items == unordered(actual_items)
@@ -326,7 +326,7 @@ class TestSharesManagerSharedDirectoryManagement:
             ProcessPoolExecutor
         ]
     )
-    async def test_scan(self, manager: SharesManager, executor: Optional[Type[Executor]]):
+    async def test_scan(self, manager: SharesManager, executor: Optional[type[Executor]]):
         manager.load_from_settings()
         manager.executor = executor() if executor else None
 

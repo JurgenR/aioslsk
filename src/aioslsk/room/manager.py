@@ -1,7 +1,6 @@
 from collections import OrderedDict
 import logging
 import time
-from typing import Dict, List
 
 from ..base_manager import BaseManager
 from ..events import (
@@ -71,33 +70,33 @@ class RoomManager(BaseManager):
         self._user_manager: UserManager = user_manager
         self._network: Network = network
 
-        self._rooms: Dict[str, Room] = dict()
+        self._rooms: dict[str, Room] = dict()
 
         self._MESSAGE_MAP = build_message_map(self)
 
         self.register_listeners()
 
     @property
-    def rooms(self) -> Dict[str, Room]:
+    def rooms(self) -> dict[str, Room]:
         return self._rooms
 
-    def get_joined_rooms(self) -> List[Room]:
+    def get_joined_rooms(self) -> list[Room]:
         return [room for room in self._rooms.values() if room.joined]
 
-    def get_private_rooms(self) -> List[Room]:
+    def get_private_rooms(self) -> list[Room]:
         return [room for room in self._rooms.values() if room.private]
 
-    def get_public_rooms(self) -> List[Room]:
+    def get_public_rooms(self) -> list[Room]:
         return [room for room in self._rooms.values() if not room.private]
 
-    def get_owned_rooms(self) -> List[Room]:
+    def get_owned_rooms(self) -> list[Room]:
         me = self._user_manager.get_self()
         return [
             room for room in self._rooms.values()
             if room.owner == me.name
         ]
 
-    def get_operated_rooms(self) -> List[Room]:
+    def get_operated_rooms(self) -> list[Room]:
         me = self._user_manager.get_self()
         return [
             room for room in self._rooms.values()

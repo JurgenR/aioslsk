@@ -1,7 +1,7 @@
+from collections.abc import Generator
 import itertools
 import logging
 import re
-from typing import Generator, List
 
 from .constants import PATH_SEPERATOR_PATTERN
 from .protocol.primitives import Attribute
@@ -24,12 +24,12 @@ def try_decoding(value: bytes):
             raise
 
 
-def split_remote_path(path: str) -> List[str]:
+def split_remote_path(path: str) -> list[str]:
     """Splits a remote path into parts. Empty parts will be filtered out"""
     return [part for part in re.split(PATH_SEPERATOR_PATTERN, path) if part]
 
 
-def get_duration(attributes: List[Attribute]) -> str:
+def get_duration(attributes: list[Attribute]) -> str:
     duration = ''
     for attr in attributes:
         if attr.key == 1:
@@ -40,7 +40,7 @@ def get_duration(attributes: List[Attribute]) -> str:
     return duration
 
 
-def get_attribute_string(attributes: List[Attribute]) -> str:
+def get_attribute_string(attributes: list[Attribute]) -> str:
     attr_str = []
     for attr in attributes:
         if attr.key == 0:

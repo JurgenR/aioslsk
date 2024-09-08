@@ -1,14 +1,14 @@
 import argparse
 import asyncio
 from collections import Counter
+from collections.abc import Generator
 from dataclasses import fields
 from functools import partial
 import logging
 import re
 import socket
 import time
-from typing import Dict, Generator, List, Optional, Set, Type, TypeVar
-import typing
+from typing import Optional, TypeVar
 
 from aioslsk.events import build_message_map
 from aioslsk.user.model import UserStatus
@@ -137,7 +137,7 @@ def ticket_generator(initial: int = 1) -> Generator[int, None, None]:
         yield idx
 
 
-def remove_0_values(counter: typing.Counter[str]):
+def remove_0_values(counter: Counter[str]):
     recommendations_to_remove = [
         key for key, value in counter.items() if value == 0
     ]
@@ -145,7 +145,7 @@ def remove_0_values(counter: typing.Counter[str]):
         del counter[to_remove]
 
 
-def on_message(message_class: Type[MessageDataclass], require_user: bool = True):
+def on_message(message_class: type[MessageDataclass], require_user: bool = True):
     """Decorator for methods listening to specific `MessageData` events
     """
     def register(event_func):
@@ -159,24 +159,24 @@ def on_message(message_class: Type[MessageDataclass], require_user: bool = True)
 class MockServer:
 
     def __init__(
-            self, hostname: str = '0.0.0.0', ports: Set[int] = {2416},
-            excluded_search_phrases: List[str] = DEFAULT_EXCLUDED_SEARCH_PHRASES,
+            self, hostname: str = '0.0.0.0', ports: set[int] = {2416},
+            excluded_search_phrases: list[str] = DEFAULT_EXCLUDED_SEARCH_PHRASES,
             potential_parent_interval: int = 0,
-            distributed_strategy_class: Type[DistributedStrategy] = EveryoneRootStrategy,
+            distributed_strategy_class: type[DistributedStrategy] = EveryoneRootStrategy,
             settings: Optional[Settings] = None,
             mock_variables: Optional[MockVariables] = None):
 
         self.hostname: str = hostname
-        self.ports: Set[int] = ports
-        self.connections: Dict[int, asyncio.Server] = {}
+        self.ports: set[int] = ports
+        self.connections: dict[int, asyncio.Server] = {}
         self.settings: Settings = settings or Settings()
 
-        self.users: List[User] = []
-        self.rooms: List[Room] = []
-        self.peers: List[Peer] = []
-        self.distributed_tree: Dict[str, DistributedValues] = {}
+        self.users: list[User] = []
+        self.rooms: list[Room] = []
+        self.peers: list[Peer] = []
+        self.distributed_tree: dict[str, DistributedValues] = {}
 
-        self.excluded_search_phrases: List[str] = excluded_search_phrases
+        self.excluded_search_phrases: list[str] = excluded_search_phrases
         self.distributed_strategy: DistributedStrategy = self._create_distributed_strategy(distributed_strategy_class)
         self.mock_variables: MockVariables = mock_variables or MockVariables()
 
@@ -194,10 +194,10 @@ class MockServer:
             self.periodic_search_task = asyncio.create_task(
                 self.search_request_job(interval=self.mock_variables.search_interval))
 
-    def _create_distributed_strategy(self, strategy_cls: Type[T]) -> T:
+    def _create_distributed_strategy(self, strategy_cls: type[T]) -> T:
         return strategy_cls(self.settings, self.peers, self.distributed_tree)
 
-    def set_distributed_strategy(self, strategy_cls: Type[DistributedStrategy]):
+    def set_distributed_strategy(self, strategy_cls: type[DistributedStrategy]):
         self.distributed_strategy = self._create_distributed_strategy(strategy_cls)
 
     async def notify_potential_parents(self):
@@ -335,7 +335,7 @@ class MockServer:
 
             await method(message, peer)
 
-    def get_valid_peers(self) -> List[Peer]:
+    def get_valid_peers(self) -> list[Peer]:
         """Returns all peers which are logged in (user set)"""
         return [peer for peer in self.peers if peer.user]
 
@@ -354,10 +354,10 @@ class MockServer:
             if room.name == name:
                 return room
 
-    def get_user_private_rooms(self, user: User) -> List[Room]:
+    def get_user_private_rooms(self, user: User) -> list[Room]:
         return [room for room in self.rooms if user in room.all_members]
 
-    def get_joined_rooms(self, user: User) -> List[Room]:
+    def get_joined_rooms(self, user: User) -> list[Room]:
         return [room for room in self.rooms if user in room.joined_users]
 
     async def set_upload_speed(self, username: str, uploads: int, speed: int):
@@ -403,7 +403,7 @@ class MockServer:
         await peer.send_message(message)
 
     async def send_potential_parents(
-            self, username: str, potential_parents: List[str] = None):
+            self, username: str, potential_parents: list[str] = None):
         """This is a utility method used for testing to send the potential
         parents to the peer with given username
 
@@ -439,7 +439,7 @@ class MockServer:
         await peer.send_message(message)
 
     async def send_private_message(
-            self, message: str, sender: str, receivers: List[str]):
+            self, message: str, sender: str, receivers: list[str]):
         """Sends a private message to one or more users"""
 
         queued_message = QueuedPrivateMessage(
@@ -472,10 +472,10 @@ class MockServer:
                 queued_message.to_protocol_message(is_direct=False))
 
     def _create_room_list_message(self, user: User, min_users: int = 1):
-        public_rooms: List[Room] = []
-        private_rooms: List[Room] = []
-        private_rooms_owned: List[Room] = []
-        private_rooms_operated: List[Room] = []
+        public_rooms: list[Room] = []
+        private_rooms: list[Room] = []
+        private_rooms_owned: list[Room] = []
+        private_rooms_operated: list[Room] = []
         for room in self.rooms:
             if room.status == RoomStatus.PRIVATE:
                 if room.owner == user:
@@ -1110,7 +1110,7 @@ class MockServer:
         rec_counter = self.get_recommendations_for_item(message.item)
         del rec_counter[message.item]
 
-        recommendations: List[Recommendation] = []
+        recommendations: list[Recommendation] = []
         for rec, score in rec_counter.most_common(MAX_RECOMMENDATIONS):
             recommendations.append(Recommendation(rec, score))
 
@@ -1849,7 +1849,7 @@ class MockServer:
             AdminMessage.PRIVATE_ROOM_OPERATOR_REVOKED.format(user.name, room.name)
         )
 
-    def get_global_recommendations(self) -> typing.Counter[str]:
+    def get_global_recommendations(self) -> Counter[str]:
         """Gets global recommendations
 
         :return: List of global recommendations for this item. This still needs
@@ -1865,7 +1865,7 @@ class MockServer:
 
         return recommendations
 
-    def get_recommendations_for_item(self, item: str) -> typing.Counter[str]:
+    def get_recommendations_for_item(self, item: str) -> Counter[str]:
         """Gets item recommendations
 
         :return: List of recommendations for this item. This still includes
@@ -1882,7 +1882,7 @@ class MockServer:
 
         return recommendations
 
-    def get_recommendations_for_user(self, user: User) -> typing.Counter[str]:
+    def get_recommendations_for_user(self, user: User) -> Counter[str]:
         """Gets all recommendations of a user based on his interests"""
         counter = Counter()
         for other_peer in self.get_valid_peers():
@@ -1912,7 +1912,7 @@ class MockServer:
         return counter
 
 
-def _get_distributed_strategy_class(name: str) -> Type[DistributedStrategy]:
+def _get_distributed_strategy_class(name: str) -> type[DistributedStrategy]:
     for strategy_cls in DistributedStrategy.__subclasses__():
         if strategy_cls.get_name() == name:
             return strategy_cls
@@ -1921,7 +1921,7 @@ def _get_distributed_strategy_class(name: str) -> Type[DistributedStrategy]:
 
 
 def _create_argument_group(
-        parser: argparse.ArgumentParser, dataclass_cls: Type[S],
+        parser: argparse.ArgumentParser, dataclass_cls: type[S],
         prefix: Optional[str] = None):
     """Creates an argparse argument group for a dataclass
 
@@ -1945,7 +1945,7 @@ def _create_argument_group(
         )
 
 
-def _parse_argument_group(args, dataclass_cls: Type[S], prefix: Optional[str] = None) -> S:
+def _parse_argument_group(args, dataclass_cls: type[S], prefix: Optional[str] = None) -> S:
     """Parses an argument group into a dataclass"""
     arg_prefix = f'{prefix}_' if prefix else ''
 

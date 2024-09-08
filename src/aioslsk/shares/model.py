@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 import enum
 import os
-from typing import List, Optional, Set, Tuple, Union
+from typing import Optional, Union
 
 from ..exceptions import FileNotFoundError
 from .utils import normalize_remote_path
@@ -22,8 +22,8 @@ class SharedDirectory:
     absolute_path: str
     alias: str
     share_mode: DirectoryShareMode = field(default=DirectoryShareMode.EVERYONE, compare=False, hash=False)
-    users: List[str] = field(default_factory=list, compare=False, hash=False)
-    items: Set['SharedItem'] = field(default_factory=set, init=False, compare=False, hash=False, repr=False)
+    users: list[str] = field(default_factory=list, compare=False, hash=False)
+    items: set['SharedItem'] = field(default_factory=set, init=False, compare=False, hash=False, repr=False)
 
     def is_parent_of(self, directory: Union[str, 'SharedDirectory']) -> bool:
         """Returns true if the current directory is a parent of the passed
@@ -58,7 +58,7 @@ class SharedDirectory:
             raise FileNotFoundError(
                 f"file with remote path {remote_path!r} not found in directory {self!r}")
 
-    def get_items_for_directory(self, directory: 'SharedDirectory') -> Set['SharedItem']:
+    def get_items_for_directory(self, directory: 'SharedDirectory') -> set['SharedItem']:
         """Gets items that are part of given directory"""
         items = set()
         for item in self.items:
@@ -73,7 +73,7 @@ class SharedItem:
     subdir: str
     filename: str
     modified: float
-    attributes: Optional[List[Tuple[int, int]]] = field(
+    attributes: Optional[list[tuple[int, int]]] = field(
         default=None,
         init=False,
         compare=False,
@@ -101,7 +101,7 @@ class SharedItem:
         return normalize_remote_path(
             '@@' + os.path.join(self.shared_directory.alias, self.subdir))
 
-    def get_remote_directory_path_parts(self) -> Tuple[str, ...]:
+    def get_remote_directory_path_parts(self) -> tuple[str, ...]:
         """Returns the remote directory path split into parts"""
         return tuple(self.get_remote_directory_path().split('\\'))
 
