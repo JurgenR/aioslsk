@@ -153,7 +153,7 @@ class SharesManager(BaseManager):
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._network: Network = network
-        self._term_map: dict[str, Weakset[SharedItem]] = {}
+        self._term_map: dict[str, WeakSet[SharedItem]] = {}
         self._shared_directories: list[SharedDirectory] = []
         self._session: Optional[Session] = None
 
