@@ -66,7 +66,7 @@ class BackgroundTask:
             await asyncio.sleep(self.resolve_interval())
 
         while True:
-            coro = self.task_coro(self.context) if self.context else self.task_coro()  # type: ignore[arg-type]
+            coro = self.task_coro(self.context) if self.context else self.task_coro()  # type: ignore[call-arg]
             job_ival = await coro
 
             next_ival = self.resolve_interval() if job_ival is None else job_ival
