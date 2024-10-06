@@ -382,6 +382,18 @@ class PublicMessageEvent(Event):
 
 
 @dataclass(frozen=True)
+class SearchRequestSentEvent(Event):
+    """Emitted when a search request has been sent out"""
+    query: SearchRequest
+
+
+@dataclass(frozen=True)
+class SearchRequestRemovedEvent(Event):
+    """Emitted when a search request has been removed"""
+    query: SearchRequest
+
+
+@dataclass(frozen=True)
 class SearchResultEvent(Event):
     """Emitted when a search result has been received"""
     query: SearchRequest
