@@ -96,7 +96,7 @@ class Timer:
 
     async def runner(self):
         await asyncio.sleep(self.timeout)
-        await self.callback()
+        await self.callback()  # type: ignore[call-arg]
 
     def reschedule(self, timeout: Optional[float] = None):
         self.timeout = self.timeout if timeout is None else timeout
