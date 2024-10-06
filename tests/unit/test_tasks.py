@@ -1,7 +1,7 @@
 import asyncio
 import pytest
 from unittest.mock import ANY, AsyncMock, Mock, patch
-from aioslsk.tasks import BackgroundTask
+from aioslsk.tasks import BackgroundTask, Timer
 
 
 async def dummy_coro():
@@ -17,6 +17,7 @@ class TestBackgroundTask:
             task.start()
 
         assert task._task == async_task
+        assert task.is_running() is True
         create_task.assert_called_once_with(ANY, name='background-task')
 
     def test_start_alreadyStarted_shouldDoNothing(self):
@@ -114,3 +115,54 @@ class TestBackgroundTask:
         task_coro.assert_awaited()
         sleep.assert_any_await(interval)
         sleep.assert_any_await(interval_after_preempt)
+
+
+class TestTimer:
+
+    def test_start_shouldCreateTask(self):
+        timer = Timer(1.0, dummy_coro)
+        async_task = Mock()
+        with patch('asyncio.create_task', return_value=async_task) as create_task:
+            timer.start()
+
+        assert timer._task == async_task
+        create_task.assert_called_once_with(ANY)
+
+    @pytest.mark.asyncio
+    async def test_cancel_shouldCancelTask(self):
+        callback = AsyncMock()
+        timer = Timer(1.0, callback)
+        timer.start()
+        await asyncio.sleep(0.5)
+
+        timer.cancel()
+        assert timer._task is None
+        callback.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_cancel_notStarted_returnsNone(self):
+        timer = Timer(1.0, dummy_coro)
+        result = timer.cancel()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_reschedule(self):
+        callback = AsyncMock()
+        timer = Timer(1.0, callback)
+        timer.start()
+        await asyncio.sleep(0.5)
+
+        timer.reschedule(timeout=2.0)
+        await asyncio.sleep(1.25)
+        callback.assert_not_awaited()
+        await asyncio.sleep(1.0)
+        callback.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_reschedule_notStarted_startsTask(self):
+        callback = AsyncMock()
+        timer = Timer(0.5, callback)
+
+        timer.reschedule()
+        await asyncio.sleep(0.75)
+        callback.assert_awaited_once()

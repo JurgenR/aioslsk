@@ -82,6 +82,8 @@ class CredentialsSettings(BaseModel, validate_assignment=True):
 
 class SearchSendSettings(BaseModel, validate_assignment=True):
     store_results: bool = True
+    request_timeout: int = 0
+    wishlist_request_timeout: int = -1
 
 
 class SearchReceiveSettings(BaseModel, validate_assignment=True):

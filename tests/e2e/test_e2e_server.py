@@ -50,7 +50,6 @@ from .utils import (
 import asyncio
 import pytest
 from pytest_unordered import unordered
-from typing import Tuple
 from unittest.mock import AsyncMock
 
 
@@ -380,7 +379,7 @@ class TestE2EServer:
             GrantRoomMembershipCommand(room_name, username2), response=True)
 
         event1: RoomMembershipGrantedEvent = await wait_for_listener_awaited(member_granted_listener1)
-        events2: Tuple[RoomMembershipGrantedEvent] = await wait_for_listener_awaited_events(
+        events2: tuple[RoomMembershipGrantedEvent] = await wait_for_listener_awaited_events(
             member_granted_listener2, amount=2
         )
 

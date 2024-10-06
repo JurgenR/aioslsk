@@ -72,3 +72,37 @@ class BackgroundTask:
             next_ival = self.resolve_interval() if job_ival is None else job_ival
 
             await asyncio.sleep(next_ival)
+
+
+class Timer:
+
+    def __init__(self, timeout: float, callback: TaskCoroutine):
+        self.timeout: float = timeout
+        self.callback: TaskCoroutine = callback
+        self._task: Optional[asyncio.Task] = None
+
+    def start(self):
+        self._task = asyncio.create_task(self.runner())
+        self._task.add_done_callback(self._unset_task)
+
+    def cancel(self) -> Optional[asyncio.Task]:
+        if self._task is None:
+            return None
+
+        task = self._task
+        self._task.cancel()
+        self._task = None
+        return task
+
+    async def runner(self):
+        await asyncio.sleep(self.timeout)
+        await self.callback()  # type: ignore[call-arg]
+
+    def reschedule(self, timeout: Optional[float] = None):
+        self.timeout = self.timeout if timeout is None else timeout
+
+        self.cancel()
+        self.start()
+
+    def _unset_task(self, task: asyncio.Future):
+        self._task = None

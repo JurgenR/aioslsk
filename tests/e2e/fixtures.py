@@ -3,6 +3,7 @@ from async_timeout import timeout as atimeout
 import os
 from pathlib import Path
 import pytest_asyncio
+from pytest import FixtureRequest
 import shutil
 from typing import AsyncGenerator, List
 
@@ -86,8 +87,12 @@ async def _client_start_and_scan(client: SoulSeekClient, timeout: float = 3):
 
 
 @pytest_asyncio.fixture
-async def mock_server() -> AsyncGenerator[MockServer, None]:
-    server = MockServer(hostname=DEFAULT_SERVER_HOSTNAME, ports={DEFAULT_SERVER_PORT})
+async def mock_server(request: FixtureRequest) -> AsyncGenerator[MockServer, None]:
+    server = MockServer(
+        hostname=DEFAULT_SERVER_HOSTNAME,
+        ports={DEFAULT_SERVER_PORT},
+        settings=getattr(request, 'param', None)
+    )
     await server.connect(start_serving=False)
     await asyncio.gather(
         *[
