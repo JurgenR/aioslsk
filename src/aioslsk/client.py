@@ -55,6 +55,7 @@ class SoulSeekClient:
             shares_cache: Optional[SharesCache] = None, transfer_cache: Optional[TransferCache] = None,
             executor_factory: Optional[ExecutorFactory] = None,
             event_bus: Optional[EventBus] = None):
+
         self.settings: Settings = settings
 
         self._stop_event: Optional[asyncio.Event] = None

@@ -4,6 +4,7 @@ from collections.abc import AsyncGenerator
 import os
 from pathlib import Path
 import pytest_asyncio
+from pytest import FixtureRequest
 import shutil
 
 from aioslsk.client import SoulSeekClient
@@ -86,8 +87,12 @@ async def _client_start_and_scan(client: SoulSeekClient, timeout: float = 3):
 
 
 @pytest_asyncio.fixture
-async def mock_server() -> AsyncGenerator[MockServer, None]:
-    server = MockServer(hostname=DEFAULT_SERVER_HOSTNAME, ports={DEFAULT_SERVER_PORT})
+async def mock_server(request: FixtureRequest) -> AsyncGenerator[MockServer, None]:
+    server = MockServer(
+        hostname=DEFAULT_SERVER_HOSTNAME,
+        ports={DEFAULT_SERVER_PORT},
+        settings=getattr(request, 'param', None)
+    )
     await server.connect(start_serving=False)
     await asyncio.gather(
         *[

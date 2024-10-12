@@ -5,13 +5,16 @@ import logging
 from typing import Optional, Union
 
 from ..base_manager import BaseManager
+from ..constants import DEFAULT_WISHLIST_INTERVAL
 from ..events import (
     on_message,
     build_message_map,
-    EventBus,
     ConnectionStateChangedEvent,
+    EventBus,
     MessageReceivedEvent,
     SearchRequestReceivedEvent,
+    SearchRequestRemovedEvent,
+    SearchRequestSentEvent,
     SearchResultEvent,
     SessionDestroyedEvent,
     SessionInitializedEvent,
@@ -41,7 +44,7 @@ from ..settings import Settings
 from ..shares.manager import SharesManager
 from ..shares.utils import convert_items_to_file_data
 from ..session import Session
-from ..tasks import BackgroundTask
+from ..tasks import BackgroundTask, Timer
 from ..transfer.interface import UploadInfoProvider
 from ..utils import task_counter, ticket_generator
 from .model import ReceivedSearch, SearchResult, SearchRequest, SearchType
@@ -82,7 +85,7 @@ class SearchManager(BaseManager):
 
         self._search_reply_tasks: list[asyncio.Task] = []
         self._wishlist_task: BackgroundTask = BackgroundTask(
-            interval=600,
+            interval=DEFAULT_WISHLIST_INTERVAL,
             task_coro=self._wishlist_job,
             name='wishlist-task'
         )
@@ -120,12 +123,14 @@ class SearchManager(BaseManager):
         await self._network.send_server_messages(
             FileSearch.Request(ticket, query)
         )
-        self.requests[ticket] = SearchRequest(
+        request = SearchRequest(
             ticket=ticket,
             query=query,
             search_type=SearchType.NETWORK
         )
-        return self.requests[ticket]
+        await self._attach_request_timer_and_emit(request)
+
+        return request
 
     async def search_room(self, room: Union[str, Room], query: str) -> SearchRequest:
         """Performs a search request on the specific user. The results generated
@@ -142,13 +147,15 @@ class SearchManager(BaseManager):
         await self._network.send_server_messages(
             RoomSearch.Request(room_name, ticket, query)
         )
-        self.requests[ticket] = SearchRequest(
+        request = SearchRequest(
             ticket=ticket,
             query=query,
             search_type=SearchType.ROOM,
             room=room_name
         )
-        return self.requests[ticket]
+        await self._attach_request_timer_and_emit(request)
+
+        return request
 
     async def search_user(self, username: str, query: str) -> SearchRequest:
         """Performs a search request on the specific user. The results generated
@@ -164,13 +171,15 @@ class SearchManager(BaseManager):
         await self._network.send_server_messages(
             UserSearch.Request(username, ticket, query)
         )
-        self.requests[ticket] = SearchRequest(
+        request = SearchRequest(
             ticket=ticket,
             query=query,
             search_type=SearchType.USER,
             username=username
         )
-        return self.requests[ticket]
+        await self._attach_request_timer_and_emit(request)
+
+        return request
 
     async def _query_shares_and_reply(self, ticket: int, username: str, query: str):
         """Performs a query on the shares manager and reports the results to the
@@ -257,28 +266,63 @@ class SearchManager(BaseManager):
     async def _wishlist_job(self):
         """Job handling wishlist queries, this method is intended to be run as
         a task. This method will run at the given ``interval`` (returned by the
-        server on start up).
+        server after logon).
         """
         items = self._settings.searches.wishlist
 
-        # Remove all current wishlist searches
-        self.requests = {
-            ticket: qry for ticket, qry in self.requests.items()
-            if qry.search_type != SearchType.WISHLIST
-        }
+        timeout = self._get_wishlist_request_timeout()
 
-        logger.info("starting wishlist search of %d items", len(items))
+        enabled_items = list(filter(lambda item: item.enabled, items))
+        logger.info("starting wishlist search of %d items", len(enabled_items))
         # Recreate
-        for item in filter(lambda item: item.enabled, items):
+        for item in enabled_items:
             ticket = next(self._ticket_generator)
-            self.requests[ticket] = SearchRequest(
+
+            await self._network.send_server_messages(
+                WishlistSearch.Request(ticket, item.query)
+            )
+
+            request = SearchRequest(
                 ticket,
                 item.query,
                 search_type=SearchType.WISHLIST
             )
-            self._network.queue_server_messages(
-                WishlistSearch.Request(ticket, item.query)
+            request.timer = Timer(
+                timeout=timeout,
+                callback=partial(self._timeout_search_request, request)
+            ) if timeout else None
+            self.requests[ticket] = request
+
+            if request.timer:
+                request.timer.start()
+
+            await self._event_bus.emit(SearchRequestSentEvent(request))
+
+    def _get_wishlist_request_timeout(self) -> int:
+        timeout = self._settings.searches.send.wishlist_request_timeout
+        if self._settings.searches.send.wishlist_request_timeout < 0:
+            if self.wishlist_interval is None:
+                timeout = DEFAULT_WISHLIST_INTERVAL
+            else:
+                timeout = self.wishlist_interval
+
+        return timeout
+
+    async def _attach_request_timer_and_emit(self, request: SearchRequest):
+        self.requests[request.ticket] = request
+
+        if self._settings.searches.send.request_timeout > 0:
+            request.timer = Timer(
+                timeout=self._settings.searches.send.request_timeout,
+                callback=partial(self._timeout_search_request, request)
             )
+            request.timer.start()
+
+        await self._event_bus.emit(SearchRequestSentEvent(request))
+
+    async def _timeout_search_request(self, request: SearchRequest):
+        del self.requests[request.ticket]
+        await self._event_bus.emit(SearchRequestRemovedEvent(request))
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message

@@ -8,6 +8,7 @@ from typing import Optional
 
 from ..protocol.primitives import FileData
 from ..shares.utils import create_term_pattern
+from ..tasks import Timer
 
 
 logger = logging.getLogger(__name__)
@@ -104,3 +105,5 @@ class SearchRequest:
     username: Optional[str] = None
     results: list[SearchResult] = field(default_factory=list)
     started: datetime.datetime = field(default_factory=datetime.datetime.now)
+
+    timer: Optional[Timer] = None

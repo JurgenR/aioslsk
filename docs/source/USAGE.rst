@@ -141,7 +141,33 @@ start a search request for each of the types:
     user_request: SearchRequest = await client.searches.search_user('other_user', 'my user query')
 
 
-Search requests are stored internally and should be removed when no longer needed:
+Wishlist Searches
+~~~~~~~~~~~~~~~~~
+
+Wishlist searches are periodic searches made by the client to the server. The interval is determined
+by the server. To add a wishlist search simply add an entry to the settings, it will be picked up
+at the next interval:
+
+.. code-block:: python
+
+    from aioslsk.settings import Settings, WishlistSettingEntry
+
+    settings: Settings = Settings(...)
+    settings.searches.wishlist.append(
+        WishlistSettingEntry(query='test', enabled=True)
+    )
+
+
+The :class:`SearchRequestSentEvent` will be emitted when a wishlist search is made. Keep in mind
+however that this event is emitted also when making other types of search requests. Look at the type
+of the request made to determine whether it is a wishlist search or not.
+
+
+Manually Removing Requests
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Search requests are stored internally but a timeout can be configured to automatically remove them.
+Following example shows how to manually remove a search request:
 
 .. code-block:: python
 
@@ -154,6 +180,16 @@ Search requests are stored internally and should be removed when no longer neede
 
 After removal there will be no more :class:`SearchResultEvent` events emitted for the removed
 request
+
+Automatically Removing Requests
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A timeout can be configured through two settings:
+
+* ``searches.sent.request_timeout``
+* ``searches.sent.wishlist_request_timeout``
+
+When a request gets removed an event will be emitted: :class:`SearchRequestRemovedEvent`
 
 
 Receiving Results
