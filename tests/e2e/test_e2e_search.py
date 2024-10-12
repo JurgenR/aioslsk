@@ -14,7 +14,6 @@ from .utils import (
     wait_for_listener_awaited_events,
 )
 import pytest
-from typing import Tuple
 from unittest.mock import AsyncMock
 
 
@@ -57,7 +56,7 @@ class TestE2ESearch:
     )
     async def test_search_with_timeout(
             self, mock_server: MockServer, client_1: SoulSeekClient,
-            search_func_name: str, search_params: Tuple, search_type: SearchType):
+            search_func_name: str, search_params: tuple, search_type: SearchType):
 
         await wait_until_clients_initialized(mock_server, amount=1)
 

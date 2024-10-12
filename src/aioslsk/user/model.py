@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import auto, Enum, Flag
-from typing import Optional, Set
+from typing import Optional
 from ..protocol.primitives import UserStats
 
 
@@ -65,8 +65,8 @@ class User:
     upload_permissions: UploadPermissions = UploadPermissions.UNKNOWN
 
     # Interests
-    interests: Set[str] = field(default_factory=set)
-    hated_interests: Set[str] = field(default_factory=set)
+    interests: set[str] = field(default_factory=set)
+    hated_interests: set[str] = field(default_factory=set)
 
     def update_from_user_stats(self, user_stats: UserStats):
         self.avg_speed = user_stats.avg_speed
