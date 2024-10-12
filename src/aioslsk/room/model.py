@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from typing import Optional
 from ..user.model import User
 
 
@@ -8,19 +8,19 @@ from ..user.model import User
 class Room:
     name: str
     private: bool = False
-    users: List[User] = field(default_factory=list)
+    users: list[User] = field(default_factory=list)
     """Current list of joined users"""
     joined: bool = False
     user_count: int = 0
-    tickers: Dict[str, str] = field(default_factory=dict)
+    tickers: dict[str, str] = field(default_factory=dict)
     """Room tickers (room wall)"""
 
     # Only for private rooms
-    members: Set[str] = field(default_factory=set)
+    members: set[str] = field(default_factory=set)
     """For private rooms, names of members of the room (excludes owner)"""
     owner: Optional[str] = None
     """For private rooms, name of the room owner"""
-    operators: Set[str] = field(default_factory=set)
+    operators: set[str] = field(default_factory=set)
     """For private rooms, names of operators"""
 
     def add_user(self, user: User):

@@ -1,11 +1,11 @@
 import asyncio
 from async_timeout import timeout as atimeout
+from collections.abc import AsyncGenerator
 import os
 from pathlib import Path
 import pytest_asyncio
 from pytest import FixtureRequest
 import shutil
-from typing import AsyncGenerator, List
 
 from aioslsk.client import SoulSeekClient
 from aioslsk.events import SessionInitializedEvent
@@ -137,8 +137,8 @@ async def client_2(tmp_path: Path) -> AsyncGenerator[SoulSeekClient, None]:
 
 
 @pytest_asyncio.fixture
-async def clients(tmp_path: Path, request) -> AsyncGenerator[List[SoulSeekClient], None]:
-    clients: List[SoulSeekClient] = []
+async def clients(tmp_path: Path, request) -> AsyncGenerator[list[SoulSeekClient], None]:
+    clients: list[SoulSeekClient] = []
 
     for idx in range(request.param):
         username = 'user' + str(idx).zfill(3)

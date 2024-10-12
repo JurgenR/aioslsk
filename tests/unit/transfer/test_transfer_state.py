@@ -1,4 +1,3 @@
-from typing import Type
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -44,7 +43,7 @@ class TestTransferState:
         UploadingState,
     ])
     @pytest.mark.asyncio
-    async def test_whenTransitionToFailed_shouldSetStateAndCompleteTime(self, initial_state: Type[TransferState]):
+    async def test_whenTransitionToFailed_shouldSetStateAndCompleteTime(self, initial_state: type[TransferState]):
         time_mock = MagicMock(return_value=12.0)
 
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
@@ -63,7 +62,7 @@ class TestTransferState:
         IncompleteState,
     ])
     @pytest.mark.asyncio
-    async def test_whenTransitionToFailed_shouldSetState(self, initial_state: Type[TransferState]):
+    async def test_whenTransitionToFailed_shouldSetState(self, initial_state: type[TransferState]):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state = initial_state(transfer)
         await transfer.state.fail(reason='err')
@@ -77,7 +76,7 @@ class TestTransferState:
         UploadingState,
     ])
     @pytest.mark.asyncio
-    async def test_whenTransitionToAborted_shouldSetStateAndCompleteTime(self, initial_state: Type[TransferState]):
+    async def test_whenTransitionToAborted_shouldSetStateAndCompleteTime(self, initial_state: type[TransferState]):
         time_mock = MagicMock(return_value=12.0)
 
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
@@ -95,7 +94,7 @@ class TestTransferState:
         IncompleteState,
     ])
     @pytest.mark.asyncio
-    async def test_whenTransitionToAborted_shouldSetState(self, initial_state: Type[TransferState]):
+    async def test_whenTransitionToAborted_shouldSetState(self, initial_state: type[TransferState]):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state = initial_state(transfer)
         await transfer.state.abort()
@@ -107,7 +106,7 @@ class TestTransferState:
         InitializingState,
     ])
     @pytest.mark.asyncio
-    async def test_whenTransitionToQueued_shouldSetState(self, initial_state: Type[TransferState]):
+    async def test_whenTransitionToQueued_shouldSetState(self, initial_state: type[TransferState]):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state = initial_state(transfer)
         await transfer.state.queue()
@@ -121,7 +120,7 @@ class TestTransferState:
         FailedState,
     ])
     @pytest.mark.asyncio
-    async def test_whenTransitionToQueued_shouldSetStateAndResetTimes(self, initial_state: Type[TransferState]):
+    async def test_whenTransitionToQueued_shouldSetStateAndResetTimes(self, initial_state: type[TransferState]):
         transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         transfer.state = initial_state(transfer)
         transfer.start_time = 1.0

@@ -1,9 +1,10 @@
+from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
 import datetime
 from enum import auto, Enum
 import logging
 import re
-from typing import Callable, Generator, List, Optional, Set
+from typing import Optional
 
 from ..protocol.primitives import FileData
 from ..shares.utils import create_term_pattern
@@ -33,9 +34,9 @@ class ReceivedSearch:
 @dataclass
 class SearchQuery:
     query: str
-    include_terms: Set[str] = field(default_factory=set)
-    exclude_terms: Set[str] = field(default_factory=set)
-    wildcard_terms: Set[str] = field(default_factory=set)
+    include_terms: set[str] = field(default_factory=set)
+    exclude_terms: set[str] = field(default_factory=set)
+    wildcard_terms: set[str] = field(default_factory=set)
 
     @classmethod
     def parse(cls, query: str) -> 'SearchQuery':
@@ -89,8 +90,8 @@ class SearchResult:
     avg_speed: int = 0
     queue_size: int = 0
 
-    shared_items: List[FileData] = field(default_factory=list)
-    locked_results: List[FileData] = field(default_factory=list)
+    shared_items: list[FileData] = field(default_factory=list)
+    locked_results: list[FileData] = field(default_factory=list)
 
 
 @dataclass
@@ -102,7 +103,7 @@ class SearchRequest:
 
     room: Optional[str] = None
     username: Optional[str] = None
-    results: List[SearchResult] = field(default_factory=list)
+    results: list[SearchResult] = field(default_factory=list)
     started: datetime.datetime = field(default_factory=datetime.datetime.now)
 
     timer: Optional[Timer] = None

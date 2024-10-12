@@ -1,6 +1,6 @@
 import pytest
-from typing import Tuple
 from unittest.mock import AsyncMock, Mock
+from typing import Optional
 
 from aioslsk.events import EventBus
 from aioslsk.exceptions import ConnectionFailedError, ListeningConnectionFailedError
@@ -39,7 +39,7 @@ DEFAULT_SETTINGS = {
 
 class TestNetworkManager:
 
-    def _create_network(self, settings=None) -> Network:
+    def _create_network(self, settings: Optional[Settings] = None) -> Network:
         sett = settings or Settings(**DEFAULT_SETTINGS)
         network = Network(sett, EventBus())
         network.server_connection = Mock()
@@ -58,7 +58,7 @@ class TestNetworkManager:
             (1, 2, True, (2, True)),
         ]
     )
-    def test_selectPort(self, clear_port: int, obfuscated_port: int, prefer_obfuscated: bool, expected: Tuple[int, bool]):
+    def test_selectPort(self, clear_port: int, obfuscated_port: int, prefer_obfuscated: bool, expected: tuple[int, bool]):
         network = self._create_network()
         network._settings.network.peer.obfuscate = prefer_obfuscated
         actual = network.select_port(clear_port, obfuscated_port)

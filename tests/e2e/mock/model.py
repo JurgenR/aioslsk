@@ -4,7 +4,7 @@ from enum import auto, Enum
 from aioslsk.protocol.messages import PrivateChatMessage
 from aioslsk.user.model import UserStatus
 import typing
-from typing import Dict, List, Set, Optional
+from typing import Optional
 from weakref import WeakValueDictionary
 
 
@@ -86,11 +86,11 @@ class User:
     port: Optional[int] = None
     obfuscated_port: Optional[int] = None
 
-    interests: Set[str] = field(default_factory=set)
-    hated_interests: Set[str] = field(default_factory=set)
+    interests: set[str] = field(default_factory=set)
+    hated_interests: set[str] = field(default_factory=set)
 
-    queued_private_messages: List[QueuedPrivateMessage] = field(default_factory=list)
-    added_users: Dict[str, 'User'] = field(default_factory=WeakValueDictionary)
+    queued_private_messages: list[QueuedPrivateMessage] = field(default_factory=list)
+    added_users: dict[str, 'User'] = field(default_factory=WeakValueDictionary)
 
     # TODO: Investigate what the default values are
     enable_private_rooms: bool = False
@@ -129,14 +129,14 @@ class RoomStatus(Enum):
 @dataclass
 class Room:
     name: str
-    joined_users: List[User] = field(default_factory=list)
+    joined_users: list[User] = field(default_factory=list)
     tickers: typing.OrderedDict[str, str] = field(default_factory=OrderedDict)
     registered_as_public: bool = False
 
     # Only for private rooms
     owner: Optional[User] = None
-    members: List[User] = field(default_factory=list)
-    operators: List[User] = field(default_factory=list)
+    members: list[User] = field(default_factory=list)
+    operators: list[User] = field(default_factory=list)
 
     @property
     def status(self) -> RoomStatus:
@@ -148,7 +148,7 @@ class Room:
             return RoomStatus.UNCLAIMED
 
     @property
-    def all_members(self) -> List[User]:
+    def all_members(self) -> list[User]:
         return self.members + [self.owner, ] if self.owner else []
 
     def can_join(self, user: User) -> bool:

@@ -1,6 +1,5 @@
 import os
 import re
-from typing import List, Tuple
 
 from .utils import split_remote_path
 
@@ -11,7 +10,7 @@ class NamingStrategy:
     def should_be_applied(self, local_dir: str, local_filename: str) -> bool:
         return True
 
-    def apply(self, remote_path: str, local_dir: str, local_filename: str) -> Tuple[str, str]:
+    def apply(self, remote_path: str, local_dir: str, local_filename: str) -> tuple[str, str]:
         """Apply the naming changes
 
         :param remote_path: the original remote path
@@ -28,14 +27,14 @@ class DefaultNamingStrategy(NamingStrategy):
     `remote_path` parameter. The `local_filename` parameter is ignored
     """
 
-    def apply(self, remote_path: str, local_dir: str, local_filename: str) -> Tuple[str, str]:
+    def apply(self, remote_path: str, local_dir: str, local_filename: str) -> tuple[str, str]:
         return local_dir, split_remote_path(remote_path)[-1]
 
 
 class KeepDirectoryStrategy(NamingStrategy):
     """Keeps the original directory the remote file was in"""
 
-    def apply(self, remote_path: str, local_dir: str, local_filename: str) -> Tuple[str, str]:
+    def apply(self, remote_path: str, local_dir: str, local_filename: str) -> tuple[str, str]:
         # -1 filename
         # -2 the containing directory
         remote_path_parts = split_remote_path(remote_path)
@@ -67,7 +66,7 @@ class NumberDuplicateStrategy(DuplicateNamingStrategy):
     """
     PATTERN = r' \((\d+)\)'
 
-    def apply(self, remote_path: str, local_dir: str, local_filename: str) -> Tuple[str, str]:
+    def apply(self, remote_path: str, local_dir: str, local_filename: str) -> tuple[str, str]:
         # Find all files which are already numbered
         filename, extension = os.path.splitext(local_filename)
         pattern = re.escape(filename) + self.PATTERN + re.escape(extension)
@@ -88,7 +87,7 @@ class NumberDuplicateStrategy(DuplicateNamingStrategy):
         return local_dir, new_filename
 
 
-def chain_strategies(strategies: List[NamingStrategy], remote_path: str, local_dir: str) -> Tuple[str, str]:
+def chain_strategies(strategies: list[NamingStrategy], remote_path: str, local_dir: str) -> tuple[str, str]:
     """Chains strategies together to find the target location and filename to
     which the file should be written.
 

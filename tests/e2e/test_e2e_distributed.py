@@ -10,7 +10,6 @@ from .utils import (
 )
 import asyncio
 import pytest
-from typing import List
 
 
 async def set_upload_speed_for_client(mock_server: MockServer, client: SoulSeekClient, value: int = 10000):
@@ -18,7 +17,7 @@ async def set_upload_speed_for_client(mock_server: MockServer, client: SoulSeekC
     await mock_server.set_upload_speed(username, uploads=10, speed=value)
 
 
-async def set_upload_speed_for_clients(mock_server: MockServer, clients: List[SoulSeekClient], value: int = 10000):
+async def set_upload_speed_for_clients(mock_server: MockServer, clients: list[SoulSeekClient], value: int = 10000):
     """Sets a dummy upload speed on the mock server for all clients. This is
     necessary in order for the clients to accept children
     """
@@ -32,7 +31,7 @@ class TestE2EDistributed:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("clients", [2], indirect=True)
-    async def test_root_user(self, mock_server: MockServer, clients: List[SoulSeekClient]):
+    async def test_root_user(self, mock_server: MockServer, clients: list[SoulSeekClient]):
         """Tests when a user gets a search request directly from the server the
         peer becomes root
         """
@@ -60,7 +59,7 @@ class TestE2EDistributed:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("clients", [2], indirect=True)
-    async def test_level1_user(self, mock_server: MockServer, clients: List[SoulSeekClient]):
+    async def test_level1_user(self, mock_server: MockServer, clients: list[SoulSeekClient]):
         """Tests when a user gets a search request directly from the server the
         peer becomes root
         """
@@ -100,7 +99,7 @@ class TestE2EDistributed:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("clients", [3], indirect=True)
-    async def test_level2_user(self, mock_server: MockServer, clients: List[SoulSeekClient]):
+    async def test_level2_user(self, mock_server: MockServer, clients: list[SoulSeekClient]):
         """Tests when a user gets a search request directly from the server the
         peer becomes root
         """
@@ -167,7 +166,7 @@ class TestE2EDistributed:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("clients", [4], indirect=True)
-    async def test_level2_sendSearchRequest(self, mock_server: MockServer, clients: List[SoulSeekClient]):
+    async def test_level2_sendSearchRequest(self, mock_server: MockServer, clients: list[SoulSeekClient]):
         """Tests if clients on multiple levels in the network receive a search
         request
         """

@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Optional, Set
+from typing import Optional
 
 from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings
@@ -16,7 +16,7 @@ from .shares.model import DirectoryShareMode
 class SharedDirectorySettingEntry(BaseModel, validate_assignment=True):
     path: str
     share_mode: DirectoryShareMode = DirectoryShareMode.EVERYONE
-    users: List[str] = Field(default_factory=list)
+    users: list[str] = Field(default_factory=list)
 
 
 class WishlistSettingEntry(BaseModel, validate_assignment=True):
@@ -94,11 +94,11 @@ class SearchReceiveSettings(BaseModel, validate_assignment=True):
 class SearchSettings(BaseModel, validate_assignment=True):
     send: SearchSendSettings = Field(default_factory=SearchSendSettings)
     receive: SearchReceiveSettings = Field(default_factory=SearchReceiveSettings)
-    wishlist: List[WishlistSettingEntry] = Field(default_factory=list)
+    wishlist: list[WishlistSettingEntry] = Field(default_factory=list)
 
     @model_validator(mode='before')
     @classmethod
-    def handle_max_result_alias(cls, values: Dict):
+    def handle_max_result_alias(cls, values: dict):
         if 'max_results' in values:
             value = values.pop('max_results')
             if 'receive' not in values:
@@ -129,28 +129,28 @@ class TransfersSettings(BaseModel, validate_assignment=True):
 class SharesSettings(BaseModel, validate_assignment=True):
     scan_on_start: bool = True
     download: str = os.getcwd()
-    directories: List[SharedDirectorySettingEntry] = Field(default_factory=list)
+    directories: list[SharedDirectorySettingEntry] = Field(default_factory=list)
 
 
 class RoomsSettings(BaseModel, validate_assignment=True):
     auto_join: bool = True
     private_room_invites: bool = True
-    favorites: Set[str] = Field(default_factory=set)
+    favorites: set[str] = Field(default_factory=set)
 
 
 class UsersSettings(BaseModel, validate_assignment=True):
-    friends: Set[str] = Field(default_factory=set)
-    blocked: Set[str] = Field(default_factory=set)
+    friends: set[str] = Field(default_factory=set)
+    blocked: set[str] = Field(default_factory=set)
 
 
 class InterestsSettings(BaseModel, validate_assignment=True):
-    liked: Set[str] = Field(default_factory=set)
-    hated: Set[str] = Field(default_factory=set)
+    liked: set[str] = Field(default_factory=set)
+    hated: set[str] = Field(default_factory=set)
 
 
 class DebugSettings(BaseModel, validate_assignment=True):
     search_for_parent: bool = True
-    ip_overrides: Dict[str, str] = Field(default_factory=dict)
+    ip_overrides: dict[str, str] = Field(default_factory=dict)
     log_connection_count: bool = False
 
 

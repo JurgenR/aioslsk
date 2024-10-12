@@ -1,21 +1,10 @@
 from __future__ import annotations
 import asyncio
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 import inspect
 import logging
-from typing import (
-    Any,
-    Callable,
-    Coroutine,
-    Dict,
-    List,
-    Optional,
-    Tuple,
-    Type,
-    TypeVar,
-    TYPE_CHECKING,
-    Union
-)
+from typing import Any, Optional, TypeVar, TYPE_CHECKING, Union
 
 from .room.model import Room, RoomMessage
 from .user.model import ChatMessage, User
@@ -91,7 +80,7 @@ EventListener = Union[
 
 # Internal functions
 
-def on_message(message_class: Type[MessageDataclass]):
+def on_message(message_class: type[MessageDataclass]):
     """Decorator for methods listening to specific `MessageData` events"""
     def register(event_func):
         event_func._registered_message = message_class
@@ -100,9 +89,9 @@ def on_message(message_class: Type[MessageDataclass]):
     return register
 
 
-def build_message_map(obj: object) -> Dict[Type[MessageDataclass], Callable]:
+def build_message_map(obj: object) -> dict[type[MessageDataclass], Callable]:
     methods = inspect.getmembers(obj, predicate=inspect.ismethod)
-    mapping: Dict[Type[MessageDataclass], Callable] = {}
+    mapping: dict[type[MessageDataclass], Callable] = {}
     for _, method in methods:
         registered_message = getattr(method, '_registered_message', None)
         if registered_message:
@@ -115,9 +104,9 @@ def build_message_map(obj: object) -> Dict[Type[MessageDataclass], Callable]:
 class EventBus:
 
     def __init__(self):
-        self._events: Dict[Type[Event], List[Tuple[int, EventListener]]] = {}
+        self._events: dict[type[Event], list[tuple[int, EventListener]]] = {}
 
-    def register(self, event_class: Type[E], listener: EventListener, priority: int = 100):
+    def register(self, event_class: type[E], listener: EventListener, priority: int = 100):
         """Registers an event listener to listen on an event class. The order in
         which the listeners are called can be managed using the ``priority``
         parameter
@@ -238,7 +227,7 @@ class UserInfoUpdateEvent(Event):
 
 @dataclass(frozen=True)
 class RoomListEvent(Event):
-    rooms: List[Room]
+    rooms: list[Room]
     raw_message: RoomList.Response
 
 
@@ -252,7 +241,7 @@ class RoomMessageEvent(Event):
 class RoomTickersEvent(Event):
     """Emitted when a list of tickers has been received for a room"""
     room: Room
-    tickers: Dict[str, str]
+    tickers: dict[str, str]
     raw_message: RoomTickers.Response
 
 
@@ -348,7 +337,7 @@ class RoomOperatorRevokedEvent(Event):
 class RoomOperatorsEvent(Event):
     """Emitted when the server sends us a list of operators in a room"""
     room: Room
-    operators: List[User]
+    operators: list[User]
     raw_message: PrivateRoomOperators.Response
 
 
@@ -358,7 +347,7 @@ class RoomMembersEvent(Event):
     of members always excludes the owner of the room
     """
     room: Room
-    members: List[User]
+    members: list[User]
     raw_message: PrivateRoomMembers.Response
 
 
@@ -410,50 +399,50 @@ class SearchRequestReceivedEvent(Event):
 
 @dataclass(frozen=True)
 class SimilarUsersEvent(Event):
-    users: List[Tuple[User, int]]
+    users: list[tuple[User, int]]
     raw_message: GetSimilarUsers.Response
 
 
 @dataclass(frozen=True)
 class ItemSimilarUsersEvent(Event):
     item: str
-    users: List[User]
+    users: list[User]
     raw_message: GetItemSimilarUsers.Response
 
 
 @dataclass(frozen=True)
 class RecommendationsEvent(Event):
-    recommendations: List[Recommendation]
-    unrecommendations: List[Recommendation]
+    recommendations: list[Recommendation]
+    unrecommendations: list[Recommendation]
     raw_message: GetRecommendations.Response
 
 
 @dataclass(frozen=True)
 class GlobalRecommendationsEvent(Event):
-    recommendations: List[Recommendation]
-    unrecommendations: List[Recommendation]
+    recommendations: list[Recommendation]
+    unrecommendations: list[Recommendation]
     raw_message: GetGlobalRecommendations.Response
 
 
 @dataclass(frozen=True)
 class ItemRecommendationsEvent(Event):
     item: str
-    recommendations: List[Recommendation]
+    recommendations: list[Recommendation]
     raw_message: GetItemRecommendations.Response
 
 
 @dataclass(frozen=True)
 class UserInterestsEvent(Event):
     user: User
-    interests: List[str]
-    hated_interests: List[str]
+    interests: list[str]
+    hated_interests: list[str]
     raw_message: GetUserInterests.Response
 
 
 @dataclass(frozen=True)
 class PrivilegedUsersEvent(Event):
     """Emitted when the list of privileged users has been received"""
-    users: List[User]
+    users: list[User]
     raw_message: PrivilegedUsers.Response
 
 
@@ -478,8 +467,8 @@ class PrivilegesUpdateEvent(Event):
 @dataclass(frozen=True)
 class UserSharesReplyEvent(Event):
     user: User
-    directories: List[DirectoryData]
-    locked_directories: List[DirectoryData]
+    directories: list[DirectoryData]
+    locked_directories: list[DirectoryData]
     raw_message: PeerSharesReply.Request
 
 
@@ -487,7 +476,7 @@ class UserSharesReplyEvent(Event):
 class UserDirectoryEvent(Event):
     user: User
     directory: str
-    directories: List[DirectoryData]
+    directories: list[DirectoryData]
     raw_message: PeerDirectoryContentsReply.Request
 
 
@@ -514,7 +503,7 @@ class TransferProgressEvent(Event):
     since the previous event. If there are no updates the event will no be
     called
     """
-    updates: List[Tuple[Transfer, TransferProgressSnapshot, TransferProgressSnapshot]]
+    updates: list[tuple[Transfer, TransferProgressSnapshot, TransferProgressSnapshot]]
     """List of progress updates: transfer instance, previous snapshot, current
     snapshot
     """

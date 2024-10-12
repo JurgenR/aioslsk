@@ -18,7 +18,7 @@ This file contains 2 types of messages:
 """
 from dataclasses import dataclass, field
 import logging
-from typing import ClassVar, List, Optional
+from typing import ClassVar, Optional
 
 from ..exceptions import UnknownMessageError
 from .primitives import (
@@ -265,13 +265,13 @@ class JoinRoom(ServerMessage):
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x0E)
         room: str = field(metadata={'type': string})
-        users: List[str] = field(metadata={'type': array, 'subtype': string})
-        users_status: List[int] = field(metadata={'type': array, 'subtype': uint32})
-        users_stats: List[UserStats] = field(metadata={'type': array, 'subtype': UserStats})
-        users_slots_free: List[int] = field(metadata={'type': array, 'subtype': uint32})
-        users_countries: List[str] = field(metadata={'type': array, 'subtype': string})
+        users: list[str] = field(metadata={'type': array, 'subtype': string})
+        users_status: list[int] = field(metadata={'type': array, 'subtype': uint32})
+        users_stats: list[UserStats] = field(metadata={'type': array, 'subtype': UserStats})
+        users_slots_free: list[int] = field(metadata={'type': array, 'subtype': uint32})
+        users_countries: list[str] = field(metadata={'type': array, 'subtype': string})
         owner: Optional[str] = field(default=None, metadata={'type': string, 'optional': True})
-        operators: Optional[List[str]] = field(
+        operators: Optional[list[str]] = field(
             default=None,
             metadata={
                 'type': array,
@@ -498,7 +498,7 @@ class DeprecatedGetItemRecommendations(ServerMessage):
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x32)
         item: str = field(metadata={'type': string})
-        recommendations: List[str] = field(metadata={'type': array, 'subtype': string})
+        recommendations: list[str] = field(metadata={'type': array, 'subtype': string})
 
 
 class AddInterest(ServerMessage):
@@ -526,10 +526,10 @@ class GetRecommendations(ServerMessage):
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x36)
-        recommendations: List[Recommendation] = field(
+        recommendations: list[Recommendation] = field(
             metadata={'type': array, 'subtype': Recommendation}
         )
-        unrecommendations: List[Recommendation] = field(
+        unrecommendations: list[Recommendation] = field(
             metadata={'type': array, 'subtype': Recommendation}
         )
 
@@ -543,7 +543,7 @@ class GetInterests(ServerMessage):
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x37)
-        interests: List[str] = field(metadata={'type': array, 'subtype': string})
+        interests: list[str] = field(metadata={'type': array, 'subtype': string})
 
 
 class GetGlobalRecommendations(ServerMessage):
@@ -555,10 +555,10 @@ class GetGlobalRecommendations(ServerMessage):
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x38)
-        recommendations: List[Recommendation] = field(
+        recommendations: list[Recommendation] = field(
             metadata={'type': array, 'subtype': Recommendation}
         )
-        unrecommendations: List[Recommendation] = field(
+        unrecommendations: list[Recommendation] = field(
             metadata={'type': array, 'subtype': Recommendation}
         )
 
@@ -574,8 +574,8 @@ class GetUserInterests(ServerMessage):
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x39)
         username: str = field(metadata={'type': string})
-        interests: List[str] = field(metadata={'type': array, 'subtype': string})
-        hated_interests: List[str] = field(metadata={'type': array, 'subtype': string})
+        interests: list[str] = field(metadata={'type': array, 'subtype': string})
+        hated_interests: list[str] = field(metadata={'type': array, 'subtype': string})
 
 
 class ExecuteCommand(ServerMessage):
@@ -584,7 +584,7 @@ class ExecuteCommand(ServerMessage):
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x3A)
         command_type: str = field(metadata={'type': string})
-        arguments: List[str] = field(metadata={'type': array, 'subtype': string})
+        arguments: list[str] = field(metadata={'type': array, 'subtype': string})
 
 
 class RoomList(ServerMessage):
@@ -596,13 +596,13 @@ class RoomList(ServerMessage):
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x40)
-        rooms: List[str] = field(metadata={'type': array, 'subtype': string})
-        rooms_user_count: List[int] = field(metadata={'type': array, 'subtype': uint32})
-        rooms_private_owned: List[str] = field(metadata={'type': array, 'subtype': string})
-        rooms_private_owned_user_count: List[int] = field(metadata={'type': array, 'subtype': uint32})
-        rooms_private: List[str] = field(metadata={'type': array, 'subtype': string})
-        rooms_private_user_count: List[int] = field(metadata={'type': array, 'subtype': uint32})
-        rooms_private_operated: List[str] = field(metadata={'type': array, 'subtype': string})
+        rooms: list[str] = field(metadata={'type': array, 'subtype': string})
+        rooms_user_count: list[int] = field(metadata={'type': array, 'subtype': uint32})
+        rooms_private_owned: list[str] = field(metadata={'type': array, 'subtype': string})
+        rooms_private_owned_user_count: list[int] = field(metadata={'type': array, 'subtype': uint32})
+        rooms_private: list[str] = field(metadata={'type': array, 'subtype': string})
+        rooms_private_user_count: list[int] = field(metadata={'type': array, 'subtype': uint32})
+        rooms_private_operated: list[str] = field(metadata={'type': array, 'subtype': string})
 
 
 class ExactFileSearch(ServerMessage):
@@ -645,11 +645,11 @@ class GetUserList(ServerMessage):
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x43)
-        users: List[str] = field(metadata={'type': array, 'subtype': string})
-        users_status: List[int] = field(metadata={'type': array, 'subtype': uint32})
-        users_stats: List[UserStats] = field(metadata={'type': array, 'subtype': UserStats})
-        users_slots_free: List[int] = field(metadata={'type': array, 'subtype': uint32})
-        users_countries: List[str] = field(metadata={'type': array, 'subtype': string})
+        users: list[str] = field(metadata={'type': array, 'subtype': string})
+        users_status: list[int] = field(metadata={'type': array, 'subtype': uint32})
+        users_stats: list[UserStats] = field(metadata={'type': array, 'subtype': UserStats})
+        users_slots_free: list[int] = field(metadata={'type': array, 'subtype': uint32})
+        users_countries: list[str] = field(metadata={'type': array, 'subtype': string})
 
 
 class TunneledMessage(ServerMessage):
@@ -678,7 +678,7 @@ class PrivilegedUsers(ServerMessage):
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x45)
-        users: List[str] = field(metadata={'type': array, 'subtype': string})
+        users: list[str] = field(metadata={'type': array, 'subtype': string})
 
 
 class ToggleParentSearch(ServerMessage):
@@ -805,7 +805,7 @@ class PotentialParents(ServerMessage):
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x66)
-        entries: List[PotentialParent] = field(metadata={'type': array, 'subtype': PotentialParent})
+        entries: list[PotentialParent] = field(metadata={'type': array, 'subtype': PotentialParent})
 
 
 class WishlistSearch(ServerMessage):
@@ -834,7 +834,7 @@ class GetSimilarUsers(ServerMessage):
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x6E)
-        users: List[SimilarUser] = field(metadata={'type': array, 'subtype': SimilarUser})
+        users: list[SimilarUser] = field(metadata={'type': array, 'subtype': SimilarUser})
 
 
 class GetItemRecommendations(ServerMessage):
@@ -848,7 +848,7 @@ class GetItemRecommendations(ServerMessage):
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x6F)
         item: str = field(metadata={'type': string})
-        recommendations: List[Recommendation] = field(metadata={'type': array, 'subtype': Recommendation})
+        recommendations: list[Recommendation] = field(metadata={'type': array, 'subtype': Recommendation})
 
 
 class GetItemSimilarUsers(ServerMessage):
@@ -862,7 +862,7 @@ class GetItemSimilarUsers(ServerMessage):
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x70)
         item: str = field(metadata={'type': string})
-        usernames: List[str] = field(metadata={'type': array, 'subtype': string})
+        usernames: list[str] = field(metadata={'type': array, 'subtype': string})
 
 
 class RoomTickers(ServerMessage):
@@ -871,7 +871,7 @@ class RoomTickers(ServerMessage):
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x71)
         room: str = field(metadata={'type': string})
-        tickers: List[RoomTicker] = field(metadata={'type': array, 'subtype': RoomTicker})
+        tickers: list[RoomTicker] = field(metadata={'type': array, 'subtype': RoomTicker})
 
 
 class RoomTickerAdded(ServerMessage):
@@ -1013,7 +1013,7 @@ class PrivateRoomMembers(ServerMessage):
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x85)
         room: str = field(metadata={'type': string})
-        usernames: List[str] = field(metadata={'type': array, 'subtype': string})
+        usernames: list[str] = field(metadata={'type': array, 'subtype': string})
 
 
 class PrivateRoomGrantMembership(ServerMessage):
@@ -1151,7 +1151,7 @@ class PrivateRoomOperators(ServerMessage):
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x94)
         room: str = field(metadata={'type': string})
-        usernames: List[str] = field(metadata={'type': array, 'subtype': string})
+        usernames: list[str] = field(metadata={'type': array, 'subtype': string})
 
 
 class PrivateChatMessageUsers(ServerMessage):
@@ -1159,7 +1159,7 @@ class PrivateChatMessageUsers(ServerMessage):
     @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x95)
-        usernames: List[str] = field(metadata={'type': array, 'subtype': string})
+        usernames: list[str] = field(metadata={'type': array, 'subtype': string})
         message: str = field(metadata={'type': string})
 
 
@@ -1198,7 +1198,7 @@ class GetRelatedSearches(ServerMessage):
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x99)
         query: str = field(metadata={'type': string})
-        related_searches: List[str] = field(metadata={'type': array, 'subtype': string})
+        related_searches: list[str] = field(metadata={'type': array, 'subtype': string})
 
 
 class ExcludedSearchPhrases(ServerMessage):
@@ -1206,7 +1206,7 @@ class ExcludedSearchPhrases(ServerMessage):
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0xA0)
-        phrases: List[str] = field(metadata={'type': array, 'subtype': string})
+        phrases: list[str] = field(metadata={'type': array, 'subtype': string})
 
 
 class CannotConnect(ServerMessage):
@@ -1286,14 +1286,14 @@ class PeerSharesReply(PeerMessage):
     @dataclass(order=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x05)
-        directories: List[DirectoryData] = field(
+        directories: list[DirectoryData] = field(
             metadata={'type': array, 'subtype': DirectoryData}
         )
         # Unknown field that always seems to be 0, possibilities:
         # * This was another list, but it always empty (not tested)
         # * This is a ticket: See explanation of ticket in PeerSharesRequest
         unknown: int = field(default=0, metadata={'type': uint32})
-        locked_directories: Optional[List[DirectoryData]] = field(
+        locked_directories: Optional[list[DirectoryData]] = field(
             default=None,
             metadata={'type': array, 'subtype': DirectoryData, 'optional': True}
         )
@@ -1313,7 +1313,7 @@ class PeerSearchReply(PeerMessage):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x09)
         username: str = field(metadata={'type': string})
         ticket: int = field(metadata={'type': uint32})
-        results: List[FileData] = field(metadata={'type': array, 'subtype': FileData})
+        results: list[FileData] = field(metadata={'type': array, 'subtype': FileData})
         has_slots_free: bool = field(metadata={'type': boolean})
         avg_speed: int = field(metadata={'type': uint32})
         # Note: queue_size and unknown. queue_size is described as uint64 in the
@@ -1322,7 +1322,7 @@ class PeerSearchReply(PeerMessage):
         # locked results: the same can be seen in PeerSharesReply
         queue_size: int = field(metadata={'type': uint32})
         unknown: Optional[int] = field(default=0, metadata={'type': uint32})
-        locked_results: Optional[List[FileData]] = field(
+        locked_results: Optional[list[FileData]] = field(
             default=None,
             metadata={'type': array, 'subtype': FileData, 'optional': True}
         )
@@ -1373,7 +1373,7 @@ class PeerDirectoryContentsReply(PeerMessage):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x25)
         ticket: int = field(metadata={'type': uint32})
         directory: str = field(metadata={'type': string})
-        directories: List[DirectoryData] = field(metadata={'type': array, 'subtype': DirectoryData})
+        directories: list[DirectoryData] = field(metadata={'type': array, 'subtype': DirectoryData})
 
         def serialize(self, compress: bool = True) -> bytes:
             return super().serialize(compress)

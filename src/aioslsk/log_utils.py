@@ -1,11 +1,12 @@
+from collections.abc import Collection
 import logging
-from typing import Collection, Type, Union
+from typing import Union
 from .exceptions import AioSlskException
 from .protocol.primitives import MessageDataclass
 from .protocol import messages
 
 
-def resolve(message_class: str) -> Type[MessageDataclass]:
+def resolve(message_class: str) -> type[MessageDataclass]:
     message_root, req_resp = message_class.split('.')
 
     if root_message := getattr(messages, message_root, None):
@@ -22,7 +23,7 @@ def resolve(message_class: str) -> Type[MessageDataclass]:
 class MessageFilter(logging.Filter):
     """Logging filter for protocol messages"""
 
-    def __init__(self, message_types: Collection[Union[Type[MessageDataclass], str]]):
+    def __init__(self, message_types: Collection[Union[type[MessageDataclass], str]]):
         super().__init__()
         converted = []
         for message_type in message_types:
@@ -32,7 +33,7 @@ class MessageFilter(logging.Filter):
                 mtype = message_type
             converted.append(mtype)
 
-        self.message_types: Collection[Type[MessageDataclass]] = converted
+        self.message_types: Collection[type[MessageDataclass]] = converted
 
     def filter(self, record: logging.LogRecord) -> bool:
         if message_type := getattr(record, 'message_type', None):

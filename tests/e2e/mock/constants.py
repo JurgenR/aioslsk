@@ -1,8 +1,7 @@
 import struct
-from typing import List
 
 
-DEFAULT_EXCLUDED_SEARCH_PHRASES: List[str] = ['banned phrase']
+DEFAULT_EXCLUDED_SEARCH_PHRASES: list[str] = ['banned phrase']
 HEADER_SIZE: int = struct.calcsize('I')
 MAX_ITEM_RECOMMENDATIONS: int = 100
 """Max items returned by GetItemRecommendations per list (value is known)"""

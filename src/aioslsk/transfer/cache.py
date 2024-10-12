@@ -2,7 +2,7 @@ import hashlib
 import logging
 import os
 import shelve
-from typing import List, Protocol
+from typing import Protocol
 from .model import Transfer
 
 
@@ -12,20 +12,20 @@ logger = logging.getLogger(__name__)
 class TransferCache(Protocol):
     """Abstract base class for storing shares"""
 
-    def read(self) -> List['Transfer']:
+    def read(self) -> list['Transfer']:
         ...
 
-    def write(self, transfers: List['Transfer']):
+    def write(self, transfers: list['Transfer']):
         ...
 
 
 class TransferNullCache:
     """Transfer cache object that does not perform any caching"""
 
-    def read(self) -> List['Transfer']:  # pragma: no cover
+    def read(self) -> list['Transfer']:  # pragma: no cover
         return []
 
-    def write(self, transfers: List['Transfer']):  # pragma: no cover
+    def write(self, transfers: list['Transfer']):  # pragma: no cover
         pass
 
 
@@ -39,7 +39,7 @@ class TransferShelveCache:
     def __init__(self, data_directory: str):
         self.data_directory = data_directory
 
-    def read(self) -> List['Transfer']:
+    def read(self) -> list['Transfer']:
         db_path = os.path.join(self.data_directory, self.DEFAULT_FILENAME)
 
         transfers = []
@@ -51,7 +51,7 @@ class TransferShelveCache:
 
         return transfers
 
-    def write(self, transfers: List['Transfer']):
+    def write(self, transfers: list['Transfer']):
         db_path = os.path.join(self.data_directory, self.DEFAULT_FILENAME)
 
         logger.info("writing %d transfers to : %s", len(transfers), db_path)
