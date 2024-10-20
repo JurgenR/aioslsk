@@ -273,7 +273,7 @@ class TestE2ETransfer:
             search_result.username,
             search_result.shared_items[0].filename
         )
-        upload = await wait_for_transfer_added(client_2)
+        upload = await wait_for_transfer_added(client_2, initial_amount=0)
 
         # Wait for the transfer to be transfering, then wait a couple of seconds
         # to receive some data
@@ -341,7 +341,7 @@ class TestE2ETransfer:
         assert os.path.exists(upload.local_path) is True
 
     @pytest.mark.asyncio
-    async def _test_transfer_requeueWhenUserComesOnline(
+    async def test_transfer_requeueWhenUserComesOnline(
             self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
 
         await wait_until_clients_initialized(mock_server, amount=2)
