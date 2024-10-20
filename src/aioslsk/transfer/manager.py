@@ -227,7 +227,7 @@ class TransferManager(BaseManager):
         """Aborts the given transfer. This will cancel all pending transfers
         and remove the file (in case of download)
 
-        :param transfer: `Transfer` object to abort
+        :param transfer: :class:`.Transfer` object to abort
         :raise TransferNotFoundError: if the transfer has not been added to the
             manager first
         :raise InvalidStateTransition: When the transfer could not be

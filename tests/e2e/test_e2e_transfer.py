@@ -371,6 +371,7 @@ class TestE2ETransfer:
 
         client_2.settings.transfers.limits.upload_slots = 1
         await client_2.start()
+        await client_2.shares.scan()
         await client_2.login()
 
         upload = await wait_for_transfer_added(client_2, initial_amount=initial_amount)
