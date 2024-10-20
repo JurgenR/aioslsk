@@ -315,8 +315,7 @@ class TransferManager(BaseManager):
                 "cannot remove transfer: transfer was not added to the manager")
 
         try:
-            async with transfer._state_lock:
-                await self.abort(transfer)
+            await self.abort(transfer)
         except InvalidStateTransition:
             pass
         except Exception:
