@@ -224,7 +224,7 @@ class TestE2ETransfer:
         # Wait for the transfer to be transfering, then wait a couple of seconds
         # to receive some data
         await wait_for_transfer_to_transfer(download)
-        await asyncio.sleep(2)
+        await asyncio.sleep(1)
 
         # Check the path exists (store to check later if it is removed)
         assert os.path.exists(download.local_path) is True
@@ -250,6 +250,51 @@ class TestE2ETransfer:
         assert download.local_path is None
         assert os.path.exists(download_local_path) is False
         assert os.path.exists(upload.local_path) is True
+
+    @pytest.mark.asyncio
+    async def test_transfer_removeDownload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        """Tests aborting a download
+
+        The download should end up in ABORTED state
+        The upload should end up in FAILED state
+        """
+        await wait_until_clients_initialized(mock_server, amount=2)
+
+        request = await client_1.searches.search('Strange')
+        await wait_for_search_results(request)
+
+        # Slow down the download speed
+        client_1.network.set_download_speed_limit(5)
+        client_2.network.set_upload_speed_limit(4)
+
+        search_result = request.results[0]
+
+        download = await client_1.transfers.download(
+            search_result.username,
+            search_result.shared_items[0].filename
+        )
+        upload = await wait_for_transfer_added(client_2)
+
+        # Wait for the transfer to be transfering, then wait a couple of seconds
+        # to receive some data
+        await wait_for_transfer_to_transfer(download)
+        await asyncio.sleep(1)
+
+        # Check the path exists (store to check later if it is removed)
+        download_local_path = download.local_path
+
+        # Finally remove the transfer
+        await client_1.transfers.remove(download)
+
+        # Verify download is aborted
+        await wait_for_transfer_state(download, TransferState.ABORTED)
+        await wait_for_transfer_state(upload, TransferState.FAILED)
+
+        # Verify file
+        assert download.local_path is None
+        assert os.path.exists(download_local_path) is False
+        assert os.path.exists(upload.local_path) is True
+        assert download not in client_1.transfers.transfers
 
     @pytest.mark.asyncio
     async def test_transfer_abortUpload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
