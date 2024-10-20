@@ -5,8 +5,8 @@ client on start and make it available from the REPL
 
 To use:
 
-1. Create a settings.json file with the desired settings under tools/debug/
-2. Run `poetry run python -m tools.debug.debug_mode
+1. Create a settings.json file with the desired settings under ``tools/debug/``
+2. Run ``poetry run python -m tools.debug.debug_mode``
 """
 from aioslsk.settings import Settings
 from aioslsk.client import SoulSeekClient

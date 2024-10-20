@@ -135,6 +135,7 @@ class GetUserStatusCommand(BaseCommand[GetUserStatus.Response, UserStatusInfo]):
 
     def handle_response(
             self, client: SoulSeekClient, response: GetUserStatus.Response) -> UserStatusInfo:
+
         return UserStatusInfo(
             UserStatus(response.status),
             response.privileged
@@ -210,7 +211,7 @@ class JoinRoomCommand(BaseCommand[JoinRoom.Response, Room]):
         )
 
     def handle_response(self, client: SoulSeekClient, response: JoinRoom.Response) -> Room:
-        return client.rooms.get_or_create_room(response.room)
+        return client.rooms.rooms[response.room]
 
 
 class LeaveRoomCommand(BaseCommand[LeaveRoom.Response, Room]):
@@ -233,7 +234,7 @@ class LeaveRoomCommand(BaseCommand[LeaveRoom.Response, Room]):
         )
 
     def handle_response(self, client: SoulSeekClient, response: LeaveRoom.Response) -> Room:
-        return client.rooms.get_or_create_room(response.room)
+        return client.rooms.rooms[response.room]
 
 
 class GrantRoomMembershipCommand(BaseCommand[PrivateRoomGrantMembership.Response, tuple[Room, User]]):
@@ -260,7 +261,7 @@ class GrantRoomMembershipCommand(BaseCommand[PrivateRoomGrantMembership.Response
     def handle_response(
             self, client: SoulSeekClient, response: PrivateRoomGrantMembership.Response) -> tuple[Room, User]:
         return (
-            client.rooms.get_or_create_room(response.room),
+            client.rooms.rooms[response.room],
             client.users.get_user_object(response.username)
         )
 
@@ -289,7 +290,7 @@ class RevokeRoomMembershipCommand(BaseCommand[PrivateRoomRevokeMembership.Respon
     def handle_response(
             self, client: SoulSeekClient, response: PrivateRoomRevokeMembership.Response) -> tuple[Room, User]:
         return (
-            client.rooms.get_or_create_room(response.room),
+            client.rooms.rooms[response.room],
             client.users.get_user_object(response.username)
         )
 
@@ -313,7 +314,7 @@ class DropRoomMembershipCommand(BaseCommand[PrivateRoomMembershipRevoked.Respons
         )
 
     def handle_response(self, client: SoulSeekClient, response: PrivateRoomMembershipRevoked.Response) -> Room:
-        return client.rooms.get_or_create_room(response.room)
+        return client.rooms.rooms[response.room]
 
 
 class DropRoomOwnershipCommand(BaseCommand[None, None]):
