@@ -607,6 +607,15 @@ class TransferManager(BaseManager):
         except (OSError, TypeError):
             return 0
 
+    def _reset_remotely_queued_flags(self, username: str):
+        """Removes the ``remotely_queued`` flag from all downloads for the given
+        given user
+        """
+        for transfer in self._transfers:
+            if transfer.direction == TransferDirection.DOWNLOAD:
+                if transfer.username == username:
+                    transfer.remotely_queued = False
+
     async def _queue_remotely(self, transfer: Transfer):
         """Remotely queue the given transfer. If the message was successfully
         delivered the ``remotely_queued`` flag will be set for the transfer
@@ -988,6 +997,9 @@ class TransferManager(BaseManager):
 
     @on_message(GetUserStatus.Response)
     async def _on_get_user_status(self, message: GetUserStatus.Response, connection: PeerConnection):
+        if message.status == UserStatus.OFFLINE.value:
+            self._reset_remotely_queued_flags(message.username)
+
         await self.manage_transfers()
 
     @on_message(PeerTransferQueue.Request)

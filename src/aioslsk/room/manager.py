@@ -65,6 +65,7 @@ class RoomManager(BaseManager):
     def __init__(
             self, settings: Settings, event_bus: EventBus,
             user_manager: UserManager, network: Network):
+
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._user_manager: UserManager = user_manager
@@ -81,15 +82,21 @@ class RoomManager(BaseManager):
         return self._rooms
 
     def get_joined_rooms(self) -> list[Room]:
+        """Returns a list of all rooms currently joined"""
         return [room for room in self._rooms.values() if room.joined]
 
     def get_private_rooms(self) -> list[Room]:
+        """Returns a list of all private rooms of which we are a member or
+        owner. This includes rooms that are not joined
+        """
         return [room for room in self._rooms.values() if room.private]
 
     def get_public_rooms(self) -> list[Room]:
+        """Returns the list of public rooms"""
         return [room for room in self._rooms.values() if not room.private]
 
     def get_owned_rooms(self) -> list[Room]:
+        """Returns a list of which we are the owner"""
         me = self._user_manager.get_self()
         return [
             room for room in self._rooms.values()
@@ -97,6 +104,7 @@ class RoomManager(BaseManager):
         ]
 
     def get_operated_rooms(self) -> list[Room]:
+        """Returns a list of rooms in which we have operator privileges"""
         me = self._user_manager.get_self()
         return [
             room for room in self._rooms.values()

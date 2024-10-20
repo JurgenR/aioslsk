@@ -63,6 +63,7 @@ logger = logging.getLogger(__name__)
 class TrackedUser:
     user: User
     flags: TrackingFlag = TrackingFlag(0)
+    requesting_flag: TrackingFlag = TrackingFlag(0)
 
     def has_add_user_flag(self) -> bool:
         """Returns whether this user has any tracking flags set related to
@@ -117,26 +118,30 @@ class UserManager(BaseManager):
 
     def get_user_object(self, username: str) -> User:
         """Gets a :class:`.User` object for given ``username``, if the user is
-        not stored it will be created and stored
+        not stored it will be created and stored.
+
+        A user will be stored only if there is a strong reference to the
+        :class:`.User` object, otherwise it will be removed
 
         :param username: Name of the user
         :return: a :class:`.User` object
         """
         if username not in self._users:
+            # Don't simplify this by assigning it directly to the dict; a strong
+            # reference needs to be kept otherwise the object would be
+            # immediatly removed
             user = User(
                 name=username,
                 privileged=username in self._privileged_users
             )
             self._users[username] = user
+            return user
+
         return self._users[username]
 
     def is_tracked(self, username: str) -> bool:
+        """Returns whether a user status is currently being tracked"""
         return username in self._tracked_users
-
-    def _get_or_create_user(self, username: str) -> User:
-        if username not in self._users:
-            self._users[username] = User(username)
-        return self._users[username]
 
     def _get_tracked_user_object(self, user: User) -> TrackedUser:
         if user.name not in self._tracked_users:
@@ -144,7 +149,10 @@ class UserManager(BaseManager):
         return self._tracked_users[user.name]
 
     def reset_users(self):
-        """Performs a reset on all users"""
+        """Performs a reset on all users. This method is called when the
+        connection with the server is disconnected and shouldn't be called
+        directly
+        """
         self._users = WeakValueDictionary()
         self._tracked_users = dict()
         self._privileged_users = set()
@@ -219,6 +227,7 @@ class UserManager(BaseManager):
 
                 if username in self._tracked_users:
                     del self._tracked_users[username]
+
                 await self._event_bus.emit(UserUntrackingEvent(user=user))
 
     async def track_friend(self, username: str):
@@ -290,6 +299,7 @@ class UserManager(BaseManager):
 
     @on_message(PrivilegedUsers.Response)
     async def _on_privileged_users(self, message: PrivilegedUsers.Response, connection: ServerConnection):
+
         for user in self._users.values():
             user.privileged = user.name in message.users
 
@@ -314,7 +324,6 @@ class UserManager(BaseManager):
         user = self.get_user_object(message.username)
         tracked_user = self._get_tracked_user_object(user)
         if message.exists:
-            user.name = message.username
             user.status = UserStatus(message.status)
             if message.user_stats:
                 user.update_from_user_stats(message.user_stats)

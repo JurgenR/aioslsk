@@ -126,11 +126,15 @@ async def wait_for_search_results(request: SearchRequest, timeout: float = 5):
     raise Exception('timeout waiting for search results')
 
 
-async def wait_for_transfer_added(client: SoulSeekClient, timeout: float = 3) -> Transfer:
+async def wait_for_transfer_added(
+        client: SoulSeekClient, initial_amount: Optional[int] = None, timeout: float = 3) -> Transfer:
+
     start = time.time()
-    init_transfer_amount = len(client.transfers.transfers)
+    if initial_amount is None:
+        initial_amount = len(client.transfers.transfers)
+
     while time.time() < start + timeout:
-        if len(client.transfers.transfers) > init_transfer_amount:
+        if len(client.transfers.transfers) > initial_amount:
             return client.transfers.transfers[-1]
         else:
             await asyncio.sleep(0.01)
@@ -148,7 +152,7 @@ async def wait_for_transfer_state(transfer: Transfer, state: TransferState.State
         else:
             await asyncio.sleep(0.05)
     else:
-        raise Exception(f"transfer {transfer} did not go to tate {state} in {timeout}s (was {current_state})")
+        raise Exception(f"transfer {transfer} did not go to state {state} in {timeout}s (was {current_state})")
 
 
 async def wait_for_transfer_to_finish(transfer: Transfer, timeout: int = 60):
@@ -162,7 +166,7 @@ async def wait_for_transfer_to_finish(transfer: Transfer, timeout: int = 60):
         raise Exception(f"transfer {transfer} did not finish in {timeout}s")
 
 
-async def wait_for_transfer_to_transfer(transfer: Transfer, timeout: int = 60):
+async def wait_for_transfer_to_transfer(transfer: Transfer, timeout: int = 10):
     start = time.time()
     while time.time() < start + timeout:
         if transfer.is_transferring():
@@ -171,3 +175,17 @@ async def wait_for_transfer_to_transfer(transfer: Transfer, timeout: int = 60):
             await asyncio.sleep(0.05)
     else:
         raise Exception(f"transfer {transfer} did not go into transferring state in {timeout}s")
+
+
+async def wait_for_remotely_queued_state(
+        transfer: Transfer, state: bool = True, timeout: int = 10):
+
+    start = time.time()
+    while time.time() < start + timeout:
+        if transfer.remotely_queued is state:
+            break
+        else:
+            await asyncio.sleep(0.05)
+    else:
+        raise Exception(
+            f"transfer {transfer} did not have remotely_queued flag set to {state} in {timeout}s")

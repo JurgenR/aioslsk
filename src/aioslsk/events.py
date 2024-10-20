@@ -200,8 +200,6 @@ class UserUntrackingEvent(Event):
 class UserStatusUpdateEvent(Event):
     """Emitted when the server sends an update for the users status / privileges
     or a request for it
-
-    Following
     """
     before: User
     current: User

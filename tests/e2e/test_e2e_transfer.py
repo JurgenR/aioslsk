@@ -1,16 +1,16 @@
 from aioslsk.client import SoulSeekClient
 from aioslsk.events import TransferAddedEvent, TransferProgressEvent
 from aioslsk.transfer.model import TransferState
-from aioslsk.transfer.manager import Reasons
 from .mock.server import MockServer
 from .fixtures import mock_server, client_1, client_2
 from .utils import (
+    wait_for_remotely_queued_state,
     wait_for_search_results,
+    wait_for_transfer_added,
+    wait_for_transfer_state,
     wait_for_transfer_to_finish,
     wait_for_transfer_to_transfer,
-    wait_for_transfer_state,
     wait_until_clients_initialized,
-    wait_for_transfer_added,
 )
 import asyncio
 import filecmp
@@ -294,3 +294,40 @@ class TestE2ETransfer:
         # Verify file
         assert os.path.exists(download.local_path) is True
         assert os.path.exists(upload.local_path) is True
+
+    @pytest.mark.asyncio
+    async def _test_transfer_requeueWhenUserComesOnline(
+            self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+
+        await wait_until_clients_initialized(mock_server, amount=2)
+
+        request = await client_1.searches.search('Strange')
+        await wait_for_search_results(request)
+
+        # Set the amount of upload slots to 0 to block transfer from starting
+        client_2.settings.transfers.limits.upload_slots = 0
+
+        result = request.results[0]
+        download = await client_1.transfers.download(
+            result.username,
+            result.shared_items[0].filename
+        )
+
+        upload = await wait_for_transfer_added(client_2)
+
+        assert download.remotely_queued is True
+
+        # Disconnect the uploader, remove the upload and restart the uploader
+        await client_2.stop()
+        await client_2.transfers.remove(upload)
+        await wait_for_remotely_queued_state(download, state=False)
+
+        initial_amount = len(client_2.transfers.transfers)
+
+        client_2.settings.transfers.limits.upload_slots = 1
+        await client_2.start()
+        await client_2.login()
+
+        upload = await wait_for_transfer_added(client_2, initial_amount=initial_amount)
+        await wait_for_transfer_state(download, TransferState.COMPLETE)
+        await wait_for_transfer_state(upload, TransferState.COMPLETE)
