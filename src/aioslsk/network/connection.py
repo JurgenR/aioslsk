@@ -444,6 +444,10 @@ class DataConnection(Connection, abc.ABC):
         ]
 
     async def _send(self, data: bytes, timeout: Optional[float] = None):
+        if not self._writer:
+            raise ConnectionWriteError(
+                f"{self.hostname}:{self.port} : cannot send data, connection is not open")
+
         try:
             self._writer.write(data)
             if timeout:
@@ -476,10 +480,6 @@ class DataConnection(Connection, abc.ABC):
                 extra=self.__dict__
             )
             return
-
-        if not self._writer:
-            raise ConnectionWriteError(
-                f"{self.hostname}:{self.port} : cannot send message, connection is not open")
 
         adapter.debug(
             "send message : %s",
@@ -724,9 +724,6 @@ class PeerConnection(DataConnection):
                 return
 
     async def send_data(self, data: bytes):
-        if not self._writer:
-            raise ConnectionWriteError("cannot send data, connection is not open")
-
         await self._send(data, timeout=TRANSFER_TIMEOUT)
 
     async def send_file(self, file_handle: AsyncBufferedReader, callback: Optional[Callable[[bytes], None]] = None):
