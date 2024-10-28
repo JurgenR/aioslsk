@@ -3,9 +3,9 @@ import abc
 from aiofiles.threadpool.binary import AsyncBufferedIOBase, AsyncBufferedReader
 import asyncio
 from async_timeout import Timeout, timeout as atimeout
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Awaitable, Callable
 from enum import auto, Enum
-from typing import Any, Optional, TYPE_CHECKING, Union
+from typing import Optional, TYPE_CHECKING, Union
 import logging
 import socket
 import struct
@@ -192,6 +192,7 @@ class DataConnection(Connection, abc.ABC):
     def __init__(
             self, hostname: str, port: int, network: Network,
             obfuscated: bool = False, read_timeout: float = DEFAULT_READ_TIMEOUT):
+
         super().__init__(hostname, port, network)
         self.obfuscated = obfuscated
 
@@ -383,7 +384,7 @@ class DataConnection(Connection, abc.ABC):
         :return: The message as a ``bytes`` object. ``None`` if the connection
             returned EOF
         """
-        return await self._read(self._read_message, timeout=self.read_timeout)
+        return await self._read(self._read_message(), timeout=self.read_timeout)
 
     async def receive_message_object(self) -> Optional[MessageDataclass]:
         """Receives a single message and parses it to a :class:`.MessageDataclass`
