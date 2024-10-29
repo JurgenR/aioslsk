@@ -854,7 +854,7 @@ class Network:
             )
 
         except NetworkError:
-            await self.server_connection.queue_message(
+            await self.server_connection.send_message(
                 CannotConnect.Request(
                     ticket=message.ticket,
                     username=message.username
@@ -998,14 +998,14 @@ class Network:
     async def on_peer_accepted(self, connection: PeerConnection):
         """Called when a connection has been accepted on one of the listening
         connections. This method will wait for the peer initialization message:
-        either PeerInit or PeerPierceFirewall.
+        either :class:`.PeerInit` or :class:`.PeerPierceFirewall`.
 
-        In case of PeerInit the method will perform the initialization of the
-        connection.
+        In case of :class:`.PeerInit` the method will perform the initialization
+        of the connection.
 
-        In case of PeerPierceFirewall we look for an associated future object
-        for the ticket provided in the message; there should be a task waiting
-        for it to be completed (see ``_make_indirect_connection``). Full
+        In case of :class:`.PeerPierceFirewall` we look for an associated future
+        object for the ticket provided in the message; there should be a task
+        waiting for it to be completed (see ``_make_indirect_connection``). Full
         initialization of the connection should be done in that method.
 
         In any other case we disconnect the connection.
@@ -1015,10 +1015,8 @@ class Network:
         self.peer_connections.append(connection)
 
         try:
-            message_data = await connection.receive_message()
-            if message_data:
-                peer_init_message = connection.decode_message_data(message_data)
-            else:
+            peer_init_message = await connection.receive_message_object()
+            if not peer_init_message:
                 # EOF reached before receiving a message. Connection should've
                 # been automatically closed
                 return
@@ -1028,7 +1026,7 @@ class Network:
         except MessageDeserializationError:
             # Couldn't deserialize the first message. Assume something is broken
             # and disconnect
-            await connection.disconnect(CloseReason.REQUESTED)
+            await connection.disconnect(CloseReason.READ_ERROR)
             return
 
         if isinstance(peer_init_message, PeerInit.Request):

@@ -3,9 +3,9 @@ import abc
 from aiofiles.threadpool.binary import AsyncBufferedIOBase, AsyncBufferedReader
 import asyncio
 from async_timeout import Timeout, timeout as atimeout
-from collections.abc import Callable, Coroutine
+from collections.abc import Awaitable, Callable
 from enum import auto, Enum
-from typing import Any, Optional, TYPE_CHECKING, Union
+from typing import Optional, TYPE_CHECKING, Union
 import logging
 import socket
 import struct
@@ -192,6 +192,7 @@ class DataConnection(Connection, abc.ABC):
     def __init__(
             self, hostname: str, port: int, network: Network,
             obfuscated: bool = False, read_timeout: float = DEFAULT_READ_TIMEOUT):
+
         super().__init__(hostname, port, network)
         self.obfuscated = obfuscated
 
@@ -216,8 +217,8 @@ class DataConnection(Connection, abc.ABC):
 
     async def connect(self, timeout: float = 30):
         """Opens a TCP connection the hostname:ip provided in this object. The
-        state of the connection will be changed to ``CONNECTING`` before the attempt
-        is made
+        state of the connection will be changed to ``CONNECTING`` before the
+        attempt is made
 
         Upon success the :attr:`state` will be set to ``CONNECTED`` and the
         message reader loop will be started. Upon failure the state will be set
@@ -320,23 +321,24 @@ class DataConnection(Connection, abc.ABC):
                     await self._perform_message_callback(message)
 
     async def _read(
-            self, reader_func: Callable[[], Coroutine[Any, Any, Optional[bytes]]],
+            self, reader_coro: Awaitable[Optional[bytes]],
             timeout: Optional[float] = None) -> Optional[bytes]:
-        """Read data from the connection using the passed ``reader_func``. When
+        """Read data from the connection using the passed ``reader_coro``. When
         an error occurs during reading the connection will be CLOSED
 
-        :param reader_func: coroutine that reads the data
-        :return: the return value of the ``reader_func``, ``None`` if EOF
+        :param reader_coro: coroutine that reads the data
+        :return: the return value of the ``reader_coro``, ``None`` if EOF
         :raise ConnectionReadError: upon any kind of read error/timeout
         """
         try:
             if timeout:
                 async with atimeout(timeout) as self._read_timeout_object:
-                    return await reader_func()
+                    data = await reader_coro
             else:
-                return await reader_func()
+                data = await reader_coro
 
         except asyncio.IncompleteReadError as exc:
+            # Can only be raised by `readexactly`
             if exc.partial:
                 await self.disconnect(CloseReason.READ_ERROR)
                 raise ConnectionReadError(
@@ -352,6 +354,13 @@ class DataConnection(Connection, abc.ABC):
         except Exception as exc:
             await self.disconnect(CloseReason.READ_ERROR)
             raise ConnectionReadError(f"{self.hostname}:{self.port} : exception during reading") from exc
+
+        else:
+            if not data:
+                await self.disconnect(CloseReason.EOF)
+                return None
+            else:
+                return data
 
     async def _read_message(self) -> bytes:
         if not self._reader:
@@ -375,7 +384,7 @@ class DataConnection(Connection, abc.ABC):
         :return: The message as a ``bytes`` object. ``None`` if the connection
             returned EOF
         """
-        return await self._read(self._read_message, timeout=self.read_timeout)
+        return await self._read(self._read_message(), timeout=self.read_timeout)
 
     async def receive_message_object(self) -> Optional[MessageDataclass]:
         """Receives a single message and parses it to a :class:`.MessageDataclass`
@@ -396,11 +405,7 @@ class DataConnection(Connection, abc.ABC):
             )
             return message
 
-        else:
-            return None
-
-    async def _read_until_eof(self) -> bytes:
-        return await self._reader.read(-1)  # type: ignore[union-attr]
+        return None
 
     async def receive_until_eof(self, raise_exception: bool = True) -> Optional[bytes]:
         """Receives data until the other end closes the connection. If
@@ -416,7 +421,7 @@ class DataConnection(Connection, abc.ABC):
         # and thus this method shouldn't worry about potentially not returning
         # partial data
         try:
-            return await self._read(self._read_until_eof)
+            return await self._read(self._reader.read(-1))
         except ConnectionReadError:
             if raise_exception:
                 raise
@@ -438,6 +443,27 @@ class DataConnection(Connection, abc.ABC):
             for message in messages
         ]
 
+    async def _send(self, data: bytes, timeout: Optional[float] = None):
+        if not self._writer:
+            raise ConnectionWriteError(
+                f"{self.hostname}:{self.port} : cannot send data, connection is not open")
+
+        try:
+            self._writer.write(data)
+            if timeout:
+                async with atimeout(timeout):
+                    await self._writer.drain()
+            else:
+                await self._writer.drain()
+
+        except asyncio.TimeoutError as exc:
+            await self.disconnect(CloseReason.TIMEOUT)
+            raise ConnectionWriteError(f"{self.hostname}:{self.port} : write timeout") from exc
+
+        except Exception as exc:
+            await self.disconnect(CloseReason.WRITE_ERROR)
+            raise ConnectionWriteError(f"{self.hostname}:{self.port} : exception during writing") from exc
+
     async def send_message(self, message: Union[bytes, MessageDataclass]):
         """Sends a message or a set of bytes over the connection. In case an
         object of :class:`.MessageDataClass` is provided the object will first
@@ -455,10 +481,6 @@ class DataConnection(Connection, abc.ABC):
             )
             return
 
-        if not self._writer:
-            raise ConnectionWriteError(
-                f"{self.hostname}:{self.port} : cannot send message, connection is not open")
-
         adapter.debug(
             "send message : %s",
             message,
@@ -474,22 +496,8 @@ class DataConnection(Connection, abc.ABC):
             adapter.exception("failed to serialize message : %s", message)
             return
 
-        # Perform actual send
-        try:
-            self._writer.write(data)
-            async with atimeout(10):
-                await self._writer.drain()
-
-        except asyncio.TimeoutError as exc:
-            await self.disconnect(CloseReason.TIMEOUT)
-            raise ConnectionWriteError(f"{self.hostname}:{self.port} : write timeout") from exc
-
-        except Exception as exc:
-            await self.disconnect(CloseReason.WRITE_ERROR)
-            raise ConnectionWriteError(f"{self.hostname}:{self.port} : exception during writing") from exc
-
-        else:
-            self._increase_read_timeout()
+        await self._send(data, timeout=10)
+        self._increase_read_timeout()
 
     def encode_message_data(self, message: Union[bytes, MessageDataclass]) -> bytes:
         """Serializes the :class:`.MessageDataclass` or ``bytes`` and obfuscates
@@ -589,9 +597,9 @@ class PeerConnection(DataConnection):
 
         self.incoming: bool = incoming
         self.connection_state = PeerConnectionState.AWAITING_INIT
+        self.connection_type: str = connection_type
 
         self.username: Optional[str] = username
-        self.connection_type: str = connection_type
 
         self.download_rate_limiter: RateLimiter = UnlimitedRateLimiter()
         self.upload_rate_limiter: RateLimiter = UnlimitedRateLimiter()
@@ -627,39 +635,33 @@ class PeerConnection(DataConnection):
         adapter.debug("setting state to %s", state, extra=self.__dict__)
         self.connection_state = state
 
-    async def _read_transfer_ticket(self) -> bytes:
+    async def receive_transfer_ticket(self) -> int:
+        """Receive the transfer ticket from the connection"""
         if not self._reader:
             raise ConnectionReadError(
                 f"{self.hostname}:{self.port} : cannot read transfer ticket, "
                 "connection is not open"
             )
 
-        return await self._reader.readexactly(struct.calcsize('I'))
-
-    async def _read_transfer_offset(self) -> bytes:
-        if not self._reader:
-            raise ConnectionReadError(
-                f"{self.hostname}:{self.port} : cannot read transfer offset, "
-                "connection is not open"
-            )
-
-        return await self._reader.readexactly(struct.calcsize('Q'))
-
-    async def receive_transfer_ticket(self) -> int:
-        """Receive the transfer ticket from the connection"""
-        data = await self._read(self._read_transfer_ticket)
-
+        data = await self._read(self._reader.readexactly(struct.calcsize('I')))
         if data is None:  # pragma: no cover
             raise ConnectionReadError(
-                f"{self.hostname}:{self.port} : couldn't receive transfer ticket, connection closed")
+                f"{self.hostname}:{self.port} : couldn't receive transfer ticket, "
+                "connection closed"
+            )
 
         _, ticket = uint32.deserialize(0, data)
         return ticket
 
     async def receive_transfer_offset(self) -> int:
         """Receive the transfer offset from the connection"""
-        data = await self._read(self._read_transfer_offset)
+        if not self._reader:
+            raise ConnectionReadError(
+                f"{self.hostname}:{self.port} : cannot read transfer offset, "
+                "connection is not open"
+            )
 
+        data = await self._read(self._reader.readexactly(struct.calcsize('Q')))
         if data is None:  # pragma: no cover
             raise ConnectionReadError(
                 f"{self.hostname}:{self.port} : couldn't receive transfer offset, "
@@ -670,12 +672,14 @@ class PeerConnection(DataConnection):
         return offset
 
     async def receive_data(self, n_bytes: int) -> Optional[bytes]:
-        """Receives given amount of bytes on the connection.
+        """Receives data on the connection. The ``n_bytes`` indicates the max
+        amount of bytes that should be received on the connection, less bytes
+        can be returned.
 
         In case of error the socket will be disconnected. If no data is received
         it is assumed to be EOF and the connection will be disconnected.
 
-        :param n_bytes: amount of bytes to receive
+        :param n_bytes: max amount of bytes to receive
         :raise ConnectionReadError: in case timeout occured on an error on the
             socket
         :return: ``bytes`` object containing the received data or ``None`` in
@@ -685,24 +689,8 @@ class PeerConnection(DataConnection):
             raise ConnectionReadError(
                 f"{self.hostname}:{self.port} : cannot read data, connection is not open")
 
-        try:
-            async with atimeout(self.transfer_read_timeout) as self._read_timeout_object:
-                data = await self._reader.read(n_bytes)
-
-        except asyncio.TimeoutError as exc:
-            await self.disconnect(CloseReason.TIMEOUT)
-            raise ConnectionReadError(f"{self.hostname}:{self.port} : timeout reading data") from exc
-
-        except Exception as exc:
-            await self.disconnect(CloseReason.READ_ERROR)
-            raise ConnectionReadError(f"{self.hostname}:{self.port} : read error") from exc
-
-        else:
-            if not data:
-                await self.disconnect(CloseReason.EOF)
-                return None
-            else:
-                return data
+        return await self._read(
+            self._reader.read(n_bytes), timeout=self.transfer_read_timeout)
 
     async def receive_file(
             self, file_handle: AsyncBufferedIOBase, filesize: int,
@@ -736,21 +724,7 @@ class PeerConnection(DataConnection):
                 return
 
     async def send_data(self, data: bytes):
-        if not self._writer:
-            raise ConnectionWriteError("cannot send data, connection is not open")
-
-        try:
-            self._writer.write(data)
-            async with atimeout(TRANSFER_TIMEOUT):
-                await self._writer.drain()
-
-        except asyncio.TimeoutError as exc:
-            await self.disconnect(CloseReason.TIMEOUT)
-            raise ConnectionWriteError(f"{self.hostname}:{self.port} : timeout writing") from exc
-
-        except Exception as exc:
-            await self.disconnect(CloseReason.WRITE_ERROR)
-            raise ConnectionWriteError(f"{self.hostname}:{self.port} : write error") from exc
+        await self._send(data, timeout=TRANSFER_TIMEOUT)
 
     async def send_file(self, file_handle: AsyncBufferedReader, callback: Optional[Callable[[bytes], None]] = None):
         """Sends a file over the connection. This method makes use of the
