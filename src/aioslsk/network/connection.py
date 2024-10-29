@@ -217,8 +217,8 @@ class DataConnection(Connection, abc.ABC):
 
     async def connect(self, timeout: float = 30):
         """Opens a TCP connection the hostname:ip provided in this object. The
-        state of the connection will be changed to ``CONNECTING`` before the attempt
-        is made
+        state of the connection will be changed to ``CONNECTING`` before the
+        attempt is made
 
         Upon success the :attr:`state` will be set to ``CONNECTED`` and the
         message reader loop will be started. Upon failure the state will be set
@@ -597,9 +597,9 @@ class PeerConnection(DataConnection):
 
         self.incoming: bool = incoming
         self.connection_state = PeerConnectionState.AWAITING_INIT
+        self.connection_type: str = connection_type
 
         self.username: Optional[str] = username
-        self.connection_type: str = connection_type
 
         self.download_rate_limiter: RateLimiter = UnlimitedRateLimiter()
         self.upload_rate_limiter: RateLimiter = UnlimitedRateLimiter()

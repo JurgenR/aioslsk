@@ -3,13 +3,14 @@ from unittest.mock import AsyncMock
 import time
 from typing import Optional
 from aioslsk.client import SoulSeekClient
+from aioslsk.network.connection import PeerConnection, PeerConnectionState
 from aioslsk.transfer.model import Transfer, TransferState
 from aioslsk.search.model import SearchRequest
 from .mock.server import MockServer
 
 
 async def wait_for_clients_connected(mock_server: MockServer, amount: int = 2, timeout: float = 10):
-    """Waits until the `amount` of peers are registered on the server"""
+    """Waits until the ``amount`` of peers are registered on the server"""
     start_time = time.time()
 
     while time.time() < start_time + timeout:
@@ -19,6 +20,35 @@ async def wait_for_clients_connected(mock_server: MockServer, amount: int = 2, t
             await asyncio.sleep(0.05)
     else:
         raise Exception(f"timeout waiting for {amount} peers to have registered to server")
+
+
+async def wait_for_peer_connection(
+        client: SoulSeekClient, username: str, typ: str, timeout: float = 10) -> PeerConnection:
+    """Waits until there is an active peer connection from given username and
+    type and returns the first
+    """
+    start_time = time.time()
+    while time.time() < start_time + timeout:
+        connections = client.network.get_active_peer_connections(username, typ)
+        if connections:
+            return connections[0]
+        else:
+            await asyncio.sleep(0.05)
+    else:
+        raise Exception(f"timeout waiting for peer connection from ({username=}, {typ=})")
+
+
+async def wait_for_peer_connection_state(
+        connection: PeerConnection, state: PeerConnectionState, timeout: float = 10):
+
+    start_time = time.time()
+    while time.time() < start_time + timeout:
+        if connection.state == state:
+            break
+        else:
+            await asyncio.sleep(0.05)
+    else:
+        raise Exception(f"timeout waiting for peer connection state ({connection=}, {state=})")
 
 
 async def wait_until_client_has_parent(client: SoulSeekClient, timeout: float = 10):
