@@ -5,6 +5,8 @@ from dataclasses import dataclass
 import inspect
 import logging
 from typing import Any, Optional, TypeVar, TYPE_CHECKING, Union
+from types import MethodType
+import weakref
 
 from .room.model import Room, RoomMessage
 from .user.model import ChatMessage, User
@@ -81,7 +83,8 @@ EventListener = Union[
 # Internal functions
 
 def on_message(message_class: type[MessageDataclass]):
-    """Decorator for methods listening to specific `MessageData` events"""
+    """Decorator for methods listening to specific :class:`.MessageData` events
+    """
     def register(event_func):
         event_func._registered_message = message_class
         return event_func
@@ -104,14 +107,23 @@ def build_message_map(obj: object) -> dict[type[MessageDataclass], Callable]:
 class EventBus:
 
     def __init__(self):
-        self._events: dict[type[Event], list[tuple[int, EventListener]]] = {}
+        self._events: dict[
+            type[Event],
+            list[tuple[int, weakref.ReferenceType[EventListener]]]] = {}
 
     def register(self, event_class: type[E], listener: EventListener, priority: int = 100):
         """Registers an event listener to listen on an event class. The order in
         which the listeners are called can be managed using the ``priority``
         parameter
         """
-        entry = (priority, listener)
+        ref_factory = weakref.ref
+        if isinstance(listener, MethodType):
+            ref_factory = weakref.WeakMethod
+
+        entry = (
+            priority,
+            ref_factory(listener, lambda ref: self._remove_callback(event_class, ref))
+        )
         try:
             self._events[event_class].append(entry)
         except KeyError:
@@ -119,13 +131,25 @@ class EventBus:
 
         self._events[event_class].sort(key=lambda e: e[0])
 
+    def unregister(self, event_class: type[E], listener: EventListener):
+        """Unregisters the event listener from event bus"""
+        if event_class not in self._events:
+            return
+
+        self._events[event_class] = [
+            listener_def
+            for listener_def in self._events[event_class]
+            if listener != listener_def[1]()
+        ]
+
     async def emit(self, event: Event):
         try:
             listeners = self._events[event.__class__]
         except KeyError:
             pass
         else:
-            for _, listener in listeners:
+            for _, listener_ref in listeners:
+                listener = listener_ref()
                 try:
                     if asyncio.iscoroutinefunction(listener):
                         await listener(event)
@@ -137,6 +161,16 @@ class EventBus:
                         "exception notifying listener %r of event %r",
                         listener, event
                     )
+
+    def _remove_callback(
+            self, event_class: type[E],
+            listener_ref: weakref.ReferenceType[EventListener]):
+
+        self._events[event_class] = [
+            listener_def
+            for listener_def in self._events[event_class]
+            if listener_ref != listener_def[1]
+        ]
 
 
 # Public events
