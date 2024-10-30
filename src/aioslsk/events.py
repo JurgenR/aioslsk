@@ -116,7 +116,7 @@ class EventBus:
         which the listeners are called can be managed using the ``priority``
         parameter
         """
-        ref_factory = weakref.ref
+        ref_factory: type[weakref.ReferenceType] = weakref.ref
         if isinstance(listener, MethodType):
             ref_factory = weakref.WeakMethod
 
@@ -150,6 +150,10 @@ class EventBus:
         else:
             for _, listener_ref in listeners:
                 listener = listener_ref()
+                # Should never be None, but checked for type compatibility
+                if not listener:  # pragma: no cover
+                    continue
+
                 try:
                     if asyncio.iscoroutinefunction(listener):
                         await listener(event)
