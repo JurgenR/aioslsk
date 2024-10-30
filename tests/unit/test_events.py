@@ -3,6 +3,7 @@ from aioslsk.protocol.messages import Login, AddUser, Kicked
 
 import pytest
 from unittest.mock import create_autospec
+import weakref
 
 
 def listener1(event: KickedEvent):
@@ -18,6 +19,9 @@ async def async_listener(event: KickedEvent):
 
 
 class DummyClass:
+
+    def on_event(self, event: KickedEvent):
+        pass
 
     @on_message(Login.Response)
     def login(self):
@@ -54,7 +58,9 @@ class TestEventBus:
 
         bus.register(KickedEvent, listener1, priority=5)
 
-        assert bus._events[KickedEvent] == [(5, listener1), ]
+        assert bus._events[KickedEvent] == [
+            (5, weakref.ref(listener1)),
+        ]
 
     def test_whenRegisterExistingEvent_shouldAddListener(self):
         bus = EventBus()
@@ -63,9 +69,61 @@ class TestEventBus:
         bus.register(KickedEvent, listener2, priority=4)
 
         assert bus._events[KickedEvent] == [
-            (4, listener2),
-            (5, listener1),
+            (4, weakref.ref(listener2)),
+            (5, weakref.ref(listener1)),
         ]
+
+    def test_whenRegisterDifferentTypes_shouldAddListener(self):
+        bus = EventBus()
+
+        dummy = DummyClass()
+        inline_func = lambda event: str(event)
+
+        bus.register(KickedEvent, listener1)
+        bus.register(KickedEvent, dummy.on_event)
+        bus.register(KickedEvent, inline_func)
+
+        assert bus._events[KickedEvent] == [
+            (100, weakref.ref(listener1)),
+            (100, weakref.WeakMethod(dummy.on_event)),
+            (100, weakref.ref(inline_func)),
+        ]
+
+    def test_whenObjectIsDestroyed_shouldRemoveListener(self):
+        bus = EventBus()
+        dummy = DummyClass()
+
+        bus.register(KickedEvent, dummy.on_event)
+        bus.register(KickedEvent, listener1)
+
+        assert bus._events[KickedEvent] == [
+            (100, weakref.WeakMethod(dummy.on_event)),
+            (100, weakref.ref(listener1)),
+        ]
+
+        del dummy
+
+        assert bus._events[KickedEvent] == [
+            (100, weakref.ref(listener1)),
+        ]
+
+    def test_whenUnregisterExistingEvent_shouldRemoveListener(self):
+        bus = EventBus()
+
+        bus.register(KickedEvent, listener1)
+
+        assert bus._events[KickedEvent] == [
+            (100, weakref.ref(listener1)),
+        ]
+
+        bus.unregister(KickedEvent, listener1)
+
+        assert bus._events[KickedEvent] == []
+
+    def test_whenUnregisterNonExistingEvent_shouldDoNothing(self):
+        bus = EventBus()
+
+        bus.unregister(KickedEvent, listener1)
 
     @pytest.mark.asyncio
     async def test_whenEmitNoListenersRegister_shouldNotRaise(self):
