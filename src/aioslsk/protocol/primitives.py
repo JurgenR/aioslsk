@@ -31,6 +31,7 @@ These metadata keys are implemented:
       has been fully parsed. If not it will parse this field
 """
 from dataclasses import dataclass, field, Field, fields, is_dataclass
+import enum
 import hashlib
 import logging
 import socket
@@ -62,6 +63,14 @@ class Serializable(Protocol):
 
     def serialize(self, *args, **kwargs) -> bytes:
         ...
+
+
+class AttributeKey(enum.Enum):
+    BITRATE = 0
+    DURATION = 1
+    VBR = 2
+    SAMPLE_RATE = 4
+    BIT_DEPTH = 5
 
 
 def decode_string(value: bytes) -> str:
@@ -472,6 +481,19 @@ class FileData(ProtocolDataclass):
             string(self.extension).serialize() +
             array(self.attributes).serialize(Attribute)
         )
+
+    def get_attribute_map(self) -> dict[AttributeKey, int]:
+        """Converts the attribute list to a dictionary. The resulting dictionary
+        will only contain known attributes and attributes present in the list
+        """
+        attribute_dict = {}
+        for attr in self.attributes:
+            try:
+                attribute_dict[AttributeKey(attr.key)] = attr.value
+            except ValueError:
+                pass
+
+        return attribute_dict
 
 
 @dataclass(frozen=True, order=True)

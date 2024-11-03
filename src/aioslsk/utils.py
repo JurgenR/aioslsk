@@ -41,6 +41,7 @@ def get_duration(attributes: list[Attribute]) -> str:
 
 
 def get_attribute_string(attributes: list[Attribute]) -> str:
+    """Returns an attributes list to a string (excludes duration)"""
     attr_str = []
     for attr in attributes:
         if attr.key == 0:
