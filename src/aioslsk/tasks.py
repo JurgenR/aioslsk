@@ -76,6 +76,7 @@ class BackgroundTask:
 
 
 class Timer:
+    """Re-schedulable timer which runs a callback after completion"""
 
     def __init__(self, timeout: float, callback: TaskCoroutine):
         self.timeout: float = timeout

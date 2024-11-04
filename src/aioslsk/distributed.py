@@ -494,6 +494,7 @@ class DistributedNetwork(BaseManager):
     @on_message(DistributedSearchRequest.Request)
     async def _on_distributed_search_request(
             self, message: DistributedSearchRequest.Request, connection: PeerConnection):
+
         await self.send_messages_to_children(message)
 
     @on_message(DistributedServerSearchRequest.Request)

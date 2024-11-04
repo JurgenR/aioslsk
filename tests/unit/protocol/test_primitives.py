@@ -3,7 +3,14 @@ import logging
 from typing import ClassVar
 import pytest
 
-from aioslsk.protocol.primitives import decode_string, uint32, MessageDataclass
+from aioslsk.protocol.primitives import (
+    decode_string,
+    Attribute,
+    AttributeKey,
+    FileData,
+    MessageDataclass,
+    uint32,
+)
 
 
 logger = logging.getLogger()
@@ -53,3 +60,26 @@ class TestMessageDataclass:
         data = bytes.fromhex('04000000010000000100000030')
         with pytest.raises(Exception):
             FieldWithoutType.deserialize(0, data)
+
+
+class TestFileData:
+
+    def test_getAttributeMap(self):
+        attrs = [
+            Attribute(0, 320),
+            Attribute(1, 120),
+            Attribute(2, 1),
+            Attribute(4, 44100),
+            Attribute(5, 24),
+            # Unknown value
+            Attribute(10, 10)
+        ]
+        file_data = FileData(1, 'test', 2, '', attrs)
+
+        assert file_data.get_attribute_map() == {
+            AttributeKey.BITRATE: 320,
+            AttributeKey.DURATION: 120,
+            AttributeKey.VBR: 1,
+            AttributeKey.SAMPLE_RATE: 44100,
+            AttributeKey.BIT_DEPTH: 24
+        }
