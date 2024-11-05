@@ -63,10 +63,8 @@ logger = logging.getLogger(__name__)
 class DistributedPeer:
     """Represents a distributed peer and its values in the distributed network"""
     username: str
-    connection: Optional[PeerConnection] = None
-    """Distributed connection (type=D) associated with the peer. A `None` value
-    indicates the peer represents the current client
-    """
+    connection: PeerConnection
+    """Distributed connection (type=D) associated with the peer"""
     branch_level: Optional[int] = None
     branch_root: Optional[str] = None
 
@@ -189,7 +187,7 @@ class DistributedNetwork(BaseManager):
         # be disconnected
         distributed_connections = [
             dpeer.connection for dpeer in self.distributed_peers
-            if dpeer in [self.parent, ] + self.children and dpeer.connection is not None
+            if dpeer in [self.parent, ] + self.children
         ]
 
         disconnect_tasks = []
@@ -214,8 +212,7 @@ class DistributedNetwork(BaseManager):
             if not self.parent:
                 await self._set_parent(peer)
             else:
-                if peer.connection:
-                    await peer.connection.disconnect(reason=CloseReason.REQUESTED)
+                await peer.connection.disconnect(reason=CloseReason.REQUESTED)
 
     async def _disconnect_children(self):
         await asyncio.gather(
@@ -224,15 +221,11 @@ class DistributedNetwork(BaseManager):
         )
 
     async def _disconnect_child(self, peer: DistributedPeer):
-        if peer.connection:
-            await peer.connection.disconnect(CloseReason.REQUESTED)
+        await peer.connection.disconnect(CloseReason.REQUESTED)
 
     async def _disconnect_parent(self):
         if self.parent:
-            if self.parent.connection:
-                await self.parent.connection.disconnect(CloseReason.REQUESTED)
-            else:
-                await self._unset_parent()
+            await self.parent.connection.disconnect(CloseReason.REQUESTED)
 
     async def _unset_parent(self):
         logger.info("unset parent : %s", self.parent)
@@ -286,8 +279,7 @@ class DistributedNetwork(BaseManager):
 
         if not self._accept_children:
             logger.debug("not accepting children, rejecting peer as child : %s", peer)
-            if peer.connection:  # Satisfy type checker
-                await peer.connection.disconnect(CloseReason.REQUESTED)
+            await peer.connection.disconnect(CloseReason.REQUESTED)
             return
 
         if len(self.children) >= self._max_children:
@@ -295,8 +287,7 @@ class DistributedNetwork(BaseManager):
                 "maximum amount of children reached (%d / %d), rejecting peer as child : %s",
                 len(self.children), self._max_children, peer
             )
-            if peer.connection:  # Satisfy type checker
-                await peer.connection.disconnect(CloseReason.REQUESTED)
+            await peer.connection.disconnect(CloseReason.REQUESTED)
             return
 
         await self._add_child(peer)
@@ -407,16 +398,6 @@ class DistributedNetwork(BaseManager):
             username = self._session.user.name
             if message.username == username:
                 return
-
-            if not self.parent:
-                # Set ourself as parent
-                parent = DistributedPeer(
-                    username,
-                    None,
-                    branch_root=username,
-                    branch_level=0
-                )
-                await self._set_parent(parent)
 
         await self.send_messages_to_children(message)
 
@@ -623,17 +604,11 @@ class DistributedNetwork(BaseManager):
 
         elif isinstance(connection, ServerConnection):
 
-            # When the client itself is branch root it means that the server is
-            # our "parent" and must be unset here
-            if self.parent and self.parent.connection is None:
-                await self._unset_parent()
-
             self._reset_server_values()
 
     async def send_messages_to_children(self, *messages: Union[MessageDataclass, bytes]):
         for child in self.children:
-            if child.connection:
-                child.connection.queue_messages(*messages)
+            child.connection.queue_messages(*messages)
 
     async def stop(self) -> list[asyncio.Task]:
         """Cancels all pending tasks

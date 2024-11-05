@@ -306,29 +306,6 @@ class TestDistributedNetwork:
         assert child.connection == new_child_connection
 
     @pytest.mark.asyncio
-    async def test_reset_isRoot_shouldUnsetParent(self, distributed_network: DistributedNetwork):
-        parent = DistributedPeer(
-            username=DEFAULT_USERNAME,
-            connection=None,
-            branch_level=0,
-            branch_root=DEFAULT_USERNAME
-        )
-
-        distributed_network.parent = parent
-
-        server = AsyncMock()
-        await distributed_network._event_bus.emit(
-            MessageReceivedEvent(
-                message=ResetDistributed.Response(),
-                connection=server
-            )
-        )
-        assert distributed_network.parent is None
-        distributed_network._network.send_server_messages.assert_has_awaits(
-            [call(BranchLevel.Request(0), BranchRoot.Request(DEFAULT_USERNAME), ToggleParentSearch.Request(True))]
-        )
-
-    @pytest.mark.asyncio
     async def test_reset_shouldDisconnectParentAndChildren(self, distributed_network: DistributedNetwork):
         parent = DistributedPeer(
             username='user0',
@@ -373,29 +350,6 @@ class TestDistributedNetwork:
         assert distributed_network.parent_speed_ratio is None
         assert distributed_network.parent_inactivity_timeout is None
         assert distributed_network.min_parents_in_cache is None
-
-    @pytest.mark.asyncio
-    async def test_serverDisconnected_isRoot_shouldUnsetParent(self, distributed_network: DistributedNetwork):
-        network = AsyncMock()
-        parent = DistributedPeer(
-            username=DEFAULT_USERNAME,
-            connection=None,
-            branch_level=0,
-            branch_root=DEFAULT_USERNAME
-        )
-        distributed_network.parent = parent
-
-        server = ServerConnection(hostname='1.2.3.4', port=1234, network=network)
-        await distributed_network._event_bus.emit(
-            ConnectionStateChangedEvent(
-                connection=server,
-                state=ConnectionState.CLOSED
-            )
-        )
-        assert distributed_network.parent is None
-        distributed_network._network.send_server_messages.assert_has_awaits(
-            [call(BranchLevel.Request(0), BranchRoot.Request(DEFAULT_USERNAME), ToggleParentSearch.Request(True))]
-        )
 
     @pytest.mark.asyncio
     async def test_parentDisconnected_shouldUnsetParent(self, distributed_network: DistributedNetwork):

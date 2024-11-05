@@ -19,16 +19,18 @@ class Peer:
 
     def __init__(
             self, hostname: str, port: int, server: MockServer,
-            reader: asyncio.StreamReader = None, writer: asyncio.StreamWriter = None):
+            reader: asyncio.StreamReader = None, writer: asyncio.StreamWriter = None,
+            user: Optional[User] = None):
+
         self.hostname: str = hostname
         self.port: int = port
         self.server = server
 
-        self.user: User = None
+        self.user: Optional[User] = user
 
-        self.reader: asyncio.StreamReader = reader
-        self.writer: asyncio.StreamWriter = writer
-        self.reader_loop = None
+        self.reader: Optional[asyncio.StreamReader] = reader
+        self.writer: Optional[asyncio.StreamWriter] = writer
+        self.reader_loop: Optional[asyncio.Task] = None
 
         self.should_close: bool = False
         self.last_ping: float = 0.0
@@ -113,3 +115,6 @@ class Peer:
         except Exception:
             logger.exception(f"failed to send message {message}")
             await self.disconnect()
+
+    def __repr__(self) -> str:
+        return f"Peer({self.hostname=}, {self.port=}, {self.user=})"

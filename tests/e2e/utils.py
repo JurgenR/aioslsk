@@ -62,6 +62,17 @@ async def wait_until_client_has_parent(client: SoulSeekClient, timeout: float = 
         raise Exception("timeout waiting for client to have parent")
 
 
+async def wait_until_client_has_no_parent(client: SoulSeekClient, timeout: float = 10):
+    start_time = time.time()
+    while time.time() < start_time + timeout:
+        if not client.distributed_network.parent:
+            break
+        else:
+            await asyncio.sleep(0.05)
+    else:
+        raise Exception("timeout waiting for client to have no parent")
+
+
 async def wait_until_peer_has_parent(
         mock_server: MockServer, username: str, level: int, root: str,
         timeout: float = 10):
