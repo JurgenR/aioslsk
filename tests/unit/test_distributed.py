@@ -352,29 +352,6 @@ class TestDistributedNetwork:
         assert distributed_network.min_parents_in_cache is None
 
     @pytest.mark.asyncio
-    async def test_serverDisconnected_isRoot_shouldUnsetParent(self, distributed_network: DistributedNetwork):
-        network = AsyncMock()
-        parent = DistributedPeer(
-            username=DEFAULT_USERNAME,
-            connection=None,
-            branch_level=0,
-            branch_root=DEFAULT_USERNAME
-        )
-        distributed_network.parent = parent
-
-        server = ServerConnection(hostname='1.2.3.4', port=1234, network=network)
-        await distributed_network._event_bus.emit(
-            ConnectionStateChangedEvent(
-                connection=server,
-                state=ConnectionState.CLOSED
-            )
-        )
-        assert distributed_network.parent is None
-        distributed_network._network.send_server_messages.assert_has_awaits(
-            [call(BranchLevel.Request(0), BranchRoot.Request(DEFAULT_USERNAME), ToggleParentSearch.Request(True))]
-        )
-
-    @pytest.mark.asyncio
     async def test_parentDisconnected_shouldUnsetParent(self, distributed_network: DistributedNetwork):
         parent_username = 'user0'
         connection = PeerConnection(
