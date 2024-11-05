@@ -382,8 +382,8 @@ class MockServer:
         )
 
     async def send_search_request(self, username: str, sender: str, query: str, ticket: int):
-        """This is a utility method for testing. To make a peer a root the
-        server has to send an initial search message to that user
+        """This is a utility method for testing. This sends a
+        :class:`.ServerSearchRequest` to a specific user
 
         :param username: Username to send the query to
         :param query: The query to send
