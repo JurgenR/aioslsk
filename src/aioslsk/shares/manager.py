@@ -303,7 +303,7 @@ class SharesManager(BaseManager):
 
     async def get_shared_item(self, remote_path: str, username: Optional[str] = None) -> SharedItem:
         """Gets a shared item from the cache based on the given file path. If
-        the file does not exist in the `shared_items` or the file is present
+        the file does not exist in the ``shared_items`` or the file is present
         in the cache but does not exist on disk a :class:`.FileNotFoundError` is
         raised
 
@@ -313,10 +313,10 @@ class SharesManager(BaseManager):
 
         :param remote_path: the remote_path
         :param username: optional username to check if the file is shared or not
-        :raise FileNotFoundError: filename was not found in shared_items or was found
-            but did not exist on disk
+        :raise FileNotFoundError: filename was not found in shared_items or was
+            found but did not exist on disk
         :raise FileNotSharedError: file is found, but locked for the given
-            `username`
+            ``username``
         """
         for shared_directory in self._shared_directories:
             try:
@@ -340,10 +340,14 @@ class SharesManager(BaseManager):
             share_mode: DirectoryShareMode = DirectoryShareMode.EVERYONE,
             users: Optional[list[str]] = None) -> SharedDirectory:
         """Adds a shared directory. This method will call :meth:`generate_alias`
-        and add the directory to the directory map. This method will not scan
-        the directory, for scanning see the :meth:`scan`,
-        :meth:`scan_directory_files` and :meth:`scan_directory_file_attributes`
-        methods.
+        and add the directory to the directory map.
+
+        This method will not scan the directory, however if the directory is a
+        (sub)child of an already registered shared directory the items from that
+        directory will be removed from the parent directory to the new directory
+
+        For scanning see the :meth:`scan`, :meth:`scan_directory_files` and
+        :meth:`scan_directory_file_attributes` methods.
 
         :param shared_directory: path of the shared directory
         :param share_mode: the share mode for the directory
@@ -384,7 +388,7 @@ class SharesManager(BaseManager):
             self, directory: Union[str, SharedDirectory],
             share_mode: Optional[DirectoryShareMode] = None,
             users: Optional[list[str]] = None) -> SharedDirectory:
-        """Updates `share_mode` and `users` values for the given directory
+        """Updates ``share_mode`` and ``users`` values for the given directory
 
         :param directory: if a string is given this method will attempt to find
             the shared directory based on the absolute path
@@ -429,7 +433,7 @@ class SharesManager(BaseManager):
 
         And removes the `Music\\Artist_One\\ shared directory the files of that
         directory get returned back to the parent directory. In this case file
-        `song_two.mp3` will be shared with EVERYONE again
+        ``song_two.mp3`` will be shared with EVERYONE again
 
         :param shared_directory: :class:`.SharedDirectory` instance to remove
         :return: the removed directory
@@ -463,7 +467,8 @@ class SharesManager(BaseManager):
         """Calculates the absolute path of given ``directory`` and looks for the
         matching :class:`.SharedDirectory` instance
 
-        :raise SharedDirectoryError: if the directory is not found
+        :raise SharedDirectoryError: if there is no corresponding
+            :class:`.SharedDirectory` instance registered in this class
         """
         abs_path = os.path.normpath(os.path.abspath(directory))
         for shared_directory in self.shared_directories:
@@ -534,15 +539,14 @@ class SharesManager(BaseManager):
         self._cleanup_term_map()
 
     async def scan_directory_file_attributes(self, shared_directory: SharedDirectory):
-        """Scans the file attributes for files in the given `shared_directory`.
-        only files that do not yet have attributes will be scanned
+        """Scans the file attributes for files in the given ``shared_directory``
+        only files that do not have attributes will be scanned
 
         The results of the scan are handled internally and are automatically to
         the :class:`.SharedItem` object for which the scan was performed
 
         :param shared_directory: :class:`.SharedDirectory` instance for which
             the files need to be scanned
-        :return: List of futures for each file that needs to be scanned
         """
         loop = asyncio.get_running_loop()
 
@@ -573,11 +577,9 @@ class SharesManager(BaseManager):
 
     def _extract_attributes_callback(self, item: SharedItem, future: asyncio.Future):
         try:
-            attributes = future.result()
+            item.attributes = future.result()
         except Exception:
             logger.warning("exception fetching shared item attributes")
-        else:
-            item.attributes = attributes
 
     async def scan(self):
         """Scan the files and their attributes for all directories currently
@@ -617,7 +619,7 @@ class SharesManager(BaseManager):
             excluded_search_phrases: Optional[list[str]] = None) -> tuple[list[SharedItem], list[SharedItem]]:
         """Performs a query on the ``shared_directories`` returning the matching
         items. If ``username`` is passed this method will return a list of
-        visible results and list of locked results. If `None` the second list
+        visible results and list of locked results. If ``None`` the second list
         will always be empty.
 
         This method makes a first pass using the built in term map and filters
@@ -877,7 +879,8 @@ class SharesManager(BaseManager):
         return children
 
     def is_directory_locked(self, directory: SharedDirectory, username: str) -> bool:
-        """Checks if the shared directory is locked for the given ``username``"""
+        """Checks if the shared directory is locked for the given ``username``
+        """
         if directory.share_mode == DirectoryShareMode.FRIENDS:
             return username not in self._settings.users.friends
         elif directory.share_mode == DirectoryShareMode.USERS:
