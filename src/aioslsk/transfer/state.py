@@ -120,6 +120,13 @@ class TransferState:
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.PAUSED.name)
         return False
 
+    async def _cancel_transfer_tasks(self):
+        await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
+
+    async def _stop_transfer(self):
+        await self._cancel_transfer_tasks()
+        self.transfer.set_complete_time()
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.transfer!r})"
 
@@ -193,6 +200,7 @@ class InitializingState(TransferState):
     VALUE = TransferState.INITIALIZING
 
     async def abort(self) -> bool:
+        await self._cancel_transfer_tasks()
         await _remove_local_file(self.transfer)
         await self.transfer.transition(AbortedState(self.transfer))
         return True
@@ -230,10 +238,6 @@ class DownloadingState(TransferState):
     - Aborted: We have aborted the transfer
     """
     VALUE = TransferState.DOWNLOADING
-
-    async def _stop_transfer(self):
-        await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
-        self.transfer.set_complete_time()
 
     async def fail(self, reason: Optional[str] = None) -> bool:
         self.transfer.fail_reason = reason
@@ -274,10 +278,6 @@ class UploadingState(TransferState):
         - Received PeerUploadFailed message from peer
     - Aborted: We have aborted the transfer
     """
-
-    async def _stop_transfer(self):
-        await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
-        self.transfer.set_complete_time()
 
     async def fail(self, reason: Optional[str] = None) -> bool:
         self.transfer.fail_reason = reason
@@ -344,6 +344,7 @@ class IncompleteState(TransferState):
         return True
 
     async def abort(self) -> bool:
+        await self._cancel_transfer_tasks()
         await _remove_local_file(self.transfer)
         await self.transfer.transition(AbortedState(self.transfer))
         return True
@@ -385,6 +386,7 @@ class PausedState(TransferState):
         return True
 
     async def abort(self) -> bool:
+        await self._cancel_transfer_tasks()
         await _remove_local_file(self.transfer)
         await self.transfer.transition(AbortedState(self.transfer))
         return True
