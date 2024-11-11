@@ -678,6 +678,27 @@ class TransferManager(BaseManager):
         """Initializes a download and starts downloading. This method should be
         called after a :class:`.PeerTransferRequest` has been received
 
+        Following steps are taken in this method:
+
+        1. Set the state of the transfer to INITIALIZING
+        2. Send a :class:`PeerTransferReply` with allowed set to true
+
+           * In case the message cannot be delivered put the transfer back to
+             QUEUED
+
+        3. Create a future for an incoming file connection with the ticket from
+           the :class:`PeerTransferRequest` message, await the future
+
+           * In case a timeout occurs waiting for the file connection: put the
+             transfer to QUEUED
+
+        4. Calculate the transfer offset and send it
+
+           * In case this fails: put transfer to INCOMPLETE
+
+        5. Start downloading, see :meth:`_download_file` : exception cases are
+           handled internally by this method
+
         :param transfer: transfer object to initialize
         :param peer_connection: peer connection on which the transfer request
             was received
@@ -735,6 +756,7 @@ class TransferManager(BaseManager):
 
         except asyncio.CancelledError:
             # Aborted or program shut down
+            logger.debug("requested to cancel transfer: %s", transfer)
             await file_connection.disconnect(CloseReason.REQUESTED)
             raise
 
@@ -744,10 +766,39 @@ class TransferManager(BaseManager):
             await self._upload_file(transfer, file_connection)
 
     async def _initialize_upload(self, transfer: Transfer):
-        """Notifies the peer we are ready to upload the file for the given
-        transfer
+        """Attempts to initialize and upload to another peer. Following steps
+        are taken in this method:
+
+        1. Set the state of the transfer to INITIALIZING
+        2. Notify the downloader we are ready to upload a file by sending a
+           :class:`.PeerTransferRequest` message, this includes a ticket
+
+           * In case the message cannot be delivered put the transfer back to
+             QUEUED
+
+        3. Wait for a response in the form of a :class:`PeerTransferReply`
+           message
+
+           * In case no response in received on time: put transfer to QUEUED
+           * In case the response message disallows upload: put the transfer to
+             FAILED
+
+        4. Open a file connection
+
+           * In case this fails: put transfer to QUEUED
+
+        5. Send the transfer ticket
+
+           * In case this fails: put transfer to QUEUED
+
+        6. Wait for transfer offset
+
+           * In case this fails: put transfer to QUEUED
+
+        7. Start uploading, see :meth:`_upload_file` : exception cases are
+           handled internally by this method
+        8. Report upload speed to the server : :class:`SendUploadSpeed`
         """
-        logger.debug("initializing upload : %s", transfer)
         async with transfer._state_lock:
             await transfer.state.initialize()
 
@@ -842,6 +893,41 @@ class TransferManager(BaseManager):
         """Uploads the transfer over the connection. This method will set the
         appropriate states on the passed ``transfer`` and ``connection`` objects
 
+        This method performs the following actions:
+
+        1. Set the state of the transfer to TRANSFERRING
+        2. Opens the upload file and set the file pointer to transfer offset
+
+           * In case the file cannot be opened the transfer goes to FAILED
+
+        3. Starts transfering the file
+
+           * In case the local path is not set on the file :
+
+             * Put the transfer to FAILED
+             * Disconnect the socket
+
+           * In case an error occurs while reading the file :
+
+             * Put the transfer to FAILED
+             * Disconnect the socket
+
+           * In case a network error occurs :
+
+             * Put the transfer to FAILED
+             * Send a :class:`PeerUploadFailed` message to the peer
+
+           * In case this task is cancelled :
+
+             * Disconnect the socket
+
+        4. If the file is fully transferred, wait for the other peer to close
+           the socket
+        5. Verify the that file has been completely transfered
+
+           * In case it is : COMPLETE
+           * In case it is not : FAILED
+
         :param transfer: :class:`.Transfer` object
         :param connection: connection on which file should be sent
         """
@@ -918,7 +1004,25 @@ class TransferManager(BaseManager):
 
     async def _download_file(self, transfer: Transfer, connection: PeerConnection):
         """Downloads the transfer over the connection. This method will set the
-        appropriate states on the passed `transfer` and `connection` objects.
+        appropriate states on the passed ``transfer`` and ``connection`` objects.
+
+        This method will:
+
+        1. Calculate and create the download path
+
+           * In case of failure fail the download and disconnect
+
+        2. Set the state of the transfer to TRANSFERRING
+        3. Open and start receiving the file, the amount of bytes that are
+           expected to be received will be calculated from the offset
+
+           * In case of failure to write to the file: put the transfer to FAILED
+           * In case a read error occurred on the socket: put the transfer to INCOMPLETE
+
+        4. Verify the transfer is complete
+
+           * If all bytes are transfered: put the transfer to COMPLETE
+           * If not all bytes are transfered: put the transfer to FAIL
 
         :param transfer: :class:`.Transfer` object of the download
         :param connection: connection on which file should be received

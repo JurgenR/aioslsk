@@ -18,6 +18,10 @@ class DirectoryShareMode(enum.Enum):
 
 @dataclass(eq=True, unsafe_hash=True)
 class SharedDirectory:
+    """Class representing a directory that is explicitly shared by the user.
+    This class holds information on how the directory is shared and is a
+    container for shared items within this directory.
+    """
     directory: str
     absolute_path: str
     alias: str
@@ -26,17 +30,23 @@ class SharedDirectory:
     items: set['SharedItem'] = field(default_factory=set, init=False, compare=False, hash=False, repr=False)
 
     def is_parent_of(self, directory: Union[str, 'SharedDirectory']) -> bool:
-        """Returns true if the current directory is a parent of the passed
+        """Returns true if the current directory is any parent of the passed
         shared directory
 
-        :param directory: directory to check
+        :param directory: directory to test, if this directory is of ``str``
+            type it should be an absolute path. If it is of
+            :class:`.SharedDirectory` type the ``absolute_path`` will be taken
         """
         path = directory if isinstance(directory, str) else directory.absolute_path
         return os.path.commonpath([path, self.absolute_path]) == self.absolute_path
 
     def is_child_of(self, directory: Union[str, 'SharedDirectory']) -> bool:
-        """Returns true if the passed directory is a child of the current
+        """Returns true if the passed directory is a (sub)child of the current
         directory
+
+        :param directory: directory to test, if this directory is of ``str``
+            type it should be an absolute path. If it is of
+            :class:`.SharedDirectory` type the ``absolute_path`` will be taken
         """
         path = directory if isinstance(directory, str) else directory.absolute_path
         return os.path.commonpath([self.absolute_path, path]) == path
@@ -59,12 +69,12 @@ class SharedDirectory:
                 f"file with remote path {remote_path!r} not found in directory {self!r}")
 
     def get_items_for_directory(self, directory: 'SharedDirectory') -> set['SharedItem']:
-        """Gets items that are part of given directory"""
-        items = set()
-        for item in self.items:
-            if os.path.commonpath([directory.absolute_path, item.get_absolute_path()]) == directory.absolute_path:
-                items.add(item)
-        return items
+        """Gets items in the current directory that are part of given directory
+        """
+        return {
+            item for item in self.items
+            if os.path.commonpath([directory.absolute_path, item.get_absolute_path()]) == directory.absolute_path
+        }
 
 
 @dataclass(eq=True, unsafe_hash=True)
