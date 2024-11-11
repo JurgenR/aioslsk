@@ -168,11 +168,13 @@ class QueuedState(TransferState):
         return True
 
     async def abort(self) -> bool:
+        await self._cancel_transfer_tasks()
         await _remove_local_file(self.transfer)
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
     async def pause(self) -> bool:
+        await self._cancel_transfer_tasks()
         await self.transfer.transition(PausedState(self.transfer))
         return True
 
@@ -203,6 +205,11 @@ class InitializingState(TransferState):
         await self._cancel_transfer_tasks()
         await _remove_local_file(self.transfer)
         await self.transfer.transition(AbortedState(self.transfer))
+        return True
+
+    async def pause(self) -> bool:
+        await self._cancel_transfer_tasks()
+        await self.transfer.transition(PausedState(self.transfer))
         return True
 
     async def queue(self, remotely: bool = False):
@@ -256,14 +263,14 @@ class DownloadingState(TransferState):
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
-    async def incomplete(self) -> bool:
-        self.transfer.set_complete_time()
-        await self.transfer.transition(IncompleteState(self.transfer))
-        return True
-
     async def pause(self) -> bool:
         await self._stop_transfer()
         await self.transfer.transition(PausedState(self.transfer))
+        return True
+
+    async def incomplete(self) -> bool:
+        self.transfer.set_complete_time()
+        await self.transfer.transition(IncompleteState(self.transfer))
         return True
 
 
@@ -350,6 +357,7 @@ class IncompleteState(TransferState):
         return True
 
     async def pause(self) -> bool:
+        await self._cancel_transfer_tasks()
         await self.transfer.transition(PausedState(self.transfer))
         return True
 
