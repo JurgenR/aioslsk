@@ -1,6 +1,6 @@
 from aioslsk.client import SoulSeekClient
 from aioslsk.events import TransferAddedEvent, TransferProgressEvent
-from aioslsk.transfer.model import TransferState
+from aioslsk.transfer.model import Transfer, TransferDirection, TransferState
 from .mock.server import MockServer
 from .fixtures import mock_server, client_1, client_2
 from .utils import (
@@ -8,8 +8,6 @@ from .utils import (
     wait_for_search_results,
     wait_for_transfer_added,
     wait_for_transfer_state,
-    wait_for_transfer_to_finish,
-    wait_for_transfer_to_transfer,
     wait_until_clients_initialized,
 )
 import asyncio
@@ -26,9 +24,11 @@ logger = logging.getLogger(__name__)
 class TestE2ETransfer:
 
     @pytest.mark.asyncio
-    async def test_transfer(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+    async def test_transfer_happyFlow(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
         """Happy path for performing a transfer"""
         await wait_until_clients_initialized(mock_server, amount=2)
+        client_1.network.set_download_speed_limit(100)
+        client_2.network.set_upload_speed_limit(100)
 
         request = await client_1.searches.search('Strange')
         await wait_for_search_results(request)
@@ -39,35 +39,30 @@ class TestE2ETransfer:
             result.shared_items[0].filename
         )
 
+        upload = await wait_for_transfer_added(client_2)
+        await wait_for_transfer_state(download, TransferState.DOWNLOADING)
+        await wait_for_transfer_state(upload, TransferState.UPLOADING)
+
         await wait_for_transfer_state(download, TransferState.COMPLETE)
-
-        # Verify download
-        assert TransferState.COMPLETE == download.state.VALUE
-        assert result.username == download.username
-        assert download.bytes_transfered == download.filesize
-
-        # Verify upload
-        assert 1 == len(client_2.transfers.get_uploads())
-
-        upload = client_2.transfers.get_uploads()[0]
         await wait_for_transfer_state(upload, TransferState.COMPLETE)
 
-        assert TransferState.COMPLETE == upload.state.VALUE
-        assert upload.bytes_transfered == upload.filesize
+        # Verify download
+        assert download.direction == TransferDirection.DOWNLOAD
+        assert download.username == result.username
+        assert download.bytes_transfered == download.filesize
 
-        # Verify file
         assert os.path.exists(download.local_path)
         assert filecmp.cmp(download.local_path, upload.local_path)
+
+        # Verify upload
+        assert upload.direction == TransferDirection.UPLOAD
+        assert upload.username == client_1.session.user.name
+        assert upload.bytes_transfered == upload.filesize
 
     @pytest.mark.asyncio
     async def test_transfer_events(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
         """Happy path, test events"""
         await wait_until_clients_initialized(mock_server, amount=2)
-
-        request = await client_1.searches.search('Strange')
-        await wait_for_search_results(request)
-
-        # Lower speeds so the transfer isn't instantaneous (file is +-200kb)
         client_1.network.set_download_speed_limit(100)
         client_2.network.set_upload_speed_limit(100)
 
@@ -81,12 +76,7 @@ class TestE2ETransfer:
         client_2.events.register(TransferAddedEvent, uploader_add_listener)
         client_2.events.register(TransferProgressEvent, uploader_progress_listener)
 
-        result = request.results[0]
-        download = await client_1.transfers.download(
-            result.username,
-            result.shared_items[0].filename
-        )
-
+        download = await self._search_and_download(client_1)
         upload = await wait_for_transfer_added(client_2)
 
         await wait_for_transfer_state(download, TransferState.COMPLETE)
@@ -103,19 +93,10 @@ class TestE2ETransfer:
         """Tests retrying the download after the connection got disconnected"""
         await wait_until_clients_initialized(mock_server, amount=2)
 
-        request = await client_1.searches.search('Strange')
-        await wait_for_search_results(request)
-
-        # Lower speeds so the transfer isn't instantaneous (file is +-200kb)
         client_1.network.set_download_speed_limit(60)
         client_2.network.set_upload_speed_limit(60)
 
-        result = request.results[0]
-        download = await client_1.transfers.download(
-            result.username,
-            result.shared_items[0].filename
-        )
-
+        download = await self._search_and_download(client_1)
         upload = await wait_for_transfer_added(client_2)
         await asyncio.sleep(1)
 
@@ -137,22 +118,15 @@ class TestE2ETransfer:
     async def test_transfer_pauseAndResumeDownload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
         """Tests pausing and resuming a download"""
         await wait_until_clients_initialized(mock_server, amount=2)
+        client_1.network.set_download_speed_limit(50)
+        client_2.network.set_upload_speed_limit(50)
 
-        request = await client_1.searches.search('Strange')
-        await wait_for_search_results(request)
-
-        # Lower speeds so the transfer isn't instantaneous (file is +-200kb)
-        client_1.network.set_download_speed_limit(30)
-        client_2.network.set_upload_speed_limit(30)
-
-        result = request.results[0]
-        download = await client_1.transfers.download(
-            result.username,
-            result.shared_items[0].filename
-        )
-
+        download = await self._search_and_download(client_1)
         upload = await wait_for_transfer_added(client_2)
-        await asyncio.sleep(1)
+
+        await wait_for_transfer_state(download, TransferState.DOWNLOADING)
+        await wait_for_transfer_state(upload, TransferState.UPLOADING)
+        await asyncio.sleep(0.5)
 
         # Pause the transfer and wait for the correct states
         await client_1.transfers.pause(download)
@@ -170,22 +144,15 @@ class TestE2ETransfer:
     async def test_transfer_pauseAndResumeUpload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
         """Tests pausing and resuming a download"""
         await wait_until_clients_initialized(mock_server, amount=2)
+        client_1.network.set_download_speed_limit(50)
+        client_2.network.set_upload_speed_limit(50)
 
-        request = await client_1.searches.search('Strange')
-        await wait_for_search_results(request)
-
-        # Lower speeds so the transfer isn't instantaneous (file is +-200kb)
-        client_1.network.set_download_speed_limit(30)
-        client_2.network.set_upload_speed_limit(30)
-
-        result = request.results[0]
-        download = await client_1.transfers.download(
-            result.username,
-            result.shared_items[0].filename
-        )
-
+        download = await self._search_and_download(client_1)
         upload = await wait_for_transfer_added(client_2)
-        await asyncio.sleep(1)
+
+        await wait_for_transfer_state(download, TransferState.DOWNLOADING)
+        await wait_for_transfer_state(upload, TransferState.UPLOADING)
+        await asyncio.sleep(0.5)
 
         # Pause the transfer and wait for the correct states
         await client_2.transfers.pause(upload)
@@ -207,24 +174,15 @@ class TestE2ETransfer:
         The upload should end up in FAILED state
         """
         await wait_until_clients_initialized(mock_server, amount=2)
+        client_1.network.set_download_speed_limit(50)
+        client_2.network.set_upload_speed_limit(50)
 
-        request = await client_1.searches.search('Strange')
-        await wait_for_search_results(request)
+        download = await self._search_and_download(client_1)
+        upload = await wait_for_transfer_added(client_2)
 
-        # Slow down the download speed
-        client_1.network.set_download_speed_limit(5)
-        client_2.network.set_upload_speed_limit(4)
-
-        result = request.results[0]
-        download = await client_1.transfers.download(
-            result.username,
-            result.shared_items[0].filename
-        )
-
-        # Wait for the transfer to be transfering, then wait a couple of seconds
-        # to receive some data
-        await wait_for_transfer_to_transfer(download)
-        await asyncio.sleep(1)
+        await wait_for_transfer_state(download, TransferState.DOWNLOADING)
+        await wait_for_transfer_state(upload, TransferState.UPLOADING)
+        await asyncio.sleep(0.5)
 
         # Check the path exists (store to check later if it is removed)
         assert os.path.exists(download.local_path) is True
@@ -234,17 +192,8 @@ class TestE2ETransfer:
         await client_1.transfers.abort(download)
 
         # Verify download
-        assert TransferState.ABORTED == download.state.VALUE
-        assert result.username == download.username
-
-        # Verify upload
-        assert 1 == len(client_2.transfers.get_uploads())
-        upload = client_2.transfers.get_uploads()[0]
-
-        # Wait for the transfer to finish on uploader side
-        await wait_for_transfer_to_finish(upload)
-
-        assert TransferState.FAILED == upload.state.VALUE
+        await wait_for_transfer_state(download, TransferState.ABORTED)
+        await wait_for_transfer_state(upload, TransferState.FAILED)
 
         # Verify file
         assert download.local_path is None
@@ -252,33 +201,50 @@ class TestE2ETransfer:
         assert os.path.exists(upload.local_path) is True
 
     @pytest.mark.asyncio
-    async def test_transfer_removeDownload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
-        """Tests aborting a download
+    async def test_transfer_abortUpload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        """Tests aborting an upload.
 
-        The download should end up in ABORTED state
+        The download should end up in FAILED state
+        The upload should end up in ABORTED state
+        """
+        await wait_until_clients_initialized(mock_server, amount=2)
+        client_1.network.set_download_speed_limit(50)
+        client_2.network.set_upload_speed_limit(50)
+
+        download = await self._search_and_download(client_1)
+        upload = await wait_for_transfer_added(client_2)
+
+        await wait_for_transfer_state(download, TransferState.DOWNLOADING)
+        await wait_for_transfer_state(upload, TransferState.UPLOADING)
+        await asyncio.sleep(0.5)
+
+        # Abort the upload
+        await client_2.transfers.abort(upload)
+
+        await wait_for_transfer_state(download, TransferState.FAILED)
+        await wait_for_transfer_state(upload, TransferState.ABORTED)
+
+        # Verify file
+        assert os.path.exists(download.local_path) is True
+        assert os.path.exists(upload.local_path) is True
+
+    @pytest.mark.asyncio
+    async def test_transfer_removeDownload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        """Tests removing a download
+
+        The download should end up in ABORTED state (and be removed afterwards)
         The upload should end up in FAILED state
         """
         await wait_until_clients_initialized(mock_server, amount=2)
+        client_1.network.set_download_speed_limit(50)
+        client_2.network.set_upload_speed_limit(50)
 
-        request = await client_1.searches.search('Strange')
-        await wait_for_search_results(request)
-
-        # Slow down the download speed
-        client_1.network.set_download_speed_limit(5)
-        client_2.network.set_upload_speed_limit(4)
-
-        search_result = request.results[0]
-
-        download = await client_1.transfers.download(
-            search_result.username,
-            search_result.shared_items[0].filename
-        )
+        download = await self._search_and_download(client_1)
         upload = await wait_for_transfer_added(client_2, initial_amount=0)
 
-        # Wait for the transfer to be transfering, then wait a couple of seconds
-        # to receive some data
-        await wait_for_transfer_to_transfer(download)
-        await asyncio.sleep(1)
+        await wait_for_transfer_state(download, TransferState.DOWNLOADING)
+        await wait_for_transfer_state(upload, TransferState.UPLOADING)
+        await asyncio.sleep(0.5)
 
         # Check the path exists (store to check later if it is removed)
         download_local_path = download.local_path
@@ -297,67 +263,15 @@ class TestE2ETransfer:
         assert download not in client_1.transfers.transfers
 
     @pytest.mark.asyncio
-    async def test_transfer_abortUpload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
-        """Tests aborting an upload.
-
-        The download should end up in FAILED state
-        The upload should end up in ABORTED state
-        """
-        await wait_until_clients_initialized(mock_server, amount=2)
-
-        request = await client_1.searches.search('Strange')
-        await wait_for_search_results(request)
-
-        # Slow down the download speed
-        client_1.network.set_download_speed_limit(5)
-        client_2.network.set_upload_speed_limit(4)
-
-        result = request.results[0]
-        download = await client_1.transfers.download(
-            result.username,
-            result.shared_items[0].filename
-        )
-
-        # Wait for the transfer to be transfering, then wait a couple of seconds
-        # to receive some data
-        await wait_for_transfer_to_transfer(download)
-        await asyncio.sleep(2)
-
-        # Finally abort the transfer
-        assert 1 == len(client_2.transfers.get_uploads())
-        upload = client_2.transfers.get_uploads()[0]
-        await client_2.transfers.abort(upload)
-
-        # Wait for the download to reach failed state. Internally the download
-        # will first go into INCOMPLETE state and try again. The uploader should
-        # reject the new queue request
-        await wait_for_transfer_state(download, TransferState.FAILED)
-
-        assert TransferState.FAILED == download.state.VALUE
-        assert TransferState.ABORTED == upload.state.VALUE
-
-        # Verify file
-        assert os.path.exists(download.local_path) is True
-        assert os.path.exists(upload.local_path) is True
-
-    @pytest.mark.asyncio
     async def test_transfer_requeueWhenUserComesOnline(
             self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
 
         await wait_until_clients_initialized(mock_server, amount=2)
 
-        request = await client_1.searches.search('Strange')
-        await wait_for_search_results(request)
-
         # Set the amount of upload slots to 0 to block transfer from starting
         client_2.settings.transfers.limits.upload_slots = 0
 
-        result = request.results[0]
-        download = await client_1.transfers.download(
-            result.username,
-            result.shared_items[0].filename
-        )
-
+        download = await self._search_and_download(client_1)
         upload = await wait_for_transfer_added(client_2)
 
         assert download.remotely_queued is True
@@ -377,3 +291,13 @@ class TestE2ETransfer:
         upload = await wait_for_transfer_added(client_2, initial_amount=initial_amount)
         await wait_for_transfer_state(download, TransferState.COMPLETE)
         await wait_for_transfer_state(upload, TransferState.COMPLETE)
+
+    async def _search_and_download(self, client_1: SoulSeekClient) -> Transfer:
+        """Client 1 performs a search and starts a download of a file"""
+        request = await client_1.searches.search('Strange')
+        await wait_for_search_results(request)
+        result = request.results[0]
+        return await client_1.transfers.download(
+            result.username,
+            result.shared_items[0].filename
+        )
