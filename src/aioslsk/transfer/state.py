@@ -79,43 +79,43 @@ class TransferState:
 
         raise Exception(f"no state class for state : {state}")
 
-    async def fail(self, reason: Optional[str] = None) -> bool:
+    async def fail(self, reason: Optional[str] = None) -> bool:  # pragma: no cover
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.FAILED.name)
         return False
 
-    async def abort(self) -> bool:
+    async def abort(self) -> bool:  # pragma: no cover
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.ABORTED.name)
         return False
 
-    async def queue(self, remotely: bool = False) -> bool:
+    async def queue(self, remotely: bool = False) -> bool:  # pragma: no cover
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.QUEUED.name)
         return False
 
-    async def initialize(self) -> bool:
+    async def initialize(self) -> bool:  # pragma: no cover
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.INITIALIZING.name)
         return False
 
-    async def complete(self) -> bool:
+    async def complete(self) -> bool:  # pragma: no cover
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.COMPLETE.name)
         return False
 
-    async def incomplete(self) -> bool:
+    async def incomplete(self) -> bool:  # pragma: no cover
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.INCOMPLETE.name)
         return False
 
-    async def start_transferring(self) -> bool:
+    async def start_transferring(self) -> bool:  # pragma: no cover
         new_state = self.UPLOADING if self.transfer.is_upload() else self.DOWNLOADING
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, new_state.name)
         return False
 
-    async def pause(self) -> bool:
+    async def pause(self) -> bool:  # pragma: no cover
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.PAUSED.name)
         return False
@@ -152,7 +152,7 @@ class QueuedState(TransferState):
         await self.transfer.transition(InitializingState(self.transfer))
         return True
 
-    async def fail(self, reason=None) -> bool:
+    async def fail(self, reason: Optional[str] = None) -> bool:
         self.transfer.fail_reason = reason
         await self.transfer.transition(FailedState(self.transfer))
         return True
@@ -195,7 +195,7 @@ class InitializingState(TransferState):
         await self.transfer.transition(QueuedState(self.transfer))
         return True
 
-    async def fail(self, reason=None) -> bool:
+    async def fail(self, reason: Optional[str] = None) -> bool:
         self.transfer.fail_reason = reason
         await self.transfer.transition(FailedState(self.transfer))
         return True
