@@ -12,7 +12,6 @@ from .events import (
     build_message_map,
     ConnectionStateChangedEvent,
     EventBus,
-    MessageReceivedEvent,
     ServerReconnectedEvent,
     SessionDestroyedEvent,
     SessionInitializedEvent,
@@ -100,8 +99,6 @@ class SoulSeekClient:
         return asyncio.get_running_loop()
 
     def register_listeners(self):
-        self.events.register(
-            MessageReceivedEvent, self._on_message_received)
         self.events.register(
             ConnectionStateChangedEvent, self._on_connection_state_changed)
         self.events.register(
@@ -367,11 +364,6 @@ class SoulSeekClient:
             self.events,
             self.network
         )
-
-    async def _on_message_received(self, event: MessageReceivedEvent):
-        message = event.message
-        if message.__class__ in self._MESSAGE_MAP:
-            await self._MESSAGE_MAP[message.__class__](message, event.connection)
 
     async def _on_connection_state_changed(self, event: ConnectionStateChangedEvent):
         if isinstance(event.connection, ServerConnection):

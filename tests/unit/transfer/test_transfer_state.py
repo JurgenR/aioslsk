@@ -5,14 +5,16 @@ import pytest
 from aioslsk.transfer.model import Transfer, TransferDirection
 from aioslsk.transfer.state import (
     TransferState,
-    DownloadingState,
-    UploadingState,
     AbortedState,
     CompleteState,
+    DownloadingState,
+    FailedState,
     IncompleteState,
     InitializingState,
+    PausedState,
     QueuedState,
-    FailedState,
+    UploadingState,
+    VirginState,
 )
 
 
@@ -25,8 +27,9 @@ class TestTransferState:
         assert isinstance(state, AbortedState)
 
     def test_initStateFromValue_nonExisting_shouldRaise(self):
+        transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
         with pytest.raises(Exception):
-            TransferState.init_from_state('bogus')
+            TransferState.init_from_state('bogus', transfer)
 
     @pytest.mark.asyncio
     async def test_whenTransitionVirginToQueued_shouldResetRemotelyQueued(self):
@@ -60,6 +63,7 @@ class TestTransferState:
         QueuedState,
         InitializingState,
         IncompleteState,
+        PausedState,
     ])
     @pytest.mark.asyncio
     async def test_whenTransitionToFailed_shouldSetState(self, initial_state: type[TransferState]):
@@ -70,6 +74,49 @@ class TestTransferState:
         assert transfer.complete_time is None
         assert transfer.state.VALUE == TransferState.FAILED
         assert transfer.fail_reason == 'err'
+
+    @pytest.mark.parametrize('initial_state', [
+        DownloadingState,
+        UploadingState,
+    ])
+    @pytest.mark.asyncio
+    async def test_whenTransitionToPaused_shouldSetStateAndCompleteTime(self, initial_state: type[TransferState]):
+        time_mock = MagicMock(return_value=12.0)
+
+        transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
+        transfer.state = initial_state(transfer)
+        transfer.start_time = 1.0
+        with patch('time.time', time_mock):
+            await transfer.state.pause()
+
+        assert transfer.complete_time == 12.0
+        assert transfer.state.VALUE == TransferState.PAUSED
+
+    @pytest.mark.parametrize('initial_state', [
+        VirginState,
+        QueuedState,
+        InitializingState,
+        IncompleteState,
+    ])
+    @pytest.mark.asyncio
+    async def test_whenTransitionToPaused_shouldSetState(self, initial_state: type[TransferState]):
+        transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
+        transfer.state = initial_state(transfer)
+        await transfer.state.pause()
+
+        assert transfer.complete_time is None
+        assert transfer.state.VALUE == TransferState.PAUSED
+
+    @pytest.mark.parametrize('initial_state', [
+        InitializingState,
+    ])
+    @pytest.mark.asyncio
+    async def test_whenTransitionToQueued_shouldSetState(self, initial_state: type[TransferState]):
+        transfer = Transfer(None, None, TransferDirection.DOWNLOAD)
+        transfer.state = initial_state(transfer)
+        await transfer.state.queue()
+
+        assert transfer.state.VALUE == TransferState.QUEUED
 
     @pytest.mark.parametrize('initial_state', [
         DownloadingState,
@@ -92,6 +139,7 @@ class TestTransferState:
         QueuedState,
         InitializingState,
         IncompleteState,
+        PausedState,
     ])
     @pytest.mark.asyncio
     async def test_whenTransitionToAborted_shouldSetState(self, initial_state: type[TransferState]):

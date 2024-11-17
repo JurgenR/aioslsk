@@ -79,43 +79,43 @@ class TransferState:
 
         raise Exception(f"no state class for state : {state}")
 
-    async def fail(self, reason: Optional[str] = None) -> bool:
+    async def fail(self, reason: Optional[str] = None) -> bool:  # pragma: no cover
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.FAILED.name)
         return False
 
-    async def abort(self) -> bool:
+    async def abort(self) -> bool:  # pragma: no cover
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.ABORTED.name)
         return False
 
-    async def queue(self, remotely: bool = False) -> bool:
+    async def queue(self, remotely: bool = False) -> bool:  # pragma: no cover
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.QUEUED.name)
         return False
 
-    async def initialize(self) -> bool:
+    async def initialize(self) -> bool:  # pragma: no cover
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.INITIALIZING.name)
         return False
 
-    async def complete(self) -> bool:
+    async def complete(self) -> bool:  # pragma: no cover
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.COMPLETE.name)
         return False
 
-    async def incomplete(self) -> bool:
+    async def incomplete(self) -> bool:  # pragma: no cover
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.INCOMPLETE.name)
         return False
 
-    async def start_transferring(self) -> bool:
+    async def start_transferring(self) -> bool:  # pragma: no cover
         new_state = self.UPLOADING if self.transfer.is_upload() else self.DOWNLOADING
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, new_state.name)
         return False
 
-    async def pause(self) -> bool:
+    async def pause(self) -> bool:  # pragma: no cover
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.PAUSED.name)
         return False
@@ -146,33 +146,25 @@ class VirginState(TransferState):
 
 
 class QueuedState(TransferState):
-    """Transfer is queued
-
-    Possible transitions:
-    - Initializing: Uploads, requesting the peer if upload is allowed
-    - Aborted: We have aborted the transfer
-    - Failed:
-        - Download: peer explicitly rejected our queue request
-        - Upload: peer explicitly rejected our transfer request
-        - Upload: peer requested a file which is not shared
-    """
     VALUE = TransferState.QUEUED
 
     async def initialize(self) -> bool:
         await self.transfer.transition(InitializingState(self.transfer))
         return True
 
-    async def fail(self, reason=None) -> bool:
+    async def fail(self, reason: Optional[str] = None) -> bool:
         self.transfer.fail_reason = reason
         await self.transfer.transition(FailedState(self.transfer))
         return True
 
     async def abort(self) -> bool:
+        await self._cancel_transfer_tasks()
         await _remove_local_file(self.transfer)
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
     async def pause(self) -> bool:
+        await self._cancel_transfer_tasks()
         await self.transfer.transition(PausedState(self.transfer))
         return True
 
@@ -184,18 +176,6 @@ class InitializingState(TransferState):
     peer to start uploading a file
     - Downloads: The download will quickly go into this state when the transfer
     ticket has been received over a file connection
-
-    Possible transitions:
-    - UploadingState: Upload, transfer has started
-    - QueueState:
-        - Failed to send PeerTransferRequest message
-        - Timeout receiving PeerTransferReply message
-        - Failed to make file connection
-        - Timeout waiting for transfer offset
-        - Failed to send transfer ticket
-    - AbortedState: We have aborted the transfer
-    - FailedState:
-        - PeerTransferReply was not allowed
     """
     VALUE = TransferState.INITIALIZING
 
@@ -205,12 +185,17 @@ class InitializingState(TransferState):
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
+    async def pause(self) -> bool:
+        await self._cancel_transfer_tasks()
+        await self.transfer.transition(PausedState(self.transfer))
+        return True
+
     async def queue(self, remotely: bool = False):
         self.transfer.remotely_queued = remotely
         await self.transfer.transition(QueuedState(self.transfer))
         return True
 
-    async def fail(self, reason=None) -> bool:
+    async def fail(self, reason: Optional[str] = None) -> bool:
         self.transfer.fail_reason = reason
         await self.transfer.transition(FailedState(self.transfer))
         return True
@@ -226,17 +211,6 @@ class InitializingState(TransferState):
 
 
 class DownloadingState(TransferState):
-    """
-    Possible transitions:
-    - CompleteState: Transfer has successfully completed
-    - IncompleteState:
-        - Failed to send transfer offset
-        - Connection was closed before all bytes were transfered
-    - FailedState:
-        - Could not open local file
-        - Received PeerUploadFailed message from peer
-    - Aborted: We have aborted the transfer
-    """
     VALUE = TransferState.DOWNLOADING
 
     async def fail(self, reason: Optional[str] = None) -> bool:
@@ -256,28 +230,19 @@ class DownloadingState(TransferState):
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
-    async def incomplete(self) -> bool:
-        self.transfer.set_complete_time()
-        await self.transfer.transition(IncompleteState(self.transfer))
-        return True
-
     async def pause(self) -> bool:
         await self._stop_transfer()
         await self.transfer.transition(PausedState(self.transfer))
         return True
 
+    async def incomplete(self) -> bool:
+        self.transfer.set_complete_time()
+        await self.transfer.transition(IncompleteState(self.transfer))
+        return True
+
 
 class UploadingState(TransferState):
     VALUE = TransferState.UPLOADING
-
-    """
-    Possible transitions:
-    - CompleteState: Transfer has successfully completed
-    - FailedState:
-        - Could not open local file
-        - Received PeerUploadFailed message from peer
-    - Aborted: We have aborted the transfer
-    """
 
     async def fail(self, reason: Optional[str] = None) -> bool:
         self.transfer.fail_reason = reason
@@ -303,10 +268,6 @@ class UploadingState(TransferState):
 
 
 class CompleteState(TransferState):
-    """
-    Possible transitions:
-    - QueueState: Attempt transfer again
-    """
     VALUE = TransferState.COMPLETE
 
     async def queue(self, remotely: bool = False) -> bool:
@@ -320,10 +281,6 @@ class IncompleteState(TransferState):
     """State only used for downloads. The transfer should enter this state if an
     error occured during transferring but there was no explicit error from the
     other peer. In this state it should be possible to retry the transfer.
-
-    Possible transitions:
-    - QueueState: when attempting to retry transfers
-    - AbortedState: We have aborted the transfer
     """
     VALUE = TransferState.INCOMPLETE
 
@@ -350,33 +307,23 @@ class IncompleteState(TransferState):
         return True
 
     async def pause(self) -> bool:
+        await self._cancel_transfer_tasks()
         await self.transfer.transition(PausedState(self.transfer))
         return True
 
 
 class FailedState(TransferState):
-    """
-
-    Possible transitions:
-    - CompleteState: When re-initializing the transfer
-    - QueuedState: Attempt transfer again
-    """
     VALUE = TransferState.FAILED
 
     async def queue(self, remotely: bool = False) -> bool:
-        self.transfer.remotely_queued = remotely
         self.transfer.reset_times()
+        self.transfer.remotely_queued = remotely
         self.transfer.fail_reason = None
         await self.transfer.transition(QueuedState(self.transfer))
         return True
 
 
 class PausedState(TransferState):
-    """
-    Possible transitions:
-    - QueuedState: Restart the transfer
-    - AbortedState: Abort the transfer
-    """
     VALUE = TransferState.PAUSED
 
     async def queue(self, remotely: bool = False) -> bool:
@@ -398,10 +345,6 @@ class PausedState(TransferState):
 
 
 class AbortedState(TransferState):
-    """
-    Possible transitions:
-    - QueuedState: Attempt transfer again
-    """
     VALUE = TransferState.ABORTED
 
     async def queue(self, remotely: bool = False) -> bool:
