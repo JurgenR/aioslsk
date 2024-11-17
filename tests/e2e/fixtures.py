@@ -25,7 +25,17 @@ FILE_SHARES = os.path.join(
     os.path.dirname(os.path.realpath(__file__)), '..', 'unit', 'resources', 'shared')
 
 
-def create_client(tmp_path: Path, username: str, port: int) -> SoulSeekClient:
+def create_client(
+        tmp_path: Path, username: str, port: int,
+        server_port: int = DEFAULT_SERVER_PORT, password: str = DEFAULT_PASSWORD) -> SoulSeekClient:
+    """Creates a new client object
+
+    :param tmp_path: Path in which downloads and shared items are stored
+    :param username: Username of the user to login with
+    :param port: Listening port
+    :param server_port: Server port to connect to
+    :param password: Password of the user to login with
+    """
     download_dir = tmp_path / username / 'downloads'
     download_dir.mkdir(parents=True, exist_ok=True)
     shared_dir = tmp_path / username / 'shared'
@@ -35,14 +45,12 @@ def create_client(tmp_path: Path, username: str, port: int) -> SoulSeekClient:
     settings = Settings(
         credentials=CredentialsSettings(
             username=username,
-            password=DEFAULT_PASSWORD
+            password=password
         )
     )
 
-    # settings.set('credentials.username', username)
-    # settings.set('credentials.password', DEFAULT_PASSWORD)
     settings.network.server.hostname = '127.0.0.1'
-    settings.network.server.port = DEFAULT_SERVER_PORT
+    settings.network.server.port = server_port
     settings.network.server.reconnect.auto = False
     settings.network.listening.port = port
     settings.network.listening.obfuscated_port = port + 1
@@ -60,9 +68,7 @@ def create_client(tmp_path: Path, username: str, port: int) -> SoulSeekClient:
         )
     )
 
-    client = SoulSeekClient(settings)
-
-    return client
+    return SoulSeekClient(settings)
 
 
 async def _client_start_and_scan(client: SoulSeekClient, timeout: float = 3):
