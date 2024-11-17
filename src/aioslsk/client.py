@@ -101,8 +101,6 @@ class SoulSeekClient:
 
     def register_listeners(self):
         self.events.register(
-            MessageReceivedEvent, self._on_message_received)
-        self.events.register(
             ConnectionStateChangedEvent, self._on_connection_state_changed)
         self.events.register(
             ServerReconnectedEvent, self._on_server_reconnected)
@@ -367,11 +365,6 @@ class SoulSeekClient:
             self.events,
             self.network
         )
-
-    async def _on_message_received(self, event: MessageReceivedEvent):
-        message = event.message
-        if message.__class__ in self._MESSAGE_MAP:
-            await self._MESSAGE_MAP[message.__class__](message, event.connection)
 
     async def _on_connection_state_changed(self, event: ConnectionStateChangedEvent):
         if isinstance(event.connection, ServerConnection):
