@@ -12,7 +12,6 @@ from .events import (
     build_message_map,
     ConnectionStateChangedEvent,
     EventBus,
-    MessageReceivedEvent,
     ServerReconnectedEvent,
     SessionDestroyedEvent,
     SessionInitializedEvent,
