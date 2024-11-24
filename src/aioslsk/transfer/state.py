@@ -2,7 +2,9 @@
 from aiofiles import os as asyncos
 import asyncio
 from enum import Enum
+import inspect
 import logging
+from types import MethodType
 from typing import Optional, Protocol, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -10,6 +12,16 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+
+def _with_state_lock(func):
+
+    async def wrapper(obj: 'TransferState', *args, **kwargs):
+        async with obj.transfer._state_lock:
+            result = await func(*args, **kwargs)
+        return result
+
+    return wrapper
 
 
 async def _remove_local_file(transfer: 'Transfer'):
@@ -70,6 +82,7 @@ class TransferState:
 
     def __init__(self, transfer: 'Transfer'):
         self.transfer: 'Transfer' = transfer
+        self._wrap_lock()
 
     @classmethod
     def init_from_state(cls, state: State, transfer: 'Transfer'):
@@ -78,6 +91,10 @@ class TransferState:
                 return subcls(transfer)
 
         raise Exception(f"no state class for state : {state}")
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._wrap_lock()
 
     async def fail(self, reason: Optional[str] = None) -> bool:  # pragma: no cover
         logger.warning(
@@ -119,6 +136,12 @@ class TransferState:
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.PAUSED.name)
         return False
+
+    def _wrap_lock(self):
+        """Decorates all methods with a lock"""
+        for name, method in inspect.getmembers(self, predicate=inspect.ismethod):
+            if not name.startswith('_'):
+                setattr(self, name, MethodType(_with_state_lock(method), self))
 
     async def _cancel_transfer_tasks(self):
         await asyncio.gather(*self.transfer.cancel_tasks(), return_exceptions=True)
