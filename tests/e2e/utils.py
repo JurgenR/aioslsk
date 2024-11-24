@@ -229,4 +229,5 @@ async def wait_for_remotely_queued_state(
             await asyncio.sleep(0.05)
     else:
         raise Exception(
-            f"transfer {transfer} did not have remotely_queued flag set to {state} in {timeout}s")
+            f"transfer {transfer} did not have remotely_queued flag set to {state} in {timeout}s "
+            f"(state={transfer.state.VALUE.name})")
