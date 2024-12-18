@@ -335,6 +335,16 @@ class SharesManager(BaseManager):
         else:
             raise FileNotFoundError(f"file name {remote_path} not found in cache")
 
+    async def find_shared_item(
+            self, remote_path: str, username: Optional[str] = None) -> Optional[SharedItem]:
+        """Equivelant to :meth:`get_shared_item` but returns ``None`` if the
+        shared item is not found
+        """
+        try:
+            return await self.get_shared_item(remote_path, username=username)
+        except (FileNotFoundError, FileNotSharedError):
+            return None
+
     def add_shared_directory(
             self, shared_directory: str,
             share_mode: DirectoryShareMode = DirectoryShareMode.EVERYONE,

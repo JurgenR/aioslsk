@@ -419,7 +419,8 @@ class TransferManager(BaseManager):
 
     def get_transfer(self, username: str, remote_path: str, direction: TransferDirection) -> Transfer:
         """Lookup transfer by ``username``, ``remote_path`` and ``transfer``
-        direction
+        direction. This method will raise an exception in case the transfer is
+        not found
 
         :param username: Username of the transfer
         :param remote_path: Full remote path of the transfer
@@ -434,6 +435,22 @@ class TransferManager(BaseManager):
 
         raise ValueError(
             f"transfer for user {username} and remote_path {remote_path} (direction={direction}) not found")
+
+    def find_transfer(self, username: str, remote_path: str, direction: TransferDirection) -> Optional[Transfer]:
+        """Lookup transfer by ``username``, ``remote_path`` and ``transfer``
+        direction. This method will return ``None`` if the transfer is not found
+
+        :param username: Username of the transfer
+        :param remote_path: Full remote path of the transfer
+        :param direction: Direction of the transfer (upload / download)
+        :return: The matching transfer object or ``None``
+        """
+        req_transfer = Transfer(username, remote_path, direction)
+        for transfer in self._transfers:
+            if transfer == req_transfer:
+                return transfer
+
+        return None
 
     async def manage_user_tracking(self):
         """Remove or add user tracking based on the list of transfers. This
@@ -1087,58 +1104,54 @@ class TransferManager(BaseManager):
                 "got PeerTransferQueue for a connection that wasn't properly initialized")
             return
 
-        transfer = await self.add(
-            Transfer(
-                username=connection.username,
-                remote_path=message.filename,
-                direction=TransferDirection.UPLOAD
-            )
+        transfer = self.find_transfer(
+            connection.username,
+            message.filename,
+            TransferDirection.UPLOAD
         )
+        fail_reason = None
 
-        # Only put the transfer in queue if in states:
-        # * FAILED: Re-attempt at downloader getting the file
-        # * COMPLETE: Re-download of a file
-        # In case the state is ABORTED:
-        # * Explicitly reply that the transfer has been cancelled
-        # In other cases where the message is not allowed (statuses=QUEUED, INITIALIZING, UPLOADING)
-        # do not respond with anything. This could otherwise abort the already
-        # processing transfer
-        if transfer.state.VALUE == TransferState.ABORTED:
-            connection.queue_message(
-                PeerTransferQueueFailed.Request(
-                    filename=message.filename,
-                    reason=Reasons.CANCELLED
-                )
-            )
-            return
+        if not transfer:
+            try:
+                transfer = await self._add_upload(connection.username, message.filename)
 
-        elif transfer.state.VALUE == TransferState.QUEUED:
-            logger.warning("ignoring queue request for transfer that is already being processed : %s", transfer)
-            return
+            except (FileNotFoundError, FileNotSharedError):
+                fail_reason = Reasons.FILE_NOT_SHARED
 
-        elif transfer.is_processing():
-            logger.warning("ignoring queue request for transfer that is already being processed : %s", transfer)
-            return
-
-        # Check if the shared file exists
-        try:
-            item = await self._shares_manager.get_shared_item(
-                message.filename, connection.username)
-
-        except (FileNotFoundError, FileNotSharedError):
-            await transfer.state.fail(reason=Reasons.FILE_NOT_SHARED)
-
-            connection.queue_message(
-                PeerTransferQueueFailed.Request(
-                    filename=message.filename,
-                    reason=Reasons.FILE_NOT_SHARED
-                )
-            )
+            else:
+                await transfer.state.queue()
 
         else:
-            transfer.local_path = item.get_absolute_path()
-            transfer.filesize = await self._shares_manager.get_filesize(item)
-            await transfer.state.queue()
+            shared_item = self._shares_manager.find_shared_item(
+                transfer.remote_path,
+                transfer.username
+            )
+            if not shared_item:
+                await transfer.state.fail(Reasons.FILE_NOT_SHARED)
+                fail_reason = Reasons.FILE_NOT_SHARED
+
+            else:
+                # Only put the transfer back in queue if in states:
+                # * FAILED: Re-attempt at downloader getting the file
+                # * COMPLETE: Re-download of a file
+                # In case the state is ABORTED:
+                # * Explicitly reply that the transfer has been cancelled
+                # In other cases where the message is not allowed (statuses=QUEUED, INITIALIZING, UPLOADING)
+                # do not respond with anything. This could otherwise abort the already
+                # processing transfer
+                if transfer.state.VALUE == TransferState.ABORTED:
+                    fail_reason = Reasons.CANCELLED
+
+                elif transfer.state.VALUE in (TransferState.FAILED, TransferState.COMPLETE):
+                    await transfer.state.queue()
+
+        if fail_reason:
+            connection.queue_message(
+                PeerTransferQueueFailed.Request(
+                    filename=message.filename,
+                    reason=fail_reason
+                )
+            )
 
     async def _on_peer_initialized(self, event: PeerInitializedEvent):
         # Only create a task for file connections that we did not try to create
@@ -1192,66 +1205,61 @@ class TransferManager(BaseManager):
                 "got PeerTransferRequest for a connection that wasn't properly initialized")
             return
 
-        try:
-            transfer = self.get_transfer(
-                connection.username,
-                message.filename,
-                TransferDirection(message.direction)
-            )
-
-        except ValueError:
-            transfer = None
+        transfer = self.find_transfer(
+            connection.username,
+            message.filename,
+            TransferDirection(message.direction)
+        )
 
         # Make a decision based on what was requested and what we currently have
         # in our queue
         if TransferDirection(message.direction) == TransferDirection.UPLOAD:
             # The other peer is asking us to upload a file. Check if this is not
             # a locked file for the given user and if the item even exists
-            try:
-                shared_item = await self._shares_manager.get_shared_item(
-                    message.filename, username=connection.username)
+            if not transfer:
+                try:
+                    transfer = await self._add_upload(connection.username, message.filename)
 
-            except (FileNotFoundError, FileNotSharedError):
-                if transfer:
-                    await transfer.state.fail(Reasons.FILE_NOT_SHARED)
-
-                await connection.send_message(
-                    PeerTransferReply.Request(
-                        ticket=message.ticket,
-                        allowed=False,
-                        reason=Reasons.FILE_NOT_SHARED
+                except (FileNotFoundError, FileNotSharedError):
+                    await connection.send_message(
+                        PeerTransferReply.Request(
+                            ticket=message.ticket,
+                            allowed=False,
+                            reason=Reasons.FILE_NOT_SHARED
+                        )
                     )
-                )
 
-                return
-
-            if transfer is None:
-                # Got a request to upload, without prior PeerTransferQueue
-                # message. Kindly put it in queue
-                transfer = Transfer(
-                    connection.username,
-                    message.filename,
-                    TransferDirection.UPLOAD
-                )
-                transfer.local_path = shared_item.get_absolute_path()
-                transfer.filesize = await self._shares_manager.get_filesize(shared_item)
-                # Send before queueing: queueing will trigger the transfer
-                # manager to re-asses the tranfers and possibly immediatly start
-                # the upload
-                await connection.send_message(
-                    PeerTransferReply.Request(
-                        ticket=message.ticket,
-                        allowed=False,
-                        reason=Reasons.QUEUED
+                else:
+                    # Send before queueing: queueing will trigger the transfer
+                    # manager to re-asses the tranfers and possibly immediatly start
+                    # the upload
+                    connection.queue_message(
+                        PeerTransferReply.Request(
+                            ticket=message.ticket,
+                            allowed=False,
+                            reason=Reasons.QUEUED
+                        )
                     )
-                )
+                    await transfer.state.queue()
 
-                transfer = await self.add(transfer)
-                await transfer.state.queue()
             else:
                 # The peer is asking us to upload a file already in our list:
                 # this always leads to a refusal of the the request as it is up
                 # to us to let the downloader know when we are ready to upload
+                shared_item = self._shares_manager.find_shared_item(
+                    transfer.remote_path,
+                    transfer.username
+                )
+                if not shared_item:
+                    await transfer.state.fail(Reasons.FILE_NOT_SHARED)
+                    await connection.send_message(
+                        PeerTransferReply.Request(
+                            ticket=message.ticket,
+                            allowed=False,
+                            reason=Reasons.FILE_NOT_SHARED
+                        )
+                    )
+                    return
 
                 # If the state of transfer is PAUSED, ABORTED, COMPLETE, QUEUED:
                 # refuse the request with a specific message
@@ -1296,7 +1304,7 @@ class TransferManager(BaseManager):
             # continue with the transfer as we were expecting this message
 
             reason = None
-            if transfer is None:
+            if not transfer:
                 # A download which we don't have in queue, assume we removed it
                 reason = Reasons.CANCELLED
             else:
@@ -1324,7 +1332,6 @@ class TransferManager(BaseManager):
                     )
                     return
 
-            # Perform sending outside the state lock
             await connection.send_message(
                 PeerTransferReply.Request(
                     ticket=message.ticket,
@@ -1343,18 +1350,14 @@ class TransferManager(BaseManager):
             return
 
         filename = message.filename
-        try:
-            transfer = self.get_transfer(
-                connection.username,
-                filename,
-                TransferDirection.UPLOAD
-            )
+        username = connection.username
+        if transfer := self.find_transfer(username, filename, TransferDirection.UPLOAD):
             place = self.get_place_in_queue(transfer)
             if place:
                 connection.queue_message(
                     PeerPlaceInQueueReply.Request(filename, place))
 
-        except ValueError:
+        else:
             logger.warning(
                 "PeerPlaceInQueueRequest : could not find transfer (upload) for %s from %s",
                 filename,
@@ -1370,15 +1373,12 @@ class TransferManager(BaseManager):
                 "got PeerPlaceInQueueReply for a connection that wasn't properly initialized")
             return
 
-        try:
-            transfer = self.get_transfer(
-                connection.username,
-                message.filename,
-                TransferDirection.DOWNLOAD
-            )
+        filename = message.filename
+        username = connection.username
+        if transfer := self.find_transfer(username, filename, TransferDirection.DOWNLOAD):
             transfer.place_in_queue = message.place
 
-        except ValueError:
+        else:
             logger.warning(
                 "PeerPlaceInQueueReply : could not find transfer (download) for %s from %s",
                 message.filename,
@@ -1396,16 +1396,13 @@ class TransferManager(BaseManager):
                 "got PeerUploadFailed for a connection that wasn't properly initialized")
             return
 
-        try:
-            transfer = self.get_transfer(
-                connection.username,
-                message.filename,
-                TransferDirection.DOWNLOAD
-            )
+        filename = message.filename
+        username = connection.username
+        if transfer := self.find_transfer(username, filename, TransferDirection.DOWNLOAD):
             transfer.remotely_queued = False
             await self.manage_transfers()
 
-        except ValueError:
+        else:
             logger.warning(
                 "PeerUploadFailed : could not find transfer (download) for %s from %s",
                 message.filename,
@@ -1421,18 +1418,30 @@ class TransferManager(BaseManager):
                 "got PeerTransferQueueFailed for a connection that wasn't properly initialized")
             return
 
+        username = connection.username
         filename = message.filename
-        reason = message.reason
-        try:
-            transfer = self.get_transfer(
-                connection.username,
-                filename,
-                TransferDirection.DOWNLOAD
-            )
-            await transfer.state.fail(reason=reason)
+        if transfer := self.find_transfer(username, filename, TransferDirection.DOWNLOAD):
+            await transfer.state.fail(reason=message.reason)
 
-        except ValueError:
+        else:
             logger.warning(
                 "PeerTransferQueueFailed : could not find transfer for %s from %s",
                 filename, connection.username
             )
+
+    async def _attach_item_to_transfer(self, transfer: Transfer):
+        shared_item = await self._shares_manager.get_shared_item(
+            transfer.remote_path,
+            transfer.username
+        )
+        transfer.local_path = shared_item.get_absolute_path()
+        transfer.filesize = await self._shares_manager.get_filesize(shared_item)
+
+    async def _add_upload(self, username: str, remote_path: str) -> Transfer:
+        """Adds a new upload if the desired shared item exists"""
+        transfer = Transfer(username, remote_path, direction=TransferDirection.UPLOAD)
+
+        await self._attach_item_to_transfer(transfer)
+
+        await self.add(transfer)
+        return transfer
