@@ -1122,7 +1122,7 @@ class TransferManager(BaseManager):
                 await transfer.state.queue()
 
         else:
-            shared_item = self._shares_manager.find_shared_item(
+            shared_item = await self._shares_manager.find_shared_item(
                 transfer.remote_path,
                 transfer.username
             )
@@ -1246,7 +1246,7 @@ class TransferManager(BaseManager):
                 # The peer is asking us to upload a file already in our list:
                 # this always leads to a refusal of the the request as it is up
                 # to us to let the downloader know when we are ready to upload
-                shared_item = self._shares_manager.find_shared_item(
+                shared_item = await self._shares_manager.find_shared_item(
                     transfer.remote_path,
                     transfer.username
                 )
