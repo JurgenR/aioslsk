@@ -247,6 +247,16 @@ class TransferManager(BaseManager):
     async def queue(self, transfer: Transfer):
         """Places given transfer (back) in the queue
 
+        This method can be called on downloads that are in the following states:
+
+        * ``ABORTED``: Re-starts the aborted download
+        * ``PAUSED``: Continues the paused download
+        * ``COMPLETE``: Re-downloads the file. By default this will download
+          the file to a new location unless the initial file was removed
+        * ``INCOMPLETE``: The library should automatically attempt to retry
+          a download in this state
+        * ``FAILED``: Re-attempt to download the file
+
         :param transfer: :class:`.Transfer` object to queue
         :raise TransferNotFoundError: if the transfer has not been added to the
             manager first
