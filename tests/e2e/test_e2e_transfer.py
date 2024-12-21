@@ -89,6 +89,51 @@ class TestE2ETransfer:
         assert uploader_progress_listener.await_count > 0
 
     @pytest.mark.asyncio
+    async def test_transfer_queueCompleteDownload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        """Requeue a completed download"""
+        await wait_until_clients_initialized(mock_server, amount=2)
+        client_1.network.set_download_speed_limit(150)
+        client_2.network.set_upload_speed_limit(150)
+
+        request = await client_1.searches.search('Strange')
+        await wait_for_search_results(request)
+
+        result = request.results[0]
+        download = await client_1.transfers.download(
+            result.username,
+            result.shared_items[0].filename
+        )
+
+        upload = await wait_for_transfer_added(client_2)
+        await wait_for_transfer_state(download, TransferState.DOWNLOADING)
+        await wait_for_transfer_state(upload, TransferState.UPLOADING)
+
+        await wait_for_transfer_state(download, TransferState.COMPLETE)
+        await wait_for_transfer_state(upload, TransferState.COMPLETE)
+
+        # Verify download
+        assert os.path.exists(download.local_path)
+        assert filecmp.cmp(download.local_path, upload.local_path)
+
+        # Store local path of download for comparison later
+        download1_local_path = download.local_path
+
+        # Requeue the download
+        await client_1.transfers.queue(download)
+
+        await wait_for_transfer_state(download, TransferState.DOWNLOADING)
+        await wait_for_transfer_state(upload, TransferState.UPLOADING)
+
+        await wait_for_transfer_state(download, TransferState.COMPLETE)
+        await wait_for_transfer_state(upload, TransferState.COMPLETE)
+
+        # A new path should be assigned as there already is a completed file in
+        # the old location
+        assert download.local_path != download1_local_path
+        assert os.path.exists(download.local_path)
+        assert filecmp.cmp(download.local_path, upload.local_path)
+
+    @pytest.mark.asyncio
     async def test_transfer_retryAfterDisconnect(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
         """Tests retrying the download after the connection got disconnected"""
         await wait_until_clients_initialized(mock_server, amount=2)
@@ -126,7 +171,7 @@ class TestE2ETransfer:
 
         await wait_for_transfer_state(download, TransferState.DOWNLOADING)
         await wait_for_transfer_state(upload, TransferState.UPLOADING)
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.25)
 
         # Pause the transfer and wait for the correct states
         await client_1.transfers.pause(download)
@@ -152,7 +197,7 @@ class TestE2ETransfer:
 
         await wait_for_transfer_state(download, TransferState.DOWNLOADING)
         await wait_for_transfer_state(upload, TransferState.UPLOADING)
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.25)
 
         # Pause the transfer and wait for the correct states
         await client_2.transfers.pause(upload)
@@ -182,7 +227,7 @@ class TestE2ETransfer:
 
         await wait_for_transfer_state(download, TransferState.DOWNLOADING)
         await wait_for_transfer_state(upload, TransferState.UPLOADING)
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.25)
 
         # Check the path exists (store to check later if it is removed)
         assert os.path.exists(download.local_path) is True
@@ -191,7 +236,7 @@ class TestE2ETransfer:
         # Finally abort the transfer
         await client_1.transfers.abort(download)
 
-        # Verify download
+        # Wait for and verify states
         await wait_for_transfer_state(download, TransferState.ABORTED)
         await wait_for_transfer_state(upload, TransferState.FAILED)
 
@@ -199,6 +244,54 @@ class TestE2ETransfer:
         assert download.local_path is None
         assert os.path.exists(download_local_path) is False
         assert os.path.exists(upload.local_path) is True
+
+    @pytest.mark.asyncio
+    async def test_transfer_queueAbortedDownload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        """Tests re-queueing an aborted download
+
+        The download should end up in COMPLETE state
+        The upload should end up in COMPLETE state
+        """
+        await wait_until_clients_initialized(mock_server, amount=2)
+        client_1.network.set_download_speed_limit(50)
+        client_2.network.set_upload_speed_limit(50)
+
+        download = await self._search_and_download(client_1)
+        upload = await wait_for_transfer_added(client_2)
+
+        await wait_for_transfer_state(download, TransferState.DOWNLOADING)
+        await wait_for_transfer_state(upload, TransferState.UPLOADING)
+        await asyncio.sleep(0.25)
+
+        # Check the path exists (store to check later if it is removed)
+        assert os.path.exists(download.local_path) is True
+        download_local_path = download.local_path
+
+        # Finally abort the transfer
+        await client_1.transfers.abort(download)
+
+        # Wait for and verify states
+        await wait_for_transfer_state(download, TransferState.ABORTED)
+        await wait_for_transfer_state(upload, TransferState.FAILED)
+
+        # Verify file
+        assert download.local_path is None
+        assert os.path.exists(download_local_path) is False
+        assert os.path.exists(upload.local_path) is True
+
+        client_1.network.set_download_speed_limit(0)
+        client_2.network.set_upload_speed_limit(0)
+
+        # Re-queue download
+        await client_1.transfers.queue(download)
+
+        await wait_for_transfer_state(download, TransferState.COMPLETE)
+        await wait_for_transfer_state(upload, TransferState.COMPLETE)
+
+        assert download.local_path is not None
+        assert os.path.exists(download_local_path) is True
+        assert os.path.exists(upload.local_path) is True
+        assert filecmp.cmp(download.local_path, upload.local_path)
 
     @pytest.mark.asyncio
     async def test_transfer_abortUpload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
@@ -216,7 +309,7 @@ class TestE2ETransfer:
 
         await wait_for_transfer_state(download, TransferState.DOWNLOADING)
         await wait_for_transfer_state(upload, TransferState.UPLOADING)
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.25)
 
         # Abort the upload
         await client_2.transfers.abort(upload)
@@ -227,6 +320,46 @@ class TestE2ETransfer:
         # Verify file
         assert os.path.exists(download.local_path) is True
         assert os.path.exists(upload.local_path) is True
+
+    @pytest.mark.asyncio
+    async def test_transfer_queueAbortedUpload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        """Tests queueing an aborted upload
+
+        The download should end up in COMPLETE state
+        The upload should end up in COMPLETE state
+        """
+        await wait_until_clients_initialized(mock_server, amount=2)
+        client_1.network.set_download_speed_limit(50)
+        client_2.network.set_upload_speed_limit(50)
+
+        download = await self._search_and_download(client_1)
+        upload = await wait_for_transfer_added(client_2)
+
+        await wait_for_transfer_state(download, TransferState.DOWNLOADING)
+        await wait_for_transfer_state(upload, TransferState.UPLOADING)
+        await asyncio.sleep(0.25)
+
+        # Abort the upload
+        await client_2.transfers.abort(upload)
+
+        await wait_for_transfer_state(download, TransferState.FAILED)
+        await wait_for_transfer_state(upload, TransferState.ABORTED)
+
+        # Verify file
+        assert os.path.exists(download.local_path) is True
+        assert os.path.exists(upload.local_path) is True
+
+        client_1.network.set_download_speed_limit(0)
+        client_2.network.set_upload_speed_limit(0)
+
+        # Requeue the upload
+        await client_2.transfers.queue(upload)
+
+        await wait_for_transfer_state(download, TransferState.COMPLETE)
+        await wait_for_transfer_state(upload, TransferState.COMPLETE)
+
+        assert os.path.exists(download.local_path)
+        assert filecmp.cmp(download.local_path, upload.local_path)
 
     @pytest.mark.asyncio
     async def test_transfer_removeDownload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
@@ -244,7 +377,7 @@ class TestE2ETransfer:
 
         await wait_for_transfer_state(download, TransferState.DOWNLOADING)
         await wait_for_transfer_state(upload, TransferState.UPLOADING)
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.25)
 
         # Check the path exists (store to check later if it is removed)
         download_local_path = download.local_path

@@ -142,7 +142,7 @@ class TransferManager(BaseManager):
                 else:
                     state = TransferState.INCOMPLETE
                 transfer.state = TransferState.init_from_state(state, transfer)
-                transfer.reset_times()
+                transfer.reset_time_vars()
 
             await self._add_transfer(transfer)
 
