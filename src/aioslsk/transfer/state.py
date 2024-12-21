@@ -224,8 +224,8 @@ class InitializingState(TransferState):
         return True
 
     async def start_transferring(self) -> bool:
-        self.transfer.remotely_queued = False
         self.transfer.set_start_time()
+        self.transfer.reset_queue_vars()
         if self.transfer.is_upload():
             await self.transfer.transition(UploadingState(self.transfer))
         else:
@@ -294,8 +294,14 @@ class CompleteState(TransferState):
     VALUE = TransferState.COMPLETE
 
     async def queue(self, remotely: bool = False) -> bool:
+        self.transfer.reset_time_vars()
+
+        if self.transfer.is_download():
+            self.transfer.reset_progress_vars()
+            self.transfer.reset_local_vars()
+
         self.transfer.remotely_queued = remotely
-        self.transfer.reset_times()
+
         await self.transfer.transition(QueuedState(self.transfer))
         return True
 
@@ -313,13 +319,13 @@ class IncompleteState(TransferState):
         return True
 
     async def queue(self, remotely: bool = False) -> bool:
+        self.transfer.reset_time_vars()
         self.transfer.remotely_queued = remotely
-        self.transfer.reset_times()
         await self.transfer.transition(QueuedState(self.transfer))
         return True
 
     async def initialize(self) -> bool:
-        self.transfer.reset_times()
+        self.transfer.reset_time_vars()
         await self.transfer.transition(InitializingState(self.transfer))
         return True
 
@@ -339,7 +345,7 @@ class FailedState(TransferState):
     VALUE = TransferState.FAILED
 
     async def queue(self, remotely: bool = False) -> bool:
-        self.transfer.reset_times()
+        self.transfer.reset_time_vars()
         self.transfer.remotely_queued = remotely
         self.transfer.fail_reason = None
         await self.transfer.transition(QueuedState(self.transfer))
@@ -350,8 +356,8 @@ class PausedState(TransferState):
     VALUE = TransferState.PAUSED
 
     async def queue(self, remotely: bool = False) -> bool:
+        self.transfer.reset_time_vars()
         self.transfer.remotely_queued = remotely
-        self.transfer.reset_times()
         await self.transfer.transition(QueuedState(self.transfer))
         return True
 
@@ -371,9 +377,12 @@ class AbortedState(TransferState):
     VALUE = TransferState.ABORTED
 
     async def queue(self, remotely: bool = False) -> bool:
-        # Reset all progress if the transfer is requeued after being aborted,
-        # the file should be deleted anyway
+        self.transfer.reset_time_vars()
+
+        if self.transfer.is_download():
+            self.transfer.reset_progress_vars()
+            self.transfer.reset_local_vars()
+
         self.transfer.remotely_queued = remotely
-        self.transfer.reset_progress()
         await self.transfer.transition(QueuedState(self.transfer))
         return True

@@ -51,17 +51,18 @@ class Transfer:
     def __init__(self, username: str, remote_path: str, direction: TransferDirection):
         self.state: TransferState = VirginState(self)
 
+        self.direction: TransferDirection = direction
+        """Determines whether this transfer is an upload or a download"""
         self.username: str = username
         """Username of the peer"""
         self.remote_path: str = remote_path
         """Remote path, this is the path that is shared between peers"""
         self.local_path: Optional[str] = None
         """Absolute path to the file on disk"""
-        self.direction: TransferDirection = direction
-        """Determines whether this transfer is an upload or a download"""
 
         self.remotely_queued: bool = False
-        """Indicates whether the transfer queue message was received by the peer
+        """Indicates whether the transfer queue message was received by the peer.
+        This only used for downloads
         """
         self.place_in_queue: Optional[int] = None
         self.fail_reason: Optional[str] = None
@@ -70,9 +71,7 @@ class Transfer:
         self.filesize: Optional[int] = None
         """Filesize in bytes"""
         self._offset: int = 0
-        """Offset used for resuming downloads. This offset will be used and
-        reset by the :meth:`read` method of this object
-        """
+        """Offset used for resuming downloads"""
 
         self.bytes_transfered: int = 0
         """Amount of bytes transfered"""
@@ -127,17 +126,24 @@ class Transfer:
 
         return obj_state
 
-    def reset_progress(self):
-        """Resets progress of the entire transfer"""
-        self.reset_times()
+    def reset_local_vars(self):
+        """Resets the local file variables"""
+        self.local_path = None
+        self.filesize = None
+
+    def reset_progress_vars(self):
         self.bytes_transfered = 0
         self._offset = 0
-        self.local_path = None
-        self.fail_reason = None
-        self.remotely_queued = False
-        self.place_in_queue = None
 
-    def reset_times(self):
+    def reset_queue_vars(self):
+        """Reset all variables when the """
+        self.place_in_queue = None
+        self.remotely_queued = False
+
+        self.reset_queue_attempts()
+        self.reset_upload_request_attempts()
+
+    def reset_time_vars(self):
         """Clear all time related variables"""
         self.start_time = None
         self.complete_time = None
@@ -145,15 +151,15 @@ class Transfer:
 
     def set_start_time(self):
         """Set the start time, clear the complete time"""
-        self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
         self.start_time = time.time()
         self.complete_time = None
+        self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
 
     def set_complete_time(self):
         """Set the complete time only if the start time has not been set"""
         if self.start_time is not None:
-            self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
             self.complete_time = time.time()
+            self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
 
     def increase_queue_attempts(self):
         self.queue_attempts += 1
@@ -167,7 +173,7 @@ class Transfer:
         self.upload_request_attempts += 1
         self.last_upload_request_attempt = time.monotonic()
 
-    def reset_upload_request_attempt(self):
+    def reset_upload_request_attempts(self):
         self.upload_request_attempts = 0
         self.last_upload_request_attempt = 0.0
 
