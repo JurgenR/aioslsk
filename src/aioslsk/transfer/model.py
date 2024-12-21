@@ -70,8 +70,6 @@ class Transfer:
 
         self.filesize: Optional[int] = None
         """Filesize in bytes"""
-        self._offset: int = 0
-        """Offset used for resuming downloads"""
 
         self.bytes_transfered: int = 0
         """Amount of bytes transfered"""
@@ -101,8 +99,11 @@ class Transfer:
         self._state_lock: asyncio.Lock = asyncio.Lock()
         self.state_listeners: list[TransferStateListener] = []
 
-    def __setstate__(self, obj_state):
+    def __setstate__(self, obj_state: dict):
         """Called when unpickling"""
+        # Remove variables that are no longer used
+        obj_state.pop('_offset', None)
+
         self.__dict__.update(obj_state)
 
         self.__dict__['state'] = TransferState.init_from_state(obj_state['state'], self)
@@ -193,13 +194,6 @@ class Transfer:
             await listener.on_transfer_state_changed(
                 self, old_state.VALUE, self.state.VALUE
             )
-
-    def set_offset(self, offset: int):
-        self._offset = offset
-        self.bytes_transfered = offset
-
-    def get_offset(self) -> int:
-        return self._offset
 
     def get_speed(self) -> float:
         """Retrieve the speed of the transfer

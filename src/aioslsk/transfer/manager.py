@@ -759,7 +759,7 @@ class TransferManager(BaseManager):
         # future could not have completed)
         # Calculate and send the file offset
         offset = await self._calculate_offset(transfer)
-        transfer.set_offset(offset)
+        transfer.bytes_transfered = offset
         try:
             await file_connection.send_message(uint64(offset).serialize())
 
@@ -880,15 +880,14 @@ class TransferManager(BaseManager):
 
         # Receive transfer offset
         try:
-            offset = await connection.receive_transfer_offset()
+            transfer.bytes_transfered = await connection.receive_transfer_offset()
         except ConnectionReadError:
             logger.info("failed to receive transfer offset : %s", transfer)
             await transfer.state.queue()
             return
 
         else:
-            logger.debug("received offset for transfer : %d : %s", offset, transfer)
-            transfer.set_offset(offset)
+            logger.debug("received offset for transfer : %d : %s", transfer.bytes_transfered, transfer)
 
         await self._upload_file(transfer, connection)
 
@@ -949,7 +948,7 @@ class TransferManager(BaseManager):
                     f"attempted to upload a transfer that doesn't have a local path set : {transfer}")
 
             async with aiofiles.open(transfer.local_path, mode='rb') as handle:
-                await handle.seek(transfer.get_offset())
+                await handle.seek(transfer.bytes_transfered)
                 await connection.send_file(
                     handle,
                     transfer._transfer_progress_callback
@@ -1051,7 +1050,7 @@ class TransferManager(BaseManager):
             async with aiofiles.open(transfer.local_path, mode='ab') as handle:
                 await connection.receive_file(
                     handle,
-                    transfer.filesize - transfer.get_offset(),
+                    transfer.filesize - transfer.bytes_transfered,
                     transfer._transfer_progress_callback
                 )
 
