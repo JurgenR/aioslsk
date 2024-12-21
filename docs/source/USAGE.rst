@@ -237,6 +237,9 @@ attribute. The amount of stored search requests can be configured using the ``se
 Transfers
 =========
 
+Managing Transfers
+------------------
+
 To start downloading a file:
 
 .. code-block:: python
@@ -249,28 +252,6 @@ To start downloading a file:
     search_result: SearchResult = search_request.results[0]
     # The following will attempt to start the download in the background
     transfer: Transfer = await client.transfers.download(search_result.username, search_result.shared_items[0].filename)
-
-Transfers can be paused or aborted, aborting will remove the partially downloaded file. To resume
-the paused transfer call the :meth:`.TransferManager.queue` method. Aborted transfers can be
-requeued as well but since the file was removed the transfer will be restarted from the beginning:
-
-.. code-block:: python
-
-    from aioslsk.transfer.model import Transfer
-
-    # The following will attempt to start the download in the background
-    transfer: Transfer = await client.transfers.download('someuser', 'somefile.mp3')
-
-    # Pause the download wait and requeue
-    await client.transfers.pause(transfer)
-    await asyncio.sleep(5)
-    await client.transfers.queue(transfer)
-
-    # Abort and requeue
-    await client.transfers.abort(transfer)
-    await asyncio.sleep(5)
-    await client.transfers.queue(transfer)
-
 
 A couple of methods are available to retrieve transfers:
 
@@ -308,8 +289,45 @@ Events are available to listen for the transfer progress:
     client.events.register(TransferRemovedEvent, on_transfer_removed)
 
 
-Setting Limits
---------------
+Managing Transfer States
+------------------------
+
+The following methods are available on the :class:`.TransferManager` class for managing the state of
+existing transfers:
+
+* :meth:`.TransferManager.queue`
+* :meth:`.TransferManager.pause`
+* :meth:`.TransferManager.abort`
+
+Transfers can be paused or aborted, aborting will remove the partially downloaded file. To resume
+the paused transfer call the :meth:`.TransferManager.queue` method. Aborted transfers can be
+requeued as well but since the file was removed the transfer will be restarted from the beginning:
+
+.. code-block:: python
+
+    from aioslsk.transfer.model import Transfer
+
+    # The following will attempt to start the download in the background
+    transfer: Transfer = await client.transfers.download('someuser', 'somefile.mp3')
+
+    # Pause the download wait and requeue
+    await client.transfers.pause(transfer)
+    await asyncio.sleep(5)
+    await client.transfers.queue(transfer)
+
+    # Abort and requeue
+    await client.transfers.abort(transfer)
+    await asyncio.sleep(5)
+    await client.transfers.queue(transfer)
+
+The :meth:`.TransferManager.queue` method can also be called on downloads that are already completed
+state, in this case the file will be re-downloaded to a new location. This method can also be used
+to retry failed downloads (however usually they are failed for a reason, for example if the
+uploader does not share the file)
+
+
+Setting Transfer Limits
+-----------------------
 
 There are 3 limits currently in place:
 
