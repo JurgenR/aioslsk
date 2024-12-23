@@ -184,6 +184,8 @@ class TransferManager(BaseManager):
         if task := self._management_task.cancel():
             cancelled_tasks.append(task)
 
+        self._management_queue = asyncio.Queue()
+
         return cancelled_tasks
 
     async def start_progress_reporting_task(self):
