@@ -6,11 +6,16 @@ from async_timeout import timeout as atimeout
 import logging
 from operator import itemgetter
 import os
+import time
 from typing import Optional, TYPE_CHECKING
 
 from ..base_manager import BaseManager
 from .cache import TransferNullCache, TransferCache
-from ..constants import TRANSFER_REPLY_TIMEOUT
+from ..constants import (
+    MAX_TRANSFER_MGMT_INTERVAL,
+    MIN_TRANSFER_MGMT_INTERVAL,
+    TRANSFER_REPLY_TIMEOUT,
+)
 from ..exceptions import (
     AioSlskException,
     ConnectionReadError,
@@ -108,7 +113,7 @@ class TransferManager(BaseManager):
 
         self._management_queue: asyncio.Queue = asyncio.Queue(maxsize=1)
         self._management_task: BackgroundTask = BackgroundTask(
-            interval=0.2,
+            interval=MIN_TRANSFER_MGMT_INTERVAL,
             task_coro=self._management_job,
             name='transfer-management-task'
         )
@@ -496,9 +501,15 @@ class TransferManager(BaseManager):
         for username in finished_users - unfinished_users:
             await self._user_manager.untrack_user(username, TrackingFlag.TRANSFER)
 
-    async def _management_job(self):
+    async def _management_job(self) -> float:
         await self._management_queue.get()
-        await self.manage_transfers()
+
+        start = time.monotonic()
+        await self.manage_user_tracking()
+        self.manage_transfers()
+        duration = time.monotonic() - start
+
+        return max(MIN_TRANSFER_MGMT_INTERVAL + duration, MAX_TRANSFER_MGMT_INTERVAL)
 
     def request_management_cycle(self):
         try:
@@ -506,12 +517,10 @@ class TransferManager(BaseManager):
         except asyncio.QueueFull:
             pass
 
-    async def manage_transfers(self):
+    def manage_transfers(self):
         """This method analyzes the state of the current downloads/uploads and
         starts them up in case there are free slots available
         """
-        await self.manage_user_tracking()
-
         downloads, uploads = self._get_queued_transfers()
         free_upload_slots = self.get_free_upload_slots()
 
