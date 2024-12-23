@@ -89,15 +89,14 @@ def manager(tmpdir, user_manager: UserManager) -> TransferManager:
 class TestTransferManager:
 
     @pytest.mark.asyncio
-    async def test_whenAddTransfer_shouldAddTransferAndAddUser(self, manager: TransferManager):
+    async def test_whenAddTransfer_shouldAddTransfer(self, manager: TransferManager):
         transfer = Transfer(DEFAULT_USERNAME, DEFAULT_FILENAME, TransferDirection.DOWNLOAD)
         await manager.add(transfer)
 
         assert transfer.state.VALUE == TransferState.VIRGIN
         assert transfer in manager.transfers
-        manager._user_manager.track_user.assert_awaited_once_with(
-            DEFAULT_USERNAME, TrackingFlag.TRANSFER
-        )
+
+        assert manager._management_queue.qsize() == 1
 
     @pytest.mark.asyncio
     async def test_whenAddTransfer_alreadyExists_shouldNotAdd(self, manager: TransferManager):

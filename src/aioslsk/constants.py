@@ -31,3 +31,5 @@ UPNP_MAPPING_SERVICES: list[str] = ["WANIPC", "WANPPP"]
 POTENTIAL_PARENTS_CACHE_SIZE: int = 20
 """Maximum amount of potential parents stored"""
 DEFAULT_COMMAND_TIMEOUT: float = 10
+MIN_TRANSFER_MGMT_INTERVAL: float = 0.05
+MAX_TRANSFER_MGMT_INTERVAL: float = 0.25
