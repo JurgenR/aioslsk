@@ -372,11 +372,7 @@ class TransferManager(BaseManager):
         return self.get_free_upload_slots() > 0
 
     def get_free_upload_slots(self) -> int:
-        uploading_transfers = []
-        for transfer in self._transfers:
-            if transfer.is_upload() and transfer.is_processing():
-                uploading_transfers.append(transfer)
-
+        uploading_transfers = self.get_uploading()
         available_slots = self.get_upload_slots() - len(uploading_transfers)
         return max(0, available_slots)
 
