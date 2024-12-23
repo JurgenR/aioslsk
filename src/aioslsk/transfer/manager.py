@@ -142,9 +142,6 @@ class TransferManager(BaseManager):
         for transfer in transfers:
             # Analyze the current state of the stored transfers and set them to
             # the correct state
-            # This needs to happen first: when calling _add_transfer the manager
-            # will be registering itself as listener. `manage_transfers` should
-            # only be called if everything is loaded
             transfer.remotely_queued = False
             if transfer.state.VALUE == TransferState.INITIALIZING:
                 await transfer.state.queue()
@@ -157,7 +154,7 @@ class TransferManager(BaseManager):
                 transfer.state = TransferState.init_from_state(state, transfer)
                 transfer.reset_time_vars()
 
-            await self._add_transfer(transfer)
+            await self.add(transfer)
 
     def write_cache(self):
         """Write all currently stored transfers to the cache"""
@@ -322,8 +319,18 @@ class TransferManager(BaseManager):
         :return: either the transfer we have passed or the already existing
             transfer
         """
-        transfer = await self._add_transfer(transfer)
+        for queued_transfer in self._transfers:
+            if queued_transfer == transfer:
+                logger.info("skip adding transfer, already exists : %s", queued_transfer)
+                return queued_transfer
+
+        logger.info("adding transfer : %s", transfer)
+        transfer.state_listeners.append(self)
+        self._transfers.append(transfer)
+
         self.request_management_cycle()
+        await self._event_bus.emit(TransferAddedEvent(transfer))
+
         return transfer
 
     async def remove(self, transfer: Transfer):
@@ -509,7 +516,7 @@ class TransferManager(BaseManager):
         self.manage_transfers()
         duration = time.monotonic() - start
 
-        return max(MIN_TRANSFER_MGMT_INTERVAL + duration, MAX_TRANSFER_MGMT_INTERVAL)
+        return min(MIN_TRANSFER_MGMT_INTERVAL + duration, MAX_TRANSFER_MGMT_INTERVAL)
 
     def request_management_cycle(self):
         try:
@@ -625,19 +632,6 @@ class TransferManager(BaseManager):
 
         ranking.sort(key=itemgetter(0))
         return list(reversed([upload for _, upload in ranking]))
-
-    async def _add_transfer(self, transfer: Transfer) -> Transfer:
-        for queued_transfer in self._transfers:
-            if queued_transfer == transfer:
-                logger.info("skip adding transfer, already exists : %s", queued_transfer)
-                return queued_transfer
-
-        logger.info("adding transfer : %s", transfer)
-        transfer.state_listeners.append(self)
-        self._transfers.append(transfer)
-        await self._event_bus.emit(TransferAddedEvent(transfer))
-
-        return transfer
 
     async def _prepare_download_path(self, transfer: Transfer):
         if transfer.local_path is None:
