@@ -89,12 +89,13 @@ class TransferManager(BaseManager):
             user_manager: UserManager, shares_manager: SharesManager,
             network: Network, cache: Optional[TransferCache] = None):
 
+        self.cache: TransferCache = cache if cache else TransferNullCache()
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._user_manager: UserManager = user_manager
         self._shares_manager: SharesManager = shares_manager
         self._network: Network = network
-        self.cache: TransferCache = cache if cache else TransferNullCache()
+
         self._ticket_generator = ticket_generator()
 
         self._transfers: list[Transfer] = []
@@ -103,6 +104,13 @@ class TransferManager(BaseManager):
             interval=self._settings.transfers.report_interval,
             task_coro=self._progress_reporting_job,
             name='transfer-progress-task'
+        )
+
+        self._management_queue: asyncio.Queue = asyncio.Queue(maxsize=1)
+        self._management_task: BackgroundTask = BackgroundTask(
+            interval=0.2,
+            task_coro=self._management_job,
+            name='transfer-management-task'
         )
 
         self._MESSAGE_MAP = build_message_map(self)
@@ -157,6 +165,7 @@ class TransferManager(BaseManager):
         self.write_cache()
 
     async def start(self):
+        self._management_task.start()
         await self.start_progress_reporting_task()
 
     async def stop(self) -> list[asyncio.Task]:
@@ -170,6 +179,9 @@ class TransferManager(BaseManager):
             cancelled_tasks.extend(transfer.cancel_tasks())
 
         if task := self._progress_reporting_task.cancel():
+            cancelled_tasks.append(task)
+
+        if task := self._management_task.cancel():
             cancelled_tasks.append(task)
 
         return cancelled_tasks
@@ -304,7 +316,7 @@ class TransferManager(BaseManager):
             transfer
         """
         transfer = await self._add_transfer(transfer)
-        await self.manage_transfers()
+        self.request_management_cycle()
         return transfer
 
     async def remove(self, transfer: Transfer):
@@ -330,7 +342,7 @@ class TransferManager(BaseManager):
             self._transfers.remove(transfer)
             await self._event_bus.emit(TransferRemovedEvent(transfer))
 
-        await self.manage_transfers()
+        self.request_management_cycle()
 
     def get_uploads(self) -> list[Transfer]:
         return [transfer for transfer in self._transfers if transfer.is_upload()]
@@ -481,6 +493,16 @@ class TransferManager(BaseManager):
             await self._user_manager.track_user(username, TrackingFlag.TRANSFER)
         for username in finished_users - unfinished_users:
             await self._user_manager.untrack_user(username, TrackingFlag.TRANSFER)
+
+    async def _management_job(self):
+        await self._management_queue.get()
+        await self.manage_transfers()
+
+    def request_management_cycle(self):
+        try:
+            self._management_queue.put_nowait(None)
+        except asyncio.QueueFull:
+            pass
 
     async def manage_transfers(self):
         """This method analyzes the state of the current downloads/uploads and
@@ -657,7 +679,7 @@ class TransferManager(BaseManager):
         else:
             transfer.remotely_queued = True
             transfer.reset_queue_attempts()
-            await self.manage_transfers()
+            self.request_management_cycle()
 
     async def request_place_in_queue(self, transfer: Transfer) -> Optional[int]:
         """Requests the place in queue for the given transfer. The method will
@@ -1081,7 +1103,7 @@ class TransferManager(BaseManager):
     async def on_transfer_state_changed(
             self, transfer: Transfer, old: TransferState.State, new: TransferState.State):
 
-        await self.manage_transfers()
+        self.request_management_cycle()
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message
@@ -1090,14 +1112,14 @@ class TransferManager(BaseManager):
 
     @on_message(AddUser.Response)
     async def _on_add_user(self, message: AddUser.Response, connection: PeerConnection):
-        await self.manage_transfers()
+        self.request_management_cycle()
 
     @on_message(GetUserStatus.Response)
     async def _on_get_user_status(self, message: GetUserStatus.Response, connection: PeerConnection):
         if message.status == UserStatus.OFFLINE.value:
             self._reset_remotely_queued_flags(message.username)
 
-        await self.manage_transfers()
+        self.request_management_cycle()
 
     @on_message(PeerTransferQueue.Request)
     async def _on_peer_transfer_queue(self, message: PeerTransferQueue.Request, connection: PeerConnection):
@@ -1198,7 +1220,7 @@ class TransferManager(BaseManager):
                 await connection.disconnect(CloseReason.REQUESTED)
 
     async def _on_session_initialized(self, event: SessionInitializedEvent):
-        await self.manage_transfers()
+        self.request_management_cycle()
 
     @on_message(PeerTransferRequest.Request)
     async def _on_peer_transfer_request(self, message: PeerTransferRequest.Request, connection: PeerConnection):
@@ -1409,7 +1431,7 @@ class TransferManager(BaseManager):
         username = connection.username
         if transfer := self.find_transfer(username, filename, TransferDirection.DOWNLOAD):
             transfer.remotely_queued = False
-            await self.manage_transfers()
+            self.request_management_cycle()
 
         else:
             logger.warning(

@@ -180,7 +180,9 @@ async def wait_for_transfer_added(
         else:
             await asyncio.sleep(0.01)
     else:
-        raise Exception(f"transfer {client} did not have a transfer added in {timeout}s")
+        raise Exception(
+            f"transfer {client} did not have a transfer added in {timeout}s "
+            f"(initial={initial_amount}, current={len(client.transfers.transfers)})")
 
 
 async def wait_for_transfer_state(transfer: Transfer, state: TransferState.State, timeout: int = 15):
