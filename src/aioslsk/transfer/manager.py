@@ -529,9 +529,6 @@ class TransferManager(BaseManager):
 
         # Downloads will just get remotely queued
         for download in downloads:
-            if download.remotely_queued or download._remotely_queue_task:
-                continue
-
             download._remotely_queue_task = asyncio.create_task(
                 self._queue_remotely(download),
                 name=f'queue-remotely-{task_counter()}'
@@ -542,14 +539,13 @@ class TransferManager(BaseManager):
 
         # Uploads should be initialized and uploaded if possible
         for upload in uploads[:free_upload_slots]:
-            if not upload._transfer_task:
-                upload._transfer_task = asyncio.create_task(
-                    self._initialize_upload(upload),
-                    name=f'initialize-upload-{task_counter()}'
-                )
-                upload._transfer_task.add_done_callback(
-                    upload._transfer_task_complete
-                )
+            upload._transfer_task = asyncio.create_task(
+                self._initialize_upload(upload),
+                name=f'initialize-upload-{task_counter()}'
+            )
+            upload._transfer_task.add_done_callback(
+                upload._transfer_task_complete
+            )
 
     def _get_queued_transfers(self) -> tuple[list[Transfer], list[Transfer]]:
         """Returns all transfers eligable for being initialized
@@ -589,6 +585,9 @@ class TransferManager(BaseManager):
                     queued_uploads.append(transfer)
 
             else:
+                if transfer.remotely_queued:
+                    continue
+
                 # For downloads we try to continue with incomplete downloads,
                 # for uploads it's up to the other user
                 # Failed uploads without a reason are retried
