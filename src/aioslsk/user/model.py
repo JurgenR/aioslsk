@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from enum import auto, Enum, Flag
+from enum import auto, Enum, Flag, IntFlag
 from typing import Optional
 from ..protocol.primitives import UserStats
 
@@ -36,6 +36,27 @@ class TrackingFlag(Flag):
     """Tracking was requested through transfer manager"""
     FRIEND = auto()
     """Tracking because the user is a friend"""
+
+
+class BlockingFlag(IntFlag):
+    MESSAGE_USER = 1
+    MESSAGE_ROOM = 2
+
+    SEARCH_RESULTS = 4
+
+    TRANSFER_UPLOAD = 8
+
+    PEER_INFO = 16
+    PEER_SHARES = 32
+
+    CONNECTION_DISTRIBUTED = 64
+
+    # Aliases
+    MESSAGE_ALL = MESSAGE_USER | MESSAGE_ROOM
+    PEER_ALL = PEER_INFO | PEER_SHARES
+
+    ALL = MESSAGE_ALL | SEARCH_RESULTS | TRANSFER_UPLOAD | PEER_ALL
+    COMPLETE = ALL | CONNECTION_DISTRIBUTED
 
 
 @dataclass

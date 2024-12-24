@@ -45,6 +45,7 @@ from ..protocol.messages import (
     SetStatus,
 )
 from .model import (
+    BlockingFlag,
     ChatMessage,
     UploadPermissions,
     User,
@@ -229,6 +230,12 @@ class UserManager(BaseManager):
                     del self._tracked_users[username]
 
                 await self._event_bus.emit(UserUntrackingEvent(user=user))
+
+    async def block(self, username: str, flags: BlockingFlag = BlockingFlag.ALL):
+        pass
+
+    async def unblock(self, username: str):
+        pass
 
     async def track_friend(self, username: str):
         """Request to track a friend with given username"""
