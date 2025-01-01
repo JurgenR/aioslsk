@@ -14,6 +14,7 @@ from ..events import (
     AdminMessageEvent,
     BlockListChangedEvent,
     ConnectionStateChangedEvent,
+    Event,
     EventBus,
     FriendListChangedEvent,
     KickedEvent,
@@ -135,7 +136,11 @@ class UserManager(BaseManager):
         self._management_task.start()
 
     async def stop(self) -> list[asyncio.Task]:
-        return [self._management_task.cancel()]
+        cancel_tasks = []
+        if task := self._management_task.cancel():
+            cancel_tasks.append(task)
+
+        return cancel_tasks
 
     def get_self(self) -> User:
         """Returns the user object for the current session"""
@@ -277,7 +282,7 @@ class UserManager(BaseManager):
         return tracked_user.flags != TrackingFlag(0)
 
     async def _management_job(self, context: UserManagementContext):
-        events = []
+        events: list[Event] = []
 
         if context.friends != self._settings.users.friends:
             events.append(
