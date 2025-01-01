@@ -101,7 +101,7 @@ class TransferState:
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.FAILED.name)
         return False
 
-    async def abort(self) -> bool:  # pragma: no cover
+    async def abort(self, reason: Optional[str] = None) -> bool:  # pragma: no cover
         logger.warning(
             "attempted to make undefined state transition from %s to %s", self.VALUE.name, self.ABORTED.name)
         return False
@@ -180,9 +180,10 @@ class QueuedState(TransferState):
         await self.transfer.transition(FailedState(self.transfer))
         return True
 
-    async def abort(self) -> bool:
+    async def abort(self, reason: Optional[str] = None) -> bool:
         await self._cancel_transfer_tasks()
         await _remove_local_file(self.transfer)
+        self.transfer.fail_reason = reason
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
@@ -202,9 +203,10 @@ class InitializingState(TransferState):
     """
     VALUE = TransferState.INITIALIZING
 
-    async def abort(self) -> bool:
+    async def abort(self, reason: Optional[str] = None) -> bool:
         await self._cancel_transfer_tasks()
         await _remove_local_file(self.transfer)
+        self.transfer.fail_reason = reason
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
@@ -247,9 +249,10 @@ class DownloadingState(TransferState):
         await self.transfer.transition(CompleteState(self.transfer))
         return True
 
-    async def abort(self) -> bool:
+    async def abort(self, reason: Optional[str] = None) -> bool:
         await self._stop_transfer()
         await _remove_local_file(self.transfer)
+        self.transfer.fail_reason = reason
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
@@ -278,9 +281,10 @@ class UploadingState(TransferState):
         await self.transfer.transition(CompleteState(self.transfer))
         return True
 
-    async def abort(self) -> bool:
+    async def abort(self, reason: Optional[str] = None) -> bool:
         await self._stop_transfer()
         # Don't remove file
+        self.transfer.fail_reason = reason
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
@@ -329,9 +333,10 @@ class IncompleteState(TransferState):
         await self.transfer.transition(InitializingState(self.transfer))
         return True
 
-    async def abort(self) -> bool:
+    async def abort(self, reason: Optional[str] = None) -> bool:
         await self._cancel_transfer_tasks()
         await _remove_local_file(self.transfer)
+        self.transfer.fail_reason = reason
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
@@ -361,9 +366,10 @@ class PausedState(TransferState):
         await self.transfer.transition(QueuedState(self.transfer))
         return True
 
-    async def abort(self) -> bool:
+    async def abort(self, reason: Optional[str] = None) -> bool:
         await self._cancel_transfer_tasks()
         await _remove_local_file(self.transfer)
+        self.transfer.fail_reason = reason
         await self.transfer.transition(AbortedState(self.transfer))
         return True
 
@@ -383,6 +389,7 @@ class AbortedState(TransferState):
             self.transfer.reset_progress_vars()
             self.transfer.reset_local_vars()
 
+        self.transfer.fail_reason = None
         self.transfer.remotely_queued = remotely
         await self.transfer.transition(QueuedState(self.transfer))
         return True

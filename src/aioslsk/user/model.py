@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from enum import auto, Enum, Flag
+from enum import auto, Enum, Flag, IntFlag
 from typing import Optional
 from ..protocol.primitives import UserStats
 
@@ -36,6 +36,27 @@ class TrackingFlag(Flag):
     """Tracking was requested through transfer manager"""
     FRIEND = auto()
     """Tracking because the user is a friend"""
+
+
+class BlockingFlag(IntFlag):
+    NONE = 0
+    PRIVATE_MESSAGES = 1
+    """Blocks private messages sent by the user"""
+    ROOM_MESSAGES = 2
+    """Blocks room messages sent by the user"""
+    SEARCHES = 4
+    """Blocks incoming searches from the user"""
+    SHARES = 8
+    """Blocks shares, directory listing requests"""
+    INFO = 16
+    UPLOADS = 32
+    """Blocks all uploads and upload requests"""
+
+    # Aliases
+    IGNORE = PRIVATE_MESSAGES | ROOM_MESSAGES
+    """Ignore all messaging"""
+    ALL = IGNORE | SEARCHES | SHARES | INFO | UPLOADS
+    """Fully blocks the user: includes messaging, shares requests, uploads"""
 
 
 @dataclass

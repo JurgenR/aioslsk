@@ -9,7 +9,9 @@ from aioslsk.protocol.messages import (
 from aioslsk.peer import PeerManager
 from aioslsk.settings import Settings
 from aioslsk.user.manager import UserManager
+from aioslsk.user.model import BlockingFlag
 
+import copy
 import pytest
 from unittest.mock import AsyncMock, Mock
 
@@ -118,6 +120,19 @@ class TestPeer:
         )
 
     @pytest.mark.asyncio
+    async def test_blocked_withInfo_shouldNotSendPeerInfoReply(self):
+        settings = copy.deepcopy(SETTINGS_WITH_INFO)
+        settings['users'] = {'blocked': {DEFAULT_USERNAME: BlockingFlag.INFO}}
+
+        manager = self._create_peer_manager(settings)
+        connection = AsyncMock()
+        connection.username = DEFAULT_USERNAME
+
+        await manager._on_peer_user_info_request(PeerUserInfoRequest.Request(), connection)
+
+        connection.send_message.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_whenDirectoryRequestReceived_shouldRespond(self):
         DIRECTORY = 'C:\\dir0'
         USER = 'user0'
@@ -140,6 +155,26 @@ class TestPeer:
         )
 
     @pytest.mark.asyncio
+    async def test_whenDirectoryRequestReceived_blocked_shouldNotRespond(self):
+        DIRECTORY = 'C:\\dir0'
+        TICKET = 1324
+
+        settings = copy.deepcopy(SETTINGS_WITH_INFO)
+        settings['users'] = {'blocked': {DEFAULT_USERNAME: BlockingFlag.SHARES}}
+
+        manager = self._create_peer_manager(settings)
+
+        connection = AsyncMock()
+        connection.username = DEFAULT_USERNAME
+
+        await manager._on_peer_directory_contents_req(
+            PeerDirectoryContentsRequest.Request(TICKET, DIRECTORY), connection
+        )
+
+        manager._shares_manager.create_directory_reply.assert_not_called()
+        connection.send_message.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_whenDirectoryReplyReceived_shouldEmitEvent(self):
         DIRECTORY = 'C:\\dir0'
         USER = 'user0'
@@ -157,4 +192,3 @@ class TestPeer:
         manager._event_bus.emit.assert_awaited_once_with(
             UserDirectoryEvent(user, DIRECTORY, DIRECTORIES, raw_message)
         )
-

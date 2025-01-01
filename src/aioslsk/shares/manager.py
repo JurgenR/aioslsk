@@ -904,7 +904,6 @@ class SharesManager(BaseManager):
     async def report_shares(self):
         """Reports the shares amount to the server"""
         if not self._session:
-            logger.warning("attempted to report shares without valid session")
             return
 
         folder_count, file_count = self.get_stats()

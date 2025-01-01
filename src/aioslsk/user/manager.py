@@ -12,8 +12,11 @@ from ..events import (
     build_message_map,
     on_message,
     AdminMessageEvent,
+    BlockListChangedEvent,
     ConnectionStateChangedEvent,
+    Event,
     EventBus,
+    FriendListChangedEvent,
     KickedEvent,
     MessageReceivedEvent,
     PrivateMessageEvent,
@@ -45,6 +48,7 @@ from ..protocol.messages import (
     SetStatus,
 )
 from .model import (
+    BlockingFlag,
     ChatMessage,
     UploadPermissions,
     User,
@@ -54,6 +58,7 @@ from .model import (
 from ..network.network import Network
 from ..settings import Settings
 from ..session import Session
+from ..tasks import BackgroundTask
 
 
 logger = logging.getLogger(__name__)
@@ -73,6 +78,12 @@ class TrackedUser:
         return self.flags & add_user_flags != TrackingFlag(0)
 
 
+@dataclass
+class UserManagementContext:
+    friends: set[str]
+    blocked: dict[str, BlockingFlag]
+
+
 class UserManager(BaseManager):
     """Class responsible for handling user messages and storing users"""
 
@@ -89,6 +100,16 @@ class UserManager(BaseManager):
         self._tracked_users: dict[str, TrackedUser] = dict()
         self._privileged_users: set[str] = set()
 
+        self._management_task: BackgroundTask = BackgroundTask(
+            interval=1.0,
+            task_coro=self._management_job,
+            name='user-management-task',
+            context=UserManagementContext(
+                friends=self._settings.users.friends.copy(),
+                blocked=self._settings.users.blocked.copy()
+            )
+        )
+
         self.register_listeners()
 
     def register_listeners(self):
@@ -100,6 +121,8 @@ class UserManager(BaseManager):
             SessionInitializedEvent, self._on_session_initialized)
         self._event_bus.register(
             SessionDestroyedEvent, self._on_session_destroyed)
+        self._event_bus.register(
+            FriendListChangedEvent, self._on_friend_list_changed)
 
     @property
     def users(self) -> dict[str, User]:
@@ -108,6 +131,16 @@ class UserManager(BaseManager):
     @property
     def privileged_users(self) -> set[str]:
         return self._privileged_users
+
+    async def start(self):
+        self._management_task.start()
+
+    async def stop(self) -> list[asyncio.Task]:
+        cancel_tasks = []
+        if task := self._management_task.cancel():
+            cancel_tasks.append(task)
+
+        return cancel_tasks
 
     def get_self(self) -> User:
         """Returns the user object for the current session"""
@@ -143,11 +176,6 @@ class UserManager(BaseManager):
         """Returns whether a user status is currently being tracked"""
         return username in self._tracked_users
 
-    def _get_tracked_user_object(self, user: User) -> TrackedUser:
-        if user.name not in self._tracked_users:
-            self._tracked_users[user.name] = TrackedUser(user)
-        return self._tracked_users[user.name]
-
     def reset_users(self):
         """Performs a reset on all users. This method is called when the
         connection with the server is disconnected and shouldn't be called
@@ -156,32 +184,6 @@ class UserManager(BaseManager):
         self._users = WeakValueDictionary()
         self._tracked_users = dict()
         self._privileged_users = set()
-
-    def get_tracking_flags(self, username: str) -> TrackingFlag:
-        """Returns current tracking flags of the user with given username
-
-        :param username: username of the user
-        """
-        if username in self._tracked_users:
-            return self._tracked_users[username].flags
-        return TrackingFlag(0)
-
-    def set_tracking_flag(self, user: User, flag: TrackingFlag = TrackingFlag.REQUESTED) -> bool:
-        """Set given tracking flag for the user. This method returns ``True`` if
-        the user previously had no tracking flags set.
-        """
-        tracked_user = self._get_tracked_user_object(user)
-        had_tracking_flag = tracked_user.flags != TrackingFlag(0)
-        tracked_user.flags |= flag
-        return not had_tracking_flag
-
-    def unset_tracking_flag(self, user: User, flag: TrackingFlag) -> bool:
-        """Unset given tracking flag. This method returns ``True`` if the user
-        still has tracking flags left
-        """
-        tracked_user = self._tracked_users[user.name]
-        tracked_user.flags &= ~flag
-        return tracked_user.flags != TrackingFlag(0)
 
     async def track_user(self, username: str, flag: TrackingFlag = TrackingFlag.REQUESTED):
         """Starts tracking a user. The method sends a tracking request to the
@@ -192,12 +194,12 @@ class UserManager(BaseManager):
         :param flag: tracking flag to add from the user
         """
         user = self.get_user_object(username)
-        is_first_flag = self.set_tracking_flag(user, flag)
+        is_first_flag = self._set_tracking_flag(user, flag)
         if is_first_flag or flag == TrackingFlag.REQUESTED:
             try:
                 await self._network.send_server_messages(AddUser.Request(username))
             except Exception:
-                self.unset_tracking_flag(user, flag)
+                self._unset_tracking_flag(user, flag)
                 raise
 
     async def untrack_user(self, username: str, flag: TrackingFlag = TrackingFlag.REQUESTED):
@@ -216,7 +218,7 @@ class UserManager(BaseManager):
             return
 
         user = self._users[username]
-        has_flags_left = self.unset_tracking_flag(user, flag)
+        has_flags_left = self._unset_tracking_flag(user, flag)
         if not has_flags_left or flag == TrackingFlag.REQUESTED:
             try:
                 await self._network.send_server_messages(RemoveUser.Request(user.name))
@@ -247,6 +249,71 @@ class UserManager(BaseManager):
         """Request to stop tracking a friend with given username"""
         await self.untrack_user(username, TrackingFlag.FRIEND)
 
+    def get_tracking_flags(self, username: str) -> TrackingFlag:
+        """Returns current tracking flags of the user with given username
+
+        :param username: username of the user
+        """
+        if username in self._tracked_users:
+            return self._tracked_users[username].flags
+        return TrackingFlag(0)
+
+    def _get_tracked_user_object(self, user: User) -> TrackedUser:
+        """Gets or creates a tracked user object"""
+        if user.name not in self._tracked_users:
+            self._tracked_users[user.name] = TrackedUser(user)
+        return self._tracked_users[user.name]
+
+    def _set_tracking_flag(self, user: User, flag: TrackingFlag = TrackingFlag.REQUESTED) -> bool:
+        """Set given tracking flag for the user. This method returns ``True`` if
+        the user previously had no tracking flags set.
+        """
+        tracked_user = self._get_tracked_user_object(user)
+        had_tracking_flag = tracked_user.flags != TrackingFlag(0)
+        tracked_user.flags |= flag
+        return not had_tracking_flag
+
+    def _unset_tracking_flag(self, user: User, flag: TrackingFlag) -> bool:
+        """Unset given tracking flag. This method returns ``True`` if the user
+        still has tracking flags left
+        """
+        tracked_user = self._tracked_users[user.name]
+        tracked_user.flags &= ~flag
+        return tracked_user.flags != TrackingFlag(0)
+
+    async def _management_job(self, context: UserManagementContext):
+        events: list[Event] = []
+
+        if context.friends != self._settings.users.friends:
+            events.append(
+                FriendListChangedEvent(
+                    added=self._settings.users.friends - context.friends,
+                    removed=context.friends - self._settings.users.friends
+                )
+            )
+
+        if context.blocked != self._settings.users.blocked:
+            changes = {}
+
+            # Unblocked through removal
+            for username in context.blocked.keys() - self._settings.users.blocked.keys():
+                changes[username] = (context.blocked[username], BlockingFlag.NONE)
+
+            # Changed flag or added
+            for username, flags in self._settings.users.blocked.items():
+                old_flags = context.blocked.get(username, BlockingFlag.NONE)
+                if flags != old_flags:
+                    changes[username] = (old_flags, flags)
+
+            events.append(BlockListChangedEvent(changes=changes))
+
+        if events:
+            context.friends = self._settings.users.friends.copy()
+            context.blocked = self._settings.users.blocked.copy()
+
+        for event in events:
+            await self._event_bus.emit(event)
+
     @on_message(AdminMessage.Response)
     async def _on_admin_message(self, message: AdminMessage.Response, connection: ServerConnection):
         await self._event_bus.emit(
@@ -262,6 +329,15 @@ class UserManager(BaseManager):
 
     @on_message(PrivateChatMessage.Response)
     async def _on_private_message(self, message: PrivateChatMessage.Response, connection: ServerConnection):
+
+        await self._network.send_server_messages(
+            PrivateChatMessageAck.Request(message.chat_id)
+        )
+
+        # For blocked users, ack the message but don't emit an event
+        if self._settings.users.is_blocked(message.username, BlockingFlag.PRIVATE_MESSAGES):
+            return
+
         user = self.get_user_object(message.username)
         chat_message = ChatMessage(
             id=message.chat_id,
@@ -271,9 +347,6 @@ class UserManager(BaseManager):
             is_direct=bool(message.is_direct)
         )
 
-        await self._network.send_server_messages(
-            PrivateChatMessageAck.Request(message.chat_id)
-        )
         await self._event_bus.emit(
             PrivateMessageEvent(
                 message=chat_message,
@@ -444,3 +517,16 @@ class UserManager(BaseManager):
 
     async def _on_session_destroyed(self, event: SessionDestroyedEvent):
         self._session = None
+
+    async def _on_friend_list_changed(self, event: FriendListChangedEvent):
+        if not self._session:  # pragma: no cover
+            return
+
+        tasks = []
+        for added_friend in event.added:
+            tasks.append(self.track_friend(added_friend))
+
+        for removed_friend in event.removed:
+            tasks.append(self.untrack_friend(removed_friend))
+
+        await asyncio.gather(*tasks, return_exceptions=True)

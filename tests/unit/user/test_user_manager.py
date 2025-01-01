@@ -74,7 +74,7 @@ class TestUserManager:
     @pytest.mark.asyncio
     async def test_trackUser_userTracked_shouldNotSendAddUser(self, manager: UserManager):
         user = manager.get_user_object(DEFAULT_USERNAME)
-        manager.set_tracking_flag(user, TrackingFlag.FRIEND)
+        manager._set_tracking_flag(user, TrackingFlag.FRIEND)
 
         await manager.track_user(DEFAULT_USERNAME, TrackingFlag.TRANSFER)
 
@@ -84,7 +84,7 @@ class TestUserManager:
     @pytest.mark.asyncio
     async def test_untrackUser_lastAddUserFlag_shouldSendRemoveUser(self, manager: UserManager):
         user = manager.get_user_object(DEFAULT_USERNAME)
-        manager.set_tracking_flag(user, TrackingFlag.FRIEND)
+        manager._set_tracking_flag(user, TrackingFlag.FRIEND)
 
         user.status = UserStatus.ONLINE
         manager._tracked_users[user.name].flags = TrackingFlag.FRIEND
@@ -100,8 +100,8 @@ class TestUserManager:
     @pytest.mark.asyncio
     async def test_untrackUser_addUserFlagRemains_shouldNotSendRemoveUser(self, manager: UserManager):
         user = manager.get_user_object(DEFAULT_USERNAME)
-        manager.set_tracking_flag(user, TrackingFlag.FRIEND)
-        manager.set_tracking_flag(user, TrackingFlag.REQUESTED)
+        manager._set_tracking_flag(user, TrackingFlag.FRIEND)
+        manager._set_tracking_flag(user, TrackingFlag.REQUESTED)
 
         await manager.untrack_user(DEFAULT_USERNAME, TrackingFlag.FRIEND)
 

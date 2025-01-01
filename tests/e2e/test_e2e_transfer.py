@@ -1,8 +1,16 @@
 from aioslsk.client import SoulSeekClient
 from aioslsk.events import TransferAddedEvent, TransferProgressEvent
+from aioslsk.transfer.manager import Reasons
 from aioslsk.transfer.model import Transfer, TransferDirection, TransferState
+from aioslsk.user.model import BlockingFlag
 from .mock.server import MockServer
-from .fixtures import mock_server, client_1, client_2
+from .fixtures import (
+    mock_server,
+    client_1,
+    client_2,
+    create_clients,
+    client_start_and_scan,
+)
 from .utils import (
     wait_for_remotely_queued_state,
     wait_for_search_results,
@@ -14,6 +22,7 @@ import asyncio
 import filecmp
 import logging
 import os
+from pathlib import Path
 import pytest
 from unittest.mock import AsyncMock
 
@@ -202,7 +211,7 @@ class TestE2ETransfer:
         # Pause the transfer and wait for the correct states
         await client_2.transfers.pause(upload)
 
-        await wait_for_transfer_state(download, TransferState.FAILED)
+        await wait_for_transfer_state(download, TransferState.FAILED, reason=Reasons.CANCELLED)
         await wait_for_transfer_state(upload, TransferState.PAUSED)
 
         # Restart the transfer and wait for complete
@@ -314,7 +323,7 @@ class TestE2ETransfer:
         # Abort the upload
         await client_2.transfers.abort(upload)
 
-        await wait_for_transfer_state(download, TransferState.FAILED)
+        await wait_for_transfer_state(download, TransferState.FAILED, reason=Reasons.CANCELLED)
         await wait_for_transfer_state(upload, TransferState.ABORTED)
 
         # Verify file
@@ -342,7 +351,7 @@ class TestE2ETransfer:
         # Abort the upload
         await client_2.transfers.abort(upload)
 
-        await wait_for_transfer_state(download, TransferState.FAILED)
+        await wait_for_transfer_state(download, TransferState.FAILED, reason=Reasons.CANCELLED)
         await wait_for_transfer_state(upload, TransferState.ABORTED)
 
         # Verify file
@@ -425,12 +434,95 @@ class TestE2ETransfer:
         await wait_for_transfer_state(download, TransferState.COMPLETE)
         await wait_for_transfer_state(upload, TransferState.COMPLETE)
 
-    async def _search_and_download(self, client_1: SoulSeekClient) -> Transfer:
+    @pytest.mark.asyncio
+    async def test_transfer_blockedUser(self, mock_server: MockServer, tmp_path: Path):
+
+        client1, client2 = create_clients(tmp_path, amount=2)
+
+        username1 = client1.settings.credentials.username
+
+        client2.settings.users.blocked[username1] = BlockingFlag.UPLOADS
+
+        try:
+            await client_start_and_scan(client1)
+            await client_start_and_scan(client2)
+            await wait_until_clients_initialized(mock_server, amount=2)
+
+            download = await self._search_and_download(client1)
+
+            await wait_for_transfer_state(
+                download, TransferState.FAILED, reason=Reasons.FILE_NOT_SHARED)
+
+            assert len(client2.transfers.transfers) == 0
+
+        finally:
+            await client1.stop()
+            await client2.stop()
+
+    @pytest.mark.asyncio
+    async def test_transfer_blockDuringDownload(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        """Tests blocking a downloading user
+
+        The download should end up in FAILED state
+        The upload should end up in ABORTED state
+        """
+        await wait_until_clients_initialized(mock_server, amount=2)
+        client_1.network.set_download_speed_limit(50)
+        client_2.network.set_upload_speed_limit(50)
+
+        download = await self._search_and_download(client_1)
+        upload = await wait_for_transfer_added(client_2, initial_amount=0)
+
+        await wait_for_transfer_state(download, TransferState.DOWNLOADING)
+        await wait_for_transfer_state(upload, TransferState.UPLOADING)
+        await asyncio.sleep(0.25)
+
+        username1 = client_1.settings.credentials.username
+        client_2.settings.users.blocked[username1] = BlockingFlag.UPLOADS
+
+        # Verify upload is aborted
+        await wait_for_transfer_state(download, TransferState.FAILED, reason=Reasons.CANCELLED)
+        await wait_for_transfer_state(upload, TransferState.ABORTED, reason=Reasons.BLOCKED)
+
+    @pytest.mark.asyncio
+    async def test_transfer_unblockDownloadingUser(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+        """Tests unblocking a user
+
+        The download should end up in COMPLETE state
+        The upload should end up in COMPLETE state
+        """
+        await wait_until_clients_initialized(mock_server, amount=2)
+        client_1.network.set_download_speed_limit(50)
+        client_2.network.set_upload_speed_limit(50)
+
+        download = await self._search_and_download(client_1)
+        upload = await wait_for_transfer_added(client_2, initial_amount=0)
+
+        await wait_for_transfer_state(download, TransferState.DOWNLOADING)
+        await wait_for_transfer_state(upload, TransferState.UPLOADING)
+        await asyncio.sleep(0.25)
+
+        username1 = client_1.settings.credentials.username
+        client_2.settings.users.blocked[username1] = BlockingFlag.UPLOADS
+
+        # Verify upload is aborted
+        await wait_for_transfer_state(download, TransferState.FAILED, reason=Reasons.CANCELLED)
+        await wait_for_transfer_state(upload, TransferState.ABORTED, reason=Reasons.BLOCKED)
+
+        client_1.network.set_download_speed_limit(0)
+        client_2.network.set_upload_speed_limit(0)
+
+        del client_2.settings.users.blocked[username1]
+
+        await wait_for_transfer_state(download, TransferState.COMPLETE)
+        await wait_for_transfer_state(upload, TransferState.COMPLETE)
+
+    async def _search_and_download(self, client: SoulSeekClient) -> Transfer:
         """Client 1 performs a search and starts a download of a file"""
-        request = await client_1.searches.search('Strange')
+        request = await client.searches.search('Strange')
         await wait_for_search_results(request)
         result = request.results[0]
-        return await client_1.transfers.download(
+        return await client.transfers.download(
             result.username,
             result.shared_items[0].filename
         )

@@ -1,7 +1,8 @@
+from collections.abc import Set
 import os
-from typing import Optional
+from typing import Annotated, Any, Optional, Sequence
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, BeforeValidator, Field, model_validator
 from pydantic_settings import BaseSettings
 
 from .constants import (
@@ -11,6 +12,22 @@ from .constants import (
 )
 from .network.network import ListeningConnectionErrorMode
 from .shares.model import DirectoryShareMode
+from .user.model import BlockingFlag
+
+
+def translate_blocked_users(value: Any) -> dict[str, BlockingFlag]:
+    """Converts blocked user set to a dictionary object"""
+    if isinstance(value, dict):
+        return value
+
+    if isinstance(value, (Sequence, Set)):
+        blocked_dict = {}
+        for username in value:
+            blocked_dict[username] = BlockingFlag.ALL
+
+        return blocked_dict
+
+    raise ValueError(f"unable to translate type {type(value)}")
 
 
 class SharedDirectorySettingEntry(BaseModel, validate_assignment=True):
@@ -140,7 +157,13 @@ class RoomsSettings(BaseModel, validate_assignment=True):
 
 class UsersSettings(BaseModel, validate_assignment=True):
     friends: set[str] = Field(default_factory=set)
-    blocked: set[str] = Field(default_factory=set)
+    blocked: Annotated[
+        dict[str, BlockingFlag],
+        BeforeValidator(translate_blocked_users)
+    ] = Field(default_factory=dict)
+
+    def is_blocked(self, username: str, flag: BlockingFlag) -> bool:
+        return bool(self.blocked.get(username, BlockingFlag.NONE) & flag)
 
 
 class InterestsSettings(BaseModel, validate_assignment=True):

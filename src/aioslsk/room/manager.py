@@ -53,7 +53,7 @@ from ..network.connection import ConnectionState, ServerConnection
 from ..network.network import Network
 from ..settings import Settings
 from ..user.manager import UserManager
-from ..user.model import UserStatus
+from ..user.model import BlockingFlag, UserStatus
 
 
 logger = logging.getLogger(__name__)
@@ -141,6 +141,10 @@ class RoomManager(BaseManager):
 
     @on_message(RoomChatMessage.Response)
     async def _on_chat_room_message(self, message: RoomChatMessage.Response, connection: ServerConnection):
+
+        if self._settings.users.is_blocked(message.username, BlockingFlag.ROOM_MESSAGES):
+            return
+
         user = self._user_manager.get_user_object(message.username)
         room = self.get_or_create_room(message.room)
         room_message = RoomMessage(
@@ -159,6 +163,10 @@ class RoomManager(BaseManager):
 
     @on_message(PublicChatMessage.Response)
     async def _on_public_chat_message(self, message: PublicChatMessage.Response, connection: ServerConnection):
+
+        if self._settings.users.is_blocked(message.username, BlockingFlag.ROOM_MESSAGES):
+            return
+
         room = self.get_or_create_room(message.room)
         user = self._user_manager.get_user_object(message.username)
 
