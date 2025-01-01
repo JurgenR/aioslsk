@@ -2,7 +2,7 @@ from collections.abc import Set
 import os
 from typing import Annotated, Any, Optional, Sequence
 
-from pydantic import BaseModel, BeforeValidator, Field, model_validator, Field
+from pydantic import BaseModel, BeforeValidator, Field, model_validator
 from pydantic_settings import BaseSettings
 
 from .constants import (
