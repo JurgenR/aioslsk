@@ -1055,8 +1055,8 @@ class MockServer:
             for rec, score in rec_counter.most_common()[:-MAX_GLOBAL_RECOMMENDATIONS-1:-1]
         ]
 
-        sorted(recommendations, key=lambda rec: rec.score, reverse=False)
-        sorted(unrecommendations, key=lambda rec: rec.score, reverse=True)
+        recommendations.sort(key=lambda rec: rec.score, reverse=False)
+        unrecommendations.sort(key=lambda rec: rec.score, reverse=True)
 
         await peer.send_message(
             GetGlobalRecommendations.Response(
@@ -1088,8 +1088,8 @@ class MockServer:
             for rec, score in rec_counter.most_common()[:-MAX_RECOMMENDATIONS-1:-1]
         ]
 
-        sorted(recommendations, key=lambda rec: rec.score, reverse=False)
-        sorted(unrecommendations, key=lambda rec: rec.score, reverse=True)
+        recommendations.sort(key=lambda rec: rec.score, reverse=False)
+        unrecommendations.sort(key=lambda rec: rec.score, reverse=True)
 
         await peer.send_message(
             GetRecommendations.Response(
@@ -1114,7 +1114,7 @@ class MockServer:
         for rec, score in rec_counter.most_common(MAX_RECOMMENDATIONS):
             recommendations.append(Recommendation(rec, score))
 
-        sorted(recommendations, key=lambda rec: rec.score, reverse=False)
+        recommendations.sort(key=lambda rec: rec.score, reverse=False)
 
         await peer.send_message(
             GetItemRecommendations.Response(

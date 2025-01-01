@@ -728,7 +728,7 @@ A list of friends can found in the settings under ``users.friends``. This list i
 * Lock files depending on whether the user is in the list
 * Automatically request the server to track the users in the list after logging on
 
-Adding a friend on the fly means adding it to friends set and requesting to track the user:
+To add a friend on the fly simply add it to the set:
 
 .. code-block:: python
 
@@ -749,11 +749,39 @@ Adding a friend on the fly means adding it to friends set and requesting to trac
 
     # Add a new friend to the list and track him
     settings.users.friends.add(new_friend)
-    await client.users.track_friend(new_friend)
 
-    # Untrack the user and remove from the list
-    await client.users.untrack_friend(new_friend)
+    # Remove from the list
     settings.users.friend.discard(new_friend)
+
+
+Blocking Users
+--------------
+
+A list of blocked users can be found in the settings under ``users.blocked``, changes to this list
+will automatically be picked up. Different flags can be used to block different actions by the user
+which can be found in the :class:`.BlockingFlag` documentation. Note that when using
+``BlockingFlag.UPLOADS`` all uploads to that user will be aborted. Unblocking the user will requeue
+the uploads:
+
+.. code-block:: python
+
+    from aioslsk.settings import Settings, CredentialsSettings, UsersSettings
+    from aioslsk.user.model import BlockingFlag
+
+    settings: Settings = Settings(
+        credentials=CredentialsSettings(username='my_user', password='Secret123'),
+        users=UsersSettings(
+            blocked={
+                'bad_user': BlockingFlag.ALL
+            }
+        )
+    )
+    client: SoulSeekClient = SoulSeekClient(settings)
+
+    new_blocked_user = 'ultra_bad_user'
+
+    # Add a new blocked user
+    settings.users.blocked[new_blocked_user] = BlockingFlag.ALL
 
 
 Interests and Recommendations

@@ -23,6 +23,7 @@ from .settings import Settings
 from .shares.manager import SharesManager
 from .transfer.interface import UploadInfoProvider
 from .user.manager import UserManager
+from .user.model import BlockingFlag
 from .utils import ticket_generator
 
 
@@ -60,9 +61,13 @@ class PeerManager(BaseManager):
 
     @on_message(PeerSharesRequest.Request)
     async def _on_peer_shares_request(self, message: PeerSharesRequest.Request, connection: PeerConnection):
+
         if not connection.username:
             logger.warning(
                 "got PeerSharesRequest for a connection that wasn't properly initialized")
+            return
+
+        if self._settings.users.is_blocked(connection.username, BlockingFlag.SHARES):
             return
 
         visible, locked = self._shares_manager.create_shares_reply(connection.username)
@@ -75,6 +80,7 @@ class PeerManager(BaseManager):
 
     @on_message(PeerSharesReply.Request)
     async def _on_peer_shares_reply(self, message: PeerSharesReply.Request, connection: PeerConnection):
+
         if not connection.username:
             logger.warning(
                 "got PeerSharesRequest for a connection that wasn't properly initialized")
@@ -99,9 +105,13 @@ class PeerManager(BaseManager):
     @on_message(PeerDirectoryContentsRequest.Request)
     async def _on_peer_directory_contents_req(
             self, message: PeerDirectoryContentsRequest.Request, connection: PeerConnection):
+
         if not connection.username:
             logger.warning(
                 "got PeerDirectoryContentsRequest for a connection that wasn't properly initialized")
+            return
+
+        if self._settings.users.is_blocked(connection.username, BlockingFlag.SHARES):
             return
 
         directories = self._shares_manager.create_directory_reply(message.directory)
@@ -116,6 +126,7 @@ class PeerManager(BaseManager):
     @on_message(PeerDirectoryContentsReply.Request)
     async def _on_peer_directory_contents_reply(
             self, message: PeerDirectoryContentsReply.Request, connection: PeerConnection):
+
         if not connection.username:
             logger.warning(
                 "got PeerDirectoryContentsReply for a connection that wasn't properly initialized")
@@ -133,9 +144,13 @@ class PeerManager(BaseManager):
 
     @on_message(PeerUserInfoRequest.Request)
     async def _on_peer_user_info_request(self, message: PeerUserInfoRequest.Request, connection: PeerConnection):
+
         if not connection.username:
             logger.warning(
                 "got PeerSharesRequest for a connection that wasn't properly initialized")
+            return
+
+        if self._settings.users.is_blocked(connection.username, BlockingFlag.INFO):
             return
 
         description = self._settings.credentials.info.description or ""

@@ -39,24 +39,24 @@ class TrackingFlag(Flag):
 
 
 class BlockingFlag(IntFlag):
-    MESSAGE_USER = 1
-    MESSAGE_ROOM = 2
-
-    SEARCH_RESULTS = 4
-
-    TRANSFER_UPLOAD = 8
-
-    PEER_INFO = 16
-    PEER_SHARES = 32
-
-    CONNECTION_DISTRIBUTED = 64
+    NONE = 0
+    PRIVATE_MESSAGES = 1
+    """Blocks private messages sent by the user"""
+    ROOM_MESSAGES = 2
+    """Blocks room messages sent by the user"""
+    SEARCHES = 4
+    """Blocks incoming searches from the user"""
+    SHARES = 8
+    """Blocks shares, directory listing requests"""
+    INFO = 16
+    UPLOADS = 32
+    """Blocks all uploads and upload requests"""
 
     # Aliases
-    MESSAGE_ALL = MESSAGE_USER | MESSAGE_ROOM
-    PEER_ALL = PEER_INFO | PEER_SHARES
-
-    ALL = MESSAGE_ALL | SEARCH_RESULTS | TRANSFER_UPLOAD | PEER_ALL
-    COMPLETE = ALL | CONNECTION_DISTRIBUTED
+    IGNORE = PRIVATE_MESSAGES | ROOM_MESSAGES
+    """Ignore all messaging"""
+    ALL = IGNORE | SEARCHES | SHARES | INFO | UPLOADS
+    """Fully blocks the user: includes messaging, shares requests, uploads"""
 
 
 @dataclass

@@ -185,17 +185,24 @@ async def wait_for_transfer_added(
             f"(initial={initial_amount}, current={len(client.transfers.transfers)})")
 
 
-async def wait_for_transfer_state(transfer: Transfer, state: TransferState.State, timeout: int = 15):
+async def wait_for_transfer_state(
+        transfer: Transfer, state: TransferState.State,
+        reason: Optional[str] = None, timeout: int = 15):
+
     start = time.time()
-    current_state = transfer.state.VALUE
+
+    expected_state = (state, reason)
+    current_state = (transfer.state.VALUE, transfer.fail_reason)
     while time.time() < start + timeout:
-        current_state = transfer.state.VALUE
-        if current_state == state:
+        current_state = (transfer.state.VALUE, transfer.fail_reason)
+        if current_state == expected_state:
             break
         else:
             await asyncio.sleep(0.05)
     else:
-        raise Exception(f"transfer {transfer} did not go to state {state} in {timeout}s (was {current_state})")
+        raise Exception(
+            f"transfer {transfer} did not go to expected state in {timeout}s"
+            f"(current={current_state}, expected={expected_state})")
 
 
 async def wait_for_transfer_to_finish(transfer: Transfer, timeout: int = 60):

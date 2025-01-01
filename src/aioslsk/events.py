@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 from collections.abc import Callable, Coroutine
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import inspect
 import logging
 from typing import Any, Optional, TypeVar, TYPE_CHECKING, Union
@@ -9,7 +9,7 @@ from types import MethodType
 import weakref
 
 from .room.model import Room, RoomMessage
-from .user.model import ChatMessage, User
+from .user.model import BlockingFlag, ChatMessage, User
 from .protocol.primitives import (
     DirectoryData,
     MessageDataclass,
@@ -590,3 +590,19 @@ class ScanCompleteEvent(InternalEvent):
     """Emitted when shares scan was completed"""
     folder_count: int
     file_count: int
+
+
+@dataclass(frozen=True)
+class FriendListChangedEvent(InternalEvent):
+    """Emitted when a change was detected in the friends list"""
+    added: set[str] = field(default_factory=set)
+    removed: set[str] = field(default_factory=set)
+
+
+@dataclass(frozen=True)
+class BlockListChangedEvent(InternalEvent):
+    """Emitted when a change was detected in the blocked list"""
+    changes: dict[str, tuple[BlockingFlag, BlockingFlag]]
+    """List of changes. The key contains the username, the value is a tuple
+    containing the old and new flags.
+    """

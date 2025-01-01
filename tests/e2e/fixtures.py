@@ -11,9 +11,15 @@ from aioslsk.client import SoulSeekClient
 from aioslsk.events import SessionInitializedEvent
 from aioslsk.shares.model import DirectoryShareMode
 from aioslsk.settings import (
+    CredentialsSettings,
+    ListeningSettings,
+    NetworkSettings,
+    ReconnectSettings,
+    ServerSettings,
     Settings,
     SharedDirectorySettingEntry,
-    CredentialsSettings,
+    SharesSettings,
+    UpnpSettings,
 )
 from .mock.server import MockServer
 
@@ -46,32 +52,49 @@ def create_client(
         credentials=CredentialsSettings(
             username=username,
             password=password
-        )
-    )
-
-    settings.network.server.hostname = '127.0.0.1'
-    settings.network.server.port = server_port
-    settings.network.server.reconnect.auto = False
-    settings.network.listening.port = port
-    settings.network.listening.obfuscated_port = port + 1
-    settings.network.upnp.enabled = False
-
-    # Explicitly set to false as this would just schedule a scan in the
-    # background. For the tests we want to make sure this scan is complete and
-    # manually trigger it
-    settings.shares.scan_on_start = False
-    settings.shares.download = str(download_dir)
-    settings.shares.directories.append(
-        SharedDirectorySettingEntry(
-            path=str(shared_dir),
-            share_mode=DirectoryShareMode.EVERYONE
+        ),
+        network=NetworkSettings(
+            server=ServerSettings(
+                hostname='127.0.0.1',
+                port=server_port,
+                reconnect=ReconnectSettings(auto=False)
+            ),
+            listening=ListeningSettings(
+                port=port,
+                obfuscated_port=port + 1
+            ),
+            upnp=UpnpSettings(enabled=False)
+        ),
+        shares=SharesSettings(
+            # Explicitly set to false as this would just schedule a scan in the
+            # background. For the tests we want to make sure this scan is
+            # complete and manually trigger it
+            scan_on_start=False,
+            download=str(download_dir),
+            directories=[
+                SharedDirectorySettingEntry(
+                    path=str(shared_dir),
+                    share_mode=DirectoryShareMode.EVERYONE
+                )
+            ]
         )
     )
 
     return SoulSeekClient(settings)
 
 
-async def _client_start_and_scan(client: SoulSeekClient, timeout: float = 3):
+def create_clients(tmp_path: Path, amount: int) -> list[SoulSeekClient]:
+    clients: list[SoulSeekClient] = []
+
+    for idx in range(amount):
+        username = 'user' + str(idx).zfill(3)
+        port = 40000 + (idx * 10)
+        clients.append(create_client(tmp_path, username, port))
+
+    return clients
+
+
+async def client_start_and_scan(client: SoulSeekClient, timeout: float = 3) -> SoulSeekClient:
     """Starts the client, logs in, scans the shares and waits for client to be
     logged on
     """
@@ -90,6 +113,8 @@ async def _client_start_and_scan(client: SoulSeekClient, timeout: float = 3):
 
     async with atimeout(timeout):
         await init_event.wait()
+
+    return client
 
 
 @pytest_asyncio.fixture
@@ -117,14 +142,11 @@ async def client_1(tmp_path: Path) -> AsyncGenerator[SoulSeekClient, None]:
     client = create_client(tmp_path, 'user0', 40000)
 
     try:
-        await _client_start_and_scan(client)
-    except Exception:
+        await client_start_and_scan(client)
+        yield client
+
+    finally:
         await client.stop()
-        raise
-
-    yield client
-
-    await client.stop()
 
 
 @pytest_asyncio.fixture
@@ -132,36 +154,28 @@ async def client_2(tmp_path: Path) -> AsyncGenerator[SoulSeekClient, None]:
     client = create_client(tmp_path, 'user1', 41000)
 
     try:
-        await _client_start_and_scan(client)
-    except Exception:
+        await client_start_and_scan(client)
+        yield client
+
+    finally:
         await client.stop()
-        raise
-
-    yield client
-
-    await client.stop()
 
 
 @pytest_asyncio.fixture
 async def clients(tmp_path: Path, request) -> AsyncGenerator[list[SoulSeekClient], None]:
-    clients: list[SoulSeekClient] = []
+    client_list = create_clients(tmp_path, amount=request.param)
 
-    for idx in range(request.param):
-        username = 'user' + str(idx).zfill(3)
-        port = 40000 + (idx * 10)
-        clients.append(
-            create_client(tmp_path, username, port)
-        )
+    stop_tasks = [client.stop() for client in client_list]
 
-    start_results = await asyncio.gather(*[
-        _client_start_and_scan(client) for client in clients])
+    start_results = await asyncio.gather(
+        *[client_start_and_scan(client) for client in client_list],
+        return_exceptions=True
+    )
 
     if any(isinstance(result, Exception) for result in start_results):
-        for client in clients:
-            await client.stop()
-
+        await asyncio.gather(*stop_tasks, return_exceptions=True)
         raise Exception("a client failed to start")
 
-    yield clients
+    yield client_list
 
-    asyncio.gather(*[client.stop() for client in clients])
+    await asyncio.gather(*stop_tasks, return_exceptions=True)
