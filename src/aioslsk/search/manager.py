@@ -46,6 +46,7 @@ from ..shares.utils import convert_items_to_file_data
 from ..session import Session
 from ..tasks import BackgroundTask, Timer
 from ..transfer.interface import UploadInfoProvider
+from ..user.model import BlockingFlag
 from ..utils import task_counter, ticket_generator
 from .model import ReceivedSearch, SearchResult, SearchRequest, SearchType
 
@@ -133,7 +134,7 @@ class SearchManager(BaseManager):
         return request
 
     async def search_room(self, room: Union[str, Room], query: str) -> SearchRequest:
-        """Performs a search request on the specific user. The results generated
+        """Performs a search request on the specific room. The results generated
         by this query will stored in the returned object or can be listened to
         through the :class:`.SearchResultEvent` event
 
@@ -187,6 +188,9 @@ class SearchManager(BaseManager):
         """
         if not self._session:
             logger.warning("not returning search results : no valid session was set")
+            return
+
+        if self._settings.users.is_blocked(username, BlockingFlag.SEARCHES):
             return
 
         visible, locked = self._shares_manager.query(
