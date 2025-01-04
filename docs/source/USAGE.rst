@@ -772,7 +772,8 @@ the uploads:
         credentials=CredentialsSettings(username='my_user', password='Secret123'),
         users=UsersSettings(
             blocked={
-                'bad_user': BlockingFlag.ALL
+                'bad_user': BlockingFlag.ALL,
+                'combined_flags': BlockingFlag.SHARES | BlockingFlag.UPLOADS
             }
         )
     )
