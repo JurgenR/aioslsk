@@ -202,19 +202,19 @@ files = [
 
 [[package]]
 name = "async-upnp-client"
-version = "0.43.0"
+version = "0.44.0"
 description = "Async UPnP Client"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "async_upnp_client-0.43.0-py3-none-any.whl", hash = "sha256:1b121ea6fec90f2fb4f7be2f46539eea561fd97690afbc17b635f2843d62e213"},
-    {file = "async_upnp_client-0.43.0.tar.gz", hash = "sha256:42994c265fa335c0ddc43be48fc80d3171dfed4258534277546b7b45137ef6a0"},
+    {file = "async_upnp_client-0.44.0-py3-none-any.whl", hash = "sha256:d435119b18ade5da30a4b09ce1b0faccd1c0392a7867fd1500a9a21c4706ab15"},
+    {file = "async_upnp_client-0.44.0.tar.gz", hash = "sha256:569b8e56e4ffae73f1acb45d2f70ff65a263f70b964d482081b82f5561cd8ab4"},
 ]
 
 [package.dependencies]
 aiohttp = ">3.9.0,<4.0"
-async-timeout = ">=3.0,<5.0"
+async-timeout = ">=3.0,<6.0"
 defusedxml = ">=0.6.0"
 python-didl-lite = ">=1.4.0,<1.5.0"
 voluptuous = ">=0.15.2"
@@ -2236,4 +2236,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.14"
-content-hash = "ae9469f76bc00da1c7e21ae9212453e6571bf0d01176956d5306389baa60dd74"
+content-hash = "c43589fd777414a724172bb37427050fcaadb9a2a1b0dcf592201203daef5e13"
