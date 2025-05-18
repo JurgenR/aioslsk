@@ -1,11 +1,20 @@
+import pickle
 from unittest.mock import MagicMock, patch
 import pytest
 import logging
 
-from aioslsk.transfer.model import Transfer, TransferDirection
-from aioslsk.transfer.state import TransferState, QueuedState, InitializingState
+from aioslsk.transfer.model import AbortReason, Transfer, TransferDirection
+from aioslsk.transfer.state import (
+    AbortedState,
+    CompleteState,
+    TransferState,
+    QueuedState,
+    InitializingState,
+)
+
 
 logger = logging.getLogger()
+
 
 @pytest.fixture
 def disable_logging():
@@ -102,3 +111,30 @@ class TestTransfer:
         await transfer.state.queue()
 
         assert TransferState.QUEUED == transfer.state.VALUE
+
+    @pytest.mark.parametrize(
+        'state_cls,reason,expected_reason',
+        [
+            (AbortedState, 'DEL', AbortReason.REQUESTED),
+            (AbortedState, None, AbortReason.REQUESTED),
+            (AbortedState, AbortReason.BLOCKED, AbortReason.BLOCKED),
+            (CompleteState, 'DEL', None),
+            (CompleteState, None, None),
+        ]
+    )
+    def test_unpickle_abortReason(
+            self, state_cls: type[TransferState], reason: str, expected_reason: str):
+
+        transfer = Transfer('user1', '@abcdef\\file.flac', TransferDirection.UPLOAD)
+        transfer.state = state_cls(transfer)
+
+        if reason == 'DEL':
+            del transfer.abort_reason
+        else:
+            transfer.abort_reason = reason
+
+        pickled_transfer = pickle.dumps(transfer)
+        unpickled_transfer = pickle.loads(pickled_transfer)
+
+        assert unpickled_transfer == transfer
+        assert unpickled_transfer.abort_reason == expected_reason

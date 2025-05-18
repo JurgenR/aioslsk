@@ -68,7 +68,6 @@ logger = logging.getLogger(__name__)
 class TrackedUser:
     user: User
     flags: TrackingFlag = TrackingFlag(0)
-    requesting_flag: TrackingFlag = TrackingFlag(0)
 
     def has_add_user_flag(self) -> bool:
         """Returns whether this user has any tracking flags set related to

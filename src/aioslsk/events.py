@@ -56,6 +56,7 @@ from .protocol.messages import (
     UserLeftRoom,
 )
 from .search.model import SearchRequest, SearchResult
+from .shares.model import SharedDirectory
 from .session import Session
 
 if TYPE_CHECKING:
@@ -143,28 +144,59 @@ class EventBus:
         ]
 
     async def emit(self, event: Event):
-        try:
-            listeners = self._events[event.__class__]
-        except KeyError:
-            pass
-        else:
-            for _, listener_ref in listeners:
-                listener = listener_ref()
-                # Should never be None, but checked for type compatibility
-                if not listener:  # pragma: no cover
-                    continue
+        """Emit an event on the event bus. Listeners can be co-routines or
+        regular functions
 
-                try:
-                    if asyncio.iscoroutinefunction(listener):
-                        await listener(event)
-                    else:
-                        listener(event)
+        :param event: the event instance to emit
+        """
+        for listener in self._get_listeners_for_event(event):
+            try:
+                if asyncio.iscoroutinefunction(listener):
+                    await listener(event)
+                else:
+                    listener(event)
 
-                except Exception:
-                    logger.exception(
-                        "exception notifying listener %r of event %r",
-                        listener, event
+            except Exception:
+                logger.exception(
+                    "exception notifying listener %r of event %r",
+                    listener, event
+                )
+
+    def emit_sync(self, event: Event):
+        """Emit an event on the event bus. Only listener functions are notified
+
+        :param event: the event instance to emit
+        """
+        for listener in self._get_listeners_for_event(event):
+            try:
+                if asyncio.iscoroutinefunction(listener):
+                    logger.warning(
+                        "attempted to emit synchronous event to an async listener : %r",
+                        listener
                     )
+                else:
+                    listener(event)
+
+            except Exception:
+                logger.exception(
+                    "exception notifying listener %r of event %r",
+                    listener, event
+                )
+
+    def _get_listeners_for_event(self, event: Event) -> list[EventListener]:
+        try:
+            listeners_refs = self._events[event.__class__]
+        except KeyError:
+            return []
+
+        listeners = []
+        for _, listener_ref in listeners_refs:
+            listener = listener_ref()
+            # Should never be None, but checked for type compatibility
+            if listener:  # pragma: no cover
+                listeners.append(listener)
+
+        return listeners
 
     def _remove_callback(
             self, event_class: type[E],
@@ -606,3 +638,8 @@ class BlockListChangedEvent(InternalEvent):
     """List of changes. The key contains the username, the value is a tuple
     containing the old and new flags.
     """
+
+
+@dataclass
+class SharedDirectoryChangeEvent(InternalEvent):
+    shared_directory: SharedDirectory

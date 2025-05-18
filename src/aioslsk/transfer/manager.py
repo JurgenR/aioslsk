@@ -3,6 +3,7 @@ import aiofiles
 from aiofiles import os as asyncos
 import asyncio
 from async_timeout import timeout as atimeout
+from enum import auto, Flag
 import logging
 from operator import itemgetter
 import os
@@ -38,9 +39,12 @@ from ..events import (
     on_message,
     BlockListChangedEvent,
     EventBus,
+    FriendListChangedEvent,
     MessageReceivedEvent,
     PeerInitializedEvent,
     SessionInitializedEvent,
+    ScanCompleteEvent,
+    SharedDirectoryChangeEvent,
     TransferAddedEvent,
     TransferProgressEvent,
     TransferRemovedEvent,
@@ -58,7 +62,7 @@ from ..protocol.messages import (
     PeerUploadFailed,
     SendUploadSpeed,
 )
-from .model import Transfer, TransferDirection
+from .model import AbortReason, FailReason, Transfer, TransferDirection
 from .state import TransferState
 from ..settings import Settings
 from ..shares.manager import SharesManager
@@ -74,18 +78,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Reasons:
-    """Definition of reasons for which an transfer queue request or transfer
-    request was rejected
-    """
-    CANCELLED = 'Cancelled'
-    COMPLETE = 'Complete'
-    QUEUED = 'Queued'
-    FILE_NOT_SHARED = 'File not shared.'
-    FILE_READ_ERROR = 'File read error.'
-
-    BLOCKED = 'Blocked'
-    """Internal fail reason only used for blocked users"""
+class _RequestFlag(Flag):
+    SHARES_CHANGE = auto()
+    TRANSFER_CHANGE = auto()
 
 
 class TransferManager(BaseManager):
@@ -122,6 +117,7 @@ class TransferManager(BaseManager):
             name='transfer-management-task'
         )
         self._management_lock: asyncio.Lock = asyncio.Lock()
+        self._management_flags: _RequestFlag = _RequestFlag(0)
 
         self._MESSAGE_MAP = build_message_map(self)
 
@@ -138,8 +134,15 @@ class TransferManager(BaseManager):
             PeerInitializedEvent, self._on_peer_initialized)
         self._event_bus.register(
             SessionInitializedEvent, self._on_session_initialized)
+
         self._event_bus.register(
-            BlockListChangedEvent, self._on_block_list_changed)
+            BlockListChangedEvent, self._request_shares_cycle)
+        self._event_bus.register(
+            FriendListChangedEvent, self._request_shares_cycle)
+        self._event_bus.register(
+            SharedDirectoryChangeEvent, self._request_shares_cycle)
+        self._event_bus.register(
+            ScanCompleteEvent, self._request_shares_cycle)
 
     async def read_cache(self):
         """Reads the transfers from the caches and corrects the state of those
@@ -259,7 +262,7 @@ class TransferManager(BaseManager):
             raise TransferNotFoundError(
                 "cannot queue transfer: transfer was not added to the manager")
 
-        if not await transfer.state.abort():
+        if not await transfer.state.abort(reason=AbortReason.REQUESTED):
             raise InvalidStateTransition(
                 transfer,
                 transfer.state.VALUE,
@@ -335,7 +338,7 @@ class TransferManager(BaseManager):
         transfer.state_listeners.append(self)
         self._transfers.append(transfer)
 
-        self.request_management_cycle()
+        self.request_management_cycle(_RequestFlag.TRANSFER_CHANGE)
         await self._event_bus.emit(TransferAddedEvent(transfer))
 
         return transfer
@@ -363,7 +366,7 @@ class TransferManager(BaseManager):
             self._transfers.remove(transfer)
             await self._event_bus.emit(TransferRemovedEvent(transfer))
 
-        self.request_management_cycle()
+        self.request_management_cycle(_RequestFlag.TRANSFER_CHANGE)
 
     def get_uploads(self) -> list[Transfer]:
         return [transfer for transfer in self._transfers if transfer.is_upload()]
@@ -515,13 +518,22 @@ class TransferManager(BaseManager):
         await self._management_queue.get()
 
         start = time.monotonic()
+
+        flags = self._management_flags
+        self._management_flags = _RequestFlag(0)
+
+        if flags & _RequestFlag.SHARES_CHANGE:
+            await self.manage_shares_changed()
+
         await self.manage_user_tracking()
         self.manage_transfers()
+
         duration = time.monotonic() - start
 
         return min(MIN_TRANSFER_MGMT_INTERVAL + duration, MAX_TRANSFER_MGMT_INTERVAL)
 
-    def request_management_cycle(self):
+    def request_management_cycle(self, flag: _RequestFlag):
+        self._management_flags |= flag
         try:
             self._management_queue.put_nowait(None)
         except asyncio.QueueFull:
@@ -554,6 +566,33 @@ class TransferManager(BaseManager):
                 upload._transfer_task_complete
             )
 
+    async def manage_shares_changed(self):
+        logger.debug("processing shares or block list changes")
+
+        uploads = filter(
+            lambda transfer: (
+                transfer.is_upload()
+                and transfer.state.VALUE not in (TransferState.COMPLETE, TransferState.FAILED)
+            ),
+            self.transfers
+        )
+
+        tasks = []
+        for upload in uploads:
+
+            should_change, abort_reason = self._evaluate_aborted_state(upload)
+
+            if should_change:
+                if upload.state.VALUE == TransferState.ABORTED:
+                    tasks.append(upload.state.queue())
+                else:
+                    tasks.append(upload.state.abort(reason=abort_reason))
+
+            elif abort_reason:
+                upload.abort_reason = abort_reason
+
+        await asyncio.gather(*tasks, return_exceptions=True)
+
     def _get_queued_transfers(self) -> tuple[list[Transfer], list[Transfer]]:
         """Returns all transfers eligable for being initialized
 
@@ -573,7 +612,7 @@ class TransferManager(BaseManager):
             # this user object will be returned. Otherwise a new user object is
             # created, but not assigned to the user manager, whose status is
             # UNKNOWN, giving it the benefit of the doubt and scheduling the
-            # transfers
+            # transfer
             user = self._user_manager.get_user_object(transfer.username)
             if user.status == UserStatus.OFFLINE:
                 continue
@@ -597,7 +636,7 @@ class TransferManager(BaseManager):
 
                 # For downloads we try to continue with incomplete downloads,
                 # for uploads it's up to the other user
-                # Failed uploads without a reason are retried
+                # Failed downloads without a reason are retried
                 if transfer.state.VALUE in (TransferState.QUEUED, TransferState.INCOMPLETE):
                     queued_downloads.append(transfer)
                 elif transfer.state.VALUE == TransferState.FAILED and transfer.fail_reason is None:
@@ -686,7 +725,7 @@ class TransferManager(BaseManager):
         else:
             transfer.remotely_queued = True
             transfer.reset_queue_attempts()
-            self.request_management_cycle()
+            self.request_management_cycle(_RequestFlag.TRANSFER_CHANGE)
 
     async def request_place_in_queue(self, transfer: Transfer) -> Optional[int]:
         """Requests the place in queue for the given transfer. The method will
@@ -985,7 +1024,7 @@ class TransferManager(BaseManager):
 
         except OSError:
             logger.exception("error opening local file : %s", transfer.local_path)
-            await transfer.state.fail(reason=Reasons.FILE_READ_ERROR)
+            await transfer.state.fail(reason=FailReason.FILE_READ_ERROR)
             await connection.disconnect(CloseReason.REQUESTED)
 
         except ConnectionWriteError:
@@ -1011,7 +1050,7 @@ class TransferManager(BaseManager):
 
         except AioSlskException:
             logger.exception("failed to upload transfer : %s", transfer)
-            await transfer.state.fail(Reasons.FILE_NOT_SHARED)
+            await transfer.state.fail(FailReason.FILE_NOT_SHARED)
 
             await connection.disconnect(CloseReason.REQUESTED)
 
@@ -1022,7 +1061,7 @@ class TransferManager(BaseManager):
                 )
 
             except PeerConnectionError:
-                logger.info("failed to send PeerUploadFailed message (possibly peer went offline)")
+                logger.debug("failed to send PeerUploadFailed message (possibly peer went offline)")
 
         else:
             await connection.receive_until_eof(raise_exception=False)
@@ -1061,7 +1100,7 @@ class TransferManager(BaseManager):
         except OSError:
             logger.exception("failed to create path : %s", transfer.local_path)
             await connection.disconnect(CloseReason.REQUESTED)
-            await transfer.state.fail(reason=Reasons.FILE_READ_ERROR)
+            await transfer.state.fail(reason=FailReason.FILE_READ_ERROR)
             return
 
         connection.set_connection_state(PeerConnectionState.TRANSFERRING)
@@ -1085,7 +1124,7 @@ class TransferManager(BaseManager):
 
         except OSError:
             logger.exception("error opening local file : %s", transfer.local_path)
-            await transfer.state.fail(reason=Reasons.FILE_READ_ERROR)
+            await transfer.state.fail(reason=FailReason.FILE_READ_ERROR)
 
             await connection.disconnect(CloseReason.REQUESTED)
 
@@ -1105,47 +1144,12 @@ class TransferManager(BaseManager):
             if transfer.is_transfered():
                 await transfer.state.complete()
             else:
-                await transfer.state.fail(reason=Reasons.CANCELLED)
+                await transfer.state.fail(reason=FailReason.CANCELLED)
 
     async def on_transfer_state_changed(
             self, transfer: Transfer, old: TransferState.State, new: TransferState.State):
 
-        self.request_management_cycle()
-
-    async def _on_block_list_changed(self, event: BlockListChangedEvent):
-        tasks = []
-
-        logger.debug("processing block list changes")
-        for username, flag_changes in event.changes.items():
-            old_flags, new_flags = flag_changes
-            flag_was_set = old_flags & BlockingFlag.UPLOADS
-            flag_is_set = new_flags & BlockingFlag.UPLOADS
-
-            # Check if newly blocked
-            if not flag_was_set and flag_is_set:
-                logger.info("aborting uploads for blocked user : %s", username)
-
-                for upload in self.get_uploads():
-
-                    if upload.username != username:
-                        continue
-
-                    tasks.append(upload.state.abort(reason=Reasons.BLOCKED))
-
-            # Check if unblocked
-            if flag_was_set and not flag_is_set:
-                logger.info("requeuing uploads for unblocked user : %s", username)
-
-                for upload in self.get_uploads():
-
-                    if upload.username != username:
-                        continue
-
-                    # Only requeue aborted transfers failed for blocked reason
-                    if (upload.state.VALUE, upload.fail_reason) == (TransferState.ABORTED, Reasons.BLOCKED):
-                        tasks.append(upload.state.queue())
-
-        await asyncio.gather(*tasks, return_exceptions=True)
+        self.request_management_cycle(_RequestFlag.TRANSFER_CHANGE)
 
     async def _on_message_received(self, event: MessageReceivedEvent):
         message = event.message
@@ -1154,14 +1158,14 @@ class TransferManager(BaseManager):
 
     @on_message(AddUser.Response)
     async def _on_add_user(self, message: AddUser.Response, connection: PeerConnection):
-        self.request_management_cycle()
+        self.request_management_cycle(_RequestFlag.TRANSFER_CHANGE)
 
     @on_message(GetUserStatus.Response)
     async def _on_get_user_status(self, message: GetUserStatus.Response, connection: PeerConnection):
         if message.status == UserStatus.OFFLINE.value:
             self._reset_remotely_queued_flags(message.username)
 
-        self.request_management_cycle()
+        self.request_management_cycle(_RequestFlag.TRANSFER_CHANGE)
 
     @on_message(PeerTransferQueue.Request)
     async def _on_peer_transfer_queue(self, message: PeerTransferQueue.Request, connection: PeerConnection):
@@ -1185,7 +1189,7 @@ class TransferManager(BaseManager):
             connection.queue_message(
                 PeerTransferQueueFailed.Request(
                     filename=filename,
-                    reason=Reasons.FILE_NOT_SHARED
+                    reason=FailReason.FILE_NOT_SHARED
                 )
             )
             return
@@ -1198,7 +1202,7 @@ class TransferManager(BaseManager):
                 transfer = await self._add_upload(username, filename)
 
             except (FileNotFoundError, FileNotSharedError):
-                fail_reason = Reasons.FILE_NOT_SHARED
+                fail_reason = FailReason.FILE_NOT_SHARED
 
             else:
                 await transfer.state.queue()
@@ -1209,8 +1213,8 @@ class TransferManager(BaseManager):
                 username
             )
             if not shared_item:
-                await transfer.state.fail(Reasons.FILE_NOT_SHARED)
-                fail_reason = Reasons.FILE_NOT_SHARED
+                await transfer.state.fail(FailReason.FILE_NOT_SHARED)
+                fail_reason = FailReason.FILE_NOT_SHARED
 
             else:
                 # Only put the transfer back in queue if in states:
@@ -1222,7 +1226,7 @@ class TransferManager(BaseManager):
                 # do not respond with anything. This could otherwise abort the already
                 # processing transfer
                 if transfer.state.VALUE == TransferState.ABORTED:
-                    fail_reason = Reasons.CANCELLED
+                    fail_reason = FailReason.CANCELLED
 
                 elif transfer.state.VALUE in (TransferState.FAILED, TransferState.COMPLETE):
                     await transfer.state.queue()
@@ -1271,7 +1275,7 @@ class TransferManager(BaseManager):
                 await connection.disconnect(CloseReason.REQUESTED)
 
     async def _on_session_initialized(self, event: SessionInitializedEvent):
-        self.request_management_cycle()
+        self.request_management_cycle(_RequestFlag.TRANSFER_CHANGE)
 
     @on_message(PeerTransferRequest.Request)
     async def _on_peer_transfer_request(self, message: PeerTransferRequest.Request, connection: PeerConnection):
@@ -1297,7 +1301,7 @@ class TransferManager(BaseManager):
                 PeerTransferReply.Request(
                     ticket=message.ticket,
                     allowed=False,
-                    reason=Reasons.FILE_NOT_SHARED
+                    reason=FailReason.FILE_NOT_SHARED
                 )
             )
             return
@@ -1318,7 +1322,7 @@ class TransferManager(BaseManager):
                         PeerTransferReply.Request(
                             ticket=ticket,
                             allowed=False,
-                            reason=Reasons.FILE_NOT_SHARED
+                            reason=FailReason.FILE_NOT_SHARED
                         )
                     )
 
@@ -1330,7 +1334,7 @@ class TransferManager(BaseManager):
                         PeerTransferReply.Request(
                             ticket=ticket,
                             allowed=False,
-                            reason=Reasons.QUEUED
+                            reason=FailReason.QUEUED
                         )
                     )
                     await transfer.state.queue()
@@ -1344,12 +1348,12 @@ class TransferManager(BaseManager):
                     username
                 )
                 if not shared_item:
-                    await transfer.state.fail(Reasons.FILE_NOT_SHARED)
+                    await transfer.state.fail(FailReason.FILE_NOT_SHARED)
                     await connection.send_message(
                         PeerTransferReply.Request(
                             ticket=ticket,
                             allowed=False,
-                            reason=Reasons.FILE_NOT_SHARED
+                            reason=FailReason.FILE_NOT_SHARED
                         )
                     )
                     return
@@ -1363,10 +1367,10 @@ class TransferManager(BaseManager):
                 # * Other clients might abort the transfer when receiving this
                 #   message in (at least) UPLOADING state
                 fail_reason_map = {
-                    TransferState.PAUSED: Reasons.CANCELLED,
-                    TransferState.ABORTED: Reasons.CANCELLED,
-                    TransferState.COMPLETE: Reasons.COMPLETE,
-                    TransferState.QUEUED: Reasons.QUEUED
+                    TransferState.PAUSED: FailReason.CANCELLED,
+                    TransferState.ABORTED: FailReason.CANCELLED,
+                    TransferState.COMPLETE: FailReason.COMPLETE,
+                    TransferState.QUEUED: FailReason.QUEUED
                 }
 
                 reason = fail_reason_map.get(transfer.state.VALUE, None)
@@ -1399,13 +1403,13 @@ class TransferManager(BaseManager):
             reason = None
             if not transfer:
                 # A download which we don't have in queue, assume we removed it
-                reason = Reasons.CANCELLED
+                reason = FailReason.CANCELLED
             else:
                 current_state = transfer.state.VALUE
                 if current_state in (TransferState.ABORTED, TransferState.PAUSED):
-                    reason = Reasons.CANCELLED
+                    reason = FailReason.CANCELLED
                 elif current_state == TransferState.COMPLETE:
-                    reason = Reasons.COMPLETE
+                    reason = FailReason.COMPLETE
                 elif transfer.is_processing():
                     # Needs investigation, currently don't do anything when the
                     # transfer is already being processed
@@ -1493,7 +1497,7 @@ class TransferManager(BaseManager):
         username = connection.username
         if transfer := self.find_transfer(username, filename, TransferDirection.DOWNLOAD):
             transfer.remotely_queued = False
-            self.request_management_cycle()
+            self.request_management_cycle(_RequestFlag.TRANSFER_CHANGE)
 
         else:
             logger.warning(
@@ -1522,19 +1526,57 @@ class TransferManager(BaseManager):
                 filename, connection.username
             )
 
-    async def _attach_item_to_transfer(self, transfer: Transfer):
+    async def _add_upload(self, username: str, remote_path: str) -> Transfer:
+        """Adds a new upload if the desired shared item exists"""
+
         shared_item = await self._shares_manager.get_shared_item(
-            transfer.remote_path,
-            transfer.username
-        )
+            remote_path, username)
+
+        transfer = Transfer(username, remote_path, direction=TransferDirection.UPLOAD)
         transfer.local_path = shared_item.get_absolute_path()
         transfer.filesize = await self._shares_manager.get_filesize(shared_item)
 
-    async def _add_upload(self, username: str, remote_path: str) -> Transfer:
-        """Adds a new upload if the desired shared item exists"""
-        transfer = Transfer(username, remote_path, direction=TransferDirection.UPLOAD)
-
-        await self._attach_item_to_transfer(transfer)
-
         await self.add(transfer)
         return transfer
+
+    def _request_shares_cycle(self, event):
+        self.request_management_cycle(_RequestFlag.SHARES_CHANGE)
+
+    def _evaluate_aborted_state(self, upload: Transfer) -> tuple[bool, Optional[str]]:
+        """Evaluates the aborted state of an upload to determine whether it:
+
+        1. Should be requeued
+        2. Should be aborted
+        3. Abort reason has changed
+
+        :return: a tuple with whether the transfer should change from aborted to
+            queued or the other way around and the blocked reason (None if it
+            needs to be requeued)
+        """
+
+        def _is_abort_requested(transfer: Transfer) -> bool:
+            return transfer.abort_reason == AbortReason.REQUESTED
+
+        def _is_blocked(transfer: Transfer) -> bool:
+            return self._settings.users.is_blocked(transfer.username, BlockingFlag.UPLOADS)
+
+        def _is_not_shared(transfer: Transfer) -> bool:
+            return not bool(self._shares_manager.find_shared_item_cache(
+                transfer.remote_path, transfer.username
+            ))
+
+        conditions = (
+            (_is_abort_requested, AbortReason.REQUESTED),
+            (_is_blocked, AbortReason.BLOCKED),
+            (_is_not_shared, AbortReason.FILE_NOT_SHARED)
+        )
+        abort_reason = None
+        for condition, reason in conditions:
+            if condition(upload):
+                abort_reason = reason
+                break
+
+        aborted = upload.state.VALUE == TransferState.ABORTED
+        should_change = aborted != bool(abort_reason)
+
+        return (should_change, abort_reason)
