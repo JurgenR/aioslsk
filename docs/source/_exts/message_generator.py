@@ -23,7 +23,7 @@ class ServerMessagesDirective(SphinxDirective):
             section.append(section_title)
             # section.append(nodes.paragraph(text=message_type.__doc__))
 
-            description = inspect.__doc__
+            description = message_type.__doc__
 
             if description:
                 docstring_lines = StringList(
