@@ -264,7 +264,8 @@ A couple of methods are available to retrieve transfers:
     uploads: list[Transfer] = client.transfers.get_uploads()
 
 
-Events are available to listen for the transfer progress:
+Events are available to listen for the transfer progress. The frequency at which updates are sent are controlled by the
+``transfer.report_interval`` setting:
 
 .. code-block:: python
 
