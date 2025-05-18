@@ -187,14 +187,15 @@ async def wait_for_transfer_added(
 
 async def wait_for_transfer_state(
         transfer: Transfer, state: TransferState.State,
-        reason: Optional[str] = None, timeout: int = 15):
+        reason: Optional[str] = None, abort_reason: Optional[str] = None,
+        timeout: int = 15):
 
     start = time.time()
 
-    expected_state = (state, reason)
-    current_state = (transfer.state.VALUE, transfer.fail_reason)
+    expected_state = (state, reason, abort_reason)
+    current_state = (transfer.state.VALUE, transfer.fail_reason, transfer.abort_reason)
     while time.time() < start + timeout:
-        current_state = (transfer.state.VALUE, transfer.fail_reason)
+        current_state = (transfer.state.VALUE, transfer.fail_reason, transfer.abort_reason)
         if current_state == expected_state:
             break
         else:

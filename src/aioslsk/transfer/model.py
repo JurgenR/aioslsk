@@ -16,6 +16,23 @@ SPEED_LOG_INTERVAL = 0.1
 SPEED_LOG_ENTRIES = 30
 
 
+class FailReason:
+    """Definition of reasons for which an transfer queue request or transfer
+    request was rejected
+    """
+    CANCELLED = 'Cancelled'
+    COMPLETE = 'Complete'
+    QUEUED = 'Queued'
+    FILE_NOT_SHARED = 'File not shared.'
+    FILE_READ_ERROR = 'File read error.'
+
+
+class AbortReason:
+    REQUESTED = 'Requested'
+    BLOCKED = 'Blocked'
+    FILE_NOT_SHARED = 'File not shared'
+
+
 class TransferDirection(Enum):
     UPLOAD = 0
     DOWNLOAD = 1
@@ -35,6 +52,10 @@ class TransferProgressSnapshot:
     """
     start_time: Optional[float] = None
     complete_time: Optional[float] = None
+    fail_reason: Optional[str] = None
+    """Optional transfer fail reason"""
+    abort_reason: Optional[str] = None
+    """Optional transfer abort reason"""
 
 
 class Transfer:
@@ -67,6 +88,8 @@ class Transfer:
         self.place_in_queue: Optional[int] = None
         self.fail_reason: Optional[str] = None
         """Reason for failure in case the transfer has failed"""
+        self.abort_reason: Optional[str] = None
+        """Reason for why transfer was aborted"""
 
         self.filesize: Optional[int] = None
         """Filesize in bytes"""
@@ -104,9 +127,19 @@ class Transfer:
         # Remove variables that are no longer used
         obj_state.pop('_offset', None)
 
+        # Add variables that might not be in cache
+        obj_state['state'] = TransferState.init_from_state(obj_state['state'], self)
+
+        if 'abort_reason' not in obj_state:
+            obj_state['abort_reason'] = None
+
+        if obj_state['abort_reason'] is None:
+            if obj_state['state'].VALUE == TransferState.ABORTED:
+                obj_state['abort_reason'] = AbortReason.REQUESTED
+
         self.__dict__.update(obj_state)
 
-        self.__dict__['state'] = TransferState.init_from_state(obj_state['state'], self)
+        # Variables that are not stored in cache
         self._speed_log = deque(maxlen=SPEED_LOG_ENTRIES)
         self._remotely_queue_task = None
         self._transfer_task = None
@@ -216,7 +249,7 @@ class Transfer:
             oldest_time = self._speed_log[0][0]
 
             transfer_duration = current_time - oldest_time
-            if current_time - oldest_time == 0.0:
+            if transfer_duration == 0.0:
                 return 0.0
 
             return bytes_transfered / transfer_duration
@@ -309,7 +342,9 @@ class Transfer:
             bytes_transfered=self.bytes_transfered,
             speed=self.get_speed(),
             start_time=self.start_time,
-            complete_time=self.complete_time
+            complete_time=self.complete_time,
+            fail_reason=self.fail_reason,
+            abort_reason=self.abort_reason
         )
         self.progress_snapshot = snapshot
         return snapshot

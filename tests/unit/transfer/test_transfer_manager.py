@@ -20,8 +20,8 @@ from aioslsk.protocol.messages import (
     PeerTransferReply,
 )
 from aioslsk.transfer.cache import TransferShelveCache
-from aioslsk.transfer.model import Transfer, TransferDirection
-from aioslsk.transfer.manager import Reasons, TransferManager
+from aioslsk.transfer.model import FailReason, Transfer, TransferDirection
+from aioslsk.transfer.manager import TransferManager
 from aioslsk.transfer.state import (
     AbortedState,
     CompleteState,
@@ -442,10 +442,10 @@ class TestTransferManager:
         "state,expected_reason",
         [
             # Possible states with reason response
-            (TransferState.PAUSED, Reasons.CANCELLED),
-            (TransferState.ABORTED, Reasons.CANCELLED),
-            (TransferState.COMPLETE, Reasons.COMPLETE),
-            (TransferState.QUEUED, Reasons.QUEUED),
+            (TransferState.PAUSED, FailReason.CANCELLED),
+            (TransferState.ABORTED, FailReason.CANCELLED),
+            (TransferState.COMPLETE, FailReason.COMPLETE),
+            (TransferState.QUEUED, FailReason.QUEUED),
             # Possible states with no response
             (TransferState.INITIALIZING, None),
             (TransferState.FAILED, None),
@@ -492,7 +492,7 @@ class TestTransferManager:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "exception_type", [(FileNotSharedError, FileNotFoundError)]
+        "exception_type", [(FileNotSharedError), (FileNotFoundError)]
     )
     async def test_onPeerTransferRequest_nonExistingUpload_fileNotSharedOrFound_shouldDoNothing(
             self, manager: TransferManager, exception_type):
@@ -517,7 +517,7 @@ class TestTransferManager:
             PeerTransferReply.Request(
                 ticket=ticket,
                 allowed=False,
-                reason=Reasons.FILE_NOT_SHARED
+                reason=FailReason.FILE_NOT_SHARED
             )
         )
 
@@ -554,7 +554,7 @@ class TestTransferManager:
             PeerTransferReply.Request(
                 ticket=ticket,
                 allowed=False,
-                reason=Reasons.FILE_NOT_SHARED
+                reason=FailReason.FILE_NOT_SHARED
             )
         )
 
@@ -583,7 +583,7 @@ class TestTransferManager:
             PeerTransferReply.Request(
                 ticket=ticket,
                 allowed=False,
-                reason=Reasons.CANCELLED
+                reason=FailReason.CANCELLED
             )
         )
 
@@ -592,9 +592,9 @@ class TestTransferManager:
         "state,expected_reason",
         [
             # Possible states with reason response
-            (TransferState.PAUSED, Reasons.CANCELLED),
-            (TransferState.ABORTED, Reasons.CANCELLED),
-            (TransferState.COMPLETE, Reasons.COMPLETE),
+            (TransferState.PAUSED, FailReason.CANCELLED),
+            (TransferState.ABORTED, FailReason.CANCELLED),
+            (TransferState.COMPLETE, FailReason.COMPLETE),
             # Possible states with no response
             (TransferState.DOWNLOADING, None),
             (TransferState.INITIALIZING, None),
@@ -641,8 +641,8 @@ class TestTransferManager:
         "state,expected_reason",
         [
             # Possible states with reason response
-            (TransferState.ABORTED, Reasons.CANCELLED),
-            (TransferState.COMPLETE, Reasons.COMPLETE),
+            (TransferState.ABORTED, FailReason.CANCELLED),
+            (TransferState.COMPLETE, FailReason.COMPLETE),
             # Possible states with no response
             (TransferState.DOWNLOADING, None),
             (TransferState.INITIALIZING, None),

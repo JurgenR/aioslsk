@@ -1,7 +1,13 @@
 from aioslsk.client import SoulSeekClient
 from aioslsk.events import TransferAddedEvent, TransferProgressEvent
-from aioslsk.transfer.manager import Reasons
-from aioslsk.transfer.model import Transfer, TransferDirection, TransferState
+from aioslsk.shares.model import DirectoryShareMode
+from aioslsk.transfer.model import (
+    AbortReason,
+    FailReason,
+    Transfer,
+    TransferDirection,
+    TransferState,
+)
 from aioslsk.user.model import BlockingFlag
 from .mock.server import MockServer
 from .fixtures import (
@@ -211,7 +217,7 @@ class TestE2ETransfer:
         # Pause the transfer and wait for the correct states
         await client_2.transfers.pause(upload)
 
-        await wait_for_transfer_state(download, TransferState.FAILED, reason=Reasons.CANCELLED)
+        await wait_for_transfer_state(download, TransferState.FAILED, reason=FailReason.CANCELLED)
         await wait_for_transfer_state(upload, TransferState.PAUSED)
 
         # Restart the transfer and wait for complete
@@ -246,7 +252,8 @@ class TestE2ETransfer:
         await client_1.transfers.abort(download)
 
         # Wait for and verify states
-        await wait_for_transfer_state(download, TransferState.ABORTED)
+        await wait_for_transfer_state(
+            download, TransferState.ABORTED, abort_reason=AbortReason.REQUESTED)
         await wait_for_transfer_state(upload, TransferState.FAILED)
 
         # Verify file
@@ -280,7 +287,8 @@ class TestE2ETransfer:
         await client_1.transfers.abort(download)
 
         # Wait for and verify states
-        await wait_for_transfer_state(download, TransferState.ABORTED)
+        await wait_for_transfer_state(
+            download, TransferState.ABORTED, abort_reason=AbortReason.REQUESTED)
         await wait_for_transfer_state(upload, TransferState.FAILED)
 
         # Verify file
@@ -323,8 +331,9 @@ class TestE2ETransfer:
         # Abort the upload
         await client_2.transfers.abort(upload)
 
-        await wait_for_transfer_state(download, TransferState.FAILED, reason=Reasons.CANCELLED)
-        await wait_for_transfer_state(upload, TransferState.ABORTED)
+        await wait_for_transfer_state(download, TransferState.FAILED, reason=FailReason.CANCELLED)
+        await wait_for_transfer_state(
+            upload, TransferState.ABORTED, abort_reason=AbortReason.REQUESTED)
 
         # Verify file
         assert os.path.exists(download.local_path) is True
@@ -351,8 +360,10 @@ class TestE2ETransfer:
         # Abort the upload
         await client_2.transfers.abort(upload)
 
-        await wait_for_transfer_state(download, TransferState.FAILED, reason=Reasons.CANCELLED)
-        await wait_for_transfer_state(upload, TransferState.ABORTED)
+        await wait_for_transfer_state(
+            download, TransferState.FAILED, reason=FailReason.CANCELLED)
+        await wait_for_transfer_state(
+            upload, TransferState.ABORTED, abort_reason=AbortReason.REQUESTED)
 
         # Verify file
         assert os.path.exists(download.local_path) is True
@@ -395,7 +406,7 @@ class TestE2ETransfer:
         await client_1.transfers.remove(download)
 
         # Verify download is aborted
-        await wait_for_transfer_state(download, TransferState.ABORTED)
+        await wait_for_transfer_state(download, TransferState.ABORTED, abort_reason=AbortReason.REQUESTED)
         await wait_for_transfer_state(upload, TransferState.FAILED)
 
         # Verify file
@@ -451,7 +462,7 @@ class TestE2ETransfer:
             download = await self._search_and_download(client1)
 
             await wait_for_transfer_state(
-                download, TransferState.FAILED, reason=Reasons.FILE_NOT_SHARED)
+                download, TransferState.FAILED, reason=FailReason.FILE_NOT_SHARED)
 
             assert len(client2.transfers.transfers) == 0
 
@@ -481,8 +492,10 @@ class TestE2ETransfer:
         client_2.settings.users.blocked[username1] = BlockingFlag.UPLOADS
 
         # Verify upload is aborted
-        await wait_for_transfer_state(download, TransferState.FAILED, reason=Reasons.CANCELLED)
-        await wait_for_transfer_state(upload, TransferState.ABORTED, reason=Reasons.BLOCKED)
+        await wait_for_transfer_state(
+            download, TransferState.FAILED, reason=FailReason.CANCELLED)
+        await wait_for_transfer_state(
+            upload, TransferState.ABORTED, abort_reason=AbortReason.BLOCKED)
 
     @pytest.mark.asyncio
     async def test_transfer_unblockDownloadingUser(self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
@@ -506,13 +519,56 @@ class TestE2ETransfer:
         client_2.settings.users.blocked[username1] = BlockingFlag.UPLOADS
 
         # Verify upload is aborted
-        await wait_for_transfer_state(download, TransferState.FAILED, reason=Reasons.CANCELLED)
-        await wait_for_transfer_state(upload, TransferState.ABORTED, reason=Reasons.BLOCKED)
+        await wait_for_transfer_state(download, TransferState.FAILED, reason=FailReason.CANCELLED)
+        await wait_for_transfer_state(
+            upload, TransferState.ABORTED, abort_reason=AbortReason.BLOCKED)
 
         client_1.network.set_download_speed_limit(0)
         client_2.network.set_upload_speed_limit(0)
 
         del client_2.settings.users.blocked[username1]
+
+        await wait_for_transfer_state(download, TransferState.COMPLETE)
+        await wait_for_transfer_state(upload, TransferState.COMPLETE)
+
+    @pytest.mark.asyncio
+    async def test_transfer_unshareReshareFile(
+            self, mock_server: MockServer, client_1: SoulSeekClient, client_2: SoulSeekClient):
+
+        """Tests unsharing a file during transfer and reshare
+
+        The download should end up in COMPLETE state
+        The upload should end up in COMPLETE state
+        """
+
+        await wait_until_clients_initialized(mock_server, amount=2)
+        client_1.network.set_download_speed_limit(50)
+        client_2.network.set_upload_speed_limit(50)
+
+        directory = client_2.shares.shared_directories[0]
+
+        download = await self._search_and_download(client_1)
+        upload = await wait_for_transfer_added(client_2, initial_amount=0)
+
+        await wait_for_transfer_state(download, TransferState.DOWNLOADING)
+        await wait_for_transfer_state(upload, TransferState.UPLOADING)
+        await asyncio.sleep(0.25)
+
+        client_2.shares.update_shared_directory(
+            directory, share_mode=DirectoryShareMode.USERS)
+
+        # Verify upload is aborted
+        await wait_for_transfer_state(
+            download, TransferState.FAILED, reason=FailReason.CANCELLED)
+        await wait_for_transfer_state(
+            upload, TransferState.ABORTED, abort_reason=AbortReason.FILE_NOT_SHARED)
+
+        client_1.network.set_download_speed_limit(0)
+        client_2.network.set_upload_speed_limit(0)
+
+        # Reshare
+        client_2.shares.update_shared_directory(
+            directory, share_mode=DirectoryShareMode.EVERYONE)
 
         await wait_for_transfer_state(download, TransferState.COMPLETE)
         await wait_for_transfer_state(upload, TransferState.COMPLETE)

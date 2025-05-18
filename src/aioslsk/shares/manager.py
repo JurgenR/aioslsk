@@ -21,6 +21,7 @@ from ..events import (
     ScanCompleteEvent,
     SessionInitializedEvent,
     SessionDestroyedEvent,
+    SharedDirectoryChangeEvent,
 )
 from ..exceptions import (
     FileNotFoundError,
@@ -301,11 +302,8 @@ class SharesManager(BaseManager):
             self._add_item_to_term_map(item)
         logger.debug("term map contains %d terms", len(self._term_map))
 
-    async def get_shared_item(self, remote_path: str, username: Optional[str] = None) -> SharedItem:
-        """Gets a shared item from the cache based on the given file path. If
-        the file does not exist in the ``shared_items`` or the file is present
-        in the cache but does not exist on disk a :class:`.FileNotFoundError` is
-        raised
+    def get_shared_item_cache(self, remote_path: str, username: Optional[str] = None) -> SharedItem:
+        """Gets a shared item from the cache if it exists
 
         If a ``username`` is passed this will also check if the file is locked
         and raise a :class:`.FileNotSharedError` if the file is not accessible
@@ -313,8 +311,7 @@ class SharesManager(BaseManager):
 
         :param remote_path: the remote_path
         :param username: optional username to check if the file is shared or not
-        :raise FileNotFoundError: filename was not found in shared_items or was
-            found but did not exist on disk
+        :raise FileNotFoundError: filename was not found in shared_items
         :raise FileNotSharedError: file is found, but locked for the given
             ``username``
         """
@@ -324,16 +321,39 @@ class SharesManager(BaseManager):
             except FileNotFoundError:
                 pass
             else:
-                if not await asyncos.path.exists(item.get_absolute_path()):
-                    raise FileNotFoundError(
-                        f"file with remote_path {remote_path} found in cache but not on disk"
-                    )
-
                 if username and self.is_item_locked(item, username):
-                    raise FileNotSharedError(f"File is not shared to user {username}")
+                    raise FileNotSharedError(f"file is not shared to user {username}")
                 return item
         else:
             raise FileNotFoundError(f"file name {remote_path} not found in cache")
+
+    async def get_shared_item(self, remote_path: str, username: Optional[str] = None) -> SharedItem:
+        """Same as :meth:`get_shared_item_cache` but also checks if the file
+        exists on disk
+
+        :param remote_path: the remote_path
+        :param username: optional username to check if the file is shared or not
+        :raise FileNotFoundError: filename was not found in shared_items or was
+            found but did not exist on disk
+        :raise FileNotSharedError: file is found, but locked for the given
+            ``username``
+        """
+        item = self.get_shared_item_cache(remote_path, username=username)
+        if not await asyncos.path.exists(item.get_absolute_path()):
+            raise FileNotFoundError(
+                f"file with remote_path {remote_path} found in cache but not on disk"
+            )
+        return item
+
+    def find_shared_item_cache(
+            self, remote_path: str, username: Optional[str] = None) -> Optional[SharedItem]:
+        """Equivelant to :meth:`get_shared_item_cache` but returns ``None`` if the
+        shared item is not found
+        """
+        try:
+            return self.get_shared_item_cache(remote_path, username=username)
+        except (FileNotFoundError, FileNotSharedError):
+            return None
 
     async def find_shared_item(
             self, remote_path: str, username: Optional[str] = None) -> Optional[SharedItem]:
@@ -392,6 +412,9 @@ class SharesManager(BaseManager):
             parent.items -= children
 
         self._shared_directories.append(directory_object)
+
+        self._event_bus.emit_sync(SharedDirectoryChangeEvent(directory_object))
+
         return directory_object
 
     def update_shared_directory(
@@ -416,6 +439,8 @@ class SharesManager(BaseManager):
 
         if users is not None:
             shared_directory.users = users
+
+        self._event_bus.emit_sync(SharedDirectoryChangeEvent(shared_directory))
 
         return shared_directory
 
@@ -470,6 +495,8 @@ class SharesManager(BaseManager):
             parent.items |= shared_directory.items
 
         self._cleanup_term_map()
+
+        self._event_bus.emit_sync(SharedDirectoryChangeEvent(shared_directory))
 
         return shared_directory
 

@@ -264,7 +264,8 @@ A couple of methods are available to retrieve transfers:
     uploads: list[Transfer] = client.transfers.get_uploads()
 
 
-Events are available to listen for the transfer progress:
+Events are available to listen for the transfer progress. The frequency at which updates are sent are controlled by the
+``transfer.report_interval`` setting:
 
 .. code-block:: python
 
@@ -351,6 +352,62 @@ the speed limits a method needs to be called before they can are applied:
     client.settings.network.limits.upload_limit_kbps = 100
     client.settings.network.limits.download_limit_kbps = 1000
     client.network.load_speed_limits()
+
+
+Possible States
+---------------
+
+Following table gives a short description of all possible states:
+
++--------------+--------------------------------------------------------------------------------------+
+|    State     |                                     Description                                      |
++==============+======================================================================================+
+| QUEUED       | The transfer is waiting to be processed                                              |
++--------------+--------------------------------------------------------------------------------------+
+| INITIALIZING | An attempt is being made to start the transfer                                       |
++--------------+--------------------------------------------------------------------------------------+
+| DOWNLOADING  | The transfer is currently being downloaded                                           |
++--------------+--------------------------------------------------------------------------------------+
+| UPLOADING    | The transfer is currently being uploaded                                             |
++--------------+--------------------------------------------------------------------------------------+
+| COMPLETE     | Transfer has completed successfully                                                  |
++--------------+--------------------------------------------------------------------------------------+
+| FAILED       | The transfer has failed. Transfer objects have a ``fail_reason`` parameter which     |
+|              | optionally specifies the reason for the transfer being failed                        |
++--------------+--------------------------------------------------------------------------------------+
+| INCOMPLETE   | Only applicable for downloads, the transfer has failed and the uploader has not      |
+|              | given a reason. The transfer will be re-attempted                                    |
++--------------+--------------------------------------------------------------------------------------+
+| PAUSED       | The transfer has been paused                                                         |
++--------------+--------------------------------------------------------------------------------------+
+| ABORTED      | The transfer has been aborted. This is either on request or because a change         |
+|              | was made which led to aborting a transfer. Transfer objects have an ``abort_reason`` |
+|              | parameter which specifies why the transfer was aborted                               |
++--------------+--------------------------------------------------------------------------------------+
+
+This table gives a list of known fail reasons, other reasons may exist:
+
++------------------+-------------+
+|      State       | Description |
++==================+=============+
+| Cancelled        |             |
++------------------+-------------+
+| File not shared. |             |
++------------------+-------------+
+| File read error. |             |
++------------------+-------------+
+
+This table gives a list of possible reasons why a transfer was aborted:
+
++-----------------+-------------------------------------------------------+
+|     Reason      |                      Description                      |
++=================+=======================================================+
+| Requested       | Transfer is aborted upon request                      |
++-----------------+-------------------------------------------------------+
+| File not shared | Transfer is aborted because the file no longer shared |
++-----------------+-------------------------------------------------------+
+| Blocked         | Transfer is aborted because the user is blocked       |
++-----------------+-------------------------------------------------------+
 
 
 Room Management
@@ -547,8 +604,10 @@ to add, remove and scan individual or all directories:
     client.shares.remove_shared_directory(shared_dir)
 
 When rescanning an individual or all directories newly found items will be added and items that are
-no longer found will be removed. Attributes will be scanned for the newly found files and files that
+no longer present will be removed. Attributes will be scanned for the newly found files and files that
 have been modified.
+
+If there is an unfinished upload for a file that is no longer shared it will be aborted.
 
 
 Defining a custom executor for scanning

@@ -2,13 +2,16 @@ import copy
 import os
 from pytest_unordered import unordered
 import shutil
+import pytest
 
 from aioslsk.transfer.cache import TransferShelveCache
-from aioslsk.transfer.model import Transfer, TransferDirection
+from aioslsk.transfer.model import AbortReason, Transfer, TransferDirection
 from aioslsk.transfer.state import (
+    AbortedState,
     CompleteState,
     FailedState,
     UploadingState,
+    TransferState,
 )
 
 
@@ -50,7 +53,7 @@ class TestTransferShelveCache:
         shutil.copytree(os.path.join(RESOURCES, 'data'), tmpdir, dirs_exist_ok=True)
         cache = TransferShelveCache(tmpdir)
         transfers = cache.read()
-        assert 2 == len(transfers)
+        assert len(transfers) == 2
         assert self.TRANSFERS == transfers
 
     def test_write(self, tmpdir: str):
