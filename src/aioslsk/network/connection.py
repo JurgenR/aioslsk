@@ -332,7 +332,9 @@ class DataConnection(Connection, abc.ABC):
         """
         try:
             if timeout:
-                async with atimeout(timeout) as self._read_timeout_object:
+                # TODO: change the type of `_read_timeout_object` to `asyncio.timeouts.Timeout`
+                # when 3.11 is the oldest supported Python version
+                async with atimeout(timeout) as self._read_timeout_object:  # type: ignore[assignment]
                     data = await reader_coro
             else:
                 data = await reader_coro
