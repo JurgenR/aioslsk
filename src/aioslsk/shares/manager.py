@@ -413,7 +413,7 @@ class SharesManager(BaseManager):
 
         self._shared_directories.append(directory_object)
 
-        self._event_bus.emit_sync(SharedDirectoryChangeEvent(shared_directory))
+        self._event_bus.emit_sync(SharedDirectoryChangeEvent(directory_object))
 
         return directory_object
 
