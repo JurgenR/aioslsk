@@ -15,6 +15,8 @@ Welcome to aioslsk's documentation!
    ./MESSAGES
    ./SOULSEEK
    ./API
+   ./MESSAGES_GEN
+
 
 Indices and tables
 ==================

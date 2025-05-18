@@ -139,6 +139,11 @@ class Login(ServerMessage):
 
 
 class SetListenPort(ServerMessage):
+    """Advertise our listening ports to the server
+
+    Obfuscated port: this part seems to be optional, either it can be omitted
+    completely or both values set to ``0``
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
