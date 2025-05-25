@@ -1837,7 +1837,8 @@ These are the first messages sent after connecting to a peer.
 PeerPierceFirewall (Code 0)
 ---------------------------
 
-Sent after connection was successfully established in response to a ConnectToPeer message. The ``ticket`` used here should be the ticket from that :ref:`ConnectToPeer` message
+Sent after connection was successfully established in response to a ConnectToPeer message. The ``ticket`` used here
+should be the ticket from that :ref:`ConnectToPeer` message
 
 :Code: 0 (0x00)
 :Status: USED
