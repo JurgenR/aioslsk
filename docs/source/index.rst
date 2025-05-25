@@ -12,10 +12,9 @@ Welcome to aioslsk's documentation!
 
    ./USAGE
    ./SETTINGS
-   ./MESSAGES
+   ./MESSAGES_GEN
    ./SOULSEEK
    ./API
-   ./MESSAGES_GEN
 
 
 Indices and tables

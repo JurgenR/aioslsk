@@ -49,49 +49,7 @@ Bytearr
 Data Structures
 ===============
 
-.. _Attribute:
-
-Attribute
----------
-
-1. **uint32**: key
-2. **uint32**: value
-
-
-.. _FileData:
-
-FileData
---------
-
-1. **uint8**: unknown
-2. **string**: filename
-3. **uint64**: filesize
-4. **string**: extension
-5. Array of file attributes:
-
-   1. :ref:`Attribute`: attributes
-
-
-.. _DirectoryData:
-
-DirectoryData
--------------
-
-1. **string**: name
-2. Array of file data:
-
-   1. :ref:`FileData`: files
-
-
-.. _UserStats:
-
-UserStats
----------
-
-1. **uint32**: avg_speed
-2. **uint32**: uploads
-3. **uint32**: shared_file_count
-4. **uint32**: shared_folder_count
+.. data-structures::
 
 
 .. _value-tables:
@@ -191,4 +149,26 @@ Server Messages
 Peer Initialization Messages
 ============================
 
+.. peer-init-messages::
+
+
+Peer Messages
+=============
+
+.. peer-messages::
+
+
+Distributed Messages
+====================
+
+.. distributed-messages::
+
+
+File Messages
+=============
+
+File connection does not have a message format but after peer initialization two values are exchanged:
+
+1. **uint32**: ticket
+2. **uint64**: offset
 

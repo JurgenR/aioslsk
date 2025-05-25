@@ -6,10 +6,81 @@ from sphinx.util.docutils import switch_source_input
 from sphinx.application import Sphinx
 from sphinx.util.docutils import SphinxDirective
 from sphinx.util.typing import ExtensionMetadata
-from aioslsk.protocol.messages import ServerMessage
-
+from aioslsk.protocol.messages import (
+    DistributedMessage,
+    PeerInitializationMessage,
+    PeerMessage,
+    ServerMessage
+)
+from aioslsk.protocol.primitives import (
+    array,
+    boolean,
+    bytearr,
+    int32,
+    ipaddr,
+    string,
+    uint16,
+    uint32,
+    uint64,
+    uint8,
+    Attribute,
+    SimilarUser,
+    Recommendation,
+    RoomTicker,
+    PotentialParent,
+    UserStats,
+    FileData,
+    DirectoryData,
+)
 import inspect
-from typing import Union
+from typing import Optional, Union
+
+
+BASIC_TYPES = [
+    boolean,
+    bytearr,
+    int32,
+    ipaddr,
+    string,
+    uint16,
+    uint32,
+    uint64,
+    uint8,
+    string,
+]
+COMPLEX_TYPES = [
+    Attribute,
+    SimilarUser,
+    Recommendation,
+    RoomTicker,
+    PotentialParent,
+    UserStats,
+    FileData,
+    DirectoryData,
+]
+
+
+class DataStructuresDirective(SphinxDirective):
+    def run(self) -> list[nodes.Node]:
+        sections = []
+
+        for struct_type in COMPLEX_TYPES:
+
+            section = nodes.section()
+            section['ids'].append(nodes.make_id(struct_type.__name__))
+            section_title = nodes.title(text=struct_type.__name__)
+
+            section.append(section_title)
+
+            description_node = _create_description(self.state, struct_type)
+            if description_node:
+                section.append(description_node)
+
+            section.append(_build_parameter_table(struct_type))
+
+            sections.append(section)
+
+        return sections
 
 
 class ServerMessagesDirective(SphinxDirective):
@@ -22,21 +93,14 @@ class ServerMessagesDirective(SphinxDirective):
 
             section = nodes.section()
             section['ids'].append(nodes.make_id(message_type.__name__))
-            section_title = nodes.title(text=message_type.__name__)
+            section_title = nodes.title(
+                text=f"{message_type.__name__} (Code {message_code})")
 
             section.append(section_title)
 
-            # Description
-            description = message_type.__doc__
-            if description:
-                docstring_lines = StringList(
-                    inspect.cleandoc(description).splitlines()
-                )
-                with switch_source_input(self.state, docstring_lines):
-                    message_description = nodes.paragraph()
-                    self.state.nested_parse(docstring_lines, 0, message_description)
-
-                section.append(message_description)
+            description_node = _create_description(self.state, message_type)
+            if description_node:
+                section.append(description_node)
 
             details = nodes.field_list()
             details.append(_create_definition_item("Code:", f"{message_code} (0x{message_code:X})"))
@@ -47,7 +111,7 @@ class ServerMessagesDirective(SphinxDirective):
             if hasattr(message_type, 'Request'):
                 request_cls = getattr(message_type, 'Request')
 
-                param_list = _build_parameter_list(request_cls)
+                param_list = _build_parameter_table(request_cls)
 
                 details.append(_create_definition_item("Send:", param_list))
 
@@ -55,7 +119,7 @@ class ServerMessagesDirective(SphinxDirective):
             if hasattr(message_type, 'Response'):
                 response_cls = getattr(message_type, 'Response')
 
-                param_list = _build_parameter_list(response_cls)
+                param_list = _build_parameter_table(response_cls)
 
                 details.append(_create_definition_item("Receive:", param_list))
 
@@ -66,16 +130,171 @@ class ServerMessagesDirective(SphinxDirective):
         return sections
 
 
-def _build_parameter_list(message_cls):
+class _PeerMessagesDirectiveBase(SphinxDirective):
+    BASE_MESSAGE_CLS = None
+
+    def run(self) -> list[nodes.Node]:
+        sections = []
+
+        for message_type in self.BASE_MESSAGE_CLS.__subclasses__():
+            message_code = _find_message_code(message_type)
+
+            section = nodes.section()
+            section['ids'].append(nodes.make_id(message_type.__name__))
+            section_title = nodes.title(
+                text=f"{message_type.__name__} (Code {message_code})")
+
+            section.append(section_title)
+
+            description_node = _create_description(self.state, message_type)
+            if description_node:
+                section.append(description_node)
+
+            details = nodes.field_list()
+            details.append(_create_definition_item("Code:", f"{message_code} (0x{message_code:X})"))
+            details.append(_create_definition_item("Status:", "ACTIVE"))
+
+            request_cls = getattr(message_type, 'Request')
+            param_list = _build_parameter_table(request_cls)
+            details.append(_create_definition_item("Send:", param_list))
+
+            section.append(details)
+
+            sections.append(section)
+
+        return sections
+
+
+class PeerInitMessagesDirective(_PeerMessagesDirectiveBase):
+    BASE_MESSAGE_CLS = PeerInitializationMessage
+
+
+class PeerMessagesDirective(_PeerMessagesDirectiveBase):
+    BASE_MESSAGE_CLS = PeerMessage
+
+
+class DistributedMessagesDirective(_PeerMessagesDirectiveBase):
+    BASE_MESSAGE_CLS = DistributedMessage
+
+
+def _get_optional_text(field) -> str:
+    return 'Yes' if field.metadata.get('optional', False) else 'No'
+
+
+def _get_condition_text(field) -> str:
+    if_true = field.metadata.get('if_true', None)
+    if_false = field.metadata.get('if_false', None)
+
+    if if_true:
+        return f'if {if_true} == true'
+
+    if if_false:
+        return f'if {if_false} == false'
+
+    return ''
+
+
+def _create_type_ref(type_cls: type) -> nodes.Node:
+    type_reference = nodes.reference(text=type_cls.__name__)
+    type_reference['refid'] = type_cls.__name__.lower()
+    type_reference['internal'] = True
+    return type_reference
+
+
+def _create_type_nodes(type_cls: type, subtype_cls: Optional[type] = None) -> list[nodes.Node]:
+    if type_cls == array:
+        return [
+            nodes.strong(text='array['),
+            _create_type_ref(subtype_cls),
+            nodes.strong(text=']')
+        ]
+
+    else:
+        if type_cls in COMPLEX_TYPES:
+            return [_create_type_ref(type_cls)]
+        else:
+            return [nodes.strong(text=type_cls.__name__)]
+
+
+def _create_description(state, type_cls: type) -> Optional[nodes.Node]:
+    description = type_cls.__doc__
+    if not description:
+        return None
+
+    docstring_lines = StringList(
+        inspect.cleandoc(description).splitlines()
+    )
+    with switch_source_input(state, docstring_lines):
+        description_node = nodes.paragraph()
+        state.nested_parse(docstring_lines, 0, description_node)
+
+    return description_node
+
+
+def _build_parameter_table(message_cls: type) -> nodes.Node:
+    if not fields(message_cls):
+        return nodes.paragraph(text='No parameters')
+
+    table = nodes.table()
+    tgroup = nodes.tgroup(cols=5)
+    table += tgroup
+
+    for _ in range(5):
+        tgroup += nodes.colspec(colwidth=1)
+
+    thead = nodes.thead()
+    tgroup += thead
+    th_row = nodes.row()
+    th_row += nodes.entry('', nodes.paragraph('', nodes.Text('#')))
+    th_row += nodes.entry('', nodes.paragraph('', nodes.Text('Type')))
+    th_row += nodes.entry('', nodes.paragraph('', nodes.Text('Name')))
+    th_row += nodes.entry('', nodes.paragraph('', nodes.Text('Optional')))
+    th_row += nodes.entry('', nodes.paragraph('', nodes.Text('Condition')))
+    thead += th_row
+
+    tbody = nodes.tbody()
+    tgroup += tbody
+
+    for idx, field in enumerate(fields(message_cls), start=1):
+        type_cls = field.metadata['type']
+        subtype_cls = field.metadata.get('subtype', None)
+
+        id_cell = nodes.entry()
+        id_cell += nodes.paragraph(text=str(idx))
+
+        type_cell = nodes.entry()
+        type_paragraph = nodes.paragraph()
+        type_paragraph += _create_type_nodes(type_cls, subtype_cls)
+        type_cell += type_paragraph
+
+        name_cell = nodes.entry()
+        name_cell += nodes.paragraph(text=field.name)
+
+        optional_cell = nodes.entry()
+        optional_cell += nodes.paragraph(text=_get_optional_text(field))
+
+        condition_cell = nodes.entry()
+        condition_cell += nodes.paragraph(text=_get_condition_text(field))
+
+        row = nodes.row()
+        row.extend([id_cell, type_cell, name_cell, optional_cell, condition_cell])
+
+        tbody += row
+
+    return table
+
+
+def _build_parameter_list(message_cls: type) -> nodes.Node:
     param_list = nodes.enumerated_list()
     for field in fields(message_cls):
         field_text = nodes.paragraph()
-        field_text.extend(
-            [
-                nodes.strong(text=field.metadata['type'].__name__),
-                nodes.Text(f": {field.name}")
-            ]
-        )
+
+        type_cls = field.metadata['type']
+        subtype_cls = field.metadata.get('subtype', None)
+
+        field_text.extend(_create_type_nodes(type_cls, subtype_cls))
+        field_text.append(nodes.Text(f": {field.name}"))
+
         param_item = nodes.list_item()
         param_item.append(field_text)
         param_list.append(param_item)
@@ -110,7 +329,11 @@ def _find_message_code(message_type) -> int:
 
 
 def setup(app: Sphinx) -> ExtensionMetadata:
+    app.add_directive('data-structures', DataStructuresDirective)
     app.add_directive('server-messages', ServerMessagesDirective)
+    app.add_directive('peer-init-messages', PeerInitMessagesDirective)
+    app.add_directive('peer-messages', PeerMessagesDirective)
+    app.add_directive('distributed-messages', DistributedMessagesDirective)
 
     return {
         'version': '0.1',
