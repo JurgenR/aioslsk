@@ -786,7 +786,8 @@ class GetUserInterests(ServerMessage):
 class ExecuteCommand(ServerMessage):
     """Send a command to the server.
 
-    The command type has only ever been seen as having value ``admin``, the ``arguments`` array contains the subcommand and arguments. Example when banning a user:
+    The command type has only ever been seen as having value ``admin``, the ``arguments`` array
+    contains the subcommand and arguments. Example when banning a user:
 
     * ``command_type`` : ``admin``
     * ``arguments``
@@ -1056,7 +1057,9 @@ class MinParentsInCache(ServerMessage):
 
 class DistributedDistributeInterval(ServerMessage):
 
-    """:status: DEPRECATED, DEFUNCT"""
+    """Deprecated distributed network related message
+
+    :status: DEPRECATED, DEFUNCT"""
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -1066,7 +1069,7 @@ class DistributedDistributeInterval(ServerMessage):
 
 class DistributedAliveInterval(ServerMessage):
     """Interval at which a :ref:`DistributedPing` message should be sent to the
-    children. Most clients don't send this message out
+    children
 
     :status: DEPRECATED
     """
@@ -1078,7 +1081,10 @@ class DistributedAliveInterval(ServerMessage):
 
 
 class AddPrivilegedUser(ServerMessage):
-    """:status: UNKNOWN"""
+    """Usage unknown
+
+    :status: UNKNOWN
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -1104,7 +1110,11 @@ class CheckPrivileges(ServerMessage):
 
 
 class ServerSearchRequest(ServerMessage):
-    """:status: USED"""
+    """Search request sent by another user through the server. Upon receiving
+    this the message should be passed on to the distributed children
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -1131,7 +1141,10 @@ class AcceptChildren(ServerMessage):
 
 
 class PotentialParents(ServerMessage):
-    """:status: USED"""
+    """List of potential parents, used in distributed network
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -1263,7 +1276,8 @@ class SetRoomTicker(ServerMessage):
 
     .. note::
 
-        An empty ``ticker`` value is not allowed in most clients. However, the server does accept it and clears the ticker from the room
+        An empty ``ticker`` value is not allowed in most clients. However, the server does accept
+        it and clears the ticker from the room
 
     :status: USED
     """
@@ -1991,7 +2005,10 @@ class PeerTransferRequest(PeerMessage):
 
 
 class PeerTransferReply(PeerMessage):
-    """:status: USED"""
+    """Response message to :ref:`PeerTransferRequest`
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -2065,7 +2082,10 @@ class PeerPlaceInQueueRequest(PeerMessage):
 
 
 class PeerUploadQueueNotification(PeerMessage):
-    """:status: DEPRECATED"""
+    """Deprecated message
+
+    :status: DEPRECATED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -2086,7 +2106,10 @@ class DistributedPing(DistributedMessage):
 
 
 class DistributedInit(DistributedMessage):
-    """:status: DEPRECATED, DEFUNCT"""
+    """Deprecated distributed network related message
+
+    :status: DEPRECATED, DEFUNCT
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):

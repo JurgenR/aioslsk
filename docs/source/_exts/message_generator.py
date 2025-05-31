@@ -36,7 +36,6 @@ from aioslsk.protocol.primitives import (
     DirectoryData,
 )
 import inspect
-import re
 from typing import Optional, Union
 
 
