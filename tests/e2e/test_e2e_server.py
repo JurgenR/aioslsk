@@ -27,6 +27,7 @@ from aioslsk.events import (
     ItemSimilarUsersEvent,
     RecommendationsEvent,
     RoomJoinedEvent,
+    RoomLeftEvent,
     RoomOperatorGrantedEvent,
     RoomOperatorRevokedEvent,
     RoomMembershipGrantedEvent,
@@ -582,20 +583,29 @@ class TestE2EServer:
         member_revoked_listener2 = AsyncMock()
         client_2.events.register(RoomMembershipRevokedEvent, member_revoked_listener2)
 
+        room_left_listener = AsyncMock()
+        client_2.events.register(RoomLeftEvent, room_left_listener)
+
         # Drop membership
         await client_2(DropRoomMembershipCommand(room_name), response=True)
 
-        revoked_event1 = await wait_for_listener_awaited(member_revoked_listener1)
-        revoked_event2 = await wait_for_listener_awaited(member_revoked_listener2)
+        revoked_event1: RoomMembershipRevokedEvent = await wait_for_listener_awaited(
+            member_revoked_listener1)
+        revoked_event2: RoomMembershipRevokedEvent = await wait_for_listener_awaited(
+            member_revoked_listener2)
+        room_left_event: RoomLeftEvent = await wait_for_listener_awaited(
+            room_left_listener)
 
-        revoked_event1.room.name == room_name
-        revoked_event2.room.name == room_name
+        assert revoked_event1.room.name == room_name
+        assert revoked_event2.room.name == room_name
 
-        revoked_event1.member.name == username2
-        revoked_event2.member is None
+        assert revoked_event1.member.name == username2
+        assert revoked_event2.member is None
+
+        assert room_left_event.room.name == room_name
+        assert room_left_event.user is None
 
         assert username2 not in client_1.rooms.rooms[room_name].members
-        # assert username2 not in client_2.rooms.rooms[room_name].members
         assert room_name not in client_2.rooms.rooms
 
     @pytest.mark.asyncio
