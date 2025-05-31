@@ -130,6 +130,7 @@ class Login(ServerMessage):
         Older client versions (at least 149 or below) would not send the
         ``md5hash`` and ``minor_version``
 
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -157,6 +158,8 @@ class SetListenPort(ServerMessage):
 
     Obfuscated port: this part seems to be optional, either it can be omitted
     completely or both values set to ``0``
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -174,6 +177,8 @@ class GetPeerAddress(ServerMessage):
 
     If the peer does not exist or is not logged on the server will respond with
     IP address set to ``0.0.0.0``, port set to ``0``
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -202,6 +207,8 @@ class AddUser(ServerMessage):
     To remove a user use the :ref:`RemoveUser` message. Keep in mind that you
     will still receive status updates in case you are joined in the same room
     with the user.
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -228,6 +235,8 @@ class AddUser(ServerMessage):
 class RemoveUser(ServerMessage):
     """Remove the tracking of user status which was previously added with the
     :ref:`AddUser` message.
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -239,6 +248,8 @@ class RemoveUser(ServerMessage):
 class GetUserStatus(ServerMessage):
     """Get the user status. The server will automatically send updates for users
     that we have added with :ref:`AddUser` or which we share a room with.
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -256,6 +267,8 @@ class GetUserStatus(ServerMessage):
 
 class IgnoreUser(ServerMessage):
     """Sent when we want to ignore a user. Received when another user ignores us
+
+    :status: DEPRECATED, DEFUNCT
     """
 
     @dataclass(order=True)
@@ -272,6 +285,8 @@ class IgnoreUser(ServerMessage):
 class UnignoreUser(ServerMessage):
     """Sent when we want to unignore a user. Received when another user
     unignores us
+
+    :status: DEPRECATED, DEFUNCT
     """
 
     @dataclass(order=True)
@@ -288,6 +303,8 @@ class UnignoreUser(ServerMessage):
 class RoomChatMessage(ServerMessage):
     """Used when sending a message to a room or receiving a message from someone
     (including self) who sent a message to a room
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -308,6 +325,8 @@ class JoinRoom(ServerMessage):
     """Used when we want to join a chat room. If the chat room does not exist
     it will be created. Upon successfully joining the room the server will send
     the response message
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -338,6 +357,8 @@ class JoinRoom(ServerMessage):
 class LeaveRoom(ServerMessage):
     """Used when we want to leave a chat room. The receive message is
     confirmation that we left the room
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -352,7 +373,10 @@ class LeaveRoom(ServerMessage):
 
 
 class UserJoinedRoom(ServerMessage):
-    """Received when a user joined a room"""
+    """Received when a user joined a room
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -366,7 +390,10 @@ class UserJoinedRoom(ServerMessage):
 
 
 class UserLeftRoom(ServerMessage):
-    """Received when a user left a room"""
+    """Received when a user left a room
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -380,6 +407,8 @@ class ConnectToPeer(ServerMessage):
     asking us to attempt to connect to them through the server. Likewise when
     we cannot connect to peer we should send this message to indicate to the
     other peer that he should try connecting to us
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -410,6 +439,8 @@ class PrivateChatMessage(ServerMessage):
 
     The ``is_direct`` boolean indicates whether it is the first attempt to send
     the message, if the server retries then this parameter will be false
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -446,6 +477,8 @@ class PrivateChatMessage(ServerMessage):
 class PrivateChatMessageAck(ServerMessage):
     """Acknowledge we have received a private message after receiving a
     :ref:`PrivateChatMessage`
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -455,7 +488,10 @@ class PrivateChatMessageAck(ServerMessage):
 
 
 class FileSearchRoom(ServerMessage):
-    """Deprecated message for searching a room"""
+    """Deprecated message for searching a room
+
+    :Status: DEPRECATED, DEFUNCT
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -469,6 +505,8 @@ class FileSearch(ServerMessage):
     """This message is received when another user performed a :ref:`RoomSearch`
     or :ref:`UserSearch` request and we are part of the room or we are the user
     the user would like to search in
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -488,6 +526,8 @@ class FileSearch(ServerMessage):
 class SetStatus(ServerMessage):
     """Used to update the online status. Possible values for ``status``:
     online = 2, away = 1, offline = 0
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -501,6 +541,8 @@ class Ping(ServerMessage):
     minutes)
 
     Older server versions would respond to this message with the response message
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -519,6 +561,8 @@ class SendConnectTicket(ServerMessage):
 
     The value of the ``ticket`` parameter would be used in the :ref:`PeerInit`
     message.
+
+    :status: DEPRECATED, DEFUNCT
     """
 
     @dataclass(order=True)
@@ -537,6 +581,8 @@ class SendConnectTicket(ServerMessage):
 class SendDownloadSpeed(ServerMessage):
     """Sent by old clients after download has completed. :ref:`SendUploadSpeed`
     should be used instead. The ``speed`` value should be in bytes per second
+
+    :status: DEPRECATED, DEFUNCT
     """
 
     @dataclass(order=True)
@@ -550,6 +596,8 @@ class SharedFoldersFiles(ServerMessage):
     """Let the server know the amount of files and directories we are sharing.
     These would be returned in several messages, for example the
     :ref:`GetUserStats` and :ref:`AddUser` messages
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -562,6 +610,8 @@ class SharedFoldersFiles(ServerMessage):
 class GetUserStats(ServerMessage):
     """Request a user's transfer statistics. This message will be received
     automatically for users with which we share a room
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -579,6 +629,8 @@ class GetUserStats(ServerMessage):
 class Kicked(ServerMessage):
     """You were kicked from the server. This message is currently only known to
     be sent when the user was logged into at another location
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -589,6 +641,8 @@ class Kicked(ServerMessage):
 class UserSearch(ServerMessage):
     """Search for a file on a specific user, the user will receive this query
     in the form of a :ref:`FileSearch` message
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -601,6 +655,8 @@ class UserSearch(ServerMessage):
 
 class DeprecatedGetItemRecommendations(ServerMessage):
     """Similar to :ref:`GetItemRecommendations` except that no score is returned
+
+    :status: DEPRECATED, DEFUNCT
     """
 
     @dataclass(order=True)
@@ -618,6 +674,8 @@ class DeprecatedGetItemRecommendations(ServerMessage):
 class AddInterest(ServerMessage):
     """Adds an interest. This is used when requesting recommendations
     (eg.: :ref:`GetRecommendations`, ...)
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -627,7 +685,10 @@ class AddInterest(ServerMessage):
 
 
 class RemoveInterest(ServerMessage):
-    """Removes an interest previously added with :ref:`AddInterest` message"""
+    """Removes an interest previously added with :ref:`AddInterest` message
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -639,6 +700,8 @@ class GetRecommendations(ServerMessage):
     """Request the server to send a list of recommendations and
     unrecommendations. A maximum of 100 each will be returned. The score can be
     negative.
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -664,6 +727,8 @@ class GetInterests(ServerMessage):
     :ref:`AddHatedInterest` messages
 
     Not known whether the server still responds to this command
+
+    :status: DEPRECATED, DEFUNCT
     """
 
     @dataclass(order=True)
@@ -680,6 +745,8 @@ class GetGlobalRecommendations(ServerMessage):
     """Get the global list of recommendations. This does not take into account
     interests or hated interests that were previously added and is just a
     ranking of interests that other users have set
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -698,7 +765,10 @@ class GetGlobalRecommendations(ServerMessage):
 
 
 class GetUserInterests(ServerMessage):
-    """Get the interests and hated interests of a particular user"""
+    """Get the interests and hated interests of a particular user
+
+    :status: DEPRECATED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -724,6 +794,8 @@ class ExecuteCommand(ServerMessage):
       * 0 : ``ban``
       * 1 : ``some user``
       * 2 : probably some extra args, perhaps time limit in case of ban, ... (optional)
+
+    :status: DEPRECATED, DEFUNCT
     """
 
     @dataclass(order=True)
@@ -744,6 +816,8 @@ class RoomList(ServerMessage):
     Parameter ``rooms_private_owned_user_count`` / ``rooms_private_user_count``
     should be the amount of users who have joined the private room, not the
     amount of members
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -771,6 +845,8 @@ class ExactFileSearch(ServerMessage):
 
     For the message receiving: message is never seen and is based on other
     documentation (PySlsk)
+
+    :status: DEPRECATED, DEFUNCT
     """
 
     @dataclass(order=True)
@@ -795,7 +871,10 @@ class ExactFileSearch(ServerMessage):
 
 
 class AdminMessage(ServerMessage):
-    """Sent by the admin when the server is going down for example"""
+    """Sent by the admin when the server is going down for example
+
+    :status: UNKNOWN
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -804,7 +883,10 @@ class AdminMessage(ServerMessage):
 
 
 class GetUserList(ServerMessage):
-    """Gets a list of all users on the server"""
+    """Gets a list of all users on the server
+
+    :status: DEPRECATED, DEFUNCT
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -821,7 +903,10 @@ class GetUserList(ServerMessage):
 
 
 class TunneledMessage(ServerMessage):
-    """Tunnel a message through the server to a user"""
+    """Tunnel a message through the server to a user
+
+    :status: DEPRECATED, DEFUNCT
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -843,7 +928,10 @@ class TunneledMessage(ServerMessage):
 
 
 class PrivilegedUsers(ServerMessage):
-    """List of users with privileges sent after login"""
+    """List of users with privileges sent after login
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -855,6 +943,8 @@ class ToggleParentSearch(ServerMessage):
     """Indicates whether we want to receive :ref:`PotentialParents` messages
     from the server. A message should be sent to disable if we have found a
     parent
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -864,7 +954,10 @@ class ToggleParentSearch(ServerMessage):
 
 
 class ParentIP(ServerMessage):
-    """IP address of the parent. Not sent by newer clients"""
+    """IP address of the parent. Not sent by newer clients
+
+    :status: DEPRECATED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -880,20 +973,13 @@ class Unknown80(ServerMessage):
     disconnect after :ref:`DistributedAliveInterval` had been reached. It would
     seem like the server would be the client's parent in this case.
 
-    After an interval determined by :ref:`DistributionInterval` the client would
-    send another message over this connection which is described below. There's
-    many unknowns in this message and even the types are unknown as many values
-    were just 0, only known value is the last value which is the second
-    listening port these clients used.
+    After an interval determined by :ref:`DistributedDistributeInterval` the
+    client would send another message over this connection which is described
+    in :ref:`DistributedInit`. There's many unknowns in this message and even
+    the types are unknown as many values were just 0, only known value is the
+    last value which is the second listening port these clients used
 
-    Distribution message (code as ``uint8``):
-
-    :Code: 1 (0x01)
-    :Send:
-        1. **uint32** : unknown1
-        2. **uint32** : unknown2
-        3. **uint8** : unknown3 (value ``1``)
-        4. **uint32** : port
+    :status: DEPRECATED, DEFUNCT
     """
 
     @dataclass(order=True)
@@ -906,6 +992,8 @@ class ParentMinSpeed(ServerMessage):
     distributed network. If our average upload speed is below this value then
     we should accept no children. The average upload speed should be determined
     by the upload speed returned by :ref:`GetUserStats` (with our own username)
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -917,6 +1005,8 @@ class ParentMinSpeed(ServerMessage):
 class ParentSpeedRatio(ServerMessage):
     """Used for calculating the maximum amount of children we can have in the
     distributed network
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -926,7 +1016,10 @@ class ParentSpeedRatio(ServerMessage):
 
 
 class ParentInactivityTimeout(ServerMessage):
-    """Timeout for the distributed parent"""
+    """Timeout for the distributed parent
+
+    :status: DEPRECATED
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -935,6 +1028,12 @@ class ParentInactivityTimeout(ServerMessage):
 
 
 class SearchInactivityTimeout(ServerMessage):
+
+    """Presumably indicates after how much time search responses should no
+    longer be accepted
+
+    :status: DEPRECATED
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -945,6 +1044,8 @@ class SearchInactivityTimeout(ServerMessage):
 class MinParentsInCache(ServerMessage):
     """Amount of parents (received through :ref:`PotentialParents`) we should
     keep in cache. Message has not been seen being sent by the server
+
+    :status: DEPRECATED, DEFUNCT
     """
 
     @dataclass(order=True)
@@ -955,6 +1056,8 @@ class MinParentsInCache(ServerMessage):
 
 class DistributedDistributeInterval(ServerMessage):
 
+    """:status: DEPRECATED, DEFUNCT"""
+
     @dataclass(order=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x59)
@@ -964,6 +1067,8 @@ class DistributedDistributeInterval(ServerMessage):
 class DistributedAliveInterval(ServerMessage):
     """Interval at which a :ref:`DistributedPing` message should be sent to the
     children. Most clients don't send this message out
+
+    :status: DEPRECATED
     """
 
     @dataclass(order=True)
@@ -973,6 +1078,7 @@ class DistributedAliveInterval(ServerMessage):
 
 
 class AddPrivilegedUser(ServerMessage):
+    """:status: UNKNOWN"""
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -983,6 +1089,8 @@ class AddPrivilegedUser(ServerMessage):
 class CheckPrivileges(ServerMessage):
     """Checks whether the requesting user has privileges, ``time_left`` will
     be ``0`` in case the user has no privileges, time left in seconds otherwise
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -996,6 +1104,7 @@ class CheckPrivileges(ServerMessage):
 
 
 class ServerSearchRequest(ServerMessage):
+    """:status: USED"""
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -1011,6 +1120,8 @@ class AcceptChildren(ServerMessage):
     """Tell the server whether or not we are accepting any distributed children,
     the server *should* take this into account when sending
     :ref:`PotentialParents` messages to other peers
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1020,6 +1131,7 @@ class AcceptChildren(ServerMessage):
 
 
 class PotentialParents(ServerMessage):
+    """:status: USED"""
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -1030,6 +1142,8 @@ class PotentialParents(ServerMessage):
 class WishlistSearch(ServerMessage):
     """Perform a wishlist search. The interval at which a client should send
     this message is determined by the :ref:`WishlistInterval` message
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1042,6 +1156,8 @@ class WishlistSearch(ServerMessage):
 class WishlistInterval(ServerMessage):
     """The server lets us know at what interval we should perform wishlist
     searches (:ref:`WishlistSearch`). Sent by the server after logon
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1051,7 +1167,10 @@ class WishlistInterval(ServerMessage):
 
 
 class GetSimilarUsers(ServerMessage):
-    """Get a list of similar users"""
+    """Get a list of similar users
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1064,7 +1183,10 @@ class GetSimilarUsers(ServerMessage):
 
 
 class GetItemRecommendations(ServerMessage):
-    """Get a list of recommendations based on a single interest"""
+    """Get a list of recommendations based on a single interest
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1079,7 +1201,10 @@ class GetItemRecommendations(ServerMessage):
 
 
 class GetItemSimilarUsers(ServerMessage):
-    """Get a list of similar users based on a single interest"""
+    """Get a list of similar users based on a single interest
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1094,7 +1219,10 @@ class GetItemSimilarUsers(ServerMessage):
 
 
 class RoomTickers(ServerMessage):
-    """List of chat room tickers (room wall)"""
+    """List of chat room tickers (room wall)
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -1104,7 +1232,10 @@ class RoomTickers(ServerMessage):
 
 
 class RoomTickerAdded(ServerMessage):
-    """A ticker has been added to the room (room wall)"""
+    """A ticker has been added to the room (room wall)
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -1115,7 +1246,10 @@ class RoomTickerAdded(ServerMessage):
 
 
 class RoomTickerRemoved(ServerMessage):
-    """A ticker has been removed to the room (room wall)"""
+    """A ticker has been removed to the room (room wall)
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -1130,6 +1264,8 @@ class SetRoomTicker(ServerMessage):
     .. note::
 
         An empty ``ticker`` value is not allowed in most clients. However, the server does accept it and clears the ticker from the room
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1142,6 +1278,8 @@ class SetRoomTicker(ServerMessage):
 class AddHatedInterest(ServerMessage):
     """Adds an hated interest. This is used when requesting recommendations
     (eg.: :ref:`GetRecommendations`, ...)
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1153,6 +1291,8 @@ class AddHatedInterest(ServerMessage):
 class RemoveHatedInterest(ServerMessage):
     """Removes a hated interest previously added with :ref:`AddHatedInterest`
     message
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1165,6 +1305,8 @@ class RoomSearch(ServerMessage):
     """Perform a search query on all users in the given room, this can only be
     performed if the room was joined first. The server will send a
     :ref:`FileSearch` to every user in the requested room
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1185,6 +1327,8 @@ class SendUploadSpeed(ServerMessage):
     In exception cases, for example if a transfer was failed midway then
     resumed, only the speed of the resumed part is taken into account. However
     this might be client dependent.
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1194,7 +1338,10 @@ class SendUploadSpeed(ServerMessage):
 
 
 class GetUserPrivileges(ServerMessage):
-    """Retrieve whether a user has privileges"""
+    """Retrieve whether a user has privileges
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1212,6 +1359,8 @@ class GiveUserPrivileges(ServerMessage):
     """Gift a user privileges. This only works if the user sending the message
     has privileges and needs to be less than what the gifting user has left,
     part of its privileges will be taken
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1240,6 +1389,8 @@ class PrivilegesNotificationAck(ServerMessage):
 
 class BranchLevel(ServerMessage):
     """Notify the server which branch level we are at in the distributed network
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1250,6 +1401,8 @@ class BranchLevel(ServerMessage):
 
 class BranchRoot(ServerMessage):
     """Notify the server who our branch root user is in the distributed network
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1265,6 +1418,7 @@ class ChildDepth(ServerMessage):
 
         SoulSeekQt sends the ``depth`` as a ``uint8``
 
+    :status: DEPRECATED
     """
 
     @dataclass(order=True)
@@ -1274,7 +1428,10 @@ class ChildDepth(ServerMessage):
 
 
 class ResetDistributed(ServerMessage):
-    """Server requests to reset our parent and children"""
+    """Server requests to reset our parent and children
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -1282,7 +1439,10 @@ class ResetDistributed(ServerMessage):
 
 
 class PrivateRoomMembers(ServerMessage):
-    """List of all members that are part of the private room (excludes owner)"""
+    """List of all members that are part of the private room (excludes owner)
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -1296,6 +1456,8 @@ class PrivateRoomGrantMembership(ServerMessage):
     add members to a private room.
 
     This message is also received by all other members in the private room
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1317,6 +1479,8 @@ class PrivateRoomRevokeMembership(ServerMessage):
     aside from himself (see :ref:`PrivateRoomDropOwnership`).
 
     This message is also received by all other members in the private room
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1335,6 +1499,8 @@ class PrivateRoomRevokeMembership(ServerMessage):
 class PrivateRoomDropMembership(ServerMessage):
     """Drops membership of a private room, this will not do anything for the
     owner of the room. See :ref:`PrivateRoomDropOwnership` for owners
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1344,7 +1510,10 @@ class PrivateRoomDropMembership(ServerMessage):
 
 
 class PrivateRoomDropOwnership(ServerMessage):
-    """Drops ownership of a private room, this disbands the entire room."""
+    """Drops ownership of a private room, this disbands the entire room.
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1355,6 +1524,8 @@ class PrivateRoomDropOwnership(ServerMessage):
 class PrivateRoomMembershipGranted(ServerMessage):
     """Received when the current user has been granted membership to a private
     room
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1366,6 +1537,8 @@ class PrivateRoomMembershipGranted(ServerMessage):
 class PrivateRoomMembershipRevoked(ServerMessage):
     """Received when the current user had its membership revoked from a private
     room
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1377,6 +1550,8 @@ class PrivateRoomMembershipRevoked(ServerMessage):
 class TogglePrivateRoomInvites(ServerMessage):
     """Enables or disables private room invites (through
     :ref:`PrivateRoomGrantMembership`)
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1391,6 +1566,9 @@ class TogglePrivateRoomInvites(ServerMessage):
 
 
 class NewPassword(ServerMessage):
+    """Modifies the user's password
+
+    :status: USED"""
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1401,7 +1579,9 @@ class NewPassword(ServerMessage):
 class PrivateRoomGrantOperator(ServerMessage):
     """Grant operator privileges to a member in a private room. This message
     will also be received by all other members in the room (irrelevant of if
-    they are online or not).
+    they are online or not)
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1421,6 +1601,8 @@ class PrivateRoomRevokeOperator(ServerMessage):
     """Revoke operator privileges from a member in a private room. This message
     will also be received by all other members in the room (irrelevant of if
     they are online or not).
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1437,7 +1619,10 @@ class PrivateRoomRevokeOperator(ServerMessage):
 
 
 class PrivateRoomOperatorGranted(ServerMessage):
-    """Received when granted operator privileges in a private room"""
+    """Received when granted operator privileges in a private room
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -1446,7 +1631,10 @@ class PrivateRoomOperatorGranted(ServerMessage):
 
 
 class PrivateRoomOperatorRevoked(ServerMessage):
-    """Received when operator privileges in a private room were revoked"""
+    """Received when operator privileges in a private room were revoked
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -1455,7 +1643,10 @@ class PrivateRoomOperatorRevoked(ServerMessage):
 
 
 class PrivateRoomOperators(ServerMessage):
-    """List of operators for a private room."""
+    """List of operators for a private room
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Response(MessageDataclass):
@@ -1467,6 +1658,8 @@ class PrivateRoomOperators(ServerMessage):
 class PrivateChatMessageUsers(ServerMessage):
     """Send a private message to a list of users. This message will only be
     received by users who have added you using the :ref:`AddUser` message first
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1477,7 +1670,10 @@ class PrivateChatMessageUsers(ServerMessage):
 
 
 class EnablePublicChat(ServerMessage):
-    """Enables public chat, see :ref:`PublicChatMessage`"""
+    """Enables public chat, see :ref:`PublicChatMessage`
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1485,7 +1681,10 @@ class EnablePublicChat(ServerMessage):
 
 
 class DisablePublicChat(ServerMessage):
-    """Disables public chat, see :ref:`PublicChatMessage`"""
+    """Disables public chat, see :ref:`PublicChatMessage`
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1496,6 +1695,8 @@ class PublicChatMessage(ServerMessage):
     """When public chat is enabled all messages sent to public rooms will also
     be sent to us using this message. Use :ref:`EnablePublicChat` and
     :ref:`DisablePublicChat` to disable or enable receiving these messages.
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1510,6 +1711,8 @@ class GetRelatedSearches(ServerMessage):
     """Usually this is sent by the client right after the :ref:`FileSearch`
     message using the same `query` to retrieve the related searches for that
     query
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1530,7 +1733,9 @@ class ExcludedSearchPhrases(ServerMessage):
     filtered out before being sent.
 
     It is highly recommended to take this filtering into account as not doing so
-    could jeopardize the network.
+    could jeopardize the network
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1540,6 +1745,11 @@ class ExcludedSearchPhrases(ServerMessage):
 
 
 class CannotConnect(ServerMessage):
+    """Send to the server if we failed to connect to a peer after a
+    :ref:`ConnectToPeer`
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1557,6 +1767,8 @@ class CannotConnect(ServerMessage):
 class CannotCreateRoom(ServerMessage):
     """Sent by the server when attempting to create/join a private room which
     already exists or the user is not part of
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1571,6 +1783,8 @@ class PeerPierceFirewall(PeerInitializationMessage):
     """Sent after connection was successfully established in response to a
     :ref:`ConnectToPeer` message. The ``ticket`` used here should be the ticket
     from that :ref:`ConnectToPeer` message
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1597,6 +1811,8 @@ class PeerInit(PeerInitializationMessage):
 
     The ``ticket`` is usually 0 and was filled in with ``ticket`` value from
     the :ref:`SendConnectTicket` message by older versions of the client
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1610,7 +1826,10 @@ class PeerInit(PeerInitializationMessage):
 # Peer messages
 
 class PeerSharesRequest(PeerMessage):
-    """Request all shared files/directories from a peer"""
+    """Request all shared files/directories from a peer
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1628,6 +1847,8 @@ class PeerSharesRequest(PeerMessage):
 class PeerSharesReply(PeerMessage):
     """Response to PeerSharesRequest. The response should include empty parent
     directories.
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1654,7 +1875,10 @@ class PeerSharesReply(PeerMessage):
 
 
 class PeerSearchReply(PeerMessage):
-    """Response to a search request"""
+    """Response to a search request
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1684,7 +1908,10 @@ class PeerSearchReply(PeerMessage):
 
 
 class PeerUserInfoRequest(PeerMessage):
-    """Request information from the peer"""
+    """Request information from the peer
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1694,6 +1921,8 @@ class PeerUserInfoRequest(PeerMessage):
 class PeerUserInfoReply(PeerMessage):
     """Response to :ref:`PeerUserInfoRequest`. Possible values for
     ``upload_permissions`` can be found :ref:`here <table-upload-permissions>`
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1709,7 +1938,10 @@ class PeerUserInfoReply(PeerMessage):
 
 
 class PeerDirectoryContentsRequest(PeerMessage):
-    """Request the contents of a directory"""
+    """Request the contents of a directory
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1723,6 +1955,8 @@ class PeerDirectoryContentsReply(PeerMessage):
 
     Although the returned directories is an array it will only contain one
     element and will not list files from subdirectories
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1743,6 +1977,8 @@ class PeerDirectoryContentsReply(PeerMessage):
 class PeerTransferRequest(PeerMessage):
     """``filesize`` can be omitted if the direction==1 however a value of ``0``
     can be used in this case as well
+
+    :status: USED
     """
 
     @dataclass(order=True)
@@ -1755,6 +1991,7 @@ class PeerTransferRequest(PeerMessage):
 
 
 class PeerTransferReply(PeerMessage):
+    """:status: USED"""
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1766,7 +2003,10 @@ class PeerTransferReply(PeerMessage):
 
 
 class PeerTransferQueue(PeerMessage):
-    """Request to place the provided transfer of ``filename`` in the queue"""
+    """Request to place the provided transfer of ``filename`` in the queue
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1775,7 +2015,10 @@ class PeerTransferQueue(PeerMessage):
 
 
 class PeerPlaceInQueueReply(PeerMessage):
-    """Response to :ref:`PeerPlaceInQueueRequest`"""
+    """Response to :ref:`PeerPlaceInQueueRequest`
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1785,7 +2028,10 @@ class PeerPlaceInQueueReply(PeerMessage):
 
 
 class PeerUploadFailed(PeerMessage):
-    """Sent when uploading failed"""
+    """Sent when uploading failed
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1794,7 +2040,10 @@ class PeerUploadFailed(PeerMessage):
 
 
 class PeerTransferQueueFailed(PeerMessage):
-    """Sent when placing the transfer in queue failed"""
+    """Sent when placing the transfer in queue failed
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1804,7 +2053,10 @@ class PeerTransferQueueFailed(PeerMessage):
 
 
 class PeerPlaceInQueueRequest(PeerMessage):
-    """Request the place of the transfer in the queue."""
+    """Request the place of the transfer in the queue.
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1813,6 +2065,7 @@ class PeerPlaceInQueueRequest(PeerMessage):
 
 
 class PeerUploadQueueNotification(PeerMessage):
+    """:status: DEPRECATED"""
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1822,7 +2075,10 @@ class PeerUploadQueueNotification(PeerMessage):
 # Distributed messages
 
 class DistributedPing(DistributedMessage):
-    """Ping request from the parent. Most clients do not send this."""
+    """Ping request from the parent. Most clients do not send this.
+
+    :status: DEPRECATED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1830,6 +2086,7 @@ class DistributedPing(DistributedMessage):
 
 
 class DistributedInit(DistributedMessage):
+    """:status: DEPRECATED, DEFUNCT"""
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1841,7 +2098,10 @@ class DistributedInit(DistributedMessage):
 
 
 class DistributedSearchRequest(DistributedMessage):
-    """Search request coming from the parent"""
+    """Search request coming from the parent
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1854,7 +2114,10 @@ class DistributedSearchRequest(DistributedMessage):
 
 
 class DistributedBranchLevel(DistributedMessage):
-    """Distributed branch level"""
+    """Distributed branch level
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1863,7 +2126,10 @@ class DistributedBranchLevel(DistributedMessage):
 
 
 class DistributedBranchRoot(DistributedMessage):
-    """Distributed branch root"""
+    """Distributed branch root
+
+    :status: USED
+    """
 
     @dataclass(order=True)
     class Request(MessageDataclass):
@@ -1878,6 +2144,8 @@ class DistributedChildDepth(DistributedMessage):
     should increase the ``depth`` by 1 until it reaches the branch root, which
     should increase by 1 and send it to the server as a :ref:`ChildDepth`
     message.
+
+    :status: DEPRECATED
     """
 
     @dataclass(order=True)
@@ -1894,6 +2162,8 @@ class DistributedServerSearchRequest(DistributedMessage):
 
     This message might need to be revisited, as it's only currently used for
     parsing
+
+    :status: USED
     """
 
     @dataclass(order=True)

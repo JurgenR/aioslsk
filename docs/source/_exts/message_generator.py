@@ -1,9 +1,12 @@
 from __future__ import annotations
 from dataclasses import fields
+import docutils
 from docutils import nodes
+from docutils.parsers.rst.states import RSTState
 from docutils.statemachine import StringList
-from sphinx.util.docutils import switch_source_input
 from sphinx.application import Sphinx
+from sphinx.environment import BuildEnvironment
+from sphinx.util.docutils import switch_source_input
 from sphinx.util.docutils import SphinxDirective
 from sphinx.util.typing import ExtensionMetadata
 from aioslsk.protocol.messages import (
@@ -33,6 +36,7 @@ from aioslsk.protocol.primitives import (
     DirectoryData,
 )
 import inspect
+import re
 from typing import Optional, Union
 
 
@@ -66,19 +70,15 @@ class DataStructuresDirective(SphinxDirective):
 
         for struct_type in COMPLEX_TYPES:
 
-            section = nodes.section()
-            section['ids'].append(nodes.make_id(struct_type.__name__))
-            section_title = nodes.title(text=struct_type.__name__)
+            target, section = _create_message_section(
+                self.state, self.env, struct_type, struct_type.__name__
+            )
 
-            section.append(section_title)
-
-            description_node = _create_description(self.state, struct_type)
-            if description_node:
-                section.append(description_node)
+            section.extend(_create_description_nodes(self.env, struct_type))
 
             section.append(_build_parameter_table(struct_type))
 
-            sections.append(section)
+            sections.extend([target, section])
 
         return sections
 
@@ -91,20 +91,18 @@ class ServerMessagesDirective(SphinxDirective):
         for message_type in ServerMessage.__subclasses__():
             message_code = _find_message_code(message_type)
 
-            section = nodes.section()
-            section['ids'].append(nodes.make_id(message_type.__name__))
-            section_title = nodes.title(
-                text=f"{message_type.__name__} (Code {message_code})")
+            target, section = _create_message_section(
+                self.state, self.env, message_type,
+                f"{message_type.__name__} (Code {message_code})"
+            )
 
-            section.append(section_title)
+            section.extend(_create_description_nodes(self.env, message_type))
 
-            description_node = _create_description(self.state, message_type)
-            if description_node:
-                section.append(description_node)
+            status = _parse_status(self.env, message_type)
 
             details = nodes.field_list()
             details.append(_create_definition_item("Code:", f"{message_code} (0x{message_code:X})"))
-            details.append(_create_definition_item("Status:", "ACTIVE"))
+            details.append(_create_definition_item("Status:", status))
 
             # Parameters
             ## Request
@@ -125,7 +123,7 @@ class ServerMessagesDirective(SphinxDirective):
 
             section.append(details)
 
-            sections.append(section)
+            sections.extend([target, section])
 
         return sections
 
@@ -139,20 +137,18 @@ class _PeerMessagesDirectiveBase(SphinxDirective):
         for message_type in self.BASE_MESSAGE_CLS.__subclasses__():
             message_code = _find_message_code(message_type)
 
-            section = nodes.section()
-            section['ids'].append(nodes.make_id(message_type.__name__))
-            section_title = nodes.title(
-                text=f"{message_type.__name__} (Code {message_code})")
+            target, section = _create_message_section(
+                self.state, self.env, message_type,
+                f"{message_type.__name__} (Code {message_code})"
+            )
 
-            section.append(section_title)
+            section.extend(_create_description_nodes(self.env, message_type))
 
-            description_node = _create_description(self.state, message_type)
-            if description_node:
-                section.append(description_node)
+            status = _parse_status(self.env, message_type)
 
             details = nodes.field_list()
             details.append(_create_definition_item("Code:", f"{message_code} (0x{message_code:X})"))
-            details.append(_create_definition_item("Status:", "ACTIVE"))
+            details.append(_create_definition_item("Status:", status))
 
             request_cls = getattr(message_type, 'Request')
             param_list = _build_parameter_table(request_cls)
@@ -160,7 +156,8 @@ class _PeerMessagesDirectiveBase(SphinxDirective):
 
             section.append(details)
 
-            sections.append(section)
+            # sections.append(section)
+            sections.extend([target, section])
 
         return sections
 
@@ -194,6 +191,30 @@ def _get_condition_text(field) -> str:
     return ''
 
 
+def _create_message_section(
+        state: RSTState, env: BuildEnvironment,
+        message_cls: type, title: str) -> tuple[nodes.target, nodes.section]:
+
+    section = nodes.section()
+    section_id = nodes.make_id(message_cls.__name__.lower())
+    section['ids'].extend([section_id])
+    section['names'].extend([nodes.fully_normalize_name(message_cls.__name__)])
+
+    target = nodes.target('', '', ids=[message_cls.__name__.lower()])
+
+    state.document.note_explicit_target(target)
+
+    section_title = nodes.title(text=title)
+
+    section.append(section_title)
+
+    std_domain = env.get_domain('std')
+    std_domain.labels[section_id] = (env.docname, section_id, title)
+    std_domain.anonlabels[section_id] = (env.docname, section_id)
+
+    return target, section
+
+
 def _create_type_ref(type_cls: type) -> nodes.Node:
     type_reference = nodes.reference(text=type_cls.__name__)
     type_reference['refid'] = type_cls.__name__.lower()
@@ -216,14 +237,12 @@ def _create_type_nodes(type_cls: type, subtype_cls: Optional[type] = None) -> li
             return [nodes.strong(text=type_cls.__name__)]
 
 
-def _create_description(state, type_cls: type) -> Optional[nodes.Node]:
+def _create_description(state: RSTState, type_cls: type) -> Optional[nodes.paragraph]:
     description = type_cls.__doc__
     if not description:
         return None
 
-    docstring_lines = StringList(
-        inspect.cleandoc(description).splitlines()
-    )
+    docstring_lines = StringList(inspect.cleandoc(description).splitlines())
     with switch_source_input(state, docstring_lines):
         description_node = nodes.paragraph()
         state.nested_parse(docstring_lines, 0, description_node)
@@ -231,7 +250,50 @@ def _create_description(state, type_cls: type) -> Optional[nodes.Node]:
     return description_node
 
 
-def _build_parameter_table(message_cls: type) -> nodes.Node:
+def _generate_doctree(env: BuildEnvironment, type_cls: type):
+    docstring = type_cls.__doc__
+    if not docstring:
+        return None
+
+    docstring = inspect.cleandoc(docstring)
+
+    return docutils.core.publish_doctree(
+        source=docstring,
+        parser_name='rst',
+        settings_overrides={
+            'output_encoding': 'unicode',
+            'env': env
+        }
+    )
+
+
+def _create_description_nodes(env: BuildEnvironment, type_cls: type) -> list[nodes.Node]:
+    if doctree := _generate_doctree(env, type_cls):
+        return [
+            component
+            for component in doctree
+            if not isinstance(component, nodes.field_list)
+        ]
+
+    return []
+
+
+def _parse_status(env: BuildEnvironment, type_cls: type) -> str:
+    if doctree := _generate_doctree(env, type_cls):
+        for child in doctree.children:
+
+            if not isinstance(child, nodes.field_list):
+                continue
+
+            for field in child.children:
+                name, value = field.children
+                if name.astext() == 'status':
+                    return value.astext()
+
+    return 'Unknown'
+
+
+def _build_parameter_table(message_cls: type) -> nodes.table:
     if not fields(message_cls):
         return nodes.paragraph(text='No parameters')
 
@@ -284,7 +346,7 @@ def _build_parameter_table(message_cls: type) -> nodes.Node:
     return table
 
 
-def _build_parameter_list(message_cls: type) -> nodes.Node:
+def _build_parameter_list(message_cls: type) -> nodes.enumerated_list:
     param_list = nodes.enumerated_list()
     for field in fields(message_cls):
         field_text = nodes.paragraph()
@@ -302,7 +364,7 @@ def _build_parameter_list(message_cls: type) -> nodes.Node:
     return param_list
 
 
-def _create_definition_item(term: str, definition: Union[nodes.Node, str]) -> nodes.Node:
+def _create_definition_item(term: str, definition: Union[nodes.Node, str]) -> nodes.definition_list_item:
     item = nodes.definition_list_item()
 
     if isinstance(definition, str):
@@ -316,7 +378,7 @@ def _create_definition_item(term: str, definition: Union[nodes.Node, str]) -> no
     return item
 
 
-def _find_message_code(message_type) -> int:
+def _find_message_code(message_type: type) -> int:
     """Finds the message code in either the request or the response"""
     # Both have the MESSAGE_ID but either may not exist
     if hasattr(message_type, 'Request'):

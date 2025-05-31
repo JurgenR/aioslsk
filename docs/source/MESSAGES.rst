@@ -1,6 +1,6 @@
-======
-Custom
-======
+=================
+Protocol Messages
+=================
 
 .. contents:
    :local
@@ -139,6 +139,31 @@ This is a description of possible statuses of each of the messages used by the p
 * DEPRECATED, DEFUNCT : Message no longer works, has no effect or the server doesn't send it any more
 * UNKNOWN
 
+Message Structure
+=================
+
+All messages, except the file connection messages, must be preceded with a header. This header contains
+the ``length`` of the message and the ``message_code``.
+
+* The ``length`` of the header is represented as a ``uint32`` and should exclude the length itself.
+* The ``message_code`` is also represented as a ``uint32`` for all messages **except** for the
+  :ref:`peer-init-messages` where it is represented as a ``uint8``
+* The ``body`` is optional
+
+Header structure thus looks as follows:
+
++--------+--------------+----------+
+|  Type  |     Name     | Optional |
++========+==============+==========+
+| uint32 | length       | No       |
++--------+--------------+----------+
+| uint32 | message_code | No       |
++--------+--------------+----------+
+| any    | body         | Yes      |
++--------+--------------+----------+
+
+
+.. _server-messages:
 
 Server Messages
 ===============
@@ -146,11 +171,15 @@ Server Messages
 .. server-messages::
 
 
+.. _peer-init-messages:
+
 Peer Initialization Messages
 ============================
 
 .. peer-init-messages::
 
+
+.. _peer-messages:
 
 Peer Messages
 =============
@@ -158,17 +187,20 @@ Peer Messages
 .. peer-messages::
 
 
+.. _distributed-messages:
+
 Distributed Messages
 ====================
 
 .. distributed-messages::
 
 
+.. _file-messages:
+
 File Messages
 =============
 
-File connection does not have a message format but after peer initialization two values are exchanged:
+File connection does not have a header format but after peer initialization two values are exchanged:
 
 1. **uint32**: ticket
 2. **uint64**: offset
-

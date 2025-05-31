@@ -2,6 +2,8 @@
 Protocol Messages
 =================
 
+Deprecated listing of messages, messages are auto-generated based on code definitions
+
 .. contents:
    :local
 

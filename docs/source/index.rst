@@ -12,7 +12,7 @@ Welcome to aioslsk's documentation!
 
    ./USAGE
    ./SETTINGS
-   ./MESSAGES_GEN
+   ./MESSAGES
    ./SOULSEEK
    ./API
 
