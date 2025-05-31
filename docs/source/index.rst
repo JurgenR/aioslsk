@@ -16,6 +16,7 @@ Welcome to aioslsk's documentation!
    ./SOULSEEK
    ./API
 
+
 Indices and tables
 ==================
 

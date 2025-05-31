@@ -7,6 +7,7 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('../../src/aioslsk'))
 sys.path.insert(0, os.path.abspath('../../src/'))
+sys.path.insert(0, os.path.abspath('_exts/'))
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
@@ -23,10 +24,11 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinxcontrib.autodoc_pydantic',
     'sphinx.ext.intersphinx',
+    'message_generator'
 ]
 
 templates_path = ['_templates']
-exclude_patterns = []
+exclude_patterns = ['deprecated/**']
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
