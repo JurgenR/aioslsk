@@ -247,7 +247,7 @@ class UserTrackingEvent(Event):
     """Emitted when a user is now successfully by the library tracked. This will
     be triggered when:
 
-    The `user` object will contain the tracked user. `data` will contain the
+    The ``user`` object will contain the tracked user. ``data`` will contain the
     data returned by the server
     """
     user: User
@@ -334,7 +334,8 @@ class RoomTickerRemovedEvent(Event):
 class RoomJoinedEvent(Event):
     """Emitted after a user joined a chat room
 
-    The value of `user` will be `None` in case it is us who has joined the room
+    The value of ``user`` will be ``None`` in case it is us who has joined the
+    room
     """
     room: Room
     raw_message: Union[JoinRoom.Response, UserJoinedRoom.Response]
@@ -345,7 +346,8 @@ class RoomJoinedEvent(Event):
 class RoomLeftEvent(Event):
     """Emitted after a user left a chat room
 
-    The value of `user` will be `None` in case it is us who has left the room
+    The value of ``user`` will be ``None`` in case it is us who has left the
+    room
     """
     room: Room
     raw_message: Union[LeaveRoom.Response, UserLeftRoom.Response]
@@ -356,8 +358,8 @@ class RoomLeftEvent(Event):
 class RoomMembershipGrantedEvent(Event):
     """Emitted when a member has been added to the private room
 
-    The value of `member` will be `None` in case it is us who has been added to
-    the room
+    The value of ``member`` will be ``None`` in case it is us who has been added
+    to the room
     """
     room: Room
     raw_message: Union[PrivateRoomGrantMembership.Response, PrivateRoomMembershipGranted.Response]
@@ -368,8 +370,8 @@ class RoomMembershipGrantedEvent(Event):
 class RoomMembershipRevokedEvent(Event):
     """Emitted when a member has been removed to the private room
 
-    The value of `member` will be `None` in case it is us who has been removed
-    from the room
+    The value of ``member`` will be ``None`` in case it is us who has been
+    removed from the room
     """
     room: Room
     raw_message: Union[PrivateRoomRevokeMembership.Response, PrivateRoomMembershipRevoked.Response]
@@ -381,8 +383,8 @@ class RoomOperatorGrantedEvent(Event):
     """Emitted when a member has been granted operator privileges on a private
     room
 
-    The value of `member` will be `None` in case it is us who has been granted
-    operator
+    The value of ``member`` will be ``None`` in case it is us who has been
+    granted operator
     """
     room: Room
     raw_message: Union[PrivateRoomGrantOperator.Response, PrivateRoomOperatorGranted.Response]
@@ -393,7 +395,7 @@ class RoomOperatorGrantedEvent(Event):
 class RoomOperatorRevokedEvent(Event):
     """Emitted when a member had operator privileges revoked on a private room
 
-    The value of `user` will be `None` in case it is us who has been revoked
+    The value of ``user`` will be ``None`` in case it is us who has been revoked
     operator
     """
     room: Room
@@ -523,7 +525,7 @@ class PrivilegedUserAddedEvent(Event):
 @dataclass(frozen=True)
 class PrivilegesUpdateEvent(Event):
     """Emitted when we receive a message containing how much time is left on the
-    current user's privileges. If `time_left` is 0 the current user has no
+    current user's privileges. If ``time_left`` is 0 the current user has no
     privileges
     """
     time_left: int
@@ -565,7 +567,7 @@ class TransferRemovedEvent(Event):
 @dataclass(frozen=True)
 class TransferProgressEvent(Event):
     """Called periodically to report progress. The interval is determined by the
-    `transfers.progress_interval` settings parameter
+    ``transfers.progress_interval`` settings parameter
 
     This event only includes transfers where the transfer state has been changed
     since the previous event. If there are no updates the event will no be
