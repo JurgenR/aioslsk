@@ -62,7 +62,8 @@ Install poetry_ and setup the project dependencies by running:
 
 A tool is available to start the client for debugging purposes (try out commands to the server, ...):
 
-1. Create a ``settings.json`` file containing valid credentials in the ``tools/debug/`` directory (or pass a path using ``--settings``). To generate a simple settings file:
+1. Create a ``settings.json`` file containing valid credentials in the ``tools/debug/`` directory
+   (or pass a path using ``--settings``). To generate a simple settings file:
 
    .. code-block:: shell
 
@@ -85,7 +86,8 @@ A tool is available to start the client for debugging purposes (try out commands
 
 4. To close the REPL execute ``exit()`` or press ``Ctrl+Z``
 
-Optionally the script takes a ``--cache-dir`` that will read/write the transfer and shares cache from the given directory
+Optionally the script takes a ``--cache-dir`` that will read/write the transfer and shares cache
+from the given directory
 
 
 Building the documentation
@@ -112,6 +114,9 @@ Running all tests with code coverage report:
 
     poetry run pytest --cov=aioslsk --cov-report term-missing tests/
 
+By default logs are only displayed on failure. To display all logs during testing add the
+``-o log_cli=true`` flag to the command line
+
 
 Mock Server
 ~~~~~~~~~~~
@@ -125,7 +130,8 @@ A mock server implementation is available for testing, to start the server run:
     # Specifying multiple listening ports
     poetry run python -m tests.e2e.mock.server --port 2416 2242
 
-Configure the hostname or IP of the server in your client and connect. If such configuration is not possible you can add an entry to the ``hosts`` file of your system. For example:
+Configure the hostname or IP of the server in your client and connect. If such configuration is not
+possible you can add an entry to the ``hosts`` file of your system. For example:
 
 ::
 
