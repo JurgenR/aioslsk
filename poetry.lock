@@ -1649,14 +1649,14 @@ testing = ["fields", "hunter", "process-tests", "pytest-xdist", "virtualenv"]
 
 [[package]]
 name = "pytest-unordered"
-version = "0.6.1"
+version = "0.7.0"
 description = "Test equality of unordered collections in pytest"
 optional = false
 python-versions = "*"
 groups = ["dev"]
 files = [
-    {file = "pytest_unordered-0.6.1-py3-none-any.whl", hash = "sha256:baa809a0ff811d97cfd85f138dbca52e2d7831612b4e19225b3a65ebd9fce068"},
-    {file = "pytest_unordered-0.6.1.tar.gz", hash = "sha256:061f7a538247f8adc97a4fcf7415d36e0db4b16548c42d5b49168e6ec2cd95b0"},
+    {file = "pytest_unordered-0.7.0-py3-none-any.whl", hash = "sha256:486b26d24a2d3b879a275c3d16d14eda1bd9c32aafddbb17b98ac755daba7584"},
+    {file = "pytest_unordered-0.7.0.tar.gz", hash = "sha256:0f953a438db00a9f6f99a0f4727f2d75e72dd93319b3d548a97ec9db4903a44f"},
 ]
 
 [package.dependencies]
@@ -2248,4 +2248,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.9,<3.14"
-content-hash = "5f5e42e25a421ebc0683fe6d2dbde426188d36b8eacec49960cd55b97a3a11f6"
+content-hash = "227aeb0ad3c0c27061400994f6fe798b0c5a030bf531a366a16b561de092c959"
