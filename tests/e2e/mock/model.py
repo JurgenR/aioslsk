@@ -51,7 +51,7 @@ class QueuedPrivateMessage:
     message: str
     timestamp: int
 
-    def to_protocol_message(self, is_direct: bool = False) -> PrivateChatMessage:
+    def to_protocol_message(self, is_direct: bool = False) -> PrivateChatMessage.Response:
         return PrivateChatMessage.Response(
             chat_id=self.chat_id,
             timestamp=self.timestamp,
@@ -90,7 +90,7 @@ class User:
     hated_interests: set[str] = field(default_factory=set)
 
     queued_private_messages: list[QueuedPrivateMessage] = field(default_factory=list)
-    added_users: dict[str, 'User'] = field(default_factory=WeakValueDictionary)
+    added_users: WeakValueDictionary[str, 'User'] = field(default_factory=WeakValueDictionary)
 
     # TODO: Investigate what the default values are
     enable_private_rooms: bool = False

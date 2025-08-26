@@ -19,7 +19,7 @@ class Peer:
 
     def __init__(
             self, hostname: str, port: int, server: MockServer,
-            reader: asyncio.StreamReader = None, writer: asyncio.StreamWriter = None,
+            reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
             user: Optional[User] = None):
 
         self.hostname: str = hostname
@@ -28,11 +28,10 @@ class Peer:
 
         self.user: Optional[User] = user
 
-        self.reader: Optional[asyncio.StreamReader] = reader
-        self.writer: Optional[asyncio.StreamWriter] = writer
+        self.reader: asyncio.StreamReader = reader
+        self.writer: asyncio.StreamWriter = writer
         self.reader_loop: Optional[asyncio.Task] = None
 
-        self.should_close: bool = False
         self.last_ping: float = 0.0
 
         self.client_version: Optional[int] = None
@@ -44,16 +43,13 @@ class Peer:
         logger.debug(f"{self.hostname}:{self.port} : disconnecting")
         self.stop_reader_loop()
         try:
-            if self.writer is not None:
-                if not self.writer.is_closing():
-                    self.writer.close()
-                await self.writer.wait_closed()
+            if not self.writer.is_closing():
+                self.writer.close()
+            await self.writer.wait_closed()
         except Exception:
             logger.exception(f"{self.hostname}:{self.port} : exception while disconnecting")
 
         finally:
-            self.writer = None
-            self.reader = None
             await self.server.on_peer_disconnected(self)
 
     def start_reader_loop(self):

@@ -208,8 +208,11 @@ class RealisticParentsStrategy(DistributedStrategy):
     selection process.
     """
 
-    def __init__(self, settings: Settings, peers: list[Peer]):
-        super().__init__(settings, peers)
+    def __init__(
+            self, settings: Settings, peers: list[Peer],
+            distributed_tree: dict[str, DistributedValues]):
+
+        super().__init__(settings, peers, distributed_tree)
         self.root_percentage: float = 0.01
 
     @classmethod

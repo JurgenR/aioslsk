@@ -528,7 +528,7 @@ class MockServer:
         """
         peer = self.find_peer_by_name(user.name)
 
-        messages = [
+        messages: list[MessageDataclass] = [
             self._create_room_list_message(user, min_users=min_users)
         ]
 
@@ -947,13 +947,13 @@ class MockServer:
         if peer.user not in room.all_members:
             return
 
-        message = FileSearch(
+        response = FileSearch.Response(
             username=peer.user.name,
             ticket=message.ticket,
             query=message.query
         )
 
-        await self.notify_room_joined_users(room, message)
+        await self.notify_room_joined_users(room, response)
 
     @on_message(UserSearch.Request)
     async def on_user_search(self, message: UserSearch.Request, peer: Peer):
@@ -981,7 +981,7 @@ class MockServer:
 
     @on_message(FileSearch.Request)
     async def on_file_search(self, message: FileSearch.Request, peer: Peer):
-        message = ServerSearchRequest.Response(
+        response = ServerSearchRequest.Response(
             0x03,
             0x31,
             peer.user.name,
@@ -990,7 +990,7 @@ class MockServer:
         )
 
         await asyncio.gather(
-            *[peer.send_message(message) for peer in self.distributed_strategy.get_roots()],
+            *[peer.send_message(response) for peer in self.distributed_strategy.get_roots()],
             return_exceptions=True
         )
 
@@ -1325,7 +1325,8 @@ class MockServer:
                 # joining the room anyway
 
                 await self.send_admin_message(
-                    AdminMessage.ROOM_CANNOT_CREATE_PUBLIC.format(message.room)
+                    AdminMessage.ROOM_CANNOT_CREATE_PUBLIC.format(message.room),
+                    peer
                 )
 
             else:
