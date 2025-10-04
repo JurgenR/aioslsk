@@ -302,8 +302,9 @@ class DataConnection(Connection, abc.ABC):
             except ConnectionReadError:
                 adapter.warning("read error", extra=self.__dict__)
 
-            except MessageDeserializationError:
-                adapter.warning("failed to deserialize message : %s", message, extra=self.__dict__)
+            except MessageDeserializationError as exc:
+                adapter.warning(
+                    "failed to deserialize message : %s", exc.proto_message, extra=self.__dict__)
 
             else:
 
@@ -532,7 +533,7 @@ class DataConnection(Connection, abc.ABC):
         try:
             message = self.deserialize_message(data)
         except Exception as exc:
-            raise MessageDeserializationError("failed to deserialize message") from exc
+            raise MessageDeserializationError(data, "failed to deserialize message") from exc
 
         return message
 
