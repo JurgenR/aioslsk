@@ -11,16 +11,16 @@ packages = [{include = "aioslsk", from = "src"}]
 keywords = ["soulseek", "p2p", "async"]
 classifiers = [
     "Development Status :: 4 - Beta",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Communications :: File Sharing"
 ]
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.14"
+python = ">=3.10,<3.15"
 mutagen = "^1.47.0"
 aiofiles = ">=22.1,<25.0"
 async-upnp-client = ">=0.33,<0.46"
