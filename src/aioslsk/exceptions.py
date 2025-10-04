@@ -38,7 +38,10 @@ class MessageSerializationError(AioSlskException):
 
 
 class MessageDeserializationError(AioSlskException):
-    pass
+
+    def __init__(self, proto_message: bytes, message: str) -> None:
+        self.proto_message: bytes = proto_message
+        self.message: str = message
 
 
 class FileError(AioSlskException):
