@@ -4,6 +4,7 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 import inspect
 import logging
+import sys
 from typing import Any, Optional, TypeVar, TYPE_CHECKING, Union
 from types import MethodType
 import weakref
@@ -70,6 +71,15 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+# There used to be a difference in older versions between using the inspect and
+# asyncio functions. The inspect function was fixed in 3.13. The asyncio version
+# will be removed in 3.14
+if sys.version_info >= (3, 14):
+    iscoroutinefunction = inspect.iscoroutinefunction
+
+else:
+    iscoroutinefunction = asyncio.iscoroutinefunction
 
 
 E = TypeVar('E', bound='Event')
@@ -151,7 +161,7 @@ class EventBus:
         """
         for listener in self._get_listeners_for_event(event):
             try:
-                if inspect.iscoroutinefunction(listener):
+                if iscoroutinefunction(listener):
                     await listener(event)
                 else:
                     listener(event)
@@ -169,7 +179,7 @@ class EventBus:
         """
         for listener in self._get_listeners_for_event(event):
             try:
-                if inspect.iscoroutinefunction(listener):
+                if iscoroutinefunction(listener):
                     logger.warning(
                         "attempted to emit synchronous event to an async listener : %r",
                         listener
