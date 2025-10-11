@@ -4,7 +4,7 @@ aioslsk
 
 aioslsk is a Python library for the SoulSeek protocol built on top of asyncio.
 
-Supported Python versions are currently 3.9 - 3.13
+Supported Python versions are currently 3.10 - 3.14
 
 You can find the full documentation `here <http://aioslsk.readthedocs.io/>`_
 
