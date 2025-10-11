@@ -151,7 +151,7 @@ class EventBus:
         """
         for listener in self._get_listeners_for_event(event):
             try:
-                if asyncio.iscoroutinefunction(listener):
+                if inspect.iscoroutinefunction(listener):
                     await listener(event)
                 else:
                     listener(event)
@@ -169,7 +169,7 @@ class EventBus:
         """
         for listener in self._get_listeners_for_event(event):
             try:
-                if asyncio.iscoroutinefunction(listener):
+                if inspect.iscoroutinefunction(listener):
                     logger.warning(
                         "attempted to emit synchronous event to an async listener : %r",
                         listener
