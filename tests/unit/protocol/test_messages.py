@@ -129,7 +129,17 @@ from aioslsk.protocol.messages import (
 )
 
 import pytest
+import zlib
 from aioslsk.exceptions import UnknownMessageError
+
+
+
+# The underlying zlib library changed in Python 3.14 and onward for Windows to
+# zlib-ng (https://github.com/python/cpython/issues/91349). This causes
+# different compression output on different platform.
+# If in the future zlib-ng should be used for platforms other than Windows
+
+IS_ZLIB_NG = zlib.ZLIB_VERSION.endswith('zlib-ng')
 
 
 class TestMessageDeserializers:
@@ -437,7 +447,7 @@ class TestGetUserStatus:
         message = GetUserStatus.Response(
             username='user0',
             status=2,
-            privileged=1
+            privileged=True
         )
         data = bytes.fromhex('12000000070000000500000075736572300200000001')
         assert message.serialize() == data
@@ -446,7 +456,7 @@ class TestGetUserStatus:
         message = GetUserStatus.Response(
             username='user0',
             status=2,
-            privileged=1
+            privileged=True
         )
         data = bytes.fromhex('12000000070000000500000075736572300200000001')
         assert GetUserStatus.Response.deserialize(0, data) == message
@@ -2454,6 +2464,7 @@ class TestPeerSharesReply:
         ]
     )
     DATA = bytes.fromhex('4100000005000000789c6364606060076267ab9894cc22034620938113888bf3f3d20df4720b8c1d9cf841620ccc400ce4320129902207200162efe006cb3200005766082d')
+    DATA_ZLIB_NG = bytes.fromhex('4a00000005000000789c636460606067606070b68a49c92c326064606060e064606028cecf4b37d0cb2d307670e207893130333030e416183331303080143930323080d83bb8c1b20c005766082d')
 
     MESSAGE_LOCKED = PeerSharesReply.Request(
         directories=[
@@ -2492,25 +2503,26 @@ class TestPeerSharesReply:
         ]
     )
     DATA_LOCKED = bytes.fromhex('5400000005000000789c6364606060076267ab9894cc220346209391134814e7e7a51be8e516183b38f1338000331003b94c200540ec002440ec1ddc6059b0181fc49c9cfce4ecd49478b8710240022a468aa9008ea3160b')
+    DATA_LOCKED_ZLIB_NG = bytes.fromhex('5f00000005000000789c636460606067606070b68a49c92c326064606060e464606028cecf4b37d0cb2d307670e267000166060686dc026326900206060607460606107b073758162cc6073127273f393b35251e6e9c00030303548c1453018ea3160b')
 
     def test_PeerSharesReply_Request_serialize_withoutLockedResults(self):
         message = self.MESSAGE
-        data = self.DATA
+        data = self.DATA if not IS_ZLIB_NG else self.DATA_ZLIB_NG
         assert message.serialize() == data
 
-    def test_PeerSharesReply_Request_deserialize_withoutLockedResults(self):
+    @pytest.mark.parametrize('data', [DATA, DATA_ZLIB_NG])
+    def test_PeerSharesReply_Request_deserialize_withoutLockedResults(self, data: bytes):
         message = self.MESSAGE
-        data = self.DATA
         assert PeerSharesReply.Request.deserialize(0, data) == message
 
     def test_PeerSharesReply_Request_serialize_withLockedResults(self):
         message = self.MESSAGE_LOCKED
-        data = self.DATA_LOCKED
+        data = self.DATA_LOCKED if not IS_ZLIB_NG else self.DATA_LOCKED_ZLIB_NG
         assert message.serialize() == data
 
-    def test_PeerSharesReply_Request_deserialize_withLockedResults(self):
+    @pytest.mark.parametrize('data', [DATA_LOCKED, DATA_LOCKED_ZLIB_NG])
+    def test_PeerSharesReply_Request_deserialize_withLockedResults(self, data: bytes):
         message = self.MESSAGE_LOCKED
-        data = self.DATA_LOCKED
         assert PeerSharesReply.Request.deserialize(0, data) == message
 
 
@@ -2536,6 +2548,7 @@ class TestPeerSearchReply:
         queue_size=5,
     )
     DATA = bytes.fromhex('4c00000009000000789c63656060282d4e2d32b8c4c2c0c008e4300a020967ab9894cc228398e2fcbc7403bddc02e38669331840801988815c2606886207200162a780f82f8092ac0c100000bd030d03')
+    DATA_ZLIB_NG = bytes.fromhex('5700000009000000789c63656060282d4e2d32b8c4c2c0c0c8c0c0c028c8c0c0e06c159392596410539c9f976ea0975b60dc306d06030830333030e416183381143230303830323080d82920fe0b66060656b02a060600bd030d03')
 
     MESSAGE_LOCKED = PeerSearchReply.Request(
         username='user0',
@@ -2569,25 +2582,26 @@ class TestPeerSearchReply:
         ]
     )
     DATA_LOCKED = bytes.fromhex('5b00000009000000789c63656060282d4e2d32b8c4c2c0c008e4300a020967ab9894cc228398e2fcbc7403bddc02e38669331840801988815c2606886207200162a780f82f8092ac0c1000364902c9a49cfce4ecd49478520c040026fe1922')
+    DATA_LOCKED_ZLIB_NG = bytes.fromhex('6400000009000000789c63656060282d4e2d32b8c4c2c0c0c8c0c0c028c8c0c0e06c159392596410539c9f976ea0975b60dc306d06030830333030e416183381143230303830323080d82920fe0b66060656b02aa849124826e5e42767a7a6c49362200026fe1922')
 
     def test_PeerSearchReply_Request_serialize_withoutLockedResults(self):
         message = self.MESSAGE
-        data = self.DATA
+        data = self.DATA if not IS_ZLIB_NG else self.DATA_ZLIB_NG
         assert message.serialize() == data
 
-    def test_PeerSearchReply_Request_deserialize_withoutLockedResults(self):
+    @pytest.mark.parametrize('data', [DATA, DATA_ZLIB_NG])
+    def test_PeerSearchReply_Request_deserialize_withoutLockedResults(self, data: bytes):
         message = self.MESSAGE
-        data = self.DATA
         assert PeerSearchReply.Request.deserialize(0, data) == message
 
     def test_PeerSearchReply_Request_serialize_withLockedResults(self):
         message = self.MESSAGE_LOCKED
-        data = self.DATA_LOCKED
+        data = self.DATA_LOCKED if not IS_ZLIB_NG else self.DATA_LOCKED_ZLIB_NG
         assert message.serialize() == data
 
-    def test_PeerSearchReply_Request_deserialize_withLockedResults(self):
+    @pytest.mark.parametrize('data', [DATA_LOCKED, DATA_LOCKED_ZLIB_NG])
+    def test_PeerSearchReply_Request_deserialize_withLockedResults(self, data: bytes):
         message = self.MESSAGE_LOCKED
-        data = self.DATA_LOCKED
         assert PeerSearchReply.Request.deserialize(0, data) == message
 
 
@@ -2745,15 +2759,16 @@ class TestPeerDirectoryContentsReply:
         ]
     )
     DATA = bytes.fromhex('4100000025000000789cbbc4c2c0c0cec0c0e06c1593925964c0c880c165e40412c5f979e9067ab905c60e4efc0c20c00cc4402e134801103b308245195e00c501231c0b79')
+    DATA_ZLIB_NG = bytes.fromhex('4900000025000000789cbbc4c2c0c0cec0c0e06c1593925964c0c880c165e464606028cecf4b37d0cb2d307670e267000166060686dc02632690020606060710c1c0c0f08299810100231c0b79')
 
     def test_PeerDirectoryContentsReply_Request_serialize(self):
         message = self.MESSAGE
-        data = self.DATA
+        data = self.DATA if not IS_ZLIB_NG else self.DATA_ZLIB_NG
         assert message.serialize() == data
 
-    def test_PeerDirectoryContentsReply_Request_deserialize(self):
+    @pytest.mark.parametrize('data', [DATA, DATA_ZLIB_NG])
+    def test_PeerDirectoryContentsReply_Request_deserialize(self, data: bytes):
         message = self.MESSAGE
-        data = self.DATA
         assert PeerDirectoryContentsReply.Request.deserialize(0, data) == message
 
 
