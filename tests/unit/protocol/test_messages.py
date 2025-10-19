@@ -137,7 +137,8 @@ from aioslsk.exceptions import UnknownMessageError
 # The underlying zlib library changed in Python 3.14 and onward for Windows to
 # zlib-ng (https://github.com/python/cpython/issues/91349). This causes
 # different compression output on different platform.
-# If in the future zlib-ng should be used for platforms other than Windows
+# If in the future zlib-ng should be used for platforms other than Windows these
+# tests should continue to work
 
 IS_ZLIB_NG = zlib.ZLIB_VERSION.endswith('zlib-ng')
 

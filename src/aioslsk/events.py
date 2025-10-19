@@ -74,7 +74,7 @@ logger = logging.getLogger(__name__)
 
 # There used to be a difference in older versions between using the inspect and
 # asyncio functions. The inspect function was fixed in 3.13. The asyncio version
-# will be removed in 3.14
+# will be removed in 3.16
 if sys.version_info >= (3, 14):
     iscoroutinefunction = inspect.iscoroutinefunction
 
