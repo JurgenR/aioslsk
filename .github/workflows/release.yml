@@ -22,9 +22,9 @@ jobs:
         uses: code-specialist/pypi-poetry-publish@v1.2
         with:
           PACKAGE_DIRECTORY: "./src/aioslsk/"
-          PYTHON_VERSION: "3.9"
-          POETRY_VERSION: "1.8.4"
-          POETRY_CORE_VERSION: "1.9.1"
+          PYTHON_VERSION: "3.10"
+          POETRY_VERSION: "2.2.0"
+          POETRY_CORE_VERSION: "2.2.0"
           ACCESS_TOKEN: ${{ steps.generate-app-token.outputs.token }}
           BRANCH: "main"
           PUBLISH_REGISTRY_PASSWORD: ${{ secrets.PYPI_TOKEN }}
