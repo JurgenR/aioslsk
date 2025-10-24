@@ -45,6 +45,7 @@ from aioslsk.protocol.messages import (
     DistributedMessage,
     DistributedPing,
     DistributedSearchRequest,
+    DistributedServerSearchRequest,
     ExactFileSearch,
     ExcludedSearchPhrases,
     ExecuteCommand,
@@ -3048,10 +3049,10 @@ class TestDistributedChildDepth:
         assert DistributedChildDepth.Request.deserialize(0, data) == message
 
 
-class DistributedServerSearchRequest:
+class TestDistributedServerSearchRequest:
 
     def test_DistributedServerSearchRequest_Request_serialize(self):
-        message = DistributedServerSearchRequest.Response(
+        message = DistributedServerSearchRequest.Request(
             distributed_code=3,
             unknown=0,
             username='user0',
@@ -3062,7 +3063,7 @@ class DistributedServerSearchRequest:
         assert message.serialize() == data
 
     def test_DistributedServerSearchRequest_Request_deserialize(self):
-        message = DistributedServerSearchRequest.Response(
+        message = DistributedServerSearchRequest.Request(
             distributed_code=3,
             unknown=0,
             username='user0',
@@ -3070,4 +3071,4 @@ class DistributedServerSearchRequest:
             query='Query'
         )
         data = bytes.fromhex('1f0000005d0000000300000000050000007573657230d2040000050000005175657279')
-        assert DistributedServerSearchRequest.Response.deserialize(0, data) == message
+        assert DistributedServerSearchRequest.Request.deserialize(0, data) == message

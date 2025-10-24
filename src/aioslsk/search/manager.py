@@ -256,7 +256,7 @@ class SearchManager(BaseManager):
             )
         except Exception as exc:
             logger.warning(
-                "failed to deliver search results : {exc!r} (ticket=%d, username=%s, query=%s)",
+                "failed to deliver search results : %r (ticket=%d, username=%s, query=%s)",
                 exc, ticket, username, query
             )
         else:

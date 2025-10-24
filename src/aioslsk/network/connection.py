@@ -163,9 +163,10 @@ class ListeningConnection(Connection):
                 start_serving=True
             )
 
-        except OSError:
+        except OSError as exc:
+            adapter.exception("failed to bind listening port", extra=self.__dict__)
             await self.disconnect(CloseReason.CONNECT_FAILED)
-            raise ConnectionFailedError(f"{self.hostname}:{self.port} : failed to connect")
+            raise ConnectionFailedError(f"{self.hostname}:{self.port} : failed to connect") from exc
 
         await self.set_state(ConnectionState.CONNECTED)
 
