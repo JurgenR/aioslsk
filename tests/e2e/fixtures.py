@@ -172,9 +172,10 @@ async def clients(tmp_path: Path, request) -> AsyncGenerator[list[SoulSeekClient
         return_exceptions=True
     )
 
-    if any(isinstance(result, Exception) for result in start_results):
+    exceptions = [result for result in start_results if isinstance(result, Exception)]
+    if exceptions:
         await asyncio.gather(*stop_tasks, return_exceptions=True)
-        raise Exception("a client failed to start")
+        raise Exception(f"one or more clients failed to start : {exceptions}")
 
     yield client_list
 
