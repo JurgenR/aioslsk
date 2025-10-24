@@ -21,7 +21,7 @@ class SearchType(Enum):
     WISHLIST = auto()
 
 
-@dataclass
+@dataclass(slots=True)
 class ReceivedSearch:
     """Used for keeping track of searches received from the distributed parent
     or server
@@ -31,7 +31,7 @@ class ReceivedSearch:
     result_count: int
 
 
-@dataclass
+@dataclass(slots=True)
 class SearchQuery:
     query: str
     include_terms: set[str] = field(default_factory=set)
@@ -80,7 +80,7 @@ class SearchQuery:
         return bool(self.include_terms) or bool(self.wildcard_terms)
 
 
-@dataclass
+@dataclass(slots=True)
 class SearchResult:
     """Search result received from a user"""
     ticket: int
@@ -94,7 +94,7 @@ class SearchResult:
     locked_results: list[FileData] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(slots=True)
 class SearchRequest:
     """Search request we have made"""
     ticket: int

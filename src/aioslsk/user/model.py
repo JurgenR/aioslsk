@@ -1,8 +1,17 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import auto, Enum, Flag, IntFlag
+import sys
 from typing import Optional
+
 from ..protocol.primitives import UserStats
+
+
+if sys.version_info >= (3, 11):
+    slots_params = {'slots': True, 'weakref_slot': True}
+
+else:
+    slots_params = {}
 
 
 class UserStatus(Enum):
@@ -65,7 +74,7 @@ class BlockingFlag(IntFlag):
     """Fully blocks the user: includes messaging, shares requests, uploads"""
 
 
-@dataclass
+@dataclass(**slots_params)
 class User:
     name: str
 
@@ -135,7 +144,7 @@ class User:
             self.slots_free = None
 
 
-@dataclass
+@dataclass(**slots_params)
 class ChatMessage:
     """Represents a private chat message"""
     id: int

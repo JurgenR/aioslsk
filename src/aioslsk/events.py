@@ -224,14 +224,14 @@ class Event:
     """Base class for events"""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SessionInitializedEvent(Event):
     """Emitted after successful login"""
     session: Session
     raw_message: Login.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SessionDestroyedEvent(Event):
     """Emitted after the login session has been destroyed (this is always after
     disconnect)
@@ -239,20 +239,20 @@ class SessionDestroyedEvent(Event):
     session: Session
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AdminMessageEvent(Event):
     """Emitted when a global admin message has been received"""
     message: str
     raw_message: AdminMessage.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class KickedEvent(Event):
     """Emitted when we are kicked from the server"""
     raw_message: Kicked.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UserTrackingStateChangedEvent(Event):
     """Emitted when the tracking state of a user has changed.
 
@@ -265,7 +265,7 @@ class UserTrackingStateChangedEvent(Event):
     raw_message: Optional[AddUser.Response] = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UserTrackingEvent(Event):
     """Emitted when a user is now successfully by the library tracked. This will
     be triggered when:
@@ -280,7 +280,7 @@ class UserTrackingEvent(Event):
     raw_message: AddUser.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UserTrackingFailedEvent(Event):
     """
     .. deprecated:: 1.6
@@ -290,7 +290,7 @@ class UserTrackingFailedEvent(Event):
     raw_message: AddUser.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UserUntrackingEvent(Event):
     """Emitted when a user is no longer tracked by the library
 
@@ -300,7 +300,7 @@ class UserUntrackingEvent(Event):
     user: User
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UserStatusUpdateEvent(Event):
     """Emitted when the server sends an update for the users status / privileges
     or a request for it
@@ -310,7 +310,7 @@ class UserStatusUpdateEvent(Event):
     raw_message: GetUserStatus.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UserStatsUpdateEvent(Event):
     """Emitted when the server send an update for the user's sharing statistics
     """
@@ -319,7 +319,7 @@ class UserStatsUpdateEvent(Event):
     raw_message: GetUserStats.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UserInfoUpdateEvent(Event):
     """Emitted when user info has been received"""
     before: User
@@ -327,19 +327,19 @@ class UserInfoUpdateEvent(Event):
     raw_message: PeerUserInfoReply.Request
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RoomListEvent(Event):
     rooms: list[Room]
     raw_message: RoomList.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RoomMessageEvent(Event):
     message: RoomMessage
     raw_message: RoomChatMessage.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RoomTickersEvent(Event):
     """Emitted when a list of tickers has been received for a room"""
     room: Room
@@ -347,7 +347,7 @@ class RoomTickersEvent(Event):
     raw_message: RoomTickers.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RoomTickerAddedEvent(Event):
     """Emitted when a ticker has been added to the room by a user"""
     room: Room
@@ -356,7 +356,7 @@ class RoomTickerAddedEvent(Event):
     raw_message: RoomTickerAdded.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RoomTickerRemovedEvent(Event):
     """Emitted when a ticker has been removed from the room by a user"""
     room: Room
@@ -364,7 +364,7 @@ class RoomTickerRemovedEvent(Event):
     raw_message: RoomTickerRemoved.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RoomJoinedEvent(Event):
     """Emitted after a user joined a chat room
 
@@ -376,7 +376,7 @@ class RoomJoinedEvent(Event):
     user: Optional[User] = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RoomLeftEvent(Event):
     """Emitted after a user left a chat room
 
@@ -388,7 +388,7 @@ class RoomLeftEvent(Event):
     user: Optional[User] = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RoomMembershipGrantedEvent(Event):
     """Emitted when a member has been added to the private room
 
@@ -400,7 +400,7 @@ class RoomMembershipGrantedEvent(Event):
     member: Optional[User] = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RoomMembershipRevokedEvent(Event):
     """Emitted when a member has been removed to the private room
 
@@ -412,7 +412,7 @@ class RoomMembershipRevokedEvent(Event):
     member: Optional[User] = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RoomOperatorGrantedEvent(Event):
     """Emitted when a member has been granted operator privileges on a private
     room
@@ -425,7 +425,7 @@ class RoomOperatorGrantedEvent(Event):
     member: Optional[User] = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RoomOperatorRevokedEvent(Event):
     """Emitted when a member had operator privileges revoked on a private room
 
@@ -437,7 +437,7 @@ class RoomOperatorRevokedEvent(Event):
     member: Optional[User] = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RoomOperatorsEvent(Event):
     """Emitted when the server sends us a list of operators in a room"""
     room: Room
@@ -445,7 +445,7 @@ class RoomOperatorsEvent(Event):
     raw_message: PrivateRoomOperators.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RoomMembersEvent(Event):
     """Emitted when the server sends us a list of members of a room. The list
     of members always excludes the owner of the room
@@ -455,14 +455,14 @@ class RoomMembersEvent(Event):
     raw_message: PrivateRoomMembers.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PrivateMessageEvent(Event):
     """Emitted when a private message has been received"""
     message: ChatMessage
     raw_message: PrivateChatMessage.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PublicMessageEvent(Event):
     """Emitted when a message has been received from a public room and public
     chat has been enabled
@@ -474,26 +474,26 @@ class PublicMessageEvent(Event):
     raw_message: PublicChatMessage.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SearchRequestSentEvent(Event):
     """Emitted when a search request has been sent out"""
     query: SearchRequest
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SearchRequestRemovedEvent(Event):
     """Emitted when a search request has been removed"""
     query: SearchRequest
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SearchResultEvent(Event):
     """Emitted when a search result has been received"""
     query: SearchRequest
     result: SearchResult
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SearchRequestReceivedEvent(Event):
     """Emitted when a search request by another user has been received"""
     username: str
@@ -501,41 +501,41 @@ class SearchRequestReceivedEvent(Event):
     result_count: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SimilarUsersEvent(Event):
     users: list[tuple[User, int]]
     raw_message: GetSimilarUsers.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ItemSimilarUsersEvent(Event):
     item: str
     users: list[User]
     raw_message: GetItemSimilarUsers.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RecommendationsEvent(Event):
     recommendations: list[Recommendation]
     unrecommendations: list[Recommendation]
     raw_message: GetRecommendations.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class GlobalRecommendationsEvent(Event):
     recommendations: list[Recommendation]
     unrecommendations: list[Recommendation]
     raw_message: GetGlobalRecommendations.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ItemRecommendationsEvent(Event):
     item: str
     recommendations: list[Recommendation]
     raw_message: GetItemRecommendations.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UserInterestsEvent(Event):
     user: User
     interests: list[str]
@@ -543,20 +543,20 @@ class UserInterestsEvent(Event):
     raw_message: GetUserInterests.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PrivilegedUsersEvent(Event):
     """Emitted when the list of privileged users has been received"""
     users: list[User]
     raw_message: PrivilegedUsers.Response
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PrivilegedUserAddedEvent(Event):
     """Emitted when a new privileged user has been added"""
     user: User
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PrivilegesUpdateEvent(Event):
     """Emitted when we receive a message containing how much time is left on the
     current user's privileges. If ``time_left`` is 0 the current user has no
@@ -568,7 +568,7 @@ class PrivilegesUpdateEvent(Event):
 
 # Peer
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UserSharesReplyEvent(Event):
     user: User
     directories: list[DirectoryData]
@@ -576,7 +576,7 @@ class UserSharesReplyEvent(Event):
     raw_message: PeerSharesReply.Request
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UserDirectoryEvent(Event):
     user: User
     directory: str
@@ -586,19 +586,19 @@ class UserDirectoryEvent(Event):
 
 # Transfer
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TransferAddedEvent(Event):
     """Emitted when a transfer has been attached to the client"""
     transfer: Transfer
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TransferRemovedEvent(Event):
     """Emitted when a transfer has been detached from the client"""
     transfer: Transfer
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TransferProgressEvent(Event):
     """Called periodically to report progress. The interval is determined by the
     ``transfers.progress_interval`` settings parameter
@@ -619,7 +619,7 @@ class InternalEvent(Event):
     """Base class for internal events"""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ConnectionStateChangedEvent(InternalEvent):
     """Indicates a state change in any type of connection"""
     connection: Connection
@@ -627,21 +627,21 @@ class ConnectionStateChangedEvent(InternalEvent):
     close_reason: Optional[CloseReason] = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ServerReconnectedEvent(InternalEvent):
     """Indicates server reconnected, used internally to automatically log back
     in
     """
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MessageReceivedEvent(InternalEvent):
     """Emitted when a message was received on a connection"""
     message: MessageDataclass
     connection: Connection
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PeerInitializedEvent(InternalEvent):
     """Emitted when a new peer connection has been established and the
     initialization message has been received or sent
@@ -653,21 +653,21 @@ class PeerInitializedEvent(InternalEvent):
     """
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ScanCompleteEvent(InternalEvent):
     """Emitted when shares scan was completed"""
     folder_count: int
     file_count: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FriendListChangedEvent(InternalEvent):
     """Emitted when a change was detected in the friends list"""
     added: set[str] = field(default_factory=set)
     removed: set[str] = field(default_factory=set)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BlockListChangedEvent(InternalEvent):
     """Emitted when a change was detected in the blocked list"""
     changes: dict[str, tuple[BlockingFlag, BlockingFlag]]
@@ -676,6 +676,6 @@ class BlockListChangedEvent(InternalEvent):
     """
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class SharedDirectoryChangeEvent(InternalEvent):
     shared_directory: SharedDirectory

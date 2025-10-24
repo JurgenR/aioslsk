@@ -72,14 +72,14 @@ RETRY_TIMEOUT_NET_ERROR = 10
 RETRY_TIMEOUT_NON_EXISTING_USER = 600
 
 
-@dataclass
+@dataclass(slots=True)
 class TrackingRequest:
     operation: Callable[[TrackingFlag], None]
     flag: TrackingFlag
     handled: asyncio.Event = field(default_factory=asyncio.Event)
 
 
-@dataclass
+@dataclass(slots=True)
 class TrackedUser:
     user: User
     flags: TrackingFlag = TrackingFlag(0)
@@ -96,7 +96,7 @@ class TrackedUser:
         self.flags &= ~flag
 
 
-@dataclass
+@dataclass(slots=True)
 class UserManagementContext:
     friends: set[str]
     blocked: dict[str, BlockingFlag]

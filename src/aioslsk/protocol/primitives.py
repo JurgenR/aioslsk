@@ -356,7 +356,8 @@ class MessageDataclass(ProtocolDataclass):
 
         :param compress: use gzip compression on the message contents
         """
-        message = super().serialize()
+        # Parametered super call due to issue: https://github.com/python/cpython/issues/90562
+        message = super(MessageDataclass, self).serialize()
 
         if compress:
             message = zlib.compress(message)
@@ -383,11 +384,12 @@ class MessageDataclass(ProtocolDataclass):
         if message_id != cls.MESSAGE_ID:
             raise ValueError(f"message id mismatch {message_id} != {cls.MESSAGE_ID}")
 
+        # Parametered super call due to issue: https://github.com/python/cpython/issues/90562
         if decompress:
             message = zlib.decompress(message[pos:])
-            pos, obj = super().deserialize(0, message)
+            pos, obj = super(MessageDataclass, cls).deserialize(0, message)
         else:
-            pos, obj = super().deserialize(pos, message)
+            pos, obj = super(MessageDataclass, cls).deserialize(pos, message)
 
         if has_unparsed_bytes(pos, message):
             logger.warning(
@@ -401,7 +403,7 @@ class MessageDataclass(ProtocolDataclass):
 _ATTR_STRUCT = struct.Struct('<II')
 
 
-@dataclass(frozen=True, order=True)
+@dataclass(frozen=True, order=True, slots=True)
 class Attribute(ProtocolDataclass):
     key: int = field(metadata={'type': uint32})
     value: int = field(metadata={'type': uint32})
@@ -417,32 +419,32 @@ class Attribute(ProtocolDataclass):
         return _ATTR_STRUCT.pack(self.key, self.value)
 
 
-@dataclass(frozen=True, order=True)
+@dataclass(frozen=True, order=True, slots=True)
 class SimilarUser(ProtocolDataclass):
     username: str = field(metadata={'type': string})
     score: int = field(metadata={'type': uint32})
 
 
-@dataclass(frozen=True, order=True)
+@dataclass(frozen=True, order=True, slots=True)
 class Recommendation(ProtocolDataclass):
     recommendation: str = field(metadata={'type': string})
     score: int = field(metadata={'type': int32})
 
 
-@dataclass(frozen=True, order=True)
+@dataclass(frozen=True, order=True, slots=True)
 class RoomTicker(ProtocolDataclass):
     username: str = field(metadata={'type': string})
     ticker: str = field(metadata={'type': string})
 
 
-@dataclass(frozen=True, order=True)
+@dataclass(frozen=True, order=True, slots=True)
 class PotentialParent(ProtocolDataclass):
     username: str = field(metadata={'type': string})
     ip: str = field(metadata={'type': ipaddr})
     port: int = field(metadata={'type': uint32})
 
 
-@dataclass(frozen=True, order=True)
+@dataclass(frozen=True, order=True, slots=True)
 class UserStats(ProtocolDataclass):
     avg_speed: int = field(metadata={'type': uint32})
     uploads: int = field(metadata={'type': uint64})
@@ -450,7 +452,7 @@ class UserStats(ProtocolDataclass):
     shared_folder_count: int = field(metadata={'type': uint32})
 
 
-@dataclass(frozen=True, order=True)
+@dataclass(frozen=True, order=True, slots=True)
 class FileData(ProtocolDataclass):
     unknown: int = field(metadata={'type': uint8})
     filename: str = field(metadata={'type': string})
@@ -496,7 +498,7 @@ class FileData(ProtocolDataclass):
         return attribute_dict
 
 
-@dataclass(frozen=True, order=True)
+@dataclass(frozen=True, order=True, slots=True)
 class DirectoryData(ProtocolDataclass):
     name: str = field(metadata={'type': string})
     files: list[FileData] = field(metadata={'type': array, 'subtype': FileData})
