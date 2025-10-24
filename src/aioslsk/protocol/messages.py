@@ -1881,11 +1881,11 @@ class PeerSharesReply(PeerMessage):
         )
 
         def serialize(self, compress: bool = True) -> bytes:
-            return super().serialize(compress)
+            return super(Request, self).serialize(compress)
 
         @classmethod
         def deserialize(cls, pos: int, message: bytes, decompress: bool = True):
-            return super().deserialize(pos, message, decompress)
+            return super(Request, cls).deserialize(pos, message, decompress)
 
 
 class PeerSearchReply(PeerMessage):
@@ -1914,11 +1914,11 @@ class PeerSearchReply(PeerMessage):
         )
 
         def serialize(self, compress: bool = True) -> bytes:
-            return super().serialize(compress)
+            return super(Request, self).serialize(compress)
 
         @classmethod
         def deserialize(cls, pos: int,  message: bytes, decompress: bool = True):
-            return super().deserialize(pos, message, decompress)
+            return super(Request, cls).deserialize(pos, message, decompress)
 
 
 class PeerUserInfoRequest(PeerMessage):
@@ -1981,11 +1981,11 @@ class PeerDirectoryContentsReply(PeerMessage):
         directories: list[DirectoryData] = field(metadata={'type': array, 'subtype': DirectoryData})
 
         def serialize(self, compress: bool = True) -> bytes:
-            return super().serialize(compress)
+            return super(Request, self).serialize(compress)
 
         @classmethod
         def deserialize(cls, pos: int, message: bytes, decompress: bool = True):
-            return super().deserialize(pos, message, decompress)
+            return super(Request, cls).deserialize(pos, message, decompress)
 
 
 class PeerTransferRequest(PeerMessage):

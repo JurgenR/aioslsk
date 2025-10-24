@@ -676,6 +676,6 @@ class BlockListChangedEvent(InternalEvent):
     """
 
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class SharedDirectoryChangeEvent(InternalEvent):
     shared_directory: SharedDirectory

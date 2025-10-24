@@ -4,7 +4,7 @@ from functools import partial
 from .user.model import User
 
 
-@dataclass
+@dataclass(slots=True)
 class Session:
     user: User
     ip_address: str

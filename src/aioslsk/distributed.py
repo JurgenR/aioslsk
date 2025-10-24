@@ -59,7 +59,7 @@ from .utils import task_counter, ticket_generator
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(slots=True)
 class DistributedPeer:
     """Represents a distributed peer and its values in the distributed network"""
     username: str

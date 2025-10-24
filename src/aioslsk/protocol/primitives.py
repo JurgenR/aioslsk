@@ -356,7 +356,8 @@ class MessageDataclass(ProtocolDataclass):
 
         :param compress: use gzip compression on the message contents
         """
-        message = super().serialize()
+        # Parametered super call due to issue: https://github.com/python/cpython/issues/90562
+        message = super(MessageDataclass, self).serialize()
 
         if compress:
             message = zlib.compress(message)
@@ -383,11 +384,12 @@ class MessageDataclass(ProtocolDataclass):
         if message_id != cls.MESSAGE_ID:
             raise ValueError(f"message id mismatch {message_id} != {cls.MESSAGE_ID}")
 
+        # Parametered super call due to issue: https://github.com/python/cpython/issues/90562
         if decompress:
             message = zlib.decompress(message[pos:])
-            pos, obj = super().deserialize(0, message)
+            pos, obj = super(MessageDataclass, cls).deserialize(0, message)
         else:
-            pos, obj = super().deserialize(pos, message)
+            pos, obj = super(MessageDataclass, cls).deserialize(pos, message)
 
         if has_unparsed_bytes(pos, message):
             logger.warning(
