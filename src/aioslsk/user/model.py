@@ -38,6 +38,12 @@ class TrackingFlag(Flag):
     """Tracking because the user is a friend"""
 
 
+class TrackingState(Enum):
+    UNTRACKED = "untracked"
+    TRACKED = "tracked"
+    RETRY_PENDING = "retry_pending"
+
+
 class BlockingFlag(IntFlag):
     NONE = 0
     PRIVATE_MESSAGES = 1

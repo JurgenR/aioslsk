@@ -1,8 +1,9 @@
 import asyncio
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from functools import partial
 import logging
-from typing import Optional
+from typing import Callable, Optional
 from weakref import WeakValueDictionary
 
 from ..base_manager import BaseManager
@@ -26,6 +27,7 @@ from ..events import (
     UserInfoUpdateEvent,
     UserStatsUpdateEvent,
     UserStatusUpdateEvent,
+    UserTrackingStateChangedEvent,
     UserTrackingEvent,
     UserUntrackingEvent,
     SessionInitializedEvent,
@@ -54,27 +56,44 @@ from .model import (
     User,
     UserStatus,
     TrackingFlag,
+    TrackingState,
 )
 from ..network.network import Network
 from ..settings import Settings
 from ..session import Session
 from ..tasks import BackgroundTask
+from ..utils import cancel_task
 
 
 logger = logging.getLogger(__name__)
+
+
+RETRY_TIMEOUT_NET_ERROR = 10
+RETRY_TIMEOUT_NON_EXISTING_USER = 600
+
+
+@dataclass
+class TrackingRequest:
+    operation: Callable[[TrackingFlag], None]
+    flag: TrackingFlag
+    handled: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 @dataclass
 class TrackedUser:
     user: User
     flags: TrackingFlag = TrackingFlag(0)
+    state: TrackingState = TrackingState.UNTRACKED
 
-    def has_add_user_flag(self) -> bool:
-        """Returns whether this user has any tracking flags set related to
-        AddUser
-        """
-        add_user_flags = TrackingFlag.FRIEND | TrackingFlag.REQUESTED | TrackingFlag.TRANSFER
-        return self.flags & add_user_flags != TrackingFlag(0)
+    queue: asyncio.Queue[TrackingRequest] = field(default_factory=asyncio.Queue)
+    task: Optional[asyncio.Task] = None
+    retry_task: Optional[asyncio.Task] = None
+
+    def add_flag(self, flag: TrackingFlag):
+        self.flags |= flag
+
+    def remove_flag(self, flag: TrackingFlag):
+        self.flags &= ~flag
 
 
 @dataclass
@@ -90,13 +109,14 @@ class UserManager(BaseManager):
         self._settings: Settings = settings
         self._event_bus: EventBus = event_bus
         self._network: Network = network
+        self._tracking_manager: UserTrackingManager = UserTrackingManager(
+            settings, event_bus, network)
 
         self._session: Optional[Session] = None
 
         self._MESSAGE_MAP = build_message_map(self)
 
         self._users: WeakValueDictionary[str, User] = WeakValueDictionary()
-        self._tracked_users: dict[str, TrackedUser] = dict()
         self._privileged_users: set[str] = set()
 
         self._management_task: BackgroundTask = BackgroundTask(
@@ -139,6 +159,9 @@ class UserManager(BaseManager):
         if task := self._management_task.cancel():
             cancel_tasks.append(task)
 
+        tracking_tasks = self._tracking_manager.stop()
+        cancel_tasks.extend(tracking_tasks)
+
         return cancel_tasks
 
     def get_self(self) -> User:
@@ -172,8 +195,8 @@ class UserManager(BaseManager):
         return self._users[username]
 
     def is_tracked(self, username: str) -> bool:
-        """Returns whether a user status is currently being tracked"""
-        return username in self._tracked_users
+        """Returns whether a user is currently being tracked"""
+        return self._tracking_manager.get_tracking_state(username) == TrackingState.TRACKED
 
     def reset_users(self):
         """Performs a reset on all users. This method is called when the
@@ -181,55 +204,31 @@ class UserManager(BaseManager):
         directly
         """
         self._users = WeakValueDictionary()
-        self._tracked_users = dict()
         self._privileged_users = set()
 
     async def track_user(self, username: str, flag: TrackingFlag = TrackingFlag.REQUESTED):
-        """Starts tracking a user. The method sends a tracking request to the
-        server if it is the first tracking flag being sent or the tracking flag
-        is ``TrackingFlag.REQUESTED``
+        """Requests to start tracking a user. Tracking of a user will be handled
+        in the background
 
         :param username: user to track
         :param flag: tracking flag to add from the user
         """
         user = self.get_user_object(username)
-        is_first_flag = self._set_tracking_flag(user, flag)
-        if is_first_flag or flag == TrackingFlag.REQUESTED:
-            try:
-                await self._network.send_server_messages(AddUser.Request(username))
-            except Exception:
-                self._unset_tracking_flag(user, flag)
-                raise
+        self._tracking_manager.track_user(user, flag=flag)
 
     async def untrack_user(self, username: str, flag: TrackingFlag = TrackingFlag.REQUESTED):
-        """Removes the given flag from the user and untracks the user (send
-        :class:`.RemoveUser` message) in case none of the AddUser tracking flags
-        are set or the removed tracking flag is ``TrackingFlag.REQUESTED``.
+        """Requests to stop tracking a user. Tracking of a user will be handled
+        in the background.
 
-        The user will be removed from the tracked users if there are no flags
-        left, if there is still a reference left to the user it will remain
-        stored
+        Untracking does not necesserily mean that the library stops receiving
+        user updates, the library could internally still be wanting to track
+        a user for example for managing transfers
 
-        :param username: user to untrack
-        :param flag: tracking flag to remove from the user
+        :param username: user to track
+        :param flag: tracking flag to add from the user
         """
-        if username not in self._tracked_users:
-            return
-
-        user = self._users[username]
-        has_flags_left = self._unset_tracking_flag(user, flag)
-        if not has_flags_left or flag == TrackingFlag.REQUESTED:
-            try:
-                await self._network.send_server_messages(RemoveUser.Request(user.name))
-            finally:
-                # If there's no more tracking done reset the user status and
-                # remove the user from the list
-                user.status = UserStatus.UNKNOWN
-
-                if username in self._tracked_users:
-                    del self._tracked_users[username]
-
-                await self._event_bus.emit(UserUntrackingEvent(user=user))
+        user = self.get_user_object(username)
+        self._tracking_manager.untrack_user(user, flag=flag)
 
     async def track_friend(self, username: str):
         """Request to track a friend with given username"""
@@ -249,36 +248,18 @@ class UserManager(BaseManager):
         await self.untrack_user(username, TrackingFlag.FRIEND)
 
     def get_tracking_flags(self, username: str) -> TrackingFlag:
-        """Returns current tracking flags of the user with given username
+        """Returns current desired tracking flags of the user
 
         :param username: username of the user
         """
-        if username in self._tracked_users:
-            return self._tracked_users[username].flags
-        return TrackingFlag(0)
+        return self._tracking_manager.get_tracking_flags(username)
 
-    def _get_tracked_user_object(self, user: User) -> TrackedUser:
-        """Gets or creates a tracked user object"""
-        if user.name not in self._tracked_users:
-            self._tracked_users[user.name] = TrackedUser(user)
-        return self._tracked_users[user.name]
+    def get_tracking_state(self, username: str) -> TrackingState:
+        """Returns current tracking state of the user
 
-    def _set_tracking_flag(self, user: User, flag: TrackingFlag = TrackingFlag.REQUESTED) -> bool:
-        """Set given tracking flag for the user. This method returns ``True`` if
-        the user previously had no tracking flags set.
+        :param username: username of the user
         """
-        tracked_user = self._get_tracked_user_object(user)
-        had_tracking_flag = tracked_user.flags != TrackingFlag(0)
-        tracked_user.flags |= flag
-        return not had_tracking_flag
-
-    def _unset_tracking_flag(self, user: User, flag: TrackingFlag) -> bool:
-        """Unset given tracking flag. This method returns ``True`` if the user
-        still has tracking flags left
-        """
-        tracked_user = self._tracked_users[user.name]
-        tracked_user.flags &= ~flag
-        return tracked_user.flags != TrackingFlag(0)
+        return self._tracking_manager.get_tracking_state(username)
 
     async def _management_job(self, context: UserManagementContext):
         events: list[Event] = []
@@ -394,25 +375,11 @@ class UserManager(BaseManager):
     @on_message(AddUser.Response)
     async def _on_add_user(self, message: AddUser.Response, connection: ServerConnection):
         user = self.get_user_object(message.username)
-        tracked_user = self._get_tracked_user_object(user)
         if message.exists:
             user.status = UserStatus(message.status)
             if message.user_stats:
                 user.update_from_user_stats(message.user_stats)
             user.country = message.country_code
-
-            await self._event_bus.emit(
-                UserTrackingEvent(
-                    user=user,
-                    raw_message=message
-                )
-            )
-
-        else:
-            tracked_user.flags = TrackingFlag(0)
-            if user.name in self._tracked_users:
-                del self._tracked_users[user.name]
-            await self._event_bus.emit(UserUntrackingEvent(user=user))
 
     @on_message(GetUserStatus.Response)
     async def _on_get_user_status(self, message: GetUserStatus.Response, connection: ServerConnection):
@@ -529,3 +496,234 @@ class UserManager(BaseManager):
             tasks.append(self.untrack_friend(removed_friend))
 
         await asyncio.gather(*tasks, return_exceptions=True)
+
+
+class UserTrackingManager:
+    """Keeps the user tracking state in sync with the server"""
+
+    def __init__(self, settings: Settings, event_bus: EventBus, network: Network):
+        self._settings: Settings = settings
+        self._event_bus: EventBus = event_bus
+        self._network: Network = network
+
+        self._tracked_users: dict[str, TrackedUser] = dict()
+
+        self.register_listeners()
+
+    def register_listeners(self):
+        self._event_bus.register(
+            ConnectionStateChangedEvent, self._on_state_changed)
+
+    def get_tracking_flags(self, username: str) -> TrackingFlag:
+        """Returns current desired tracking flags of the user with given
+        username
+
+        :param username: username of the user
+        """
+        if username in self._tracked_users:
+            return self._tracked_users[username].flags
+        return TrackingFlag(0)
+
+    def get_tracking_state(self, username: str) -> TrackingState:
+        """Returns the current tracking state of the given user
+
+        """
+        if username in self._tracked_users:
+            return self._tracked_users[username].state
+
+        return TrackingState.UNTRACKED
+
+    def track_user(self, user: User, flag: TrackingFlag = TrackingFlag.REQUESTED) -> TrackingRequest:
+        tracked_user = self._get_tracked_user_object(user)
+
+        request = TrackingRequest(tracked_user.add_flag, flag)
+        tracked_user.queue.put_nowait(request)
+
+        return request
+
+    def untrack_user(self, user: User, flag: TrackingFlag = TrackingFlag.REQUESTED) -> Optional[TrackingRequest]:
+        if user.name not in self._tracked_users:
+            return None
+
+        tracked_user = self._tracked_users[user.name]
+
+        request = TrackingRequest(tracked_user.remove_flag, flag)
+        tracked_user.queue.put_nowait(request)
+
+        return request
+
+    async def _tracking_task(self, tracked_user: TrackedUser):
+        while True:
+            request = await tracked_user.queue.get()
+
+            previous_flags = tracked_user.flags
+            request.operation(request.flag)
+            is_retry = request.flag == TrackingFlag(0)
+
+            if tracked_user.flags == TrackingFlag(0):
+                # Ensure retry does not get scheduled again if we no longer
+                # desire to track the user
+                await cancel_task(tracked_user.retry_task)
+
+                # Prevent RemoveUser from being called multiple times if there
+                # are multiple entries on the queue
+                if previous_flags != TrackingFlag(0):
+                    await self._request_untracking(tracked_user)
+                    await self._set_tracking_state(
+                        tracked_user,
+                        TrackingState.UNTRACKED
+                    )
+
+                # Only if the queue is empty can the user be removed from the
+                # tracked users and task ended. It's possible there's a request
+                # to start tracking again, the user cannot be removed otherwise
+                # there is a "ghost" user being tracked
+                if tracked_user.queue.empty():
+                    request.handled.set()
+                    return
+
+            elif previous_flags == TrackingFlag(0) or is_retry:
+                retry_timeout, retry_reason, response = await self._request_tracking(tracked_user)
+
+                if retry_timeout:
+                    logger.debug(
+                        "failed to track user %s retrying in %d seconds. reason : %r",
+                        tracked_user.user.name, retry_timeout, retry_reason
+                    )
+
+                    # Cancelling probably shouldn't be necessary but just doing
+                    # it for safety
+                    await cancel_task(tracked_user.retry_task)
+                    tracked_user.retry_task = asyncio.create_task(
+                        self._request_retry(tracked_user, retry_timeout))
+
+                    await self._set_tracking_state(
+                        tracked_user,
+                        TrackingState.RETRY_PENDING,
+                        message=response
+                    )
+
+                else:
+                    await self._set_tracking_state(
+                        tracked_user,
+                        TrackingState.TRACKED,
+                        message=response
+                    )
+
+            request.handled.set()
+
+    async def _request_retry(self, tracked_user: TrackedUser, timeout: float):
+        await asyncio.sleep(timeout)
+        request = TrackingRequest(tracked_user.add_flag, TrackingFlag(0))
+        tracked_user.queue.put_nowait(request)
+
+    async def _request_tracking(
+            self, tracked_user: TrackedUser) -> tuple[Optional[float], Optional[str], Optional[AddUser.Response]]:
+
+        username = tracked_user.user.name
+        try:
+            await self._network.send_server_messages(AddUser.Request(username))
+
+        except Exception:
+            return RETRY_TIMEOUT_NET_ERROR, "failed to send tracking message", None
+
+        try:
+            response = await self._network.wait_for_server_message(
+                AddUser.Response,
+                fields={'username': username},
+                timeout=10
+            )
+
+        except TimeoutError:
+            return RETRY_TIMEOUT_NET_ERROR, "timeout waiting for tracking response", None
+
+        except Exception as exc:
+            return RETRY_TIMEOUT_NET_ERROR, f"unknown error waiting for tracking response : {exc!r}", None
+
+        if not response.exists:
+            return RETRY_TIMEOUT_NON_EXISTING_USER, "user does not exist", response
+
+        return None, None, response
+
+    async def _request_untracking(self, tracked_user: TrackedUser):
+        username = tracked_user.user.name
+        try:
+            await self._network.send_server_messages(RemoveUser.Request(username))
+
+        except Exception as exc:
+            logger.debug(
+                "failed to send untracking request for user %s : %r",
+                username, exc
+            )
+
+    async def _set_tracking_state(
+            self, tracked_user: TrackedUser, state: TrackingState,
+            message: Optional[AddUser.Response] = None):
+
+        tracked_user.state = state
+
+        # Deprecated events
+        if state == TrackingState.TRACKED:
+            await self._event_bus.emit(
+                UserTrackingEvent(tracked_user.user, message))  # type: ignore
+
+        elif state == TrackingState.UNTRACKED:
+            await self._event_bus.emit(
+                UserUntrackingEvent(tracked_user.user))
+
+        await self._event_bus.emit(
+            UserTrackingStateChangedEvent(tracked_user.user, state, message))
+
+    def _get_tracked_user_object(self, user: User) -> TrackedUser:
+        """Gets or creates a tracked user object"""
+        if user.name in self._tracked_users:
+            tracked_user = self._tracked_users[user.name]
+
+        else:
+            tracked_user = TrackedUser(user)
+            tracked_user.task = asyncio.create_task(
+                self._tracking_task(tracked_user))
+            tracked_user.task.add_done_callback(
+                partial(self._on_tracking_task_done, tracked_user))
+
+            self._tracked_users[user.name] = tracked_user
+
+        return tracked_user
+
+    def _on_tracking_task_done(self, tracked_user: TrackedUser, task: asyncio.Task):
+        try:
+            task.result()
+
+        except asyncio.CancelledError:
+            pass
+
+        except Exception as exc:
+            logger.warning(
+                "unknown exception in tracking task for user %s : %r",
+                tracked_user.user.name, exc
+            )
+
+        finally:
+            self._tracked_users.pop(tracked_user.user.name, None)
+
+    async def _on_state_changed(self, event: ConnectionStateChangedEvent):
+        if not isinstance(event.connection, ServerConnection):
+            return
+
+        if event.state == ConnectionState.CLOSED:
+            tasks = self.stop()
+            if tasks:
+                await asyncio.gather(*self.stop(), return_exceptions=True)
+
+    def stop(self) -> list[asyncio.Task]:
+        tasks = []
+        for tracked_user in self._tracked_users.values():
+            if tracked_user.task:
+                tracked_user.task.cancel()
+                tasks.append(tracked_user.task)
+
+            if tracked_user.retry_task:
+                tracked_user.retry_task.cancel()
+                tasks.append(tracked_user.retry_task)
+
+        return tasks

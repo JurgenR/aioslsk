@@ -1,7 +1,9 @@
+import asyncio
 from collections.abc import Generator
 import itertools
 import logging
 import re
+from typing import Optional
 
 from .constants import PATH_SEPERATOR_PATTERN
 from .protocol.primitives import Attribute
@@ -67,3 +69,12 @@ def ticket_generator(initial: int = 1) -> Generator[int, None, None]:
         if idx > 0xFFFFFFFF:
             idx = initial
         yield idx
+
+
+async def cancel_task(task: Optional[asyncio.Task]):
+    if task:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
