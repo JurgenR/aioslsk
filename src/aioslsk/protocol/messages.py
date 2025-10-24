@@ -133,7 +133,7 @@ class Login(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x01)
         username: str = field(metadata={'type': string})
@@ -142,7 +142,7 @@ class Login(ServerMessage):
         md5hash: str = field(metadata={'type': string})
         minor_version: int = field(metadata={'type': uint32})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x01)
         success: bool = field(metadata={'type': boolean})
@@ -162,7 +162,7 @@ class SetListenPort(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x02)
         port: int = field(metadata={'type': uint32})
@@ -181,12 +181,12 @@ class GetPeerAddress(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x03)
         username: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x03)
         username: str = field(metadata={'type': string})
@@ -211,12 +211,12 @@ class AddUser(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x05)
         username: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x05)
         username: str = field(metadata={'type': string})
@@ -239,7 +239,7 @@ class RemoveUser(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x06)
         username: str = field(metadata={'type': string})
@@ -252,12 +252,12 @@ class GetUserStatus(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x07)
         username: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x07)
         username: str = field(metadata={'type': string})
@@ -271,12 +271,12 @@ class IgnoreUser(ServerMessage):
     :status: DEPRECATED, DEFUNCT
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x0B)
         username: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x0B)
         username: str = field(metadata={'type': string})
@@ -289,12 +289,12 @@ class UnignoreUser(ServerMessage):
     :status: DEPRECATED, DEFUNCT
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x0C)
         username: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x0C)
         username: str = field(metadata={'type': string})
@@ -307,13 +307,13 @@ class RoomChatMessage(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x0D)
         room: str = field(metadata={'type': string})
         message: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x0D)
         room: str = field(metadata={'type': string})
@@ -329,13 +329,13 @@ class JoinRoom(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x0E)
         room: str = field(metadata={'type': string})
         is_private: bool = field(default=False, metadata={'type': uint32, 'optional': True})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x0E)
         room: str = field(metadata={'type': string})
@@ -361,12 +361,12 @@ class LeaveRoom(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x0F)
         room: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x0F)
         room: str = field(metadata={'type': string})
@@ -378,7 +378,7 @@ class UserJoinedRoom(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x10)
         room: str = field(metadata={'type': string})
@@ -395,7 +395,7 @@ class UserLeftRoom(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x11)
         room: str = field(metadata={'type': string})
@@ -411,14 +411,14 @@ class ConnectToPeer(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x12)
         ticket: int = field(metadata={'type': uint32})
         username: str = field(metadata={'type': string})
         typ: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x12)
         username: str = field(metadata={'type': string})
@@ -443,13 +443,13 @@ class PrivateChatMessage(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x16)
         username: str = field(metadata={'type': string})
         message: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x16)
         chat_id: int = field(metadata={'type': uint32})
@@ -481,7 +481,7 @@ class PrivateChatMessageAck(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x17)
         chat_id: int = field(metadata={'type': uint32})
@@ -493,7 +493,7 @@ class FileSearchRoom(ServerMessage):
     :Status: DEPRECATED, DEFUNCT
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x19)
         ticket: int = field(metadata={'type': uint32})
@@ -509,13 +509,13 @@ class FileSearch(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x1A)
         ticket: int = field(metadata={'type': uint32})
         query: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x1A)
         username: str = field(metadata={'type': string})
@@ -530,7 +530,7 @@ class SetStatus(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x1C)
         status: int = field(metadata={'type': uint32})
@@ -545,11 +545,11 @@ class Ping(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x20)
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x20)
 
@@ -565,13 +565,13 @@ class SendConnectTicket(ServerMessage):
     :status: DEPRECATED, DEFUNCT
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x21)
         username: str = field(metadata={'type': string})
         ticket: int = field(metadata={'type': uint32})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x21)
         username: str = field(metadata={'type': string})
@@ -585,7 +585,7 @@ class SendDownloadSpeed(ServerMessage):
     :status: DEPRECATED, DEFUNCT
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x22)
         username: str = field(metadata={'type': string})
@@ -600,7 +600,7 @@ class SharedFoldersFiles(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x23)
         shared_folder_count: int = field(metadata={'type': uint32})
@@ -614,12 +614,12 @@ class GetUserStats(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x24)
         username: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x24)
         username: str = field(metadata={'type': string})
@@ -633,7 +633,7 @@ class Kicked(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x29)
 
@@ -645,7 +645,7 @@ class UserSearch(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x2A)
         username: str = field(metadata={'type': string})
@@ -659,12 +659,12 @@ class DeprecatedGetItemRecommendations(ServerMessage):
     :status: DEPRECATED, DEFUNCT
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x32)
         item: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x32)
         item: str = field(metadata={'type': string})
@@ -678,7 +678,7 @@ class AddInterest(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x33)
         interest: str = field(metadata={'type': string})
@@ -690,7 +690,7 @@ class RemoveInterest(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x34)
         interest: str = field(metadata={'type': string})
@@ -704,11 +704,11 @@ class GetRecommendations(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x36)
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x36)
         recommendations: list[Recommendation] = field(
@@ -731,11 +731,11 @@ class GetInterests(ServerMessage):
     :status: DEPRECATED, DEFUNCT
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x37)
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x37)
         interests: list[str] = field(metadata={'type': array, 'subtype': string})
@@ -749,11 +749,11 @@ class GetGlobalRecommendations(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x38)
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x38)
         recommendations: list[Recommendation] = field(
@@ -770,12 +770,12 @@ class GetUserInterests(ServerMessage):
     :status: DEPRECATED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x39)
         username: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x39)
         username: str = field(metadata={'type': string})
@@ -799,7 +799,7 @@ class ExecuteCommand(ServerMessage):
     :status: DEPRECATED, DEFUNCT
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x3A)
         command_type: str = field(metadata={'type': string})
@@ -821,11 +821,11 @@ class RoomList(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x40)
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x40)
         rooms: list[str] = field(metadata={'type': array, 'subtype': string})
@@ -850,7 +850,7 @@ class ExactFileSearch(ServerMessage):
     :status: DEPRECATED, DEFUNCT
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x41)
         ticket: int = field(metadata={'type': uint32})
@@ -860,7 +860,7 @@ class ExactFileSearch(ServerMessage):
         checksum: int = field(metadata={'type': uint32})
         unknown: int = field(metadata={'type': uint8})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x41)
         username: str = field(metadata={'type': string})
@@ -877,7 +877,7 @@ class AdminMessage(ServerMessage):
     :status: UNKNOWN
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x42)
         message: str = field(metadata={'type': string})
@@ -889,11 +889,11 @@ class GetUserList(ServerMessage):
     :status: DEPRECATED, DEFUNCT
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x43)
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x43)
         users: list[str] = field(metadata={'type': array, 'subtype': string})
@@ -909,7 +909,7 @@ class TunneledMessage(ServerMessage):
     :status: DEPRECATED, DEFUNCT
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x44)
         username: str = field(metadata={'type': string})
@@ -917,7 +917,7 @@ class TunneledMessage(ServerMessage):
         code: int = field(metadata={'type': uint32})
         message: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x44)
         username: str = field(metadata={'type': string})
@@ -934,7 +934,7 @@ class PrivilegedUsers(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x45)
         users: list[str] = field(metadata={'type': array, 'subtype': string})
@@ -948,7 +948,7 @@ class ToggleParentSearch(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x47)
         enable: bool = field(metadata={'type': boolean})
@@ -960,7 +960,7 @@ class ParentIP(ServerMessage):
     :status: DEPRECATED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x49)
         ip: str = field(metadata={'type': ipaddr})
@@ -983,7 +983,7 @@ class Unknown80(ServerMessage):
     :status: DEPRECATED, DEFUNCT
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x50)
 
@@ -997,7 +997,7 @@ class ParentMinSpeed(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x53)
         speed: int = field(metadata={'type': uint32})
@@ -1010,7 +1010,7 @@ class ParentSpeedRatio(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x54)
         ratio: int = field(metadata={'type': uint32})
@@ -1022,7 +1022,7 @@ class ParentInactivityTimeout(ServerMessage):
     :status: DEPRECATED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x56)
         timeout: int = field(metadata={'type': uint32})
@@ -1036,7 +1036,7 @@ class SearchInactivityTimeout(ServerMessage):
     :status: DEPRECATED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x57)
         timeout: int = field(metadata={'type': uint32})
@@ -1049,7 +1049,7 @@ class MinParentsInCache(ServerMessage):
     :status: DEPRECATED, DEFUNCT
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x58)
         amount: int = field(metadata={'type': uint32})
@@ -1061,7 +1061,7 @@ class DistributedDistributeInterval(ServerMessage):
 
     :status: DEPRECATED, DEFUNCT"""
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x59)
         interval: int = field(metadata={'type': uint32})
@@ -1074,7 +1074,7 @@ class DistributedAliveInterval(ServerMessage):
     :status: DEPRECATED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x5A)
         interval: int = field(metadata={'type': uint32})
@@ -1086,7 +1086,7 @@ class AddPrivilegedUser(ServerMessage):
     :status: UNKNOWN
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x5B)
         username: str = field(metadata={'type': string})
@@ -1099,11 +1099,11 @@ class CheckPrivileges(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x5C)
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x5C)
         time_left: int = field(metadata={'type': uint32})
@@ -1116,7 +1116,7 @@ class ServerSearchRequest(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x5D)
         distributed_code: int = field(metadata={'type': uint8})
@@ -1134,7 +1134,7 @@ class AcceptChildren(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x64)
         accept: bool = field(metadata={'type': boolean})
@@ -1146,7 +1146,7 @@ class PotentialParents(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x66)
         entries: list[PotentialParent] = field(metadata={'type': array, 'subtype': PotentialParent})
@@ -1159,7 +1159,7 @@ class WishlistSearch(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x67)
         ticket: int = field(metadata={'type': uint32})
@@ -1173,7 +1173,7 @@ class WishlistInterval(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x68)
         interval: int = field(metadata={'type': uint32})
@@ -1185,11 +1185,11 @@ class GetSimilarUsers(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x6E)
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x6E)
         users: list[SimilarUser] = field(metadata={'type': array, 'subtype': SimilarUser})
@@ -1201,12 +1201,12 @@ class GetItemRecommendations(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x6F)
         item: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x6F)
         item: str = field(metadata={'type': string})
@@ -1219,12 +1219,12 @@ class GetItemSimilarUsers(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x70)
         item: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x70)
         item: str = field(metadata={'type': string})
@@ -1237,7 +1237,7 @@ class RoomTickers(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x71)
         room: str = field(metadata={'type': string})
@@ -1250,7 +1250,7 @@ class RoomTickerAdded(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x72)
         room: str = field(metadata={'type': string})
@@ -1264,7 +1264,7 @@ class RoomTickerRemoved(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x73)
         room: str = field(metadata={'type': string})
@@ -1282,7 +1282,7 @@ class SetRoomTicker(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x74)
         room: str = field(metadata={'type': string})
@@ -1296,7 +1296,7 @@ class AddHatedInterest(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x75)
         hated_interest: str = field(metadata={'type': string})
@@ -1309,7 +1309,7 @@ class RemoveHatedInterest(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x76)
         hated_interest: str = field(metadata={'type': string})
@@ -1323,7 +1323,7 @@ class RoomSearch(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x78)
         room: str = field(metadata={'type': string})
@@ -1345,7 +1345,7 @@ class SendUploadSpeed(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x79)
         speed: int = field(metadata={'type': uint32})
@@ -1357,12 +1357,12 @@ class GetUserPrivileges(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7A)
         username: int = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7A)
         username: int = field(metadata={'type': string})
@@ -1377,7 +1377,7 @@ class GiveUserPrivileges(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7B)
         username: str = field(metadata={'type': string})
@@ -1386,7 +1386,7 @@ class GiveUserPrivileges(ServerMessage):
 
 class PrivilegesNotification(ServerMessage):
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7C)
         notification_id: int = field(metadata={'type': uint32})
@@ -1395,7 +1395,7 @@ class PrivilegesNotification(ServerMessage):
 
 class PrivilegesNotificationAck(ServerMessage):
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7D)
         notification_id: int = field(metadata={'type': uint32})
@@ -1407,7 +1407,7 @@ class BranchLevel(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7E)
         level: int = field(metadata={'type': uint32})
@@ -1419,7 +1419,7 @@ class BranchRoot(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7F)
         username: str = field(metadata={'type': string})
@@ -1435,7 +1435,7 @@ class ChildDepth(ServerMessage):
     :status: DEPRECATED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x81)
         depth: int = field(metadata={'type': uint32})
@@ -1447,7 +1447,7 @@ class ResetDistributed(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x82)
 
@@ -1458,7 +1458,7 @@ class PrivateRoomMembers(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x85)
         room: str = field(metadata={'type': string})
@@ -1474,13 +1474,13 @@ class PrivateRoomGrantMembership(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x86)
         room: str = field(metadata={'type': string})
         username: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x86)
         room: str = field(metadata={'type': string})
@@ -1497,13 +1497,13 @@ class PrivateRoomRevokeMembership(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x87)
         room: str = field(metadata={'type': string})
         username: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x87)
         room: str = field(metadata={'type': string})
@@ -1517,7 +1517,7 @@ class PrivateRoomDropMembership(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x88)
         room: str = field(metadata={'type': string})
@@ -1529,7 +1529,7 @@ class PrivateRoomDropOwnership(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x89)
         room: str = field(metadata={'type': string})
@@ -1542,7 +1542,7 @@ class PrivateRoomMembershipGranted(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x8B)
         room: str = field(metadata={'type': string})
@@ -1555,7 +1555,7 @@ class PrivateRoomMembershipRevoked(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x8C)
         room: str = field(metadata={'type': string})
@@ -1568,12 +1568,12 @@ class TogglePrivateRoomInvites(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x8D)
         enable: bool = field(metadata={'type': boolean})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x8D)
         enabled: bool = field(metadata={'type': boolean})
@@ -1584,7 +1584,7 @@ class NewPassword(ServerMessage):
 
     :status: USED"""
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x8E)
         password: str = field(metadata={'type': string})
@@ -1598,13 +1598,13 @@ class PrivateRoomGrantOperator(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x8F)
         room: str = field(metadata={'type': string})
         username: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x8F)
         room: str = field(metadata={'type': string})
@@ -1619,13 +1619,13 @@ class PrivateRoomRevokeOperator(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x90)
         room: str = field(metadata={'type': string})
         username: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x90)
         room: str = field(metadata={'type': string})
@@ -1638,7 +1638,7 @@ class PrivateRoomOperatorGranted(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x91)
         room: str = field(metadata={'type': string})
@@ -1650,7 +1650,7 @@ class PrivateRoomOperatorRevoked(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x92)
         room: str = field(metadata={'type': string})
@@ -1662,7 +1662,7 @@ class PrivateRoomOperators(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x94)
         room: str = field(metadata={'type': string})
@@ -1676,7 +1676,7 @@ class PrivateChatMessageUsers(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x95)
         usernames: list[str] = field(metadata={'type': array, 'subtype': string})
@@ -1689,7 +1689,7 @@ class EnablePublicChat(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x96)
 
@@ -1700,7 +1700,7 @@ class DisablePublicChat(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x97)
 
@@ -1713,7 +1713,7 @@ class PublicChatMessage(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x98)
         room: str = field(metadata={'type': string})
@@ -1729,12 +1729,12 @@ class GetRelatedSearches(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x99)
         query: str = field(metadata={'type': string})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x99)
         query: str = field(metadata={'type': string})
@@ -1752,7 +1752,7 @@ class ExcludedSearchPhrases(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0xA0)
         phrases: list[str] = field(metadata={'type': array, 'subtype': string})
@@ -1765,13 +1765,13 @@ class CannotConnect(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x03E9)
         ticket: int = field(metadata={'type': uint32})
         username: Optional[str] = field(default=None, metadata={'type': string, 'optional': True})
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x03E9)
         ticket: int = field(metadata={'type': uint32})
@@ -1785,7 +1785,7 @@ class CannotCreateRoom(ServerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x03EB)
         room: str = field(metadata={'type': string})
@@ -1801,7 +1801,7 @@ class PeerPierceFirewall(PeerInitializationMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint8] = uint8(0x00)
         ticket: int = field(metadata={'type': uint32})
@@ -1829,7 +1829,7 @@ class PeerInit(PeerInitializationMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint8] = uint8(0x01)
         username: str = field(metadata={'type': string})
@@ -1845,7 +1845,7 @@ class PeerSharesRequest(PeerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x04)
         # Museek docs: PeerSharesReply has an unknown uint32. The assumption is
@@ -1865,7 +1865,7 @@ class PeerSharesReply(PeerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x05)
         directories: list[DirectoryData] = field(
@@ -1894,7 +1894,7 @@ class PeerSearchReply(PeerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x09)
         username: str = field(metadata={'type': string})
@@ -1927,7 +1927,7 @@ class PeerUserInfoRequest(PeerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x0F)
 
@@ -1939,7 +1939,7 @@ class PeerUserInfoReply(PeerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x10)
         description: str = field(metadata={'type': string})
@@ -1957,7 +1957,7 @@ class PeerDirectoryContentsRequest(PeerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x24)
         ticket: int = field(metadata={'type': uint32})
@@ -1973,7 +1973,7 @@ class PeerDirectoryContentsReply(PeerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x25)
         ticket: int = field(metadata={'type': uint32})
@@ -1995,7 +1995,7 @@ class PeerTransferRequest(PeerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x28)
         direction: int = field(metadata={'type': uint32})
@@ -2010,7 +2010,7 @@ class PeerTransferReply(PeerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x29)
         ticket: int = field(metadata={'type': uint32})
@@ -2025,7 +2025,7 @@ class PeerTransferQueue(PeerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x2B)
         filename: str = field(metadata={'type': string})
@@ -2037,7 +2037,7 @@ class PeerPlaceInQueueReply(PeerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x2C)
         filename: str = field(metadata={'type': string})
@@ -2050,7 +2050,7 @@ class PeerUploadFailed(PeerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x2E)
         filename: str = field(metadata={'type': string})
@@ -2062,7 +2062,7 @@ class PeerTransferQueueFailed(PeerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x32)
         filename: str = field(metadata={'type': string})
@@ -2075,7 +2075,7 @@ class PeerPlaceInQueueRequest(PeerMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x33)
         filename: str = field(metadata={'type': string})
@@ -2087,7 +2087,7 @@ class PeerUploadQueueNotification(PeerMessage):
     :status: DEPRECATED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x34)
 
@@ -2100,7 +2100,7 @@ class DistributedPing(DistributedMessage):
     :status: DEPRECATED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint8] = uint8(0x00)
 
@@ -2111,7 +2111,7 @@ class DistributedInit(DistributedMessage):
     :status: DEPRECATED, DEFUNCT
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint8] = uint8(0x01)
         unknown1: int = field(metadata={'type': uint32})
@@ -2126,7 +2126,7 @@ class DistributedSearchRequest(DistributedMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint8] = uint8(0x03)
         # Should always be 0x31
@@ -2142,7 +2142,7 @@ class DistributedBranchLevel(DistributedMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint8] = uint8(0x04)
         level: int = field(metadata={'type': uint32})
@@ -2154,7 +2154,7 @@ class DistributedBranchRoot(DistributedMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint8] = uint8(0x05)
         username: str = field(metadata={'type': string})
@@ -2171,7 +2171,7 @@ class DistributedChildDepth(DistributedMessage):
     :status: DEPRECATED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint8] = uint8(0x07)
         depth: int = field(metadata={'type': uint32})
@@ -2189,7 +2189,7 @@ class DistributedServerSearchRequest(DistributedMessage):
     :status: USED
     """
 
-    @dataclass(order=True)
+    @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x5D)
         distributed_code: int = field(metadata={'type': uint8})

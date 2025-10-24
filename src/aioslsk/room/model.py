@@ -1,10 +1,19 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
+import sys
 from typing import Optional
+
 from ..user.model import User
 
 
-@dataclass
+if sys.version_info >= (3, 11):
+    slots_params = {'slots': True, 'weakref_slot': True}
+
+else:
+    slots_params = {}
+
+
+@dataclass(**slots_params)
 class Room:
     name: str
     private: bool = False
@@ -32,7 +41,7 @@ class Room:
             self.users.remove(user)
 
 
-@dataclass
+@dataclass(**slots_params)
 class RoomMessage:
     timestamp: int
     user: User
