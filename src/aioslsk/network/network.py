@@ -640,6 +640,7 @@ class Network:
         :param message_class: Class of the expected server message
         :param fields: Optional matchers for the message fields
         :return: The :class:`.MessageData` object corresponding to the response
+        :raise: TimeoutError
         """
         future = self.create_server_response_future(
             message_class=message_class,

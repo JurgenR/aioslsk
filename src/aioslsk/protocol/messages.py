@@ -1360,12 +1360,12 @@ class GetUserPrivileges(ServerMessage):
     @dataclass(order=True, slots=True)
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7A)
-        username: int = field(metadata={'type': string})
+        username: str = field(metadata={'type': string})
 
     @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x7A)
-        username: int = field(metadata={'type': string})
+        username: str = field(metadata={'type': string})
         privileged: bool = field(metadata={'type': boolean})
 
 
