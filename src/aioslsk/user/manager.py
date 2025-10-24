@@ -499,6 +499,7 @@ class UserManager(BaseManager):
 
 
 class UserTrackingManager:
+    """Keeps the user tracking state in sync with the server"""
 
     def __init__(self, settings: Settings, event_bus: EventBus, network: Network):
         self._settings: Settings = settings
@@ -533,13 +534,6 @@ class UserTrackingManager:
         return TrackingState.UNTRACKED
 
     def track_user(self, user: User, flag: TrackingFlag = TrackingFlag.REQUESTED) -> TrackingRequest:
-        """Requests to start tracking a user. The method sends a tracking
-        request to the server if it is the first tracking flag being sent or the
-        tracking flag is ``TrackingFlag.REQUESTED``
-
-        :param user: user to track
-        :param flag: tracking flag to add from the user
-        """
         tracked_user = self._get_tracked_user_object(user)
 
         request = TrackingRequest(tracked_user.add_flag, flag)
@@ -548,17 +542,6 @@ class UserTrackingManager:
         return request
 
     def untrack_user(self, user: User, flag: TrackingFlag = TrackingFlag.REQUESTED) -> Optional[TrackingRequest]:
-        """Removes the given flag from the user and untracks the user (send
-        :class:`.RemoveUser` message) in case none of the tracking flags are set
-        or the removed tracking flag is ``TrackingFlag.REQUESTED``.
-
-        The user will be removed from the tracked users if there are no flags
-        left, if there is still a reference left to the user it will remain
-        stored
-
-        :param username: user to untrack
-        :param flag: tracking flag to remove from the user
-        """
         if user.name not in self._tracked_users:
             return None
 
@@ -631,7 +614,6 @@ class UserTrackingManager:
 
     async def _request_retry(self, tracked_user: TrackedUser, timeout: float):
         await asyncio.sleep(timeout)
-        logger.debug("putting retry on queue")
         request = TrackingRequest(tracked_user.add_flag, TrackingFlag(0))
         tracked_user.queue.put_nowait(request)
 
@@ -683,7 +665,7 @@ class UserTrackingManager:
         # Deprecated events
         if state == TrackingState.TRACKED:
             await self._event_bus.emit(
-                UserTrackingEvent(tracked_user.user, message)) # type: ignore
+                UserTrackingEvent(tracked_user.user, message))  # type: ignore
 
         elif state == TrackingState.UNTRACKED:
             await self._event_bus.emit(
