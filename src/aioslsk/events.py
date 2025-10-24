@@ -9,7 +9,7 @@ from types import MethodType
 import weakref
 
 from .room.model import Room, RoomMessage
-from .user.model import BlockingFlag, ChatMessage, User
+from .user.model import BlockingFlag, ChatMessage, TrackingState, User
 from .protocol.primitives import (
     DirectoryData,
     MessageDataclass,
@@ -243,12 +243,28 @@ class KickedEvent(Event):
 
 
 @dataclass(frozen=True)
+class UserTrackingStateChangedEvent(Event):
+    """Emitted when the tracking state of a user has changed.
+
+    Possibly states for the ``state`` property will be defined in by the
+    :class:`.TrackingState` flags
+    """
+
+    user: User
+    state: TrackingState
+    raw_message: Optional[AddUser.Response] = None
+
+
+@dataclass(frozen=True)
 class UserTrackingEvent(Event):
     """Emitted when a user is now successfully by the library tracked. This will
     be triggered when:
 
     The ``user`` object will contain the tracked user. ``data`` will contain the
     data returned by the server
+
+    .. deprecated:: 1.6
+        Use :class:`.UserTrackingStateChangedEvent` instead
     """
     user: User
     raw_message: AddUser.Response
@@ -256,13 +272,21 @@ class UserTrackingEvent(Event):
 
 @dataclass(frozen=True)
 class UserTrackingFailedEvent(Event):
+    """
+    .. deprecated:: 1.6
+        Use :class:`.UserTrackingStateChangedEvent` instead
+    """
     username: str
     raw_message: AddUser.Response
 
 
 @dataclass(frozen=True)
 class UserUntrackingEvent(Event):
-    """Emitted when a user is no longer tracked by the library"""
+    """Emitted when a user is no longer tracked by the library
+
+    .. deprecated:: 1.6
+        Use :class:`.UserTrackingStateChangedEvent` instead
+    """
     user: User
 
 

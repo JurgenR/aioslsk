@@ -769,11 +769,8 @@ and getting the tracking flags:
     client.users.untrack_user('interesting user')
 
 Sending the command does not necessarily mean the tracking of the user was successful, if the user
-we attempted to track does not exist then the tracking will fail. Events related to tracking:
-
-* :class:`.UserTrackingEvent`
-* :class:`.UserTrackingFailedEvent`
-* :class:`.UserUntrackingEvent`
+we attempted to track does not exist then the tracking will fail. Event related to tracking:
+:class:`.UserTrackingStateChangedEvent`
 
 
 .. _users-friends:
