@@ -80,7 +80,7 @@ jobs:
         run: |
           poetry run pytest --junitxml=test-reports/report-${{ matrix.os }}-${{ matrix.python-version }}.xml -o junit_suite_name=suite-${{ matrix.os }}-${{ matrix.python-version }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: report-${{ matrix.os }}-${{ matrix.python-version }}
@@ -99,7 +99,7 @@ jobs:
 
     steps:
       - name: Download Test Result Artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           path: test-reports
 
