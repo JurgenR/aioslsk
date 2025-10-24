@@ -1985,7 +1985,7 @@ class PeerDirectoryContentsReply(PeerMessage):
 
         @classmethod
         def deserialize(cls, pos: int, message: bytes, decompress: bool = True):
-            return super(type(self), cls).deserialize(pos, message, decompress)
+            return super(cls, cls).deserialize(pos, message, decompress)
 
 
 class PeerTransferRequest(PeerMessage):
