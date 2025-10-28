@@ -10,7 +10,7 @@ from .constants import (
     UPNP_DEFAULT_LEASE_DURATION,
     UPNP_DEFAULT_SEARCH_TIMEOUT,
 )
-from .network.network import ListeningConnectionErrorMode
+from .network.network import ListeningConnectionErrorMode, PeerConnectMode
 from .shares.model import DirectoryShareMode
 from .user.model import BlockingFlag
 
@@ -67,6 +67,7 @@ class ListeningSettings(BaseModel, validate_assignment=True):
 
 class PeerSettings(BaseModel, validate_assignment=True):
     obfuscate: bool = False
+    connect_mode: PeerConnectMode = PeerConnectMode.RACE
 
 
 class NetworkLimitSettings(BaseModel, validate_assignment=True):

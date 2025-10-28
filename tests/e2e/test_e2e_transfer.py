@@ -54,7 +54,7 @@ class TestE2ETransfer:
             result.shared_items[0].filename
         )
 
-        upload = await wait_for_transfer_added(client_2)
+        upload = await wait_for_transfer_added(client_2, timeout=10)
         await wait_for_transfer_state(download, TransferState.DOWNLOADING)
         await wait_for_transfer_state(upload, TransferState.UPLOADING)
 
