@@ -595,7 +595,7 @@ class Network:
             name=f"indirect-connect-{username}-{typ}-{ticket}"
         )
 
-        pending = [direct_task, indirect_task]
+        pending = {direct_task, indirect_task}
         while pending:
             done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
 
