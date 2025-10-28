@@ -9,6 +9,7 @@ from ipaddress import IPv4Address
 import logging
 from typing import (
     Any,
+    Generic,
     Optional,
     Union,
     TypeVar,
@@ -70,6 +71,7 @@ logger = logging.getLogger(__name__)
 
 
 T = TypeVar('T', bound='MessageDataclass')
+PeerConnectionT = TypeVar('PeerConnectionT', bound='PeerConnection')
 ListeningConnections = tuple[Optional[ListeningConnection], Optional[ListeningConnection]]
 
 
@@ -85,6 +87,16 @@ class ListeningConnectionErrorMode(enum.Enum):
     CLEAR = 'clear'
     """Raise an exception only if the non-obfuscated connection failed to
     connect
+    """
+
+
+class PeerConnectMode(enum.Enum):
+    """Connection mode to use when connecting to peers"""
+    FALLBACK = 'fallback'
+    """Attempt direct connection first, fallback on indirect connection"""
+    RACE = 'race'
+    """Attempt both direct and indirect connection at the same time. First to
+    connect will be used and the other will be disconnected
     """
 
 
@@ -129,6 +141,17 @@ class ExpectedResponse(asyncio.Future):
         return True
 
 
+class PeerFuture(asyncio.Future, Generic[PeerConnectionT]):
+    def __init__(
+            self, ticket: int, username: str, typ: str,
+            loop: Optional[asyncio.AbstractEventLoop] = None):
+
+        super().__init__(loop=loop)
+        self.ticket: int = ticket
+        self.username: str = username
+        self.typ: str = typ
+
+
 @dataclass
 class WatchdogContext:
     last_state: ConnectionState
@@ -142,7 +165,7 @@ class Network:
         self._upnp = upnp.UPNP()
         self._ticket_generator = ticket_generator()
         self._expected_response_futures: list[ExpectedResponse] = []
-        self._expected_connection_futures: dict[int, asyncio.Future] = {}
+        self._expected_connection_futures: dict[int, PeerFuture] = {}
 
         # List of connections
         self.server_connection: ServerConnection = self.create_server_connection()
@@ -498,8 +521,7 @@ class Network:
 
     async def create_peer_connection(
             self, username: str, typ: str, ip: Optional[str] = None, port: Optional[int] = None,
-            obfuscate: bool = False,
-            initial_state: PeerConnectionState = PeerConnectionState.ESTABLISHED) -> PeerConnection:
+            obfuscate: bool = False) -> PeerConnection:
         """Creates a new peer connection to the given ``username`` and
         connection type.
 
@@ -519,16 +541,22 @@ class Network:
         """
         ticket = next(self._ticket_generator)
 
-        # Request peer address if ip and port are not given
-        if ip is None or port is None:
-            ip, clear_port, obfuscated_port = await self._get_peer_address(username)
+        logger.debug("creating new peer connection to %s (type=%s, ticket=%d)", username, typ, ticket)
 
-            port, obfuscate = self.select_port(clear_port, obfuscated_port)
+        if self._settings.network.peer.connect_mode == PeerConnectMode.RACE:
+            connection = await self._create_peer_connection_race(
+                ticket, username, typ, ip=ip, port=port, obfuscate=obfuscate)
 
-        # Override IP address if requested
-        ip = self._ip_overrides.get(username, ip)
+        else:
+            connection = await self._create_peer_connection_fallback(
+                ticket, username, typ, ip=ip, port=port, obfuscate=obfuscate)
 
-        # Make direct connection
+        return connection
+
+    async def _create_peer_connection_fallback(
+            self, ticket: int, username: str, typ: str,
+            ip: Optional[str] = None, port: Optional[int] = None, obfuscate: bool = False):
+
         try:
             connection = await self._make_direct_connection(
                 ticket, username, typ, ip, port, obfuscate
@@ -536,11 +564,10 @@ class Network:
 
         except NetworkError as exc:
             logger.debug(
-                "direct connection (%s) to peer failed : %s %s:%d : %r",
-                typ, username, ip, port, exc
+                "direct connection (%s) to peer failed : %s : %r",
+                typ, username, exc
             )
 
-            # Make indirect connection
             try:
                 connection = await self._make_indirect_connection(
                     ticket, username, typ
@@ -551,14 +578,49 @@ class Network:
                 raise PeerConnectionError(
                     f"failed to connect to peer {username} ({typ=}, {ticket=})")
 
-        connection.set_connection_state(initial_state)
-        if typ == PeerConnectionType.FILE:
-            connection.download_rate_limiter = self._download_rate_limiter
-            connection.upload_rate_limiter = self._upload_rate_limiter
-
-        await self._event_bus.emit(
-            PeerInitializedEvent(connection, requested=True))
         return connection
+
+    async def _create_peer_connection_race(
+            self, ticket: int, username: str, typ: str,
+            ip: Optional[str] = None, port: Optional[int] = None, obfuscate: bool = False) -> PeerConnection:
+
+        direct_task = asyncio.create_task(
+            self._make_direct_connection(
+                ticket, username, typ, ip=ip, port=port, obfuscate=obfuscate
+            ),
+            name=f"direct-connect-{username}-{typ}-{ticket}"
+        )
+        indirect_task = asyncio.create_task(
+            self._make_indirect_connection(ticket, username, typ),
+            name=f"indirect-connect-{username}-{typ}-{ticket}"
+        )
+
+        pending = [direct_task, indirect_task]
+        while pending:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+
+            connections = []
+            for done_task in done:
+                try:
+                    connections.append(done_task.result())
+                except Exception:
+                    pass
+
+            if connections:
+
+                if pending:
+                    for pending_task in pending:
+                        logger.debug("cancelling connect task : %s", pending_task.get_name())
+                        pending_task.cancel()
+                    await asyncio.gather(*pending, return_exceptions=True)
+
+                if len(connections) > 1:
+                    await connections[1].disconnect(CloseReason.REQUESTED)
+
+                return connections[0]
+
+        raise PeerConnectionError(
+            f"failed to connect to peer {username} ({typ=}, {ticket=})")
 
     async def _get_peer_address(self, username: str) -> tuple[str, int, int]:
         """Requests the peer address for the given ``username`` from the server.
@@ -742,12 +804,25 @@ class Network:
         self._create_peer_connection_tasks.append(task)
 
     async def _make_direct_connection(
-            self, ticket: int, username: str, typ: str, ip: str, port: int, obfuscate: bool) -> PeerConnection:
+            self, ticket: int, username: str, typ: str, ip: Optional[str] = None,
+            port: Optional[int] = None, obfuscate: bool = False) -> PeerConnection:
         """Attempts to make a direct connection to the peer and send a
         :class:`.PeerInit` message. This will be the first step in case we are
         the one initiating the connection
         """
-        logger.debug("attempting to connect to peer : %r %s:%d", username, ip, port)
+        # Request peer address if ip and port are not given
+        if ip is None or port is None:
+            ip, clear_port, obfuscated_port = await self._get_peer_address(username)
+
+            port, obfuscate = self.select_port(clear_port, obfuscated_port)
+
+        # Override IP address if requested
+        ip = self._ip_overrides.get(username, ip)
+
+        logger.debug(
+            "attempting to connect directly to peer : %r %s:%d",
+            username, ip, port
+        )
         connection = PeerConnection(
             ip, port, self,
             connection_type=typ,
@@ -764,6 +839,12 @@ class Network:
                 ticket
             )
         )
+
+        self._finalize_peer_connection(connection)
+
+        await self._event_bus.emit(
+            PeerInitializedEvent(connection, requested=True))
+
         return connection
 
     async def _make_indirect_connection(
@@ -781,7 +862,7 @@ class Network:
         """
         # Wait for either a established connection with PeerPierceFirewall or a
         # CannotConnect from the server
-        expected_connection_future: asyncio.Future = asyncio.Future()
+        expected_connection_future: PeerFuture = PeerFuture(ticket, username, typ)
         expected_connection_future.add_done_callback(
             partial(self._remove_connection_future, ticket)
         )
@@ -819,12 +900,7 @@ class Network:
             raise PeerConnectionError(
                 f"indirect connection failed ({username=}, {ticket=})")
 
-        connection = completed_future.result()
-
-        connection.username = username
-        connection.connection_type = typ
-
-        return connection
+        return completed_future.result()
 
     async def _handle_connect_to_peer(self, message: ConnectToPeer.Response):
         """Handles an indirect connection request received from the server.
@@ -863,15 +939,19 @@ class Network:
             )
             raise PeerConnectionError("failed connect on user request")
 
-        if message.typ == PeerConnectionType.FILE:
-            peer_connection.set_connection_state(PeerConnectionState.AWAITING_TICKET)
-            peer_connection.download_rate_limiter = self._download_rate_limiter
-            peer_connection.upload_rate_limiter = self._upload_rate_limiter
-        else:
-            peer_connection.set_connection_state(PeerConnectionState.ESTABLISHED)
+        self._finalize_peer_connection(peer_connection)
 
         await self._event_bus.emit(
             PeerInitializedEvent(peer_connection, requested=False))
+
+    def _finalize_peer_connection(self, connection: PeerConnection):
+        if connection.connection_type == PeerConnectionType.FILE:
+            connection.set_connection_state(PeerConnectionState.NEGOTIATING_TRANSFER)
+            connection.download_rate_limiter = self._download_rate_limiter
+            connection.upload_rate_limiter = self._upload_rate_limiter
+
+        else:
+            connection.set_connection_state(PeerConnectionState.ESTABLISHED)
 
     async def send_peer_messages(
             self, username: str, *messages: Union[bytes, MessageDataclass],
@@ -1033,14 +1113,7 @@ class Network:
         if isinstance(peer_init_message, PeerInit.Request):
             connection.username = peer_init_message.username
             connection.connection_type = peer_init_message.typ
-            # When the first message is PeerInit it's up to the other peer to send
-            # us the transfer ticket in case it's a file connection
-            if peer_init_message.typ == PeerConnectionType.FILE:
-                connection.set_connection_state(PeerConnectionState.AWAITING_TICKET)
-                connection.download_rate_limiter = self._download_rate_limiter
-                connection.upload_rate_limiter = self._upload_rate_limiter
-            else:
-                connection.set_connection_state(PeerConnectionState.ESTABLISHED)
+            self._finalize_peer_connection(connection)
 
             await self._event_bus.emit(
                 PeerInitializedEvent(connection, requested=False))
@@ -1056,6 +1129,13 @@ class Network:
                 )
                 await connection.disconnect(CloseReason.REQUESTED)
             else:
+                connection.username = connection_future.username
+                connection.connection_type = connection_future.typ
+                self._finalize_peer_connection(connection)
+
+                await self._event_bus.emit(
+                    PeerInitializedEvent(connection, requested=True))
+
                 connection_future.set_result(connection)
 
         else:

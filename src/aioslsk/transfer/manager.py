@@ -927,8 +927,7 @@ class TransferManager(BaseManager):
         try:
             connection = await self._network.create_peer_connection(
                 transfer.username,
-                PeerConnectionType.FILE,
-                initial_state=PeerConnectionState.AWAITING_OFFSET
+                PeerConnectionType.FILE
             )
 
         except PeerConnectionError:
@@ -943,8 +942,6 @@ class TransferManager(BaseManager):
             logger.info("failed to send transfer ticket : %d : %s", ticket, transfer)
             await transfer.state.queue()
             return
-
-        connection.set_connection_state(PeerConnectionState.AWAITING_OFFSET)
 
         # Receive transfer offset
         try:

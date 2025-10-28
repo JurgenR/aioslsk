@@ -79,10 +79,8 @@ class PeerConnectionState(Enum):
     """No init message has been received yet (PeerInit, PeerPierceFirewall)"""
     ESTABLISHED = auto()
     """Message connections: ready to receive / send data"""
-    AWAITING_TICKET = auto()
-    """Transfer connections: awaiting the transfer ticket"""
-    AWAITING_OFFSET = auto()
-    """Transfer connections: awaiting the transfer offset"""
+    NEGOTIATING_TRANSFER = auto()
+    """Transfer connections: negotiating the transfer ticket / offset"""
     TRANSFERRING = auto()
     """Transfer connections: ready to receive / send data"""
 

@@ -82,6 +82,8 @@ Network
 +------------------------------------+---------+---------------------------------------------------------------------------------------------------+--------------------+
 | network.peer.obfuscate             | boolean | When true, prefer obfuscated connections as much as possible                                      | false              |
 +------------------------------------+---------+---------------------------------------------------------------------------------------------------+--------------------+
+| network.peer.connect_mode          | string  | Specifies how to make peer connections (race, fallback)                                           | race               |
++------------------------------------+---------+---------------------------------------------------------------------------------------------------+--------------------+
 | network.upnp.enabled               | boolean | Automatically configure UPnP for the listening ports                                              | false              |
 +------------------------------------+---------+---------------------------------------------------------------------------------------------------+--------------------+
 | network.upnp.lease_duration        | integer | Length of the UPnP port mapping lease duration (in seconds)                                       | 0                  |
