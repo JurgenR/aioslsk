@@ -654,7 +654,7 @@ class UserTrackingManager:
     async def _set_tracking_state(
             self, tracked_user: TrackedUser, state: TrackingState,
             message: Optional[AddUser.Response] = None,
-            retry_timeout: int = RETRY_TIMEOUT_NET_ERROR):
+            retry_timeout: float = RETRY_TIMEOUT_NET_ERROR):
 
         tracked_user.state = state
 
