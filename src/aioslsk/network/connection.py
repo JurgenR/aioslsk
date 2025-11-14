@@ -629,15 +629,15 @@ class PeerConnection(DataConnection):
             if self.connection_type != PeerConnectionType.PEER:
                 self.obfuscated = False
 
+        adapter.debug("setting state to %s", state, extra=self.__dict__)
+        self.connection_state = state
+
         if state == PeerConnectionState.ESTABLISHED:
             self.start_reader_task()
         else:
             # This shouldn't occur, during all other states we call the
             # receive_* methods directly. But it can do no harm
             self.stop_reader_task()
-
-        adapter.debug("setting state to %s", state, extra=self.__dict__)
-        self.connection_state = state
 
     async def receive_transfer_ticket(self) -> int:
         """Receive the transfer ticket from the connection"""
