@@ -591,16 +591,11 @@ class UserTrackingManager:
                         tracked_user.user.name, retry_timeout, retry_reason
                     )
 
-                    # Cancelling probably shouldn't be necessary but just doing
-                    # it for safety
-                    await cancel_task(tracked_user.retry_task)
-                    tracked_user.retry_task = asyncio.create_task(
-                        self._request_retry(tracked_user, retry_timeout))
-
                     await self._set_tracking_state(
                         tracked_user,
                         TrackingState.RETRY_PENDING,
-                        message=response
+                        message=response,
+                        retry_timeout=retry_timeout
                     )
 
                 else:
@@ -658,9 +653,17 @@ class UserTrackingManager:
 
     async def _set_tracking_state(
             self, tracked_user: TrackedUser, state: TrackingState,
-            message: Optional[AddUser.Response] = None):
+            message: Optional[AddUser.Response] = None,
+            retry_timeout: float = RETRY_TIMEOUT_NET_ERROR):
 
         tracked_user.state = state
+
+        if state == TrackingState.RETRY_PENDING:
+            # Cancelling probably shouldn't be necessary but just doing
+            # it for safety
+            await cancel_task(tracked_user.retry_task)
+            tracked_user.retry_task = asyncio.create_task(
+                self._request_retry(tracked_user, retry_timeout))
 
         # Deprecated events
         if state == TrackingState.TRACKED:
