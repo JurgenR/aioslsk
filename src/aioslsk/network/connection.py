@@ -159,8 +159,6 @@ class ListeningConnection(Connection):
                 self.port,
                 family=socket.AF_INET,
                 start_serving=True,
-                reuse_address=True,
-                reuse_port=True,
             )
 
         except OSError as exc:
