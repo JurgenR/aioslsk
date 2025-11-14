@@ -1,14 +1,15 @@
-import argparse
-import asyncio
 from collections import Counter
 from collections.abc import Generator
 from dataclasses import fields
 from functools import partial
+from typing import Optional, TypeVar
+import argparse
+import asyncio
 import logging
 import re
 import socket
+import sys
 import time
-from typing import Optional, TypeVar
 
 from aioslsk.events import build_message_map
 from aioslsk.user.model import UserStatus
@@ -269,7 +270,8 @@ class MockServer:
             self.hostname,
             port,
             family=socket.AF_INET,
-            start_serving=start_serving
+            start_serving=start_serving,
+            reuse_address=sys.platform != 'win32'
         )
         self.connections[port] = connection
 

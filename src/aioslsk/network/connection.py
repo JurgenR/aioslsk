@@ -9,6 +9,7 @@ from typing import Optional, TYPE_CHECKING, Union
 import logging
 import socket
 import struct
+import sys
 
 from ..constants import (
     DEFAULT_READ_TIMEOUT,
@@ -159,6 +160,7 @@ class ListeningConnection(Connection):
                 self.port,
                 family=socket.AF_INET,
                 start_serving=True,
+                reuse_address=sys.platform != 'win32'
             )
 
         except OSError as exc:
