@@ -9,25 +9,37 @@ This document describes different flows and details for the SoulSeek protocol
 How to read this document
 =========================
 
-The order of the actions is (usually) deliberate to keep the order of the messages. For example: when a user leaves a room the first step is to remove the user from the list of joined users. If a subsequent step describes that a message should be sent to all joined users then that list excludes the leaving user itself as the user was removed in the first step.
+The order of the actions is (usually) deliberate to keep the order of the messages. For example:
+when a user leaves a room the first step is to remove the user from the list of joined users. If a
+subsequent step describes that a message should be sent to all joined users then that list excludes
+the leaving user itself as the user was removed in the first step.
 
-For some of the checks and input checks the action performed is simply "Continue", in these cases the behaviour has been verified but no error is given. This is usually done in cases where an error was expected but non was given and is a reminder that it has been verified.
+For some of the checks and input checks the action performed is simply "Continue", in these cases
+the behaviour has been verified but no error is given. This is usually done in cases where an error
+was expected but non was given and is a reminder that it has been verified.
 
 
 Peer Flows
 ==========
 
-All peer connections use the TCP protocol. The SoulSeek protocol defines 3 types of connections with each its own set of messages. The type of connection is established during the peer initialization message:
+All peer connections use the TCP protocol. The SoulSeek protocol defines 3 types of connections
+with each its own set of messages. The type of connection is established during the peer
+initialization message:
 
 * Peer (``P``) : Peer to peer connection for messaging
 * Distributed (``D``) : Distributed network connections
 * File (``F``) : Peer to peer connection for file transfer
 
-To accept connections from incoming peers there should be at least one listening port opened. However newer clients will open two ports: a non-obfuscated and an obfuscated port.
+To accept connections from incoming peers there should be at least one listening port opened. However
+newer clients will open two ports: a non-obfuscated and an obfuscated port.
 
-The obfuscated port is not mandatory and is usually just the obfuscated port + 1. Normally any port can be picked, both ports can be made known to the server using the :ref:`SetListenPort` message. How obfuscation works is described in the :ref:`obfuscation` section
+The obfuscated port is not mandatory and is usually just the obfuscated port + 1. Normally any port
+can be picked, both ports can be made known to the server using the :ref:`SetListenPort` message.
+How obfuscation works is described in the :ref:`obfuscation` section
 
-When a peer connection is accepted on the obfuscated port all messaging should be obfuscated with each their own key, this only applies to peer connection though (``P``). Distributed (``D``) and file (``F``) connections are not obfuscated aside from the :ref:`peer-init-messages`.
+When a peer connection is accepted on the obfuscated port all messaging should be obfuscated with
+each their own key, this only applies to peer connection though (``P``). Distributed (``D``) and
+file (``F``) connections are not obfuscated aside from the :ref:`peer-init-messages`.
 
 
 .. _connecting-to-peer:
@@ -35,52 +47,77 @@ When a peer connection is accepted on the obfuscated port all messaging should b
 Connecting to a peer
 --------------------
 
-The process uses the server to request the IP as well as a middle man in case we fail to connect to the other peer. To obtain the IP address and port of the peer the :ref:`GetPeerAddress` message is first requested from the server.
+There are two ways a peer connection can be established: a direct connection to the peer or an
+indirect connection using the server as a middle man.
 
-We can connect to them:
+The original flow was to first attempt a direct connection and if that fails fall back to an
+indirect connection (fallback method). However this can be very slow and most clients opt to try
+both methods in parallel and use whichever connection succeeds first (race method).
 
-1. Attempt to connect to the peer -> connection established
-2. Generate a ticket number
-3. Send :ref:`PeerInit` over the peer connection
 
-   * ``ticket``
-   * ``username``
-   * ``connection_type``
+Direct Connection
+~~~~~~~~~~~~~~~~~
 
-We cannot connect to them, but they can connect to us:
+1. Request the IP address and listening ports for the target peer from the server using the :ref:`GetPeerAddress` message
+2. In case the peer exists the server will respond with:
 
-1. Attempt to connect to the peer -> connection failure
-2. Generate a ticket number, store the associated information (username, connection_type)
-3. Send :ref:`ConnectToPeer` to the server
+   * ``ip_address`` : IP address of the peer
+   * ``port`` : listening port of the peer
+   * ``obfuscated_port`` : obfuscated listening port of the peer (``0`` if not set)
 
-   * ``ticket``
-   * ``username``
-   * ``connection_type``
+2. Establish a TCP connection to the peer using ``ip_address`` and ``port`` (or ``obfuscated_port`` if using obfuscation)
+3. In case of success: send :ref:`PeerInit` over the peer connection
 
-4. Incoming connection from peer -> connection is established
-5. Receive :ref:`PeerPierceFirewall` over the peer connection (ticket)
-6. Look up the ticket and associated information
+   * ``username`` : our username
+   * ``connection_type`` : the connection type we want to establish (`P`, `D` or `F`)
 
-We cannot connect to them, they cannot connect to us:
-
-1. Attempt to connect to the peer -> connection failure
-2. Generate a ticket number
-3. Send :ref:`ConnectToPeer` command to the server
-
-   * ``ticket``
-   * ``username``
-   * ``connection_type``
-
-4. Nothing should happen here, as they cannot connect to us
-5. Other peer sends :ref:`CannotConnect` to the server
-
-   * ``ticket`` : ``ticket`` parameter from the :ref:`ConnectToPeer` message
-
-6. Receive :ref:`CannotConnect` from server (ticket)
 
 .. note::
 
-   Other clients don't seem to adhere to this flow: they don't actually wait for the connection to be established and just fires a :ref:`ConnectToPeer` message to the server at the same time as it tries to establish a connection to the peer.
+   The :ref:`GetPeerAddress` can return address 0.0.0.0 as ``ip_address`` which indicates the peer
+   is not connected to the server
+
+
+Indirect Connection
+~~~~~~~~~~~~~~~~~~~
+
+1. Generate a ticket number
+2. Send :ref:`ConnectToPeer` to the server:
+
+   * ``ticket`` : the generated ticket
+   * ``username`` : target peer username
+   * ``connection_type`` : the connection type we want to establish (`P`, `D` or `F`)
+
+3. The server will send the :ref:`ConnectToPeer` message to the target peer who receives the following information:
+
+   * ``ticket`` : the generated ticket
+   * ``username`` : our username
+   * ``connection_type`` : (`P`, `D` or `F`)
+   * ``ip_address`` : our IP address
+   * ``port`` : our listening port
+   * ``obfuscated_port`` : our obfuscated listening port (``0`` if not set)
+
+4. Target peer attempts to establish a TCP connection to us using the provided ``ip_address`` and ``port`` (or ``obfuscated_port`` if using obfuscation)
+5. In case of success: target peer sends :ref:`PeerPierceFirewall` over the peer connection
+
+   * ``ticket`` : the generated ticket
+
+6. In case of failure:
+
+   1. Target peer sends :ref:`CannotConnect` to the server
+
+      * ``ticket`` : the generated ticket
+
+   2. We receive :ref:`CannotConnect` from the server
+
+      * ``ticket`` : the generated ticket
+
+
+.. note::
+
+   When building a client the desired username and connection type should be stored alongside the
+   generated ticket to be able to match it when the incoming peer connection sends the
+   :ref:`PeerPierceFirewall` message.
 
 
 Delivering Search Results
@@ -106,9 +143,13 @@ Delivery of search results is the same process for all kinds of search messages:
 Obfuscation
 -----------
 
-Obfuscation is possible only through the peer connection type (``P``) and the peer initialization messages (:ref:`PeerInit` and :ref:`PeerPierceFirewall`). If a distributed or file connection is made only the initialization messages can be obfuscated, after that the client should switch to sending/received messages non-obfuscated.
+Obfuscation is possible only through the peer connection type (``P``) and the peer initialization
+messages (:ref:`PeerInit` and :ref:`PeerPierceFirewall`). If a distributed or file connection is
+made only the initialization messages can be obfuscated, after that the client should switch to
+sending/received messages non-obfuscated.
 
-When messages are obfuscated the first 4 bytes are the key which is randomly generated for each message. To decode the first 4 bytes of the actual message the following steps should be taken:
+When messages are obfuscated the first 4 bytes are the key which is randomly generated for each
+message. To decode the first 4 bytes of the actual message the following steps should be taken:
 
 1. Convert the key to an integer (from little-endian)
 2. Perform a circular shift of 31 bits to the right
@@ -239,19 +280,32 @@ Distributed Flows
 Obtaining a parent
 ------------------
 
-When :ref:`ToggleParentSearch` is enabled then every 60 seconds the server will send the client a :ref:`PotentialParents` command (containing a maximum of 10 possible parents) until we disable our search for a parent using the :ref:`ToggleParentSearch` command. The :ref:`PotentialParents` command contains a list with each entry containing: username, IP address and port. Upon receiving this command the client will attempt to open up a connection to each of the IP addresses in the list to find a suitable parent.
+When :ref:`ToggleParentSearch` is enabled then every 60 seconds the server will send the client a
+:ref:`PotentialParents` command (containing a maximum of 10 possible parents) until we disable our
+search for a parent using the :ref:`ToggleParentSearch` command. The :ref:`PotentialParents` command
+contains a list with each entry containing: username, IP address and port. Upon receiving this
+command the client will attempt to open up a connection to each of the IP addresses in the list to
+find a suitable parent.
 
-After establishing a distributed connection with one of the potential parents the peer will send out a :ref:`DistributedBranchLevel` and optionally, if the branch level is non-zero, :ref:`DistributedBranchRoot` over the distributed connection. If the peer is selected to be the parent the other potential parents are disconnected and the following messages are then send to the server to let it know where we are in the hierarchy:
+After establishing a distributed connection with one of the potential parents the peer will send out
+a :ref:`DistributedBranchLevel` and optionally, if the branch level is non-zero,
+:ref:`DistributedBranchRoot` over the distributed connection. If the peer is selected to be the
+parent the other potential parents are disconnected and the following messages are then send to the
+server to let it know where we are in the hierarchy:
 
 * :ref:`BranchLevel` : BranchLevel from the parent + 1
 * :ref:`BranchRoot` : The BranchRoot received from the parent as-is
 * :ref:`ToggleParentSearch` : Setting to false disables receiving :ref:`PotentialParents` messages
 * :ref:`AcceptChildren`: See :ref:`max-children` setting
 
-Once the parent is set it will start sending us search requests or if we are branch root the server will send us search requests.
+Once the parent is set it will start sending us search requests or if we are branch root the server
+will send us search requests.
 
 .. note::
-   The implementation currently differs from the original clients. The implementation will make the first peer that sends a :ref:`DistributedBranchLevel` and :ref:`DistributedBranchRoot` (except if level was 0, see above). Others clients decide the parent based on the first search request received.
+   The implementation currently differs from the original clients. The implementation will make the
+   first peer that sends a :ref:`DistributedBranchLevel` and :ref:`DistributedBranchRoot` (except
+   if level was 0, see above). Others clients decide the parent based on the first search request
+   received.
 
 
 List of open questions:
@@ -262,9 +316,16 @@ List of open questions:
 Obtaining children
 ------------------
 
-The :ref:`AcceptChildren` command tells the server whether we want to have any children, this is used in combination with the :ref:`ToggleParentSearch` command which enables searching for parents. Enabling it will cause us to be listed in :ref:`PotentialParents` commands sent to other peers. It is not mandatory to have a parent and to obtain children if we ourselves are the branch root (branch level is 0).
+The :ref:`AcceptChildren` command tells the server whether we want to have any children, this is
+used in combination with the :ref:`ToggleParentSearch` command which enables searching for parents.
+Enabling it will cause us to be listed in :ref:`PotentialParents` commands sent to other peers. It
+is not mandatory to have a parent and to obtain children if we ourselves are the branch root (branch
+level is 0).
 
-The process is very similar to the one to obtain a parent except that this time we are in the role of the other peer; we need to advertise the branch level and branch root using the :ref:`DistributedBranchLevel` and :ref:`DistributedBranchRoot` commands as soon as another peer establishes.
+The process is very similar to the one to obtain a parent except that this time we are in the role
+of the other peer; we need to advertise the branch level and branch root using the
+:ref:`DistributedBranchLevel` and :ref:`DistributedBranchRoot` commands as soon as another peer
+establishes.
 
 
 .. _max-children:
@@ -272,9 +333,13 @@ The process is very similar to the one to obtain a parent except that this time 
 Max children
 ~~~~~~~~~~~~
 
-Clients limit the amount of children depending on the upload speed that is currently stored on the server. Whenever a :ref:`GetUserStats` message is received (for the logged in user) this limit is re-calculated and depends on the :ref:`ParentSpeedRatio` and :ref:`ParentMinSpeed` values the server sent after logon.
+Clients limit the amount of children depending on the upload speed that is currently stored on the
+server. Whenever a :ref:`GetUserStats` message is received (for the logged in user) this limit is
+re-calculated and depends on the :ref:`ParentSpeedRatio` and :ref:`ParentMinSpeed` values the server
+sent after logon.
 
-When a client receives a :ref:`GetUserStats` message the client should determine whether to enable or disable accepting children and if enabled, calculate the amount of maximum children.
+When a client receives a :ref:`GetUserStats` message the client should determine whether to enable
+or disable accepting children and if enabled, calculate the amount of maximum children.
 
 1. If the ``avg_speed`` returned is smaller than the value received by :ref:`ParentMinSpeed` * 1024 :
 
@@ -316,74 +381,108 @@ Calculation:
 
 
 .. note::
-   With this formula there is a possibility that even when the ``avg_speed`` is greater than the ``min_speed_ratio`` the max amount of children calculated is 0. In this case the :ref:`AcceptChildren` is sent with ``accept=true``, despite the client not accepting any children.
+   With this formula there is a possibility that even when the ``avg_speed`` is greater than the
+   ``min_speed_ratio`` the max amount of children calculated is 0. In this case the
+   :ref:`AcceptChildren` is sent with ``accept=true``, despite the client not accepting any children
 
 
 Searches on the distributed network
 -----------------------------------
 
-Searches for the branch root (level = 0) will come from the server in the form of a :ref:`ServerSearchRequest` message. The branch root forwards this message as-is directly to its children (level = 1). The children will then convert this message into a :ref:`DistributedSearchRequest` and pass it on to its children (level = 2). It is up to the peer to perform the query on the local filesystem and report the results the peer making the query.
+Searches for the branch root (level = 0) will come from the server in the form of a
+:ref:`ServerSearchRequest` message. The branch root forwards this message as-is directly to its
+children (level = 1). The children will then convert this message into a :ref:`DistributedSearchRequest`
+and pass it on to its children (level = 2). It is up to the peer to perform the query on the local
+filesystem and report the results the peer making the query.
 
 .. note::
-   The reason why it is done this way is not clear. The branch root could perfectly convert it into a :ref:`DistributedSearchRequest` itself before passing it on. This would in fact be cleaner as right now the :ref:`DistributedServerSearchRequest` is just a copy of :ref:`ServerSearchRequest`, otherwise this wouldn't parse.
+   The reason why it is done this way is not clear. The branch root could perfectly convert it into
+   a :ref:`DistributedSearchRequest` itself before passing it on. This would in fact be cleaner as
+   right now the :ref:`DistributedServerSearchRequest` is just a copy of :ref:`ServerSearchRequest`,
+   otherwise this wouldn't parse.
 
-   The naming of these messages is probably incorrect as the ``distributed_code`` parameter of the :ref:`ServerSearchRequest` holds the distributed message ID. Possibly the server could send any distributed command through this that needs to be broadcast over the distributed network.
+   The naming of these messages is probably incorrect as the ``distributed_code`` parameter of the
+   :ref:`ServerSearchRequest` holds the distributed message ID. Possibly the server could send any
+   distributed command through this that needs to be broadcast over the distributed network.
 
 
 Transfer Flows
 ==============
 
-Downloads
----------
+Basic Flow
+----------
 
 For downloading we need only the ``username`` and ``filename`` returned by a :ref:`PeerSearchReply`.
 
-Request a file download (peer has free upload slots):
+Request a file download over a peer connection (``P``):
 
-1. Initiate a connection a peer connection (``P``)
-2. Send: :ref:`PeerTransferQueue` : ``filename``
-3. Receive: :ref:`PeerTransferRequest` : ``direction=1``. Store the ``ticket`` and the ``filesize``
-4. Send: :ref:`PeerTransferReply` : containing the ``ticket``. If the ``allowed`` flag is set the other peer will now attempt to establish a connection for uploading, if it is not set the transfer should be aborted.
+1. Downloader: :ref:`PeerTransferQueue`
+
+   * ``filename`` : name of the file to download
 
 
-When the peer is ready for uploading it will create a new file connection (``F``) :
+The uploader should queue the download request. He decides when the flow continues:
 
-1. Receive: :ref:`PeerInit`: or :ref:`PeerPierceFirewall`
-2. Receive: ``ticket``
-3. Send: ``offset``
-4. Receive data until ``filesize`` is reached
-5. Close connection
-6. (the uploader will send a :ref:`SendUploadSpeed` message to the server with the average upload speed)
+1. Uploader: :ref:`PeerTransferRequest` : this can sent over any peer connection (``P``)
 
-Queue a file download (peer does not have any free upload slots):
+   * ``direction`` : ``1``
+   * ``ticket``
+   * ``filesize``
 
-1. Initiate a peer connection (``P``)
-2. Send: :ref:`PeerTransferQueue` message containing the filename
-3. (If after 60s the ticket is not handled) Send: :ref:`PeerPlaceInQueueRequest` containing the filename
-4. Receive: :ref:`PeerPlaceInQueueReply` which contains the filename and place in queue
+2. Downloader: :ref:`PeerTransferReply`
+
+   * ``allowed`` : ``true``
+
+
+The uploader should open a new file connection (``F``) to the downloader and proceed with the file
+transfer:
+
+1. Uploader: ``ticket`` (``uint32``) : should be the same ticket as the :ref:`PeerTransferRequest` message
+2. Downloader: ``offset`` (``uint64``) : indicates from which byte the uploader should start sending data
+3. Uploader: Send file data
+4. Downloader: Close connection when all data is received
+5. Uploader: will send a :ref:`SendUploadSpeed` message to the server with the average upload speed
+
 
 .. warning::
-  It is up to the downloader to close the file connection, the downloader confirms he has received all bytes by closing. If the uploader closes the connection as soon as all data is sent the file will be incomplete on the downloader side.
+
+  It is up to the downloader to close the file connection, the downloader confirms he has received
+  all bytes by closing. If the uploader closes the connection as soon as all data is sent the file
+  will be incomplete on the downloader side.
 
 
-Uploads
--------
+Deprecated: Uploads
+-------------------
 
-The original Windows SoulSeek client also has the ability to upload files to another user.
+.. note::
+
+  This section describes a flow which is no longer used but is kept for reference. It describes a
+  flow for uploading files to another user without a prior download request (pushing a file). This
+  is only implemented by SoulSeekNS.
+
 
 Successful upload
 ~~~~~~~~~~~~~~~~~
 
 Uploader opens a new peer connection (``P``):
 
-1. Uploader send: :ref:`PeerUploadQueueNotification`
-2. Uploader send: :ref:`PeerTransferRequest` : ``direction=1``, ``filename=<local path>``, ``filesize=<set>``
-3. Receiver send: :ref:`PeerTransferReply`: allowed=true
+1. Uploader: :ref:`PeerUploadQueueNotification`
+2. Uploader: :ref:`PeerTransferRequest`
+
+   * ``direction`` : ``1``
+   * ``filename``
+   * ``filesize``
+
+3. Downloader: :ref:`PeerTransferReply`
+   
+   * ``allowed`` : ``true``
+
 
 Uploader opens a new file connection (``F``) and proceeds with uploading
 
 .. note::
-  It seems like the :ref:`PeerUploadQueueNotification` is stored as subsequent uploads do not require this message to be sent
+  It seems like the :ref:`PeerUploadQueueNotification` is stored as subsequent uploads do not
+  require this message to be sent
 
 
 Upload not allowed
@@ -391,12 +490,21 @@ Upload not allowed
 
 Uploader opens a new peer connection (``P``):
 
-1. Uploader send: :ref:`PeerUploadQueueNotification`
-2. Uploader send: :ref:`PeerTransferRequest` : direction=1, filename=<local path>, filesize=<set>
-3. Receiver send: :ref:`PeerTransferReply`: allowed=false, reason='Cancelled'
-4. Uploader send: :ref:`PeerUploadFailed`: filename=<local path>
+1. Uploader: :ref:`PeerUploadQueueNotification`
+2. Uploader: :ref:`PeerTransferRequest`
 
+   * ``direction`` : ``1``
+   * ``filename``
+   * ``filesize``
 
+3. Downloader: :ref:`PeerTransferReply`
+
+   * ``allowed`` : ``false``
+   * ``reason`` : ``Cancelled``
+
+4. Uploader: :ref:`PeerUploadFailed`
+
+   * ``filename``
 
 
 Server Connection and Logon
@@ -408,7 +516,7 @@ Server Connection and Logon
 Establishing a connection and logging on:
 
 1. Open a TCP connection to the server
-2. Open up at least one listening connection (see :ref:`peer-connections` for more info)
+2. Open up at least one listening connection to allow incoming peer connections
 3. Send the :ref:`Login`: message on the server socket
 
 A login response will be received which determines whether the login was successful
@@ -435,7 +543,8 @@ After connection is complete, send a :ref:`Ping` command to the server every 5 m
 Server Flows
 ============
 
-This section describes the flows from a point of view of the server as well as the presumed internal structures.
+This section describes the flows from a point of view of the server as well as the presumed internal
+structures.
 
 
 Structures
@@ -705,7 +814,7 @@ The :ref:`Login` message is the first message a peer needs to send to the server
 
 * If ``client_version`` is less than TBD
 
-   1. :ref:`function-server-info-message` : message : "Your connection is restricted: You cannot search or chat. Your client version is too old. You need to upgrade to the latest version. Close this client, download new version from http://www.slsknet.org, install it and reconnect."
+  1. :ref:`function-server-info-message` : message : "Your connection is restricted: You cannot search or chat. Your client version is too old. You need to upgrade to the latest version. Close this client, download new version from http://www.slsknet.org, install it and reconnect."
 
 * If ``username`` is empty:
 
@@ -749,9 +858,9 @@ The :ref:`Login` message is the first message a peer needs to send to the server
 
    1. :ref:`Login`
 
-       * success : true
-       * greeting : value from ``motd``
-       * md5hash : md5hash of the ``password`` of the ``user``
+      * success : true
+      * greeting : value from ``motd``
+      * md5hash : md5hash of the ``password`` of the ``user``
 
    2. :ref:`function-send-queued-messages`
    3. :ref:`function-room-list-update`
@@ -2072,7 +2181,9 @@ Function: Update user status
    * During disconnect: user status goes from online/away to offline
    * When user sets status: user status goes from online to away or vice versa
 
-   Step 2, informing the user itself of the status update, is effectively only executed when the status is changed to the away status. As such this message is only sent when a user changes his status from online to away. This seems to be a bug in the server.
+   Step 2, informing the user itself of the status update, is effectively only executed when the
+   status is changed to the away status. As such this message is only sent when a user changes his
+   status from online to away. This seems to be a bug in the server.
 
 
 .. _function-send-queued-messages:
@@ -2107,7 +2218,8 @@ Function: Send Queued Messages
 Function: Send Room List Update
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This is a collection of messages commonly sent to the peer after performing an action on a private room or after logging on.
+This is a collection of messages commonly sent to the peer after performing an action on a private
+room or after logging on.
 
 **Actions:**
 
@@ -2126,7 +2238,8 @@ This is a collection of messages commonly sent to the peer after performing an a
 Function: Notify room owner
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Function to notify the room owner. This short function sends a server chat ``message`` to the ``owner`` of a room if the room has an owner.
+Function to notify the room owner. This short function sends a server chat ``message`` to the
+``owner`` of a room if the room has an owner.
 
 **Actions:**
 
@@ -2157,16 +2270,16 @@ Function to join the room, checks should already be performed.
 
    1. :ref:`JoinRoom`
 
-     * ``room`` : name of joined room
-     * ``usernames`` : list of room ``joined_users``
-     * user stats, online status, etc
-     * ``owner`` : ``owner`` if ``is_private=true`` for the room
-     * ``operators`` : ``owner`` if ``is_private=true`` for the room
+      * ``room`` : name of joined room
+      * ``usernames`` : list of room ``joined_users``
+      * user stats, online status, etc
+      * ``owner`` : ``owner`` if ``is_private=true`` for the room
+      * ``operators`` : ``owner`` if ``is_private=true`` for the room
 
    2. :ref:`RoomTickers`
 
-     * ``room`` : name of joined room
-     * ``tickers`` : array of room ``tickers``
+      * ``room`` : name of joined room
+      * ``tickers`` : array of room ``tickers``
 
 
 .. _function-leave-room:
@@ -2298,7 +2411,8 @@ Function to grant operator privileges to a member of a private room
 
 
 .. note::
-   It is not a mistake that the :ref:`PrivateRoomGrantOperator` message gets sent twice to both the joined users and the members
+   It is not a mistake that the :ref:`PrivateRoomGrantOperator` message gets sent twice to both the
+   joined users and the members
 
 
 .. _function-private-room-revoke-operator:
@@ -2335,7 +2449,8 @@ Function to revoke operator privileges from a member of a private room
 
 
 .. note::
-  It is not a mistake that the :ref:`PrivateRoomRevokeOperator` message gets sent twice to both the joined users and the members
+  It is not a mistake that the :ref:`PrivateRoomRevokeOperator` message gets sent twice to both the
+  joined users and the members
 
 
 .. _function-server-info-message:
@@ -2366,7 +2481,8 @@ The server will send private chat messages to report errors and information back
 Client Flows
 ============
 
-This section describes some of the flows from the client point of view. Specifically it focuses on the interactions between the client and the server
+This section describes some of the flows from the client point of view. Specifically it focuses on
+the interactions between the client and the server
 
 Private Chat Message
 --------------------
@@ -2437,7 +2553,9 @@ Attributes
 
 Each search results returns a list of attributes containing information about the file.
 
-Investigated different file formats and which attributes they return in which the following formats were checked: FLAC, MP3, M4A, OGG, AAC, WAV. It seems like there's a categorization of the different formats, based on the category certain attributes will be returned:
+Investigated different file formats and which attributes they return in which the following formats
+were checked: FLAC, MP3, M4A, OGG, AAC, WAV. It seems like there's a categorization of the different
+formats, based on the category certain attributes will be returned:
 
 * Lossless: FLAC, WAV
 * Compressed: MP3, M4A, AAC, OGG
@@ -2463,4 +2581,7 @@ Attribute table:
   The ``extension`` parameter is empty for anything but mp3 and flac
 
 .. note::
-  Couldn't find any other than these. Number 3 seems to be missing, could this be something used in the past or maybe for video? Theoretically we could invent new attributes here, like something for video, images, extra metadata for music files. The official clients don't seem to do anything with the extra attributes
+  Couldn't find any other than these. Number 3 seems to be missing, could this be something used in
+  the past or maybe for video? Theoretically we could invent new attributes here, like something for
+  video, images, extra metadata for music files. The official clients don't seem to do anything with
+  the extra attributes
