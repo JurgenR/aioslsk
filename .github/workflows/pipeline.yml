@@ -67,7 +67,7 @@ jobs:
 
       - name: Load cached venv
         id: cached-pip-wheels
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache
           key: venv-${{ runner.os }}-${{ matrix.python-version }}
@@ -80,7 +80,7 @@ jobs:
         run: |
           poetry run pytest --junitxml=test-reports/report-${{ matrix.os }}-${{ matrix.python-version }}.xml -o junit_suite_name=suite-${{ matrix.os }}-${{ matrix.python-version }}
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: report-${{ matrix.os }}-${{ matrix.python-version }}
@@ -99,7 +99,7 @@ jobs:
 
     steps:
       - name: Download Test Result Artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           path: test-reports
 
