@@ -233,20 +233,20 @@ files = [
 
 [[package]]
 name = "async-upnp-client"
-version = "0.46.1"
+version = "0.46.2"
 description = "Async UPnP Client"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "async_upnp_client-0.46.1-py3-none-any.whl", hash = "sha256:4bd520762d9f83b1ed03d1677a5325e7720e2c6c7037254b4f3843d44b207cc9"},
-    {file = "async_upnp_client-0.46.1.tar.gz", hash = "sha256:0522de1e01b010a09663e2c444ab573c5aec46cc8065b453ed0b4df36b3ab1f3"},
+    {file = "async_upnp_client-0.46.2-py3-none-any.whl", hash = "sha256:3754717e73003d2680afed1c46a21692e1c22dfab3158be93fa2a9d06ef4d176"},
+    {file = "async_upnp_client-0.46.2.tar.gz", hash = "sha256:c19bdf81627fbed809763c40e60d1d28bbf22663e439f5aa0185c688ea3df3b6"},
 ]
 
 [package.dependencies]
 aiohttp = ">3.9.0,<4.0"
 defusedxml = ">=0.6.0"
-python-didl-lite = ">=1.4.0,<1.5.0"
+python-didl-lite = ">=1.5.0,<1.6.0"
 voluptuous = ">=0.15.2"
 
 [[package]]
@@ -1988,18 +1988,21 @@ pytest = ">=7.0.0"
 
 [[package]]
 name = "python-didl-lite"
-version = "1.4.1"
+version = "1.5.0"
 description = "DIDL-Lite (Digital Item Declaration Language) tools for Python"
 optional = false
-python-versions = ">=3.8"
+python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "python_didl_lite-1.4.1-py3-none-any.whl", hash = "sha256:5ef9d09821db80b1fbbb8f999219b33b57b91fd1f49f5d8dbd8cb0ad357e7ce0"},
-    {file = "python_didl_lite-1.4.1.tar.gz", hash = "sha256:68f085b965bde12c0cbc4a068c1fb4c22c58c8f119b1851630896fced7201dc4"},
+    {file = "python_didl_lite-1.5.0-py3-none-any.whl", hash = "sha256:88023b04458019e88cc3c64445a1da4d11bae0fbe1cd96f49888e53862610a97"},
+    {file = "python_didl_lite-1.5.0.tar.gz", hash = "sha256:6ed1c8db01426a4c282b1b810bb7d9ebb3abec7ea832e48e89972544568caec1"},
 ]
 
 [package.dependencies]
 defusedxml = ">=0.6.0"
+
+[package.extras]
+test = ["pytest (==9.0.2)"]
 
 [[package]]
 name = "python-dotenv"
