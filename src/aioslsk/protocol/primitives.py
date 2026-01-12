@@ -411,10 +411,11 @@ class Attribute(ProtocolDataclass):
 
     @classmethod
     def deserialize(cls, pos: int, message: bytes):
-        return (
-            pos + _ATTR_STRUCT.size,
-            cls(*_ATTR_STRUCT.unpack_from(message, offset=pos))
-        )
+        key, value = _ATTR_STRUCT.unpack_from(message, pos)
+        obj = object.__new__(cls)
+        object.__setattr__(obj, 'key', key)
+        object.__setattr__(obj, 'value', value)
+        return pos + _ATTR_STRUCT.size, obj
 
     def serialize(self) -> bytes:
         return _ATTR_STRUCT.pack(self.key, self.value)
