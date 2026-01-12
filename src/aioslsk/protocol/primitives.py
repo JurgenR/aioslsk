@@ -315,7 +315,7 @@ class ProtocolDataclass:
                 return False
 
         if 'optional' in field.metadata:
-            return has_unparsed_bytes(pos, message)
+            return pos < len(message)  # check if there are unparsed bytes left
 
         return True
 
@@ -391,7 +391,7 @@ class MessageDataclass(ProtocolDataclass):
         else:
             pos, obj = super(MessageDataclass, cls).deserialize(pos, message)
 
-        if has_unparsed_bytes(pos, message):
+        if pos < len(message):  # check if there's any unparsed bytes left
             logger.warning(
                 "message has %d unparsed bytes : %r",
                 len(message[pos:]), message
@@ -514,7 +514,7 @@ class DirectoryData(ProtocolDataclass):
 
 
 def has_unparsed_bytes(pos: int, message: bytes) -> bool:
-    return len(message[pos:]) > 0
+    return pos < len(message)
 
 
 def calc_md5(value: str) -> str:
