@@ -208,8 +208,9 @@ class array(list):
     def deserialize(cls, pos: int, data: bytes, element_type: type[T]) -> tuple[int, list[T]]:
         items = []
         pos, array_len = uint32.deserialize(pos, data)
+        func = element_type.deserialize
         for _ in range(array_len):
-            pos, item = element_type.deserialize(pos, data)
+            pos, item = func(pos, data)
             items.append(item)
         return pos, items
 
