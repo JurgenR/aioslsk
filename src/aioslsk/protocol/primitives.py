@@ -467,13 +467,7 @@ class FileData(ProtocolDataclass):
         pos, filesize = uint64.deserialize(pos, message)
         pos, ext = string.deserialize(pos, message)
         pos, attrs = array.deserialize(pos, message, Attribute)
-        return pos, cls(
-            unknown=unknown,
-            filename=filename,
-            filesize=filesize,
-            extension=ext,
-            attributes=attrs
-        )
+        return pos, cls(unknown, filename, filesize, ext, attrs)
 
     def serialize(self) -> bytes:
         return (
