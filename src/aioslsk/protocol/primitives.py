@@ -151,7 +151,11 @@ class string(str):
         if len(value) != length:
             raise Exception(
                 f"expected string with length ({length}), got {len(value)}")
-        return end_pos, decode_string(value)
+        
+        try:
+            return end_pos, value.decode('utf-8')
+        except UnicodeDecodeError:
+            return end_pos, value.decode('cp1252')
 
 
 class bytearr(bytes):
