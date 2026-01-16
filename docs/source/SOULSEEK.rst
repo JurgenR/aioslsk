@@ -99,7 +99,7 @@ Indirect Connection
       * ``port`` : our listening port
       * ``obfuscated_port`` : our obfuscated listening port (``0`` if not set)
 
-   2. If he is not connected the server will send a :ref:`CannotConnect` message back to us:
+   2. If he is not connected the server will send a :ref:`CannotConnect` message back to us and the flow ends:
 
       * ``ticket`` : the generated ticket
       * ``username`` : <empty>
