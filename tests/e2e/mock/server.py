@@ -904,6 +904,13 @@ class MockServer:
                 )
             )
 
+        else:
+            await peer.send_message(
+                CannotConnect.Response(
+                    ticket=message.ticket
+                )
+            )
+
     @on_message(BranchLevel.Request)
     async def on_branch_level(self, message: BranchLevel.Request, peer: Peer):
         self.distributed_tree[peer.user.name].level = message.level
@@ -925,7 +932,6 @@ class MockServer:
         if (peer := self.find_peer_by_name(message.username)) is not None:
             await peer.send_message(
                 CannotConnect.Response(
-                    username=peer.user.name,
                     ticket=message.ticket
                 )
             )

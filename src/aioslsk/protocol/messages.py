@@ -403,10 +403,17 @@ class UserLeftRoom(ServerMessage):
 
 
 class ConnectToPeer(ServerMessage):
-    """Received when a peer attempted to connect to us but failed and thus is
-    asking us to attempt to connect to them through the server. Likewise when
-    we cannot connect to peer we should send this message to indicate to the
-    other peer that he should try connecting to us
+    """Used for making an indirect connection to another peer. If an indirect
+    connection is needed the request should be sent to the server who will pass
+    on the message to the other peer. The peer should try to make a connection
+    with the information (IP, port) provided by the server.
+
+    Likewise if the response is received an attempt should be made to connect
+    to the requesting peer
+
+    Peer A --Request(username=Peer B)--> Server --Response(username=Peer A)--> Peer B
+
+    Also see: :ref:`CannotConnect`
 
     :status: USED
     """
@@ -1759,8 +1766,13 @@ class ExcludedSearchPhrases(ServerMessage):
 
 
 class CannotConnect(ServerMessage):
-    """Send to the server if we failed to connect to a peer after a
-    :ref:`ConnectToPeer`
+    """Indicates an indirect connection attempt failed
+
+    The request message should be sent to the server after we received a
+    :ref:`ConnectToPeer` message but the connection attempt failed
+
+    The response will be received from the server if we sent out a
+    :ref:`ConnectToPeer` message but the target user failed to connect to us
 
     :status: USED
     """
@@ -1769,13 +1781,12 @@ class CannotConnect(ServerMessage):
     class Request(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x03E9)
         ticket: int = field(metadata={'type': uint32})
-        username: Optional[str] = field(default=None, metadata={'type': string, 'optional': True})
+        username: Optional[str] = field(metadata={'type': string})
 
     @dataclass(order=True, slots=True)
     class Response(MessageDataclass):
         MESSAGE_ID: ClassVar[uint32] = uint32(0x03E9)
         ticket: int = field(metadata={'type': uint32})
-        username: Optional[str] = field(default=None, metadata={'type': string, 'optional': True})
 
 
 class CannotCreateRoom(ServerMessage):
