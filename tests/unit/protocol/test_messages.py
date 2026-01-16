@@ -2306,21 +2306,7 @@ class TestExcludedSearchPhrases:
 
 class TestCannotConnect:
 
-    def test_CannotConnect_Request_serialize_withoutUsername(self):
-        message = CannotConnect.Request(
-            ticket=1234
-        )
-        data = bytes.fromhex('08000000e9030000d2040000')
-        assert message.serialize() == data
-
-    def test_CannotConnect_Request_deserialize_withoutUsername(self):
-        message = CannotConnect.Request(
-            ticket=1234
-        )
-        data = bytes.fromhex('08000000e9030000d2040000')
-        assert CannotConnect.Request.deserialize(0, data) == message
-
-    def test_CannotConnect_Request_serialize_withUsername(self):
+    def test_CannotConnect_Request_serialize(self):
         message = CannotConnect.Request(
             ticket=1234,
             username='user0'
@@ -2328,7 +2314,7 @@ class TestCannotConnect:
         data = bytes.fromhex('11000000e9030000d2040000050000007573657230')
         assert message.serialize() == data
 
-    def test_CannotConnect_Request_deserialize_withUsername(self):
+    def test_CannotConnect_Request_deserialize(self):
         message = CannotConnect.Request(
             ticket=1234,
             username='user0'
@@ -2337,34 +2323,18 @@ class TestCannotConnect:
         assert CannotConnect.Request.deserialize(0, data) == message
 
     # Response
-    def test_CannotConnect_Response_serialize_withoutUsername(self):
+    def test_CannotConnect_Response_serialize(self):
         message = CannotConnect.Response(
             ticket=1234
         )
         data = bytes.fromhex('08000000e9030000d2040000')
         assert message.serialize() == data
 
-    def test_CannotConnect_Response_deserialize_withoutUsername(self):
+    def test_CannotConnect_Response_deserialize(self):
         message = CannotConnect.Response(
             ticket=1234
         )
         data = bytes.fromhex('08000000e9030000d2040000')
-        assert CannotConnect.Response.deserialize(0, data) == message
-
-    def test_CannotConnect_Response_serialize_withUsername(self):
-        message = CannotConnect.Response(
-            ticket=1234,
-            username='user0'
-        )
-        data = bytes.fromhex('11000000e9030000d2040000050000007573657230')
-        assert message.serialize() == data
-
-    def test_CannotConnect_Response_deserialize_withUsername(self):
-        message = CannotConnect.Response(
-            ticket=1234,
-            username='user0'
-        )
-        data = bytes.fromhex('11000000e9030000d2040000050000007573657230')
         assert CannotConnect.Response.deserialize(0, data) == message
 
 

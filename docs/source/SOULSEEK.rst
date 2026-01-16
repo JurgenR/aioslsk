@@ -88,14 +88,21 @@ Indirect Connection
    * ``username`` : target peer username
    * ``connection_type`` : the connection type we want to establish (`P`, `D` or `F`)
 
-3. The server will send the :ref:`ConnectToPeer` message to the target peer who receives the following information:
+3. The server will check if the target peer is connected:
 
-   * ``ticket`` : the generated ticket
-   * ``username`` : our username
-   * ``connection_type`` : (`P`, `D` or `F`)
-   * ``ip_address`` : our IP address
-   * ``port`` : our listening port
-   * ``obfuscated_port`` : our obfuscated listening port (``0`` if not set)
+   1. If he is connected the server will send the :ref:`ConnectToPeer` message with the following information:
+
+      * ``ticket`` : the generated ticket
+      * ``username`` : our username
+      * ``connection_type`` : (`P`, `D` or `F`)
+      * ``ip_address`` : our IP address
+      * ``port`` : our listening port
+      * ``obfuscated_port`` : our obfuscated listening port (``0`` if not set)
+
+   2. If he is not connected the server will send a :ref:`CannotConnect` message back to us and the flow ends:
+
+      * ``ticket`` : the generated ticket
+      * ``username`` : <empty>
 
 4. Target peer attempts to establish a TCP connection to us using the provided ``ip_address`` and ``port`` (or ``obfuscated_port`` if using obfuscation)
 5. In case of success: target peer sends :ref:`PeerPierceFirewall` over the peer connection
@@ -474,7 +481,7 @@ Uploader opens a new peer connection (``P``):
    * ``filesize``
 
 3. Downloader: :ref:`PeerTransferReply`
-   
+
    * ``allowed`` : ``true``
 
 
