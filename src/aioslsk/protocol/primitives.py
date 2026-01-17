@@ -30,7 +30,6 @@ These metadata keys are implemented:
     * deserialization : during deserialization the code will determine if the message
       has been fully parsed. If not it will parse this field
 """
-from voluptuous import message
 from dataclasses import dataclass, field, Field, fields, is_dataclass
 import enum
 import hashlib
