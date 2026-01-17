@@ -151,7 +151,7 @@ class string(str):
         if len(value) != length:
             raise Exception(
                 f"expected string with length ({length}), got {len(value)}")
-        
+
         try:
             return end_pos, value.decode('utf-8')
         except UnicodeDecodeError:
@@ -473,7 +473,15 @@ class FileData(ProtocolDataclass):
         pos, filesize = uint64.deserialize(pos, message)
         pos, ext = string.deserialize(pos, message)
         pos, attrs = array.deserialize(pos, message, Attribute)
-        return pos, cls(unknown, filename, filesize, ext, attrs)
+
+        obj = object.__new__(cls)
+        set_attr = object.__setattr__
+        set_attr(obj, 'unknown', unknown)
+        set_attr(obj, 'filename', filename)
+        set_attr(obj, 'filesize', filesize)
+        set_attr(obj, 'extension', ext)
+        set_attr(obj, 'attributes', attrs)
+        return pos, obj
 
     def serialize(self) -> bytes:
         return (
