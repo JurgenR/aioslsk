@@ -309,15 +309,7 @@ class ProtocolDataclass:
             if is_dataclass(proto_type):
                 value.serialize_into(buffer)
             elif 'subtype' in obj_field.metadata:
-                if is_dataclass(obj_field.metadata['subtype']):
-                    # during serialization of elements in the array the code
-                    # will try to wrap the values into the passed type (in
-                    # order to call 'serialize' on them) but dataclasses don't
-                    # need to be wrapped. Just use a dummy lambda that returns
-                    # the dataclass object as-is
-                    proto_type(value).serialize_into(buffer, lambda val: val)
-                else:
-                    proto_type(value).serialize_into(buffer, obj_field.metadata['subtype'])
+                proto_type(value).serialize_into(buffer, obj_field.metadata['subtype'])
             else:
                 proto_type(value).serialize_into(buffer)
 
@@ -406,24 +398,22 @@ class MessageDataclass(ProtocolDataclass):
 
         :param compress: use gzip compression on the message contents
         """
-        # Parametered super call due to issue: https://github.com/python/cpython/issues/90562
-        message = super(MessageDataclass, self).serialize()
-
-        if compress:
-            message = zlib.compress(message)
-
-        message = self.MESSAGE_ID.serialize() + message
-        return uint32(len(message)).serialize() + message
+        buffer = bytearray()
+        self.serialize_into(buffer, compress=compress)
+        return bytes(buffer)
 
     def serialize_into(self, buffer: bytearray, compress: bool = False):
+        message_id = self.MESSAGE_ID.serialize()
+
         message = bytearray()
+        # Parametered super call due to issue: https://github.com/python/cpython/issues/90562
         super(MessageDataclass, self).serialize_into(message)
 
         if compress:
             message = zlib.compress(message)
 
-        self.MESSAGE_ID.serialize_into(buffer)
-        uint32(len(message)).serialize_into(buffer)
+        uint32(len(message_id) + len(message)).serialize_into(buffer)
+        buffer.extend(message_id)
         buffer.extend(message)
 
     @classmethod
@@ -555,7 +545,7 @@ class FileData(ProtocolDataclass):
         uint8(self.unknown).serialize_into(buffer)
         string(self.filename).serialize_into(buffer)
         uint64(self.filesize).serialize_into(buffer)
-        string(self.filesize).serialize_into(buffer)
+        string(self.extension).serialize_into(buffer)
         array(self.attributes).serialize_into(buffer, Attribute)
 
     def get_attribute_map(self) -> dict[AttributeKey, int]:
