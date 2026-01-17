@@ -151,7 +151,11 @@ class string(str):
         if len(value) != length:
             raise Exception(
                 f"expected string with length ({length}), got {len(value)}")
-        return end_pos, decode_string(value)
+
+        try:
+            return end_pos, value.decode('utf-8')
+        except UnicodeDecodeError:
+            return end_pos, value.decode('cp1252')
 
 
 class bytearr(bytes):
@@ -208,8 +212,9 @@ class array(list):
     def deserialize(cls, pos: int, data: bytes, element_type: type[T]) -> tuple[int, list[T]]:
         items = []
         pos, array_len = uint32.deserialize(pos, data)
+        func = element_type.deserialize
         for _ in range(array_len):
-            pos, item = element_type.deserialize(pos, data)
+            pos, item = func(pos, data)
             items.append(item)
         return pos, items
 
@@ -315,7 +320,7 @@ class ProtocolDataclass:
                 return False
 
         if 'optional' in field.metadata:
-            return has_unparsed_bytes(pos, message)
+            return pos < len(message)  # check if there are unparsed bytes left
 
         return True
 
@@ -391,7 +396,7 @@ class MessageDataclass(ProtocolDataclass):
         else:
             pos, obj = super(MessageDataclass, cls).deserialize(pos, message)
 
-        if has_unparsed_bytes(pos, message):
+        if pos < len(message):  # check if there's any unparsed bytes left
             logger.warning(
                 "message has %d unparsed bytes : %r",
                 len(message[pos:]), message
@@ -410,10 +415,11 @@ class Attribute(ProtocolDataclass):
 
     @classmethod
     def deserialize(cls, pos: int, message: bytes):
-        return (
-            pos + _ATTR_STRUCT.size,
-            cls(*_ATTR_STRUCT.unpack_from(message, offset=pos))
-        )
+        key, value = _ATTR_STRUCT.unpack_from(message, pos)
+        obj = object.__new__(cls)
+        object.__setattr__(obj, 'key', key)
+        object.__setattr__(obj, 'value', value)
+        return pos + _ATTR_STRUCT.size, obj
 
     def serialize(self) -> bytes:
         return _ATTR_STRUCT.pack(self.key, self.value)
@@ -467,13 +473,15 @@ class FileData(ProtocolDataclass):
         pos, filesize = uint64.deserialize(pos, message)
         pos, ext = string.deserialize(pos, message)
         pos, attrs = array.deserialize(pos, message, Attribute)
-        return pos, cls(
-            unknown=unknown,
-            filename=filename,
-            filesize=filesize,
-            extension=ext,
-            attributes=attrs
-        )
+
+        obj = object.__new__(cls)
+        set_attr = object.__setattr__
+        set_attr(obj, 'unknown', unknown)
+        set_attr(obj, 'filename', filename)
+        set_attr(obj, 'filesize', filesize)
+        set_attr(obj, 'extension', ext)
+        set_attr(obj, 'attributes', attrs)
+        return pos, obj
 
     def serialize(self) -> bytes:
         return (
@@ -514,7 +522,7 @@ class DirectoryData(ProtocolDataclass):
 
 
 def has_unparsed_bytes(pos: int, message: bytes) -> bool:
-    return len(message[pos:]) > 0
+    return pos < len(message)
 
 
 def calc_md5(value: str) -> str:
