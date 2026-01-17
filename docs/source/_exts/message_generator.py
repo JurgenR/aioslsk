@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import fields
-import docutils
+from docutils.core import publish_doctree
 from docutils import nodes
 from docutils.parsers.rst.states import RSTState
 from docutils.statemachine import StringList
@@ -223,6 +223,11 @@ def _create_type_ref(type_cls: type) -> nodes.Node:
 
 def _create_type_nodes(type_cls: type, subtype_cls: Optional[type] = None) -> list[nodes.Node]:
     if type_cls == array:
+
+        if not subtype_cls:
+            raise Exception(
+                "type was defined as an 'array' but subtype was not set")
+
         return [
             nodes.strong(text='array['),
             _create_type_ref(subtype_cls),
@@ -256,7 +261,7 @@ def _generate_doctree(env: BuildEnvironment, type_cls: type):
 
     docstring = inspect.cleandoc(docstring)
 
-    return docutils.core.publish_doctree(
+    return publish_doctree(
         source=docstring,
         parser_name='rst',
         settings_overrides={
@@ -292,7 +297,7 @@ def _parse_status(env: BuildEnvironment, type_cls: type) -> str:
     return 'Unknown'
 
 
-def _build_parameter_table(message_cls: type) -> nodes.table:
+def _build_parameter_table(message_cls: type) -> nodes.table | nodes.paragraph:
     if not fields(message_cls):
         return nodes.paragraph(text='No parameters')
 

@@ -1,0 +1,46 @@
+@startuml Transfer States
+[*] --> Virgin
+
+Virgin -down-> Queued
+Virgin -right-> Paused
+
+Queued -down-> Initializing
+Queued -right-> Failed
+Queued -right-> Aborted
+Queued -right-> Paused
+
+Initializing -left-> Queued
+Initializing -right-> Failed
+Initializing -right-> Aborted
+Initializing -right-> Paused
+Initializing -down-> Downloading
+Initializing -down-> Uploading
+
+Downloading -down-> Failed
+Downloading -right-> Aborted
+Downloading -right-> Paused
+Downloading -down-> Incomplete
+Downloading -down-> Complete
+
+Uploading -down-> Failed
+Uploading -right-> Aborted
+Uploading -right-> Paused
+Uploading -down-> Complete
+
+Complete -left-> Queued
+
+Incomplete -down-> Queued
+Incomplete --> Initializing
+Incomplete -right-> Failed
+Incomplete -right-> Aborted
+Incomplete -right-> Paused
+
+Failed -left-> Queued
+
+Paused -left-> Queued
+Paused -right-> Aborted
+Paused -right-> Failed
+
+Aborted -left-> Queued
+
+@enduml
