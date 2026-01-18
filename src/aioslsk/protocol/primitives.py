@@ -64,7 +64,7 @@ class Serializable(Protocol):
     def serialize(self, *args, **kwargs) -> bytes:
         ...
 
-    def serialize_into(self, buffer: bytearray):
+    def serialize_into(self, buffer: bytearray, *args, **kwargs):
         ...
 
 
@@ -244,12 +244,13 @@ class array(list):
 
     def serialize_into(self, buffer: bytearray, element_type: type[Serializable]):
         uint32(len(self)).serialize_into(buffer)
-        is_protocoldc = is_dataclass(element_type)
-        for value in self:
-            if is_protocoldc:
+        if is_dataclass(element_type):
+            for value in self:
                 value.serialize_into(buffer)
-            else:
-                element_type(value).serialize_into(buffer)
+        else:
+            serialize_func = element_type.serialize_into
+            for value in self:
+                serialize_func(value, buffer)
 
     @classmethod
     def deserialize(cls, pos: int, data: bytes, element_type: type[T]) -> tuple[int, list[T]]:
