@@ -1172,7 +1172,7 @@ class Network:
         try:
             task.result()
         except asyncio.CancelledError:
-            logger.debug("cancelled ConnectToPeer request : %d", message)
+            logger.debug("cancelled ConnectToPeer request : %s", message)
         except Exception as exc:
             logger.warning("failed to fulfill ConnectToPeer request : %s : %r", message, exc)
         else:
