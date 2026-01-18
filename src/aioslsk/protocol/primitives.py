@@ -404,7 +404,7 @@ class MessageDataclass(ProtocolDataclass):
         super(MessageDataclass, self).serialize_into(message)
 
         if compress:
-            message = zlib.compress(message)
+            message = bytearray(zlib.compress(message))
 
         uint32(len(message_id) + len(message)).serialize_into(buffer)
         buffer.extend(message_id)
