@@ -127,7 +127,6 @@ class uint32(int):
 
 class uint64(int):
     STRUCT = struct.Struct('<Q')
-    STRUCT_SIZE = STRUCT.size
 
     def serialize(self) -> bytes:
         return self.STRUCT.pack(self)
@@ -137,7 +136,7 @@ class uint64(int):
 
     @classmethod
     def deserialize(cls, pos: int, data: bytes) -> tuple[int, int]:
-        return pos + cls.STRUCT_SIZE, cls.STRUCT.unpack_from(data, offset=pos)[0]
+        return pos + cls.STRUCT.size, cls.STRUCT.unpack_from(data, offset=pos)[0]
 
 
 class int32(int):
@@ -233,14 +232,9 @@ class boolean(int):
 class array(list):
 
     def serialize(self, element_type: type[Serializable]) -> bytes:
-        body = uint32(len(self)).serialize()
-        is_protocoldc = is_dataclass(element_type)
-        for value in self:
-            if is_protocoldc:
-                body += value.serialize()
-            else:
-                body += element_type(value).serialize()
-        return body
+        buffer = bytearray()
+        self.serialize_into(buffer, element_type)
+        return bytes(buffer)
 
     def serialize_into(self, buffer: bytearray, element_type: type[Serializable]):
         uint32(len(self)).serialize_into(buffer)
@@ -248,9 +242,8 @@ class array(list):
             for value in self:
                 value.serialize_into(buffer)
         else:
-            serialize_func = element_type.serialize_into
             for value in self:
-                serialize_func(value, buffer)
+                element_type(value).serialize_into(buffer)
 
     @classmethod
     def deserialize(cls, pos: int, data: bytes, element_type: type[T]) -> tuple[int, list[T]]:
