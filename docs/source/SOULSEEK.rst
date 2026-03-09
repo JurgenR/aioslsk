@@ -265,7 +265,7 @@ Delivery of search results is the same process for all kinds of search messages:
 
 * :ref:`FileSearch` from the server in case the searcher used :ref:`UserSearch` or :ref:`RoomSearch`
 * :ref:`ServerSearchRequest` from the server in case we are branch root
-* :ref:`DistributedServerSearchRequest`, :ref:`DistributedSearchRequest` from the distributed peer in case we are in the distributed network
+* :ref:`DistributedSearchRequest` from the distributed parent
 
 1. Receive search request. All messages contain:
 
@@ -396,18 +396,19 @@ Calculation:
 Searches on the distributed network
 -----------------------------------
 
-Searches for the branch root (level = 0) will come from the server in the form of a
-:ref:`ServerSearchRequest` message. The branch root forwards this message as-is directly to its
-children (level = 1). The children will then convert this message into a :ref:`DistributedSearchRequest`
-and pass it on to its children (level = 2). It is up to the peer to perform the query on the local
-filesystem and report the results the peer making the query.
+Searches for the branch root (level = 0) will be received from the server in the form of a
+:ref:`ServerSearchRequest` message. The client implementation should converted the message into a
+:ref:`DistributedSearchRequest` message and passed on to all its children. It is up to the peer to
+perform the query on the local filesystem and report the results the peer making the query.
 
 .. note::
-   The reason why it is done this way is not clear. The branch root could perfectly convert it into
-   a :ref:`DistributedSearchRequest` itself before passing it on. This would in fact be cleaner as
-   right now the :ref:`DistributedServerSearchRequest` is just a copy of :ref:`ServerSearchRequest`,
-   otherwise this wouldn't parse.
+   In older versions of the SoulSeek client the branch root would forward the
+   :ref:`ServerSearchRequest` directly as-is to its children without converting it to a
+   :ref:`DistributedSearchRequest`. It is possible to still see this message coming from older or
+   implementations that implemented this bug as is. In the library this is implemented as the
+   :ref:`DistributedServerSearchRequest` and is still handled
 
+.. note::
    The naming of these messages is probably incorrect as the ``distributed_code`` parameter of the
    :ref:`ServerSearchRequest` holds the distributed message ID. Possibly the server could send any
    distributed command through this that needs to be broadcast over the distributed network.
@@ -1276,7 +1277,7 @@ Perform a search query to everyone on the network.
 
 1. Foreach user who is a distributed root:
 
-   :ref:`DistributedServerSearchRequest`
+   :ref:`ServerSearchRequest`
 
 
 Room Search

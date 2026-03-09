@@ -1791,7 +1791,7 @@ class CannotConnect(ServerMessage):
 
 class CannotCreateRoom(ServerMessage):
     """Sent by the server when attempting to create/join a private room which
-    already exists or the user is not part of
+    already exists or the user is not a member of
 
     :status: USED
     """
@@ -1873,6 +1873,22 @@ class PeerSharesReply(PeerMessage):
     """Response to PeerSharesRequest. The response should include empty parent
     directories.
 
+    The content of the payload is compressed using zlib
+
+    ..code-block::
+
+        0                   1                   2                   3
+        0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        |                            Length                             |
+        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        |                          Message ID                           |
+        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        |                                                               |
+        /                   Payload (zlib compressed)                   /
+        |                                                               |
+        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
     :status: USED
     """
 
@@ -1901,6 +1917,22 @@ class PeerSharesReply(PeerMessage):
 
 class PeerSearchReply(PeerMessage):
     """Response to a search request
+
+    The content of the payload is compressed using zlib
+
+    ..code-block::
+
+        0                   1                   2                   3
+        0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        |                            Length                             |
+        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        |                          Message ID                           |
+        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        |                                                               |
+        /                   Payload (zlib compressed)                   /
+        |                                                               |
+        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
     :status: USED
     """
@@ -1964,6 +1996,20 @@ class PeerUserInfoReply(PeerMessage):
 
 class PeerDirectoryContentsRequest(PeerMessage):
     """Request the contents of a directory
+
+    ..code-block::
+
+        0                   1                   2                   3
+        0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        |                            Length                             |
+        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        |                          Message ID                           |
+        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+        |                                                               |
+        /                   Payload (zlib compressed)                   /
+        |                                                               |
+        +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
     :status: USED
     """
@@ -2189,15 +2235,13 @@ class DistributedChildDepth(DistributedMessage):
 
 
 class DistributedServerSearchRequest(DistributedMessage):
-    """The branch root should just pass the ServerSearchRequest as-is to all its
-    children; meaning we will get this message if we are at level 1. If we get
-    this message we should translate it to a proper DistributedSearchRequest
-    message.
+    """Deprecated message that was used to circumvent a bug in the SoulSeek
+    client: the branch root used to pass the ServerSearchRequest as-is to
+    all its children instead of unpacking it first; meaning we used to get this
+    message if we were at level 1. If we get this message we should translate it
+    to a proper DistributedSearchRequest message.
 
-    This message might need to be revisited, as it's only currently used for
-    parsing
-
-    :status: USED
+    :status: DEPRECATED
     """
 
     @dataclass(order=True, slots=True)

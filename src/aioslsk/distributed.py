@@ -351,16 +351,19 @@ class DistributedNetwork(BaseManager):
     @on_message(MinParentsInCache.Response)
     async def _on_min_parents_in_cache(
             self, message: MinParentsInCache.Response, connection: ServerConnection):
+
         self.min_parents_in_cache = message.amount
 
     @on_message(DistributedAliveInterval.Response)
     async def _on_ditributed_alive_interval(
             self, message: DistributedAliveInterval.Response, connection: ServerConnection):
+
         self.distributed_alive_interval = message.interval
 
     @on_message(ParentInactivityTimeout.Response)
     async def _on_parent_inactivity_timeout(
             self, message: ParentInactivityTimeout.Response, connection: ServerConnection):
+
         self.parent_inactivity_timeout = message.timeout
 
     @on_message(PotentialParents.Response)
@@ -399,7 +402,14 @@ class DistributedNetwork(BaseManager):
             if message.username == username:
                 return
 
-        await self.send_messages_to_children(message)
+        await self.send_messages_to_children(
+            DistributedSearchRequest.Request(
+                unknown=message.unknown,
+                username=message.username,
+                ticket=message.ticket,
+                query=message.query
+            )
+        )
 
     @on_message(ResetDistributed.Response)
     async def _on_reset_distributed(self, message: ResetDistributed.Response, connection: ServerConnection):
@@ -433,6 +443,7 @@ class DistributedNetwork(BaseManager):
     @on_message(DistributedBranchRoot.Request)
     async def _on_distributed_branch_root(
             self, message: DistributedBranchRoot.Request, connection: PeerConnection):
+
         logger.info(f"branch root {message.username!r}: {connection!r}")
 
         peer = self.get_distributed_peer(connection)
