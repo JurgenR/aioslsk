@@ -57,6 +57,10 @@ class TransferProgressSnapshot:
     abort_reason: Optional[str] = None
     """Optional transfer abort reason"""
 
+    @property
+    def bytes_transferred(self):
+        return self.bytes_transfered
+
 
 class Transfer:
     """Class representing a transfer"""
@@ -159,6 +163,10 @@ class Transfer:
         obj_state['state'] = obj_state['state'].VALUE
 
         return obj_state
+
+    @property
+    def bytes_transferred(self) -> int:
+        return self.bytes_transfered
 
     def reset_local_vars(self):
         """Resets the local file variables"""
