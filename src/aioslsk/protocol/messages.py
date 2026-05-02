@@ -125,10 +125,11 @@ class Login(ServerMessage):
     * The ``md5hash`` parameter in the response is the MD5 hash of the
       ``password``
 
-    .. note::
+    aioslsk uses client/major version 175. Minor version could be modified if
+    major changes are made to network capabilities
 
-        Older client versions (at least 149 or below) would not send the
-        ``md5hash`` and ``minor_version``
+    More information on versions can found in the
+    `nicotine+ documentation <https://nicotine-plus.org/doc/SLSKPROTOCOL.html>`_
 
     :status: USED
     """
