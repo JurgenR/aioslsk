@@ -1875,7 +1875,7 @@ class PeerSharesReply(PeerMessage):
 
     The content of the payload is compressed using zlib
 
-    ..code-block::
+    .. code-block::
 
         0                   1                   2                   3
         0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -1920,7 +1920,7 @@ class PeerSearchReply(PeerMessage):
 
     The content of the payload is compressed using zlib
 
-    ..code-block::
+    .. code-block::
 
         0                   1                   2                   3
         0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -1997,7 +1997,7 @@ class PeerUserInfoReply(PeerMessage):
 class PeerDirectoryContentsRequest(PeerMessage):
     """Request the contents of a directory
 
-    ..code-block::
+    .. code-block::
 
         0                   1                   2                   3
         0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1

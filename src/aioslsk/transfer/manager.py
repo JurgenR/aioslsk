@@ -226,7 +226,7 @@ class TransferManager(BaseManager):
     async def download(self, username: str, filename: str, paused: bool = False) -> Transfer:
         """Requests to start a downloading the file from the given user
 
-        :param user: User from which to download the file
+        :param username: User from which to download the file
         :param filename: Name of the file to download. This should be the full
             path to the file as returned in the search results
         :param paused: Adds the download in the paused state
