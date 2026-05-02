@@ -240,7 +240,7 @@ class SoulSeekClient:
 
         Example waiting for response:
 
-        ..code-block:: python
+        .. code-block:: python
 
             from aioslsk.commands import GetUserStatusCommand
 
@@ -249,7 +249,7 @@ class SoulSeekClient:
 
         Example without response:
 
-        ..code-block:: python
+        .. code-block:: python
 
             from aioslsk.commands import JoinRoomCommand
 
