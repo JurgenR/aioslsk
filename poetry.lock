@@ -233,14 +233,14 @@ files = [
 
 [[package]]
 name = "async-upnp-client"
-version = "0.46.2"
+version = "0.47.0"
 description = "Async UPnP Client"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "async_upnp_client-0.46.2-py3-none-any.whl", hash = "sha256:3754717e73003d2680afed1c46a21692e1c22dfab3158be93fa2a9d06ef4d176"},
-    {file = "async_upnp_client-0.46.2.tar.gz", hash = "sha256:c19bdf81627fbed809763c40e60d1d28bbf22663e439f5aa0185c688ea3df3b6"},
+    {file = "async_upnp_client-0.47.0-py3-none-any.whl", hash = "sha256:a879b1041b03b347dcf009c243e084b9ecb19e9c521c39bd435438229dd99602"},
+    {file = "async_upnp_client-0.47.0.tar.gz", hash = "sha256:f4a3bc001bed786dd576947ceaf0075c3ed6f821a3c00866fc7e7e688ccef954"},
 ]
 
 [package.dependencies]
@@ -976,7 +976,7 @@ version = "6.1.0"
 description = "Powerful and Pythonic XML processing library combining libxml2/libxslt with the ElementTree API."
 optional = false
 python-versions = ">=3.8"
-groups = ["dev", "tools"]
+groups = ["tools"]
 files = [
     {file = "lxml-6.1.0-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:41dcc4c7b10484257cbd6c37b83ddb26df2b0e5aff5ac00d095689015af868ec"},
     {file = "lxml-6.1.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:a31286dbb5e74c8e9a5344465b77ab4c5bd511a253b355b5ca2fae7e579fafec"},
@@ -2691,4 +2691,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.15"
-content-hash = "c85cfd059c5d2fd4f3d451191be7a4e3fe720f3605ddd88bda6fa7e4987571c7"
+content-hash = "a476eb91fe904d9ca87781b2717060ee8cfbf74f42d3a521772ba9c715bf1d4f"
