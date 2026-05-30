@@ -36,8 +36,8 @@ from .user.manager import UserManager
 from .utils import ticket_generator
 
 
-CLIENT_VERSION = 157
-MINOR_VERSION = 100
+CLIENT_VERSION = 175
+MINOR_VERSION = 1
 
 
 logger = logging.getLogger(__name__)
@@ -161,10 +161,9 @@ class SoulSeekClient:
         """
         await self.network.initialize()
 
-    async def login(
-            self, client_version: int = CLIENT_VERSION, minor_version: int = MINOR_VERSION):
-        """Performs a logon to the server with the `credentials` defined in the
-        `settings`
+    async def login(self):
+        """Performs a logon to the server with the ``credentials`` defined in the
+        ``settings``
 
         :raise AuthenticationError: When authentication failed
         """
@@ -176,9 +175,9 @@ class SoulSeekClient:
             Login.Request(
                 username=username,
                 password=password,
-                client_version=client_version,
+                client_version=CLIENT_VERSION,
                 md5hash=calc_md5(username + password),
-                minor_version=minor_version
+                minor_version=MINOR_VERSION
             )
         )
 
@@ -198,8 +197,8 @@ class SoulSeekClient:
             user=self.users.get_user_object(username),
             ip_address=response.ip if response.ip is not None else '',
             greeting=response.greeting if response.greeting is not None else '',
-            client_version=client_version,
-            minor_version=minor_version
+            client_version=CLIENT_VERSION,
+            minor_version=MINOR_VERSION
         )
         await self.events.emit(
             SessionInitializedEvent(
