@@ -250,6 +250,10 @@ class DistributedNetwork(BaseManager):
         """Notifies the server of our parent or if we don't have any, notify the
         server that we are looking for one
         """
+        if not self._session:
+            logger.debug("skipping notifying server of parent, not connected to server")
+            return
+
         root, level = self._get_advertised_branch_values()
         logger.info("notifying server of our parent : level=%d root=%s", level, root)
 
@@ -265,6 +269,10 @@ class DistributedNetwork(BaseManager):
         ])
 
     async def _notify_children_of_branch_values(self):
+        if not self._session:
+            logger.debug("skipping notifying children of parent, not connected to server")
+            return
+
         root, level = self._get_advertised_branch_values()
         await self.send_messages_to_children(
             DistributedBranchLevel.Request(level),
