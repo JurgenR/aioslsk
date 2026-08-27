@@ -274,14 +274,14 @@ files = [
 
 [[package]]
 name = "async-upnp-client"
-version = "0.47.0"
+version = "0.48.1"
 description = "Async UPnP Client"
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "async_upnp_client-0.47.0-py3-none-any.whl", hash = "sha256:a879b1041b03b347dcf009c243e084b9ecb19e9c521c39bd435438229dd99602"},
-    {file = "async_upnp_client-0.47.0.tar.gz", hash = "sha256:f4a3bc001bed786dd576947ceaf0075c3ed6f821a3c00866fc7e7e688ccef954"},
+    {file = "async_upnp_client-0.48.1-py3-none-any.whl", hash = "sha256:726ce14ad93a91bdf72b6ddd04c0b85a9ee95e84c996929690aa6cc57569d759"},
+    {file = "async_upnp_client-0.48.1.tar.gz", hash = "sha256:86a7dc6192381a7dc6c06ffd21438c85c5cfacc9b98ce23735415cdf33383776"},
 ]
 
 [package.dependencies]
@@ -2758,4 +2758,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.15"
-content-hash = "afda1d31d2db7342d543d48a83baa5063d60726f57b6b4aa176c8ba157366dd7"
+content-hash = "c4b065e162be67a65f3f3647e85ef3cb477d4a2d480574ec16d8989cadea8149"
