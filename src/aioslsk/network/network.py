@@ -629,9 +629,7 @@ class Network:
             name=f"indirect-connect-{username}-{typ}-{ticket}"
         )
 
-
         pending = {direct_task, indirect_task}
-
         while pending:
             try:
 
@@ -642,7 +640,8 @@ class Network:
 
             except (asyncio.CancelledError, Exception):
                 # Wait doesn't cancel the futures it is waiting for unlike
-                # asyncio.wait_for. This could lead to an error:
+                # asyncio.wait_for. This could lead to an error if this method
+                # is cancelled and a connection failed:
                 # "Task exception was never retrieved"
                 if pending:
                     for pending_task in pending:
