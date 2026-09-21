@@ -551,9 +551,11 @@ class DataConnection(Connection, abc.ABC):
     def _increase_read_timeout(self):
         if self.read_timeout and self._read_timeout_object:
             try:
-                self._read_timeout_object.reschedule(
-                    self._read_timeout_object.when() + self.read_timeout
-                )
+                current_deadline = self._read_timeout_object.when()
+                if current_deadline is not None:
+                    self._read_timeout_object.reschedule(
+                        current_deadline + self.read_timeout
+                    )
 
             except RuntimeError:
                 # Possible if the timeout has already expired
