@@ -104,10 +104,13 @@ class ExpectedResponse(asyncio.Future):
     """Future for an expected response message"""
 
     def __init__(
-            self, connection_class: type[Union[PeerConnection, ServerConnection]],
-            message_class: type[MessageDataclass],
-            peer: Optional[str] = None, fields: Optional[dict[str, Any]] = None,
-            loop: Optional[asyncio.AbstractEventLoop] = None):
+        self,
+        connection_class: type[Union[PeerConnection, ServerConnection]],
+        message_class: type[MessageDataclass],
+        peer: Optional[str] = None,
+        fields: Optional[dict[str, Any]] = None,
+        loop: Optional[asyncio.AbstractEventLoop] = None
+    ):
 
         super().__init__(loop=loop)
         self.connection_class: type[Union[PeerConnection, ServerConnection]] = connection_class
@@ -638,7 +641,7 @@ class Network:
                     return_when=asyncio.FIRST_COMPLETED
                 )
 
-            except (asyncio.CancelledError, Exception):
+            except asyncio.CancelledError:
                 # Wait doesn't cancel the futures it is waiting for unlike
                 # asyncio.wait_for. This could lead to an error if this method
                 # is cancelled and a connection failed:
@@ -965,18 +968,29 @@ class Network:
         )
 
         # Send the connect to peer message
-        await self.server_connection.send_message(
-            ConnectToPeer.Request(ticket, username, typ))
+        futures = {expected_connection_future, cannot_connect_future}
+        try:
 
-        futures = (expected_connection_future, cannot_connect_future)
-        done, pending = await asyncio.wait(
-            futures,
-            timeout=PEER_INDIRECT_CONNECT_TIMEOUT,
-            return_when=asyncio.FIRST_COMPLETED
-        )
+            await self.server_connection.send_message(
+                ConnectToPeer.Request(ticket, username, typ)
+            )
 
-        # Whatever happens here, we can cancel all pending futures
-        [fut.cancel() for fut in pending]
+            done, _ = await asyncio.wait(
+                futures,
+                timeout=PEER_INDIRECT_CONNECT_TIMEOUT,
+                return_when=asyncio.FIRST_COMPLETED
+            )
+
+        finally:
+            # Whatever happens here, we can cancel all pending futures
+            for future in futures:
+                if not future.done():
+                    future.cancel()
+
+            await asyncio.gather(
+                *futures,
+                return_exceptions=True,
+            )
 
         # `done` will be empty in case of timeout
         if not done:
@@ -1127,8 +1141,11 @@ class Network:
         )
 
     async def _on_server_connection_state_changed(
-            self, state: ConnectionState, connection: ServerConnection,
-            close_reason: CloseReason = CloseReason.UNKNOWN):
+        self,
+        state: ConnectionState,
+        connection: ServerConnection,
+        close_reason: CloseReason = CloseReason.UNKNOWN
+    ):
 
         if state == ConnectionState.CONNECTED:
             # For registering with UPNP we need to know our own IP first, we can
@@ -1266,7 +1283,12 @@ class Network:
         await self.advertise_listening_ports()
 
     # Task callbacks
-    def _handle_connect_to_peer_callback(self, message: ConnectToPeer.Response, task: asyncio.Task):
+    def _handle_connect_to_peer_callback(
+        self,
+        message: ConnectToPeer.Response,
+        task: asyncio.Task
+    ):
+
         try:
             task.result()
         except asyncio.CancelledError:
