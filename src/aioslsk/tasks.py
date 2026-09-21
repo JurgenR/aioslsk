@@ -7,7 +7,7 @@ from typing import Any, Optional, Union
 logger = logging.getLogger(__name__)
 
 
-Interval = Union[float, Callable[[], float]]
+Interval = float | Callable[[], float]
 TaskCoroutine = Union[
     Callable[[], Coroutine[None, None, Optional[float]]],
     Callable[[Any], Coroutine[None, None, Optional[float]]]

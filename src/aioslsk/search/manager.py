@@ -2,7 +2,7 @@ import asyncio
 from collections import deque
 from functools import partial
 import logging
-from typing import Optional, Union
+from typing import Optional
 
 from ..base_manager import BaseManager
 from ..constants import DEFAULT_WISHLIST_INTERVAL
@@ -101,7 +101,7 @@ class SearchManager(BaseManager):
         self._event_bus.register(
             SessionDestroyedEvent, self._on_session_destroyed)
 
-    def remove_request(self, request: Union[SearchRequest, int]):
+    def remove_request(self, request: SearchRequest | int):
         """Removes the search request from the client. Incoming results after
         the request has been removed will be ignored
 
@@ -133,7 +133,7 @@ class SearchManager(BaseManager):
 
         return request
 
-    async def search_room(self, room: Union[str, Room], query: str) -> SearchRequest:
+    async def search_room(self, room: str | Room, query: str) -> SearchRequest:
         """Performs a search request on the specific room. The results generated
         by this query will stored in the returned object or can be listened to
         through the :class:`.SearchResultEvent` event

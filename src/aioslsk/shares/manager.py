@@ -10,7 +10,7 @@ import os
 import re
 import sys
 import time
-from typing import Optional, Union
+from typing import Optional
 import uuid
 from weakref import WeakSet
 
@@ -418,7 +418,7 @@ class SharesManager(BaseManager):
         return directory_object
 
     def update_shared_directory(
-            self, directory: Union[str, SharedDirectory],
+            self, directory: str | SharedDirectory,
             share_mode: Optional[DirectoryShareMode] = None,
             users: Optional[list[str]] = None) -> SharedDirectory:
         """Updates ``share_mode`` and ``users`` values for the given directory
@@ -444,7 +444,7 @@ class SharesManager(BaseManager):
 
         return shared_directory
 
-    def remove_shared_directory(self, directory: Union[str, SharedDirectory]) -> SharedDirectory:
+    def remove_shared_directory(self, directory: str | SharedDirectory) -> SharedDirectory:
         """Removes the given shared directory. If the directory was a
         subdirectory of another shared directory its items will be moved into
         that directory
@@ -651,7 +651,7 @@ class SharesManager(BaseManager):
         return await asyncos.path.getsize(shared_item.get_absolute_path())
 
     def query(
-            self, query: Union[str, SearchQuery],
+            self, query: str | SearchQuery,
             username: Optional[str] = None,
             excluded_search_phrases: Optional[list[str]] = None) -> tuple[list[SharedItem], list[SharedItem]]:
         """Performs a query on the ``shared_directories`` returning the matching
