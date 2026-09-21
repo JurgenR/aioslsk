@@ -5,7 +5,7 @@ import asyncio
 from async_timeout import Timeout, timeout as atimeout
 from collections.abc import Awaitable, Callable
 from enum import auto, Enum
-from typing import Optional, TYPE_CHECKING, Union
+from typing import Optional, TYPE_CHECKING
 import logging
 import socket
 import struct
@@ -432,7 +432,7 @@ class DataConnection(Connection, abc.ABC):
 
             return b''
 
-    def queue_message(self, message: Union[bytes, MessageDataclass]) -> asyncio.Task:
+    def queue_message(self, message: bytes | MessageDataclass) -> asyncio.Task:
         task = asyncio.create_task(
             self.send_message(message),
             name=f'queue-message-task-{task_counter()}'
@@ -441,7 +441,7 @@ class DataConnection(Connection, abc.ABC):
         task.add_done_callback(self._queued_messages.remove)
         return task
 
-    def queue_messages(self, *messages: Union[bytes, MessageDataclass]) -> list[asyncio.Task]:
+    def queue_messages(self, *messages: bytes | MessageDataclass) -> list[asyncio.Task]:
         return [
             self.queue_message(message)
             for message in messages
@@ -468,7 +468,7 @@ class DataConnection(Connection, abc.ABC):
             await self.disconnect(CloseReason.WRITE_ERROR)
             raise ConnectionWriteError(f"{self.hostname}:{self.port} : exception during writing") from exc
 
-    async def send_message(self, message: Union[bytes, MessageDataclass]):
+    async def send_message(self, message: bytes | MessageDataclass):
         """Sends a message or a set of bytes over the connection. In case an
         object of :class:`.MessageDataClass` is provided the object will first
         be serialized. If the :attr:`obfuscated` flag is set for the connection
@@ -503,7 +503,7 @@ class DataConnection(Connection, abc.ABC):
         await self._send(data, timeout=10)
         self._increase_read_timeout()
 
-    def encode_message_data(self, message: Union[bytes, MessageDataclass]) -> bytes:
+    def encode_message_data(self, message: bytes | MessageDataclass) -> bytes:
         """Serializes the :class:`.MessageDataclass` or ``bytes`` and obfuscates
         the contents. See :meth:`serialize_message`
 
@@ -544,7 +544,7 @@ class DataConnection(Connection, abc.ABC):
         should parse the message
         """
 
-    def serialize_message(self, message: Union[bytes, MessageDataclass]) -> bytes:
+    def serialize_message(self, message: bytes | MessageDataclass) -> bytes:
         if isinstance(message, MessageDataclass):
             return message.serialize()
         else:

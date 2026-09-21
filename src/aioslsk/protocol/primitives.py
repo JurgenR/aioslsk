@@ -36,14 +36,13 @@ import hashlib
 import logging
 import socket
 import struct
-from typing_extensions import Self
 from typing import (
     Any,
     ClassVar,
     Optional,
     Protocol,
+    Self,
     TypeVar,
-    Union
 )
 import zlib
 
@@ -381,9 +380,7 @@ class MessageDataclass(ProtocolDataclass):
     * Prepending the message with length and MESSAGE_ID
     * Optionally the message data will (de)compressed
     """
-    __slots__ = ()
-
-    MESSAGE_ID: ClassVar[Union[uint8, uint32]] = uint32(0x00)
+    MESSAGE_ID: ClassVar[uint8 | uint32] = uint32(0x00)
 
     def serialize(self, compress: bool = False) -> bytes:
         """Serializes the current `MessageDataClass` object and prepends the
