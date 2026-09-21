@@ -2,7 +2,6 @@ from __future__ import annotations
 import aiofiles
 from aiofiles import os as asyncos
 import asyncio
-from async_timeout import timeout as atimeout
 from enum import auto, Flag
 import logging
 from operator import itemgetter
@@ -745,7 +744,7 @@ class TransferManager(BaseManager):
             raise RequestPlaceFailedError("failed to request place in queue")
 
         try:
-            async with atimeout(15):
+            async with asyncio.timeout(15):
                 _, response = await self._network.create_peer_response_future(
                     peer=transfer.username,
                     message_class=PeerPlaceInQueueReply.Request,
@@ -816,7 +815,7 @@ class TransferManager(BaseManager):
         self._file_connection_futures[request.ticket] = file_connection_future
 
         try:
-            async with atimeout(60):
+            async with asyncio.timeout(60):
                 file_connection: PeerConnection = await file_connection_future
 
         except asyncio.TimeoutError:
@@ -905,7 +904,7 @@ class TransferManager(BaseManager):
             return
 
         try:
-            async with atimeout(TRANSFER_REPLY_TIMEOUT):
+            async with asyncio.timeout(TRANSFER_REPLY_TIMEOUT):
                 connection, response = await self._network.create_peer_response_future(
                     transfer.username,
                     PeerTransferReply.Request,
@@ -1248,7 +1247,7 @@ class TransferManager(BaseManager):
                 return
 
             try:
-                async with atimeout(5):
+                async with asyncio.timeout(5):
                     ticket = await connection.receive_transfer_ticket()
 
             except (ConnectionReadError, asyncio.TimeoutError) as exc:

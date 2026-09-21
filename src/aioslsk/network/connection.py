@@ -2,7 +2,6 @@ from __future__ import annotations
 import abc
 from aiofiles.threadpool.binary import AsyncBufferedIOBase, AsyncBufferedReader
 import asyncio
-from async_timeout import Timeout, timeout as atimeout
 from collections.abc import Awaitable, Callable
 from enum import auto, Enum
 from typing import Optional, TYPE_CHECKING
@@ -132,7 +131,7 @@ class ListeningConnection(Connection):
                 if self._server.is_serving():
                     self._server.close()
 
-                async with atimeout(DISCONNECT_TIMEOUT):
+                async with asyncio.timeout(DISCONNECT_TIMEOUT):
                     await self._server.wait_closed()
 
         except Exception as exc:
@@ -232,7 +231,7 @@ class DataConnection(Connection, abc.ABC):
         await self.set_state(ConnectionState.CONNECTING)
 
         try:
-            async with atimeout(timeout):
+            async with asyncio.timeout(timeout):
                 self._reader, self._writer = await asyncio.open_connection(
                     self.hostname, self.port)
 
@@ -265,7 +264,7 @@ class DataConnection(Connection, abc.ABC):
                 if not self._writer.is_closing():
                     self._writer.close()
 
-                async with atimeout(DISCONNECT_TIMEOUT):
+                async with asyncio.timeout(DISCONNECT_TIMEOUT):
                     await self._writer.wait_closed()
 
         except Exception as exc:
@@ -334,10 +333,9 @@ class DataConnection(Connection, abc.ABC):
         """
         try:
             if timeout:
-                # TODO: change the type of `_read_timeout_object` to `asyncio.timeouts.Timeout`
-                # when 3.11 is the oldest supported Python version
-                async with atimeout(timeout) as self._read_timeout_object:  # type: ignore[assignment]
+                async with asyncio.timeout(timeout) as self._read_timeout_object:  # type: ignore[assignment]
                     data = await reader_coro
+
             else:
                 data = await reader_coro
 
@@ -455,7 +453,7 @@ class DataConnection(Connection, abc.ABC):
         try:
             self._writer.write(data)
             if timeout:
-                async with atimeout(timeout):
+                async with asyncio.timeout(timeout):
                     await self._writer.drain()
             else:
                 await self._writer.drain()
@@ -553,8 +551,12 @@ class DataConnection(Connection, abc.ABC):
     def _increase_read_timeout(self):
         if self.read_timeout and self._read_timeout_object:
             try:
-                self._read_timeout_object.shift(self.read_timeout)
+                self._read_timeout_object.reschedule(
+                    self._read_timeout_object.when() + self.read_timeout
+                )
+
             except RuntimeError:
+                # Possible if the timeout has already expired
                 pass
 
     async def _perform_message_callback(self, message: MessageDataclass):

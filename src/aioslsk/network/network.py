@@ -1,6 +1,5 @@
 from __future__ import annotations
 import asyncio
-from async_timeout import timeout as atimeout
 from async_upnp_client.profiles.igd import PortMappingEntry
 from dataclasses import dataclass
 import enum
@@ -780,7 +779,7 @@ class Network:
             fields=fields
         )
         try:
-            async with atimeout(timeout):
+            async with asyncio.timeout(timeout):
                 _, response = await future
         except TimeoutError:
             raise
@@ -829,7 +828,7 @@ class Network:
             fields=fields
         )
         try:
-            async with atimeout(timeout):
+            async with asyncio.timeout(timeout):
                 _, response = await future
         except TimeoutError:
             raise
