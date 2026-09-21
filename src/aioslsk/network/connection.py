@@ -201,7 +201,7 @@ class DataConnection(Connection, abc.ABC):
         self._reader_task: Optional[asyncio.Task] = None
 
         self._queued_messages: list[asyncio.Task] = []
-        self._read_timeout_object: Optional[Timeout] = None
+        self._read_timeout_object: Optional[asyncio.Timeout] = None
 
         self.read_timeout: float = read_timeout
 
