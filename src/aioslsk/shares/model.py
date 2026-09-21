@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 import enum
 import os
-from typing import Optional, Union
+from typing import Optional
 
 from ..exceptions import FileNotFoundError
 from .utils import normalize_remote_path
@@ -29,7 +29,7 @@ class SharedDirectory:
     users: list[str] = field(default_factory=list, compare=False, hash=False)
     items: set['SharedItem'] = field(default_factory=set, init=False, compare=False, hash=False, repr=False)
 
-    def is_parent_of(self, directory: Union[str, 'SharedDirectory']) -> bool:
+    def is_parent_of(self, directory: str | 'SharedDirectory') -> bool:
         """Returns true if the current directory is any parent of the passed
         shared directory
 
@@ -40,7 +40,7 @@ class SharedDirectory:
         path = directory if isinstance(directory, str) else directory.absolute_path
         return os.path.commonpath([path, self.absolute_path]) == self.absolute_path
 
-    def is_child_of(self, directory: Union[str, 'SharedDirectory']) -> bool:
+    def is_child_of(self, directory: str | 'SharedDirectory') -> bool:
         """Returns true if the passed directory is a (sub)child of the current
         directory
 

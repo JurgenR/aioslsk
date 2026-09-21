@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import inspect
 import logging
 import sys
-from typing import Any, Optional, TypeVar, TYPE_CHECKING, Union
+from typing import Any, Optional, TypeVar, TYPE_CHECKING
 from types import MethodType
 import weakref
 
@@ -85,10 +85,7 @@ else:
 E = TypeVar('E', bound='Event')
 
 
-EventListener = Union[
-    Callable[[E], None],
-    Callable[[E], Coroutine[Any, Any, Any]]
-]
+EventListener = Callable[[E], None] | Callable[[E], Coroutine[Any, Any, Any]]
 
 
 # Internal functions
@@ -372,7 +369,7 @@ class RoomJoinedEvent(Event):
     room
     """
     room: Room
-    raw_message: Union[JoinRoom.Response, UserJoinedRoom.Response]
+    raw_message: JoinRoom.Response | UserJoinedRoom.Response
     user: Optional[User] = None
 
 
@@ -384,7 +381,7 @@ class RoomLeftEvent(Event):
     room
     """
     room: Room
-    raw_message: Union[LeaveRoom.Response, UserLeftRoom.Response]
+    raw_message: LeaveRoom.Response | UserLeftRoom.Response
     user: Optional[User] = None
 
 
@@ -396,7 +393,7 @@ class RoomMembershipGrantedEvent(Event):
     to the room
     """
     room: Room
-    raw_message: Union[PrivateRoomGrantMembership.Response, PrivateRoomMembershipGranted.Response]
+    raw_message: PrivateRoomGrantMembership.Response | PrivateRoomMembershipGranted.Response
     member: Optional[User] = None
 
 
@@ -408,7 +405,7 @@ class RoomMembershipRevokedEvent(Event):
     removed from the room
     """
     room: Room
-    raw_message: Union[PrivateRoomRevokeMembership.Response, PrivateRoomMembershipRevoked.Response]
+    raw_message: PrivateRoomRevokeMembership.Response | PrivateRoomMembershipRevoked.Response
     member: Optional[User] = None
 
 
@@ -421,7 +418,7 @@ class RoomOperatorGrantedEvent(Event):
     granted operator
     """
     room: Room
-    raw_message: Union[PrivateRoomGrantOperator.Response, PrivateRoomOperatorGranted.Response]
+    raw_message: PrivateRoomGrantOperator.Response | PrivateRoomOperatorGranted.Response
     member: Optional[User] = None
 
 
@@ -433,7 +430,7 @@ class RoomOperatorRevokedEvent(Event):
     operator
     """
     room: Room
-    raw_message: Union[PrivateRoomRevokeOperator.Response, PrivateRoomOperatorRevoked.Response]
+    raw_message: PrivateRoomRevokeOperator.Response | PrivateRoomOperatorRevoked.Response
     member: Optional[User] = None
 
 

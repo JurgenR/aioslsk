@@ -5,7 +5,6 @@ from typing import (
     Generic,
     NamedTuple,
     Optional,
-    Union,
     TypeVar,
     TYPE_CHECKING,
 )
@@ -70,7 +69,7 @@ if TYPE_CHECKING:
     from .client import SoulSeekClient
 
 
-RC = TypeVar('RC', bound=Union[MessageDataclass, None])
+RC = TypeVar('RC', bound=MessageDataclass | None)
 """Response class type"""
 RT = TypeVar('RT')
 """Response value type"""

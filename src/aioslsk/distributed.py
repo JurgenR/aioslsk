@@ -3,7 +3,7 @@ from collections import deque
 from dataclasses import dataclass
 from functools import partial
 import logging
-from typing import Optional, Union
+from typing import Optional
 
 from .base_manager import BaseManager
 from .constants import (
@@ -625,7 +625,7 @@ class DistributedNetwork(BaseManager):
 
             self._reset_server_values()
 
-    async def send_messages_to_children(self, *messages: Union[MessageDataclass, bytes]):
+    async def send_messages_to_children(self, *messages: MessageDataclass | bytes):
         for child in self.children:
             child.connection.queue_messages(*messages)
 
