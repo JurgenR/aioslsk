@@ -161,7 +161,7 @@ class SoulSeekClient:
         """
         await self.network.initialize()
 
-    async def login(self):
+    async def login(self, minor_version: int = MINOR_VERSION):
         """Performs a logon to the server with the ``credentials`` defined in the
         ``settings``
 
@@ -177,7 +177,7 @@ class SoulSeekClient:
                 password=password,
                 client_version=CLIENT_VERSION,
                 md5hash=calc_md5(username + password),
-                minor_version=MINOR_VERSION
+                minor_version=minor_version
             )
         )
 
