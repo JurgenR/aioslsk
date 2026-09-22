@@ -381,6 +381,8 @@ class MessageDataclass(ProtocolDataclass):
     * Prepending the message with length and MESSAGE_ID
     * Optionally the message data will (de)compressed
     """
+    __slots__ = ()
+
     MESSAGE_ID: ClassVar[Union[uint8, uint32]] = uint32(0x00)
 
     def serialize(self, compress: bool = False) -> bytes:
