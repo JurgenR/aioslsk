@@ -673,7 +673,7 @@ Example a strategy that places files in a directory containing the current date:
             return os.path.join(local_dir, current_datetime), local_filename
 
     # Modify the strategy
-    client.shares_manager.naming_strategies = [
+    client.shares.naming_strategies = [
         DefaultNamingStrategy(),
         DatetimeDirectoryStrategy(),
     ]
