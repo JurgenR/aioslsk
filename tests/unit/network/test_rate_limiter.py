@@ -157,21 +157,23 @@ class TestLimitedRateLimiter:
         assert limited_limiter.bucket == 0
 
     @pytest.mark.asyncio
-    async def test_whenTakeTokens_andBelowMinChunkAfterWaiting_shouldReturnTokens(
+    async def test_whenTakeTokens_andBelowMinChunk_shouldKeepWaitingUntilMinChunk(
         self,
         limited_limiter: LimitedRateLimiter
     ):
 
         limited_limiter.bucket = 0
-        tokens = limited_limiter.min_chunk_size - 1
+        below_min = limited_limiter.min_chunk_size - 1
+        refills = iter([below_min, limited_limiter.min_chunk_size])
 
         def refill():
-            limited_limiter.bucket = tokens
+            limited_limiter.bucket = next(refills)
 
         limited_limiter.refill = MagicMock(side_effect=refill)
         with patch('asyncio.sleep') as sleep_func:
-            assert await limited_limiter.take_tokens() == tokens
+            assert await limited_limiter.take_tokens() == limited_limiter.min_chunk_size
             assert sleep_func.call_count == 1
+        assert limited_limiter.bucket == 0
 
     @pytest.mark.asyncio
     async def test_whenTakeTokens_andBucketAboveMaxChunk_shouldReturnMaxChunk(
