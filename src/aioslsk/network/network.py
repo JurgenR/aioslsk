@@ -1,6 +1,5 @@
 from __future__ import annotations
 import asyncio
-from async_timeout import timeout as atimeout
 from async_upnp_client.profiles.igd import PortMappingEntry
 from dataclasses import dataclass
 import enum
@@ -11,7 +10,6 @@ from typing import (
     Any,
     Generic,
     Optional,
-    Union,
     TypeVar,
     TYPE_CHECKING
 )
@@ -105,7 +103,7 @@ class ExpectedResponse(asyncio.Future):
 
     def __init__(
         self,
-        connection_class: type[Union[PeerConnection, ServerConnection]],
+        connection_class: type[PeerConnection | ServerConnection],
         message_class: type[MessageDataclass],
         peer: Optional[str] = None,
         fields: Optional[dict[str, Any]] = None,
@@ -113,7 +111,7 @@ class ExpectedResponse(asyncio.Future):
     ):
 
         super().__init__(loop=loop)
-        self.connection_class: type[Union[PeerConnection, ServerConnection]] = connection_class
+        self.connection_class: type[PeerConnection | ServerConnection] = connection_class
         self.message_class: type[MessageDataclass] = message_class
         self.peer: Optional[str] = peer
         self.fields: dict[str, Any] = {} if fields is None else fields
@@ -781,7 +779,7 @@ class Network:
             fields=fields
         )
         try:
-            async with atimeout(timeout):
+            async with asyncio.timeout(timeout):
                 _, response = await future
         except TimeoutError:
             raise
@@ -830,7 +828,7 @@ class Network:
             fields=fields
         )
         try:
-            async with atimeout(timeout):
+            async with asyncio.timeout(timeout):
                 _, response = await future
         except TimeoutError:
             raise
@@ -1059,7 +1057,7 @@ class Network:
     async def send_peer_messages(
         self,
         username: str,
-        *messages: Union[bytes, MessageDataclass],
+        *messages: bytes | MessageDataclass,
         raise_on_error: bool = True
     ):
 
@@ -1085,7 +1083,7 @@ class Network:
         if not raise_on_error:
             return list(zip(messages, results))
 
-    def queue_server_messages(self, *messages: Union[bytes, MessageDataclass]) -> list[asyncio.Task]:
+    def queue_server_messages(self, *messages: bytes | MessageDataclass) -> list[asyncio.Task]:
         """Queues server messages
 
         :param messages: list of messages to queue
@@ -1094,7 +1092,7 @@ class Network:
 
     async def send_server_messages(
         self,
-        *messages: Union[bytes, MessageDataclass],
+        *messages: bytes | MessageDataclass,
         raise_on_error: bool = True
     ):
         """Sends a list of messages to the server

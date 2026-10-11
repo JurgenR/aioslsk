@@ -1,5 +1,4 @@
 import asyncio
-from async_timeout import timeout as atimeout
 from collections.abc import AsyncGenerator
 import os
 from pathlib import Path
@@ -111,7 +110,7 @@ async def client_start_and_scan(client: SoulSeekClient, timeout: float = 3) -> S
     await client.login()
     await client.shares.scan()
 
-    async with atimeout(timeout):
+    async with asyncio.timeout(timeout):
         await init_event.wait()
 
     return client

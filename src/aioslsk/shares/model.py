@@ -1,7 +1,8 @@
+from __future__ import annotations
 from dataclasses import dataclass, field
 import enum
 import os
-from typing import Optional, Union
+from typing import Optional
 
 from ..exceptions import FileNotFoundError
 from .utils import normalize_remote_path
@@ -27,9 +28,9 @@ class SharedDirectory:
     alias: str
     share_mode: DirectoryShareMode = field(default=DirectoryShareMode.EVERYONE, compare=False, hash=False)
     users: list[str] = field(default_factory=list, compare=False, hash=False)
-    items: set['SharedItem'] = field(default_factory=set, init=False, compare=False, hash=False, repr=False)
+    items: set[SharedItem] = field(default_factory=set, init=False, compare=False, hash=False, repr=False)
 
-    def is_parent_of(self, directory: Union[str, 'SharedDirectory']) -> bool:
+    def is_parent_of(self, directory: str | SharedDirectory) -> bool:
         """Returns true if the current directory is any parent of the passed
         shared directory
 
@@ -40,7 +41,7 @@ class SharedDirectory:
         path = directory if isinstance(directory, str) else directory.absolute_path
         return os.path.commonpath([path, self.absolute_path]) == self.absolute_path
 
-    def is_child_of(self, directory: Union[str, 'SharedDirectory']) -> bool:
+    def is_child_of(self, directory: str | SharedDirectory) -> bool:
         """Returns true if the passed directory is a (sub)child of the current
         directory
 
@@ -54,7 +55,7 @@ class SharedDirectory:
     def get_remote_path(self) -> str:
         return '@@' + self.alias
 
-    def get_item_by_remote_path(self, remote_path: str) -> 'SharedItem':
+    def get_item_by_remote_path(self, remote_path: str) -> SharedItem:
         """Returns the :class:`.SharedItem` instance belonging to the passed
         ``remote_path``
 
@@ -68,7 +69,7 @@ class SharedDirectory:
             raise FileNotFoundError(
                 f"file with remote path {remote_path!r} not found in directory {self!r}")
 
-    def get_items_for_directory(self, directory: 'SharedDirectory') -> set['SharedItem']:
+    def get_items_for_directory(self, directory: SharedDirectory) -> set[SharedItem]:
         """Gets items in the current directory that are part of given directory
         """
         return {
