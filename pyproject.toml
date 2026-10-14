@@ -23,7 +23,7 @@ classifiers = [
 python = ">=3.11,<3.16"
 mutagen = "^1.47.0"
 aiofiles = ">=22.1,<26.0"
-async-upnp-client = ">=0.33,<0.49"
+async-upnp-client = ">=0.33,<0.50"
 types-aiofiles = ">=23.2,<26.0"
 pydantic-settings = "^2.4.0"
 multidict = "^6.0.5"
