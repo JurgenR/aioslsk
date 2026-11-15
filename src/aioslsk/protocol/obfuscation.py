@@ -17,11 +17,11 @@ CHUNK_SIZE: int = 16 * 1024
     (default: 16 KiB)
 """
 
-_FULL_KEY_SIZE = 4 * 32
+_FULL_KEY_SIZE: int = 4 * 32
 """:var _FULL_KEY_SIZE: Size of the key after it went through one complete
 rotation
 """
-_MASK = 0xFFFFFFFF
+_MASK: int = 0xFFFFFFFF
 
 
 def generate_key() -> bytes:
