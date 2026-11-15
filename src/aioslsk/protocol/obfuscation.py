@@ -28,6 +28,18 @@ def generate_key() -> bytes:
     return secrets.token_bytes(KEY_SIZE)
 
 
+def rotate_key(key: bytes, rot_bits: int = 31) -> bytes:
+    """Rotate the ``key`` to the right by ``const`` bits
+
+    :param key: Key to rotate
+    :param rot_bits: Amount of bits to rotate
+    :return: The rotated key
+    """
+    key_i = int.from_bytes(key, 'little')
+    key_i_rot = (key_i >> rot_bits) | ((key_i << (0x20 - rot_bits)) & 0xFFFFFFFF)
+    return key_i_rot.to_bytes(4, 'little')
+
+
 def _build_key_lookup_tables() -> tuple[tuple[int, ...], ...]:
     """Precompute each key byte's contribution to the 128-byte XOR block
 
