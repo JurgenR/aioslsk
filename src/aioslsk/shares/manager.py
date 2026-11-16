@@ -651,9 +651,12 @@ class SharesManager(BaseManager):
         return await asyncos.path.getsize(shared_item.get_absolute_path())
 
     def query(
-            self, query: str | SearchQuery,
-            username: Optional[str] = None,
-            excluded_search_phrases: Optional[list[str]] = None) -> tuple[list[SharedItem], list[SharedItem]]:
+        self,
+        query: str | SearchQuery,
+        username: Optional[str] = None,
+        excluded_search_phrases: Optional[list[str]] = None
+    ) -> tuple[list[SharedItem], list[SharedItem]]:
+
         """Performs a query on the ``shared_directories`` returning the matching
         items. If ``username`` is passed this method will return a list of
         visible results and list of locked results. If ``None`` the second list
@@ -680,7 +683,10 @@ class SharesManager(BaseManager):
             return [], []
 
         # First round using the term map
-        include_terms = []
+        include_terms: list[str] = []
+        # A wildcard can match multiple terms in the term map, an item only
+        # needs to contain one of them
+        wildcard_term_groups: list[list[str]] = []
         for term in search_query.include_terms:
             subterms = re.split(_QUERY_CLEAN_PATTERN, term)
             for subterm in subterms:
@@ -707,16 +713,36 @@ class SharesManager(BaseManager):
                     if not matching_terms:  # Optimization
                         return [], []
 
-                    include_terms.extend(matching_terms)
+                    wildcard_term_groups.append(matching_terms)
                 else:
                     if subterm not in self._term_map:  # Optimization
                         return [], []
 
                     include_terms.append(subterm)
 
-        found_items = set(self._term_map[include_terms[0]])
+        found_items: Optional[set[SharedItem]] = None
         for include_term in include_terms:
-            found_items &= set(self._term_map[include_term])
+            # No risk of KeyError here, the code already checked if a term
+            # exists in the term map
+            term_items = set(self._term_map[include_term])
+            if found_items is None:
+                found_items = term_items
+            else:
+                found_items &= term_items
+
+        # For wildcard searches each of the matching terms needs to be checked
+        for wildcard_terms in wildcard_term_groups:
+            group_items: set[SharedItem] = set()
+            for wildcard_term in wildcard_terms:
+                group_items.update(self._term_map[wildcard_term])
+
+            if found_items is None:
+                found_items = group_items
+            else:
+                found_items &= group_items
+
+        if not found_items:
+            return [], []
 
         # Regular expressions on the remaining items
 

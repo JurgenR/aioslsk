@@ -219,6 +219,10 @@ class TestSharesManagerQuery:
             ('*lac', ['item2']),
             # wildcard unicode characters
             ('*仮名', ['item2', 'item3']),
+            # wildcard matching multiple distinct terms (folkalbum, metalalbum, rapalbum)
+            ('*album', ['item1', 'item2', 'item3']),
+            # wildcard matching multiple distinct terms combined with another term
+            ('*album mp3', ['item1', 'item3']),
         ]
     )
     def test_queryWildcard_matching(self, manager_query: SharesManager, query: str, expected_items: list[str]):
