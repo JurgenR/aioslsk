@@ -58,6 +58,7 @@ class TransferShelveCache:
 
         with shelve.open(db_path, flag='c') as database:
             # Update/add transfers
+            keys = set()
             for transfer in transfers:
                 key = hashlib.sha256(
                     (
@@ -66,14 +67,11 @@ class TransferShelveCache:
                         str(transfer.direction.value)
                     ).encode('utf-8')
                 ).hexdigest()
+                keys.add(key)
                 database[key] = transfer
 
-            # Remove non existing transfers
-            keys_to_delete = []
-            for key, db_transfer in database.items():
-                if not any(transfer == db_transfer for transfer in transfers):
-                    keys_to_delete.append(key)
-            for key_to_delete in keys_to_delete:
-                database.pop(key_to_delete)
+            # Remove non existing transfers by key
+            for key_to_delete in set(database.keys()) - keys:
+                del database[key_to_delete]
 
         logger.info("successfully wrote %d transfers to : %s", len(transfers), db_path)
