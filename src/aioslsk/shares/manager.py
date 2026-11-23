@@ -14,6 +14,7 @@ from typing import Optional
 import uuid
 from weakref import WeakSet
 
+from ..file_access import open_transfer_file, transfer_stat
 from ..base_manager import BaseManager
 from .cache import SharesNullCache, SharesCache
 from ..events import (
@@ -94,7 +95,7 @@ def scan_directory(
         for filename in files:
             filepath = os.path.join(directory, filename)
             try:
-                modified = os.path.getmtime(os.path.join(directory, filename))
+                modified = transfer_stat(shared_directory.absolute_path, filepath).st_mtime
             except OSError:
                 logger.debug("could not get modified time for file : %r ", filepath)
             else:
@@ -105,14 +106,17 @@ def scan_directory(
     return shared_items
 
 
-def extract_attributes(filepath: str) -> ItemAttributes:
+def extract_attributes(filepath: str, root: Optional[str] = None) -> ItemAttributes:
     """Attempts to extract attributes from the file at ``filepath``. If there was
     an error attempting to extract the attributes this method will log a warning
     and return an empty list of attributes
     """
     attributes = []
     try:
-        mutagen_file = mutagen.File(filepath)
+        filepath = os.path.abspath(filepath)
+        opener = partial(open_transfer_file, root or os.path.dirname(filepath))
+        with open(filepath, 'rb', opener=opener) as handle:
+            mutagen_file = mutagen.File(handle)
         if not mutagen_file:
             return []
 
@@ -136,7 +140,7 @@ def extract_attributes(filepath: str) -> ItemAttributes:
                 (5, mutagen_file.info.bits_per_sample, ),
             ]
 
-    except mutagen.MutagenError as exc:
+    except (mutagen.MutagenError, OSError) as exc:
         logger.warning(
             "failed retrieve audio file metadata. path=%r", filepath, exc_info=exc)
 
@@ -339,10 +343,12 @@ class SharesManager(BaseManager):
             ``username``
         """
         item = self.get_shared_item_cache(remote_path, username=username)
-        if not await asyncos.path.exists(item.get_absolute_path()):
+        try:
+            await asyncio.to_thread(transfer_stat, item.shared_directory.absolute_path, item.get_absolute_path())
+        except OSError as exc:
             raise FileNotFoundError(
-                f"file with remote_path {remote_path} found in cache but not on disk"
-            )
+                f"file with remote_path {remote_path} is no longer shareable"
+            ) from exc
         return item
 
     def find_shared_item_cache(
@@ -593,7 +599,7 @@ class SharesManager(BaseManager):
             if item.attributes is None:
                 future = loop.run_in_executor(
                     self.executor,
-                    partial(extract_attributes, item.get_absolute_path())
+                    partial(extract_attributes, item.get_absolute_path(), shared_directory.absolute_path)
                 )
                 future.add_done_callback(
                     partial(self._extract_attributes_callback, item)
@@ -648,7 +654,9 @@ class SharesManager(BaseManager):
         await self.report_shares()
 
     async def get_filesize(self, shared_item: SharedItem) -> int:
-        return await asyncos.path.getsize(shared_item.get_absolute_path())
+        info = await asyncio.to_thread(
+            transfer_stat, shared_item.shared_directory.absolute_path, shared_item.get_absolute_path())
+        return info.st_size
 
     def query(
         self,

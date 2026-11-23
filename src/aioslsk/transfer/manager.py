@@ -1,6 +1,6 @@
 from __future__ import annotations
 import aiofiles
-from aiofiles import os as asyncos
+from functools import partial
 import asyncio
 from enum import auto, Flag
 import logging
@@ -9,6 +9,7 @@ import os
 import time
 from typing import Optional, TYPE_CHECKING
 
+from ..file_access import open_transfer_file, transfer_stat
 from ..base_manager import BaseManager
 from .cache import TransferNullCache, TransferCache
 from ..constants import (
@@ -334,6 +335,8 @@ class TransferManager(BaseManager):
                 return queued_transfer
 
         logger.info("adding transfer : %s", transfer)
+        if transfer.is_download():
+            transfer._download_root = os.path.abspath(self._settings.shares.download)
         transfer.state_listeners.append(self)
         self._transfers.append(transfer)
 
@@ -673,14 +676,6 @@ class TransferManager(BaseManager):
         ranking.sort(key=itemgetter(0))
         return list(reversed([upload for _, upload in ranking]))
 
-    async def _prepare_download_path(self, transfer: Transfer):
-        if transfer.local_path is None:
-            download_path, file_path = self._shares_manager.calculate_download_path(transfer.remote_path)
-            transfer.local_path = os.path.join(download_path, file_path)
-
-        path, _ = os.path.split(transfer.local_path)
-        await self._shares_manager.create_directory(path)
-
     async def _calculate_offset(self, transfer: Transfer) -> int:
         """Calculates the offset when downloading a file by inspecting the file
         at the local path.
@@ -688,11 +683,12 @@ class TransferManager(BaseManager):
         :return: the calculated offset (in bytes)
         """
         # Shouldn't occur but this is to keep the typing happy
-        if not transfer.local_path:
+        if not transfer.local_path or not transfer._download_root:
             return 0
 
         try:
-            return await asyncos.path.getsize(transfer.local_path)
+            info = await asyncio.to_thread(transfer_stat, transfer._download_root, transfer.local_path)
+            return info.st_size
         except (OSError, TypeError):
             return 0
 
@@ -1011,14 +1007,16 @@ class TransferManager(BaseManager):
                 raise AioSlskException(
                     f"attempted to upload a transfer that doesn't have a local path set : {transfer}")
 
-            async with aiofiles.open(transfer.local_path, mode='rb') as handle:
+            item = self._shares_manager.get_shared_item_cache(transfer.remote_path, transfer.username)
+            opener = partial(open_transfer_file, item.shared_directory.absolute_path)
+            async with aiofiles.open(item.get_absolute_path(), mode='rb', opener=opener) as handle:
                 await handle.seek(transfer.bytes_transfered)
                 await connection.send_file(
                     handle,
                     transfer._transfer_progress_callback
                 )
 
-        except OSError:
+        except (OSError, FileNotSharedError, FileNotFoundError):
             logger.exception("error opening local file : %s", transfer.local_path)
             await transfer.state.fail(reason=FailReason.FILE_READ_ERROR)
             await connection.disconnect(CloseReason.REQUESTED)
@@ -1091,27 +1089,26 @@ class TransferManager(BaseManager):
         :param transfer: :class:`.Transfer` object of the download
         :param connection: connection on which file should be received
         """
-        try:
-            await self._prepare_download_path(transfer)
-        except OSError:
-            logger.exception("failed to create path : %s", transfer.local_path)
-            await connection.disconnect(CloseReason.REQUESTED)
-            await transfer.state.fail(reason=FailReason.FILE_READ_ERROR)
-            return
-
         connection.set_connection_state(PeerConnectionState.TRANSFERRING)
         await transfer.state.start_transferring()
-
-        if transfer.local_path is None:  # pragma: no cover
-            raise AioSlskException(
-                f"attempted to start download for which local_path was not set : {transfer}")
 
         if transfer.filesize is None:  # pragma: no cover
             raise AioSlskException(
                 f"attempted to start download for which filesize was not set : {transfer}")
 
         try:
-            async with aiofiles.open(transfer.local_path, mode='ab') as handle:
+            if not transfer._download_root:
+                raise OSError("missing configured download directory")
+            opener = partial(open_transfer_file, transfer._download_root)
+            if transfer.local_path is None:
+                directory, name = self._shares_manager.calculate_download_path(transfer.remote_path)
+                destination = os.path.join(directory, name)
+                mode = 'xb'
+            else:
+                destination = transfer.local_path
+                mode = 'ab'
+            async with aiofiles.open(destination, mode=mode, opener=opener) as handle:
+                transfer.local_path = destination
                 await connection.receive_file(
                     handle,
                     transfer.filesize - transfer.bytes_transfered,
