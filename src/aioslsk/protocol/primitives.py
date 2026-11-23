@@ -46,6 +46,8 @@ from typing import (
 )
 import zlib
 
+from ..constants import MAX_DECOMPRESSED_MESSAGE_SIZE
+
 logger = logging.getLogger(__name__)
 
 
@@ -430,15 +432,19 @@ class MessageDataclass(ProtocolDataclass):
 
         # Parametered super call due to issue: https://github.com/python/cpython/issues/90562
         if decompress:
-            message = zlib.decompress(message[pos:])
+            decoder = zlib.decompressobj()
+            message = decoder.decompress(memoryview(message)[pos:], MAX_DECOMPRESSED_MESSAGE_SIZE + 1)
+            if len(message) > MAX_DECOMPRESSED_MESSAGE_SIZE:
+                raise ValueError(f"decompressed message exceeds {MAX_DECOMPRESSED_MESSAGE_SIZE} bytes")
+            if not decoder.eof:
+                raise zlib.error("incomplete compressed message")
             pos, obj = super(MessageDataclass, cls).deserialize(0, message)
         else:
             pos, obj = super(MessageDataclass, cls).deserialize(pos, message)
 
         if pos < len(message):  # check if there's any unparsed bytes left
             logger.warning(
-                "message has %d unparsed bytes : %r",
-                len(message[pos:]), message
+                "message has %d unparsed bytes", len(message) - pos
             )
 
         return obj

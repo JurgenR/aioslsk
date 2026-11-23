@@ -6,6 +6,10 @@ DEFAULT_PARENT_MIN_SPEED: int = 1
 DEFAULT_PARENT_SPEED_RATIO: int = 50
 DEFAULT_WISHLIST_INTERVAL: int = 600
 DEFAULT_READ_TIMEOUT: float = 60
+MAX_MESSAGE_SIZE: int = 16 * 1024 * 1024
+"""Maximum inbound frame body in bytes, including its message ID."""
+MAX_DECOMPRESSED_MESSAGE_SIZE: int = 64 * 1024 * 1024
+"""Maximum payload in bytes after decompressing a protocol message."""
 PEER_CONNECT_TIMEOUT: float = 10
 """Direct connection timeout"""
 PEER_INDIRECT_CONNECT_TIMEOUT: float = 60

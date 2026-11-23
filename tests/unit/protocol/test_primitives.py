@@ -1,8 +1,10 @@
 from dataclasses import dataclass, field
 import logging
+import zlib
 from typing import ClassVar
 import pytest
 
+from aioslsk.protocol.messages import LeaveRoom
 from aioslsk.protocol.primitives import (
     decode_string,
     Attribute,
@@ -46,6 +48,22 @@ class TestMessageDataclass:
         assert len(caplog.records) >= 1
         assert caplog.records[-1].levelname == 'WARNING'
         assert 'message has 1 unparsed bytes' in caplog.records[-1].getMessage()
+
+    def test_compressedPayloadSizeLimit(self, monkeypatch):
+        message = LeaveRoom.Response('room')
+        payload_size = len(message.serialize()) - 8  # exclude length and message ID
+        compressed = message.serialize(compress=True)
+        monkeypatch.setattr('aioslsk.protocol.primitives.MAX_DECOMPRESSED_MESSAGE_SIZE', payload_size)
+        assert LeaveRoom.Response.deserialize(0, compressed, decompress=True) == message
+
+        monkeypatch.setattr('aioslsk.protocol.primitives.MAX_DECOMPRESSED_MESSAGE_SIZE', payload_size - 1)
+        with pytest.raises(ValueError, match='decompressed message exceeds'):
+            LeaveRoom.Response.deserialize(0, compressed, decompress=True)
+
+    def test_incompleteCompressedPayload(self):
+        compressed = LeaveRoom.Response('room').serialize(compress=True)
+        with pytest.raises(zlib.error):
+            LeaveRoom.Response.deserialize(0, compressed[:-1], decompress=True)
 
     def test_whenDeserialize_mismatchMessageId_shouldRaise(self):
         data = bytes.fromhex('0400000002000000')

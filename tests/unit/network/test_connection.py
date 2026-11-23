@@ -185,6 +185,33 @@ class TestDataConnection:
         assert expected_message == actual_message
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize('obfuscated', [False, True])
+    @pytest.mark.parametrize('over_limit', [False, True])
+    async def test_receiveMessage_sizeLimit(self, network, monkeypatch, obfuscated, over_limit):
+        frame = LeaveRoom.Response('room').serialize()
+        body_size = len(frame) - 4
+        monkeypatch.setattr('aioslsk.network.connection.MAX_MESSAGE_SIZE', body_size - int(over_limit))
+        header_size = 4
+        if obfuscated:
+            frame = encode(frame)
+            header_size = 8
+
+        connection = self._create_connection(network)
+        connection.obfuscated = obfuscated
+        connection.disconnect = AsyncMock()
+        read = AsyncMock(side_effect=(frame[:header_size], frame[header_size:]))
+        connection._reader = Mock(readexactly=read)
+
+        if over_limit:
+            with pytest.raises(ConnectionReadError):
+                await connection.receive_message()
+            read.assert_awaited_once_with(header_size)
+            connection.disconnect.assert_awaited_once_with(CloseReason.READ_ERROR)
+        else:
+            assert await connection.receive_message() == frame
+            assert read.await_args_list == [call(header_size), call(body_size)]
+
+    @pytest.mark.asyncio
     async def test_receiveMessage_exception_shouldDisconnectAndRaise(self, network: Network):
         connection = self._create_connection(network)
         connection._reader = Mock()
