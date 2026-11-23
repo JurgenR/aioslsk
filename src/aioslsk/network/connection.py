@@ -13,6 +13,7 @@ import sys
 from ..constants import (
     DEFAULT_READ_TIMEOUT,
     DISCONNECT_TIMEOUT,
+    MAX_MESSAGE_SIZE,
     PEER_CONNECT_TIMEOUT,
     PEER_READ_TIMEOUT,
     SERVER_CONNECT_TIMEOUT,
@@ -304,7 +305,7 @@ class DataConnection(Connection, abc.ABC):
 
             except MessageDeserializationError as exc:
                 adapter.warning(
-                    "failed to deserialize message : %s", exc.proto_message, extra=self.__dict__)
+                    "failed to deserialize %d-byte message", len(exc.proto_message), extra=self.__dict__)
 
             else:
 
@@ -375,6 +376,9 @@ class DataConnection(Connection, abc.ABC):
 
         message_len_buf = obfuscation.decode(header) if self.obfuscated else header
         _, message_len = uint32.deserialize(0, message_len_buf)
+
+        if message_len > MAX_MESSAGE_SIZE:
+            raise ValueError(f"message length {message_len} exceeds maximum {MAX_MESSAGE_SIZE}")
 
         message = await self._reader.readexactly(message_len)
 
