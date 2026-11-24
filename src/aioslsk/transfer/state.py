@@ -1,5 +1,5 @@
 """Implementation of the state design pattern for transfers"""
-from aiofiles import os as asyncos
+from ..file_access import unlink_download
 import asyncio
 from enum import Enum
 import inspect
@@ -31,8 +31,10 @@ async def _remove_local_file(transfer: 'Transfer'):
     if transfer.local_path:
         logger.info("removing file from filesystem : %s", transfer.local_path)
         try:
-            if await asyncos.path.exists(transfer.local_path):
-                await asyncos.remove(transfer.local_path)
+            if transfer._download_root:
+                await asyncio.to_thread(unlink_download, transfer._download_root, transfer.local_path)
+        except FileNotFoundError:
+            pass
         except OSError:
             logger.warning("failed to remove file during abort : %s", transfer.local_path)
 

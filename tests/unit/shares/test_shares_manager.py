@@ -644,7 +644,7 @@ class TestSharesManager:
 
         remote_path = list(manager.shared_directories[1].items)[0].get_remote_path()
 
-        with patch('aiofiles.os.path.exists', return_value=False):
+        with patch('aioslsk.shares.manager.transfer_stat', side_effect=OSError):
             with pytest.raises(FileNotFoundError):
                 await manager.get_shared_item(remote_path)
 

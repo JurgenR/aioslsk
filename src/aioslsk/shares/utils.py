@@ -4,6 +4,7 @@ import os
 import re
 from typing import TYPE_CHECKING
 
+from ..file_access import transfer_stat
 from ..constants import PATH_SEPERATOR_PATTERN
 from ..protocol.primitives import Attribute, FileData
 
@@ -47,7 +48,7 @@ def convert_item_to_file_data(
     :raise OSError: raised when an error occurred accessing the file
     """
     file_path = shared_item.get_absolute_path()
-    file_size = os.path.getsize(file_path)
+    file_size = transfer_stat(shared_item.shared_directory.absolute_path, file_path).st_size
     file_ext = os.path.splitext(shared_item.filename)[-1][1:]
     if shared_item.attributes:
         attributes = [Attribute(*attr) for attr in shared_item.attributes]

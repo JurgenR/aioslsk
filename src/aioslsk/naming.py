@@ -1,6 +1,7 @@
 import os
 import re
 
+from .file_access import validate_component
 from .utils import split_remote_path
 
 
@@ -28,7 +29,10 @@ class DefaultNamingStrategy(NamingStrategy):
     """
 
     def apply(self, remote_path: str, local_dir: str, local_filename: str) -> tuple[str, str]:
-        return local_dir, split_remote_path(remote_path)[-1]
+        parts = split_remote_path(remote_path)
+        filename = parts[-1] if parts else ''
+        validate_component(filename)
+        return local_dir, filename
 
 
 class KeepDirectoryStrategy(NamingStrategy):
@@ -51,6 +55,7 @@ class KeepDirectoryStrategy(NamingStrategy):
         elif re.match(r'[a-zA-Z]{1}:', contained_dir) is not None:
             return local_dir, local_filename
 
+        validate_component(contained_dir)
         return os.path.join(local_dir, contained_dir), local_filename
 
 
@@ -70,18 +75,17 @@ class NumberDuplicateStrategy(DuplicateNamingStrategy):
         # Find all files which are already numbered
         filename, extension = os.path.splitext(local_filename)
         pattern = re.escape(filename) + self.PATTERN + re.escape(extension)
-        indices = []
+        indices = set()
         for path_file in os.listdir(local_dir):
-            if (match := re.match(pattern, path_file)) is not None:
-                indices.append(int(match.group(1)))
+            if (match := re.fullmatch(pattern, path_file)) is not None:
+                indices.add(int(match.group(1)))
 
         # Find the next free index
         next_index = 1
         if indices:
-            # +1 to include the max, +2 so that we get the next one in case all
-            # indices are already taken
-            possible_indices = set(range(min(indices), max(indices) + 2))
-            next_index = min(possible_indices - set(indices))
+            next_index = min(indices)
+            while next_index in indices:
+                next_index += 1
 
         new_filename = f"{filename} ({next_index}){extension}"
         return local_dir, new_filename

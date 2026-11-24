@@ -65,6 +65,7 @@ class TransferProgressSnapshot:
 class Transfer:
     """Class representing a transfer"""
     _UNPICKABLE_FIELDS = (
+        '_download_root',
         '_speed_log',
         '_transfer_task',
         '_remotely_queue_task',
@@ -82,6 +83,7 @@ class Transfer:
         """Username of the peer"""
         self.remote_path: str = remote_path
         """Remote path, this is the path that is shared between peers"""
+        self._download_root: Optional[str] = None
         self.local_path: Optional[str] = None
         """Absolute path to the file on disk"""
 
@@ -148,6 +150,7 @@ class Transfer:
         self._remotely_queue_task = None
         self._transfer_task = None
         self._state_lock = asyncio.Lock()
+        self._download_root = None
         self.state_listeners = []
         self.progress_snapshot = self.take_progress_snapshot()
 
