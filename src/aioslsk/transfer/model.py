@@ -25,6 +25,7 @@ class FailReason:
     QUEUED = 'Queued'
     FILE_NOT_SHARED = 'File not shared.'
     FILE_READ_ERROR = 'File read error.'
+    FILE_SIZE_CHANGED = 'File size changed.'
 
 
 class AbortReason:
@@ -95,6 +96,8 @@ class Transfer:
         self.abort_reason: Optional[str] = None
         """Reason for why transfer was aborted"""
 
+        self.expected_size: Optional[int] = None
+        """File size selected by the caller, if known."""
         self.filesize: Optional[int] = None
         """Filesize in bytes"""
 
@@ -130,6 +133,7 @@ class Transfer:
         """Called when unpickling"""
         # Remove variables that are no longer used
         obj_state.pop('_offset', None)
+        obj_state.setdefault('expected_size', None)
 
         # Add variables that might not be in cache
         obj_state['state'] = TransferState.init_from_state(obj_state['state'], self)

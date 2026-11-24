@@ -222,24 +222,32 @@ class TransferManager(BaseManager):
         if updates:
             await self._event_bus.emit(TransferProgressEvent(updates))
 
-    async def download(self, username: str, filename: str, paused: bool = False) -> Transfer:
+    async def download(
+            self, username: str, filename: str, paused: bool = False, *,
+            expected_size: Optional[int] = None) -> Transfer:
         """Requests to start a downloading the file from the given user
 
         :param username: User from which to download the file
         :param filename: Name of the file to download. This should be the full
             path to the file as returned in the search results
         :param paused: Adds the download in the paused state
+        :param expected_size: Selected file size in bytes. If supplied, only offers
+            of this exact size are accepted, including retries after restarting.
         :return: a :class:`.Transfer` object from which the status of the
             transfer can be requested. If the transfer already exists in the
             client then this transfer will be returned
         """
-        transfer = await self.add(
-            Transfer(
-                username,
-                filename,
-                TransferDirection.DOWNLOAD
-            )
-        )
+        if expected_size is not None and expected_size < 0:
+            raise ValueError("expected_size must be non-negative")
+        candidate = Transfer(username, filename, TransferDirection.DOWNLOAD)
+        candidate.expected_size = expected_size
+        transfer = await self.add(candidate)
+        if transfer is not candidate and expected_size is not None:
+            if transfer.expected_size not in (None, expected_size):
+                raise ValueError("existing transfer has a different selected size")
+            if transfer.is_processing() and transfer.filesize != expected_size:
+                raise ValueError("active transfer has a different offered size")
+            transfer.expected_size = expected_size
         if paused:
             await transfer.state.pause()
         else:
@@ -794,6 +802,12 @@ class TransferManager(BaseManager):
         :param request: transfer request object for the given transfer
         """
         await transfer.state.initialize()
+
+        if transfer.expected_size is not None and request.filesize != transfer.expected_size:
+            await transfer.state.fail(reason=FailReason.FILE_SIZE_CHANGED)
+            await peer_connection.send_message(PeerTransferReply.Request(
+                ticket=request.ticket, allowed=False, reason=FailReason.FILE_SIZE_CHANGED))
+            return
 
         transfer.filesize = request.filesize
 

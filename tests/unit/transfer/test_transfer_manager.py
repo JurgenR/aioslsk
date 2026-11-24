@@ -152,6 +152,28 @@ class TestTransferManager:
         assert transfer.state.VALUE == TransferState.ABORTED
         patched_remove.assert_not_awaited()
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("expected_size", [0, 8192])
+    async def test_selected_size_persists_and_survives_requeue(self, manager, expected_size):
+        import pickle
+
+        transfer = await manager.download("alice", "track.flac", expected_size=expected_size)
+        await manager.download("alice", "track.flac")
+        assert pickle.loads(pickle.dumps(transfer)).expected_size == expected_size
+
+    @pytest.mark.asyncio
+    async def test_changed_library_file_requires_reselection(self, manager):
+        transfer = await manager.download("alice", "track.flac", expected_size=8192)
+        connection = AsyncMock()
+        offer = PeerTransferRequest.Request(
+            TransferDirection.DOWNLOAD.value, 1, "track.flac", filesize=8200)
+        await manager._initialize_download(transfer, connection, offer)
+        assert transfer.fail_reason == FailReason.FILE_SIZE_CHANGED
+        assert transfer.expected_size == 8192
+        assert transfer.filesize is None
+        connection.send_message.assert_awaited_once_with(
+            PeerTransferReply.Request(1, False, reason=FailReason.FILE_SIZE_CHANGED))
+
     # Speed calculations
     def test_whenGetUploadSpeed_returnsUploadSpeed(self, manager: TransferManager):
         transfer1 = Transfer(None, None, TransferDirection.UPLOAD)
