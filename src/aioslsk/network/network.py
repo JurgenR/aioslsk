@@ -54,6 +54,7 @@ from ..protocol.messages import (
     MessageDataclass,
     PeerInit,
     PeerPierceFirewall,
+    PeerSearchReply,
     SetListenPort,
 )
 from . import upnp
@@ -1264,6 +1265,13 @@ class Network:
         :param message: Received message instance
         :param connection: Connection on which the message was received
         """
+        if isinstance(message, PeerSearchReply.Request):
+            if (not isinstance(connection, PeerConnection) or not connection.username
+                    or message.username != connection.username):
+                logger.warning("discarding search reply with inconsistent peer identity")
+                await connection.disconnect(CloseReason.READ_ERROR)
+                return
+
         # Call the message callbacks for this object
         if message.__class__ in self._MESSAGE_MAP:
             await self._MESSAGE_MAP[message.__class__](message, connection)
