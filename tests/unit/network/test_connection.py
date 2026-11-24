@@ -486,6 +486,22 @@ class TestPeerConnection:
         if callback:
             callback.assert_has_calls(expected_calls)
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("size", [0, 3])
+    async def test_receiveFile_reads_only_remaining_bytes(self, network, size):
+        network._download_rate_limiter = Mock()
+        network._download_rate_limiter.take_tokens = AsyncMock(return_value=8)
+        connection = self._create_connection(network)
+        connection.receive_data = AsyncMock(return_value=b"abc")
+        handle = AsyncMock()
+        await connection.receive_file(handle, size)
+        if size:
+            connection.receive_data.assert_awaited_once_with(size)
+            handle.write.assert_awaited_once_with(b"abc")
+        else:
+            connection.receive_data.assert_not_awaited()
+            handle.write.assert_not_awaited()
+
     # send_data
     @pytest.mark.asyncio
     async def test_sendData(self, network: Network):

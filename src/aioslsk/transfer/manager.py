@@ -842,6 +842,10 @@ class TransferManager(BaseManager):
         # Calculate and send the file offset
         try:
             offset = await self._calculate_offset(transfer)
+            if transfer.filesize is None or offset > transfer.filesize:
+                await file_connection.disconnect(CloseReason.REQUESTED)
+                await transfer.state.fail(reason=FailReason.FILE_READ_ERROR)
+                return
             transfer.bytes_transfered = offset
             await file_connection.send_message(uint64(offset).serialize())
 
@@ -959,6 +963,10 @@ class TransferManager(BaseManager):
         else:
             logger.debug("received offset for transfer : %d : %s", transfer.bytes_transfered, transfer)
 
+        if transfer.filesize is None or transfer.bytes_transfered > transfer.filesize:
+            await connection.disconnect(CloseReason.REQUESTED)
+            await transfer.state.fail(reason=FailReason.FILE_READ_ERROR)
+            return
         await self._upload_file(transfer, connection)
 
         # Send transfer speed
@@ -1066,7 +1074,17 @@ class TransferManager(BaseManager):
                 logger.debug("failed to send PeerUploadFailed message (possibly peer went offline)")
 
         else:
-            await connection.receive_until_eof(raise_exception=False)
+            # The receiver signals completion by closing the file connection.
+            # receive_data bounds the wait using the transfer read timeout.
+            try:
+                trailing = await connection.receive_data(1)
+            except ConnectionReadError:
+                await transfer.state.fail()
+                return
+            if trailing:
+                await connection.disconnect(CloseReason.REQUESTED)
+                await transfer.state.fail()
+                return
             if transfer.is_transfered():
                 await transfer.state.complete()
             else:

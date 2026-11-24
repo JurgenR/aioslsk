@@ -715,10 +715,12 @@ class PeerConnection(DataConnection):
         :param callback: optional callback that gets called each time a chunk
             of data is received
         """
+        if filesize < 0:
+            raise ValueError("remaining size must be non-negative")
         bytes_received = 0
-        while True:
-            bytes_to_read = await self.download_rate_limiter.take_tokens()
-            data = await self.receive_data(bytes_to_read)
+        while bytes_received < filesize:
+            allowance = await self.download_rate_limiter.take_tokens()
+            data = await self.receive_data(min(allowance, filesize - bytes_received))
             if data is None:
                 return
 
@@ -726,10 +728,7 @@ class PeerConnection(DataConnection):
             if callback is not None:
                 callback(data)
 
-            # Check if all data received and return
             bytes_received += len(data)
-            if bytes_received >= filesize:
-                return
 
     async def send_data(self, data: bytes):
         await self._send(data, timeout=TRANSFER_TIMEOUT)
