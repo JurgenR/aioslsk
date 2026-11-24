@@ -2,7 +2,9 @@ import pytest
 from unittest.mock import AsyncMock, Mock
 from typing import Optional
 
-from aioslsk.events import EventBus
+from aioslsk.events import EventBus, MessageReceivedEvent
+from aioslsk.network.connection import CloseReason, PeerConnection
+from aioslsk.protocol.messages import PeerSearchReply
 from aioslsk.exceptions import ConnectionFailedError, ListeningConnectionFailedError
 from aioslsk.network.network import Network, ListeningConnectionErrorMode
 from aioslsk.settings import Settings
@@ -45,6 +47,24 @@ class TestNetworkManager:
         network.server_connection = Mock()
 
         return network
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("peer", ["alice", "bob", None])
+    async def test_searchReplyRequiresMatchingPeer(self, peer):
+        network = self._create_network()
+        connection = AsyncMock(spec=PeerConnection)
+        connection.username = peer
+        reply = PeerSearchReply.Request("alice", 1, [], True, 100, 0)
+        network._event_bus.emit = AsyncMock()
+
+        await network.on_message_received(reply, connection)
+
+        if peer == "alice":
+            network._event_bus.emit.assert_awaited_once_with(MessageReceivedEvent(reply, connection))
+            connection.disconnect.assert_not_awaited()
+        else:
+            network._event_bus.emit.assert_not_awaited()
+            connection.disconnect.assert_awaited_once_with(CloseReason.READ_ERROR)
 
     @pytest.mark.parametrize(
         'clear_port,obfuscated_port,prefer_obfuscated,expected',
