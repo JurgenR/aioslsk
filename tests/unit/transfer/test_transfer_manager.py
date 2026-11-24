@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock, MagicMock, patch
 
 import pytest
 
+from aioslsk.events import PeerInitializedEvent
 from aioslsk.exceptions import (
     ConnectionWriteError,
     RequestPlaceFailedError,
@@ -759,6 +760,55 @@ class TestTransferManager:
         manager._initialize_download.assert_called_once_with(
             download, connection, message
         )
+
+    @pytest.mark.asyncio
+    async def test_two_peers_can_complete_handshakes_with_the_same_ticket(self, manager):
+        manager._download_file = AsyncMock()
+        connections = {}
+        ready = asyncio.Barrier(2)
+
+        async def start(username):
+            transfer = await manager.download(username, "album/track.flac")
+            control = self._create_peer_connection(manager, username)
+            file_conn = self._create_peer_connection(manager, username)
+            file_conn.connection_type = PeerConnectionType.FILE
+            file_conn.receive_transfer_ticket = AsyncMock(return_value=7)
+            connections[username] = file_conn
+
+            async def accept(reply):
+                await ready.wait()
+                await manager._on_peer_initialized(PeerInitializedEvent(file_conn, False))
+
+            control.send_message = accept
+            request = PeerTransferRequest.Request(
+                TransferDirection.DOWNLOAD.value, 7, transfer.remote_path, filesize=8)
+            await manager._initialize_download(transfer, control, request)
+            return transfer
+
+        async with asyncio.timeout(2):
+            transfers = await asyncio.gather(start("alice"), start("bob"))
+        for transfer in transfers:
+            manager._download_file.assert_any_await(transfer, connections[transfer.username])
+        assert not manager._file_connection_futures
+
+    @pytest.mark.asyncio
+    async def test_cancel_before_file_connection_releases_waiter(self, manager):
+        transfer = await manager.download("alice", "album/track.flac")
+        control = self._create_peer_connection(manager, transfer.username)
+        accepted = asyncio.Event()
+
+        async def accept(reply):
+            accepted.set()
+
+        control.send_message = accept
+        request = PeerTransferRequest.Request(
+            TransferDirection.DOWNLOAD.value, 7, transfer.remote_path, filesize=8)
+        task = asyncio.create_task(manager._initialize_download(transfer, control, request))
+        await accepted.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert not manager._file_connection_futures
 
     def _create_upload(
             self, manager: TransferManager, username: str, state: TransferState.State,
