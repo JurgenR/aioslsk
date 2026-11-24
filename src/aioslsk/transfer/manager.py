@@ -102,7 +102,7 @@ class TransferManager(BaseManager):
         self._ticket_generator = ticket_generator()
 
         self._transfers: list[Transfer] = []
-        self._file_connection_futures: dict[int, asyncio.Future] = {}
+        self._file_connection_futures: dict[tuple[str, int], asyncio.Future[PeerConnection]] = {}
         self._progress_reporting_task: BackgroundTask = BackgroundTask(
             interval=self._settings.transfers.report_interval,
             task_coro=self._progress_reporting_job,
@@ -222,24 +222,32 @@ class TransferManager(BaseManager):
         if updates:
             await self._event_bus.emit(TransferProgressEvent(updates))
 
-    async def download(self, username: str, filename: str, paused: bool = False) -> Transfer:
+    async def download(
+            self, username: str, filename: str, paused: bool = False, *,
+            expected_size: Optional[int] = None) -> Transfer:
         """Requests to start a downloading the file from the given user
 
         :param username: User from which to download the file
         :param filename: Name of the file to download. This should be the full
             path to the file as returned in the search results
         :param paused: Adds the download in the paused state
+        :param expected_size: Selected file size in bytes. If supplied, only offers
+            of this exact size are accepted, including retries after restarting.
         :return: a :class:`.Transfer` object from which the status of the
             transfer can be requested. If the transfer already exists in the
             client then this transfer will be returned
         """
-        transfer = await self.add(
-            Transfer(
-                username,
-                filename,
-                TransferDirection.DOWNLOAD
-            )
-        )
+        if expected_size is not None and expected_size < 0:
+            raise ValueError("expected_size must be non-negative")
+        candidate = Transfer(username, filename, TransferDirection.DOWNLOAD)
+        candidate.expected_size = expected_size
+        transfer = await self.add(candidate)
+        if transfer is not candidate and expected_size is not None:
+            if transfer.expected_size not in (None, expected_size):
+                raise ValueError("existing transfer has a different selected size")
+            if transfer.is_processing() and transfer.filesize != expected_size:
+                raise ValueError("active transfer has a different offered size")
+            transfer.expected_size = expected_size
         if paused:
             await transfer.state.pause()
         else:
@@ -770,13 +778,13 @@ class TransferManager(BaseManager):
         Following steps are taken in this method:
 
         1. Set the state of the transfer to INITIALIZING
-        2. Send a :class:`PeerTransferReply` with allowed set to true
+        2. Register the expected incoming file connection for this peer and ticket,
+           then send a :class:`PeerTransferReply` with allowed set to true
 
            * In case the message cannot be delivered put the transfer back to
              QUEUED
 
-        3. Create a future for an incoming file connection with the ticket from
-           the :class:`PeerTransferRequest` message, await the future
+        3. Await the incoming file connection
 
            * In case a timeout occurs waiting for the file connection: put the
              transfer to QUEUED
@@ -795,39 +803,50 @@ class TransferManager(BaseManager):
         """
         await transfer.state.initialize()
 
+        if transfer.expected_size is not None and request.filesize != transfer.expected_size:
+            await transfer.state.fail(reason=FailReason.FILE_SIZE_CHANGED)
+            await peer_connection.send_message(PeerTransferReply.Request(
+                ticket=request.ticket, allowed=False, reason=FailReason.FILE_SIZE_CHANGED))
+            return
+
         transfer.filesize = request.filesize
 
-        try:
-            await peer_connection.send_message(
-                PeerTransferReply.Request(
-                    ticket=request.ticket,
-                    allowed=True
-                )
-            )
-        except ConnectionWriteError:
-            logger.warning(
-                "failed to send transfer reply for ticket %d and transfer : %s", request.ticket, transfer)
+        key = (transfer.username, request.ticket)
+        if key in self._file_connection_futures:
+            # Another transfer from this peer is already using this ticket.
             await transfer.state.queue()
             return
 
-        # Already create a future for the incoming connection
-        file_connection_future: asyncio.Future = asyncio.Future()
-        self._file_connection_futures[request.ticket] = file_connection_future
-
+        future = asyncio.get_running_loop().create_future()
+        self._file_connection_futures[key] = future
+        file_connection = None
         try:
+            await peer_connection.send_message(PeerTransferReply.Request(
+                ticket=request.ticket, allowed=True))
             async with asyncio.timeout(60):
-                file_connection: PeerConnection = await file_connection_future
-
-        except asyncio.TimeoutError:
+                file_connection = await future
+        except (ConnectionWriteError, TimeoutError):
             await transfer.state.queue()
             return
+        finally:
+            del self._file_connection_futures[key]
+            if not future.done():
+                future.cancel()
+            elif file_connection is None and not future.cancelled():
+                # The socket arrived, but the waiting transfer was cancelled
+                # or the acceptance write failed before it took ownership.
+                await future.result().disconnect(CloseReason.REQUESTED)
 
         # The transfer ticket should already have been received (otherwise the
         # future could not have completed)
         # Calculate and send the file offset
-        offset = await self._calculate_offset(transfer)
-        transfer.bytes_transfered = offset
         try:
+            offset = await self._calculate_offset(transfer)
+            if transfer.filesize is None or offset > transfer.filesize:
+                await file_connection.disconnect(CloseReason.REQUESTED)
+                await transfer.state.fail(reason=FailReason.FILE_READ_ERROR)
+                return
+            transfer.bytes_transfered = offset
             await file_connection.send_message(uint64(offset).serialize())
 
         except ConnectionWriteError:
@@ -887,6 +906,8 @@ class TransferManager(BaseManager):
 
         ticket = next(self._ticket_generator)
 
+        reply_future = self._network.create_peer_response_future(
+            transfer.username, PeerTransferReply.Request, fields={'ticket': ticket})
         try:
             await self._network.send_peer_messages(
                 transfer.username,
@@ -898,25 +919,14 @@ class TransferManager(BaseManager):
                 )
             )
 
-        except (ConnectionWriteError, PeerConnectionError) as exc:
-            logger.debug("failed to send request to upload : %s : %r", transfer, exc)
-            await transfer.state.queue()
-            return
-
-        try:
             async with asyncio.timeout(TRANSFER_REPLY_TIMEOUT):
-                connection, response = await self._network.create_peer_response_future(
-                    transfer.username,
-                    PeerTransferReply.Request,
-                    fields={
-                        'ticket': ticket
-                    }
-                )
-
-        except asyncio.TimeoutError:
-            logger.debug("timeout waiting for transfer reply : %s", transfer)
+                _, response = await reply_future
+        except (ConnectionWriteError, PeerConnectionError, TimeoutError) as exc:
+            logger.debug("could not complete transfer request : %s : %r", transfer, exc)
             await transfer.state.queue()
             return
+        finally:
+            reply_future.cancel()  # unregister on cancellation or send failure
 
         if not response.allowed:
             await transfer.state.fail(reason=response.reason)
@@ -953,6 +963,10 @@ class TransferManager(BaseManager):
         else:
             logger.debug("received offset for transfer : %d : %s", transfer.bytes_transfered, transfer)
 
+        if transfer.filesize is None or transfer.bytes_transfered > transfer.filesize:
+            await connection.disconnect(CloseReason.REQUESTED)
+            await transfer.state.fail(reason=FailReason.FILE_READ_ERROR)
+            return
         await self._upload_file(transfer, connection)
 
         # Send transfer speed
@@ -1060,7 +1074,17 @@ class TransferManager(BaseManager):
                 logger.debug("failed to send PeerUploadFailed message (possibly peer went offline)")
 
         else:
-            await connection.receive_until_eof(raise_exception=False)
+            # The receiver signals completion by closing the file connection.
+            # receive_data bounds the wait using the transfer read timeout.
+            try:
+                trailing = await connection.receive_data(1)
+            except ConnectionReadError:
+                await transfer.state.fail()
+                return
+            if trailing:
+                await connection.disconnect(CloseReason.REQUESTED)
+                await transfer.state.fail()
+                return
             if transfer.is_transfered():
                 await transfer.state.complete()
             else:
@@ -1250,25 +1274,16 @@ class TransferManager(BaseManager):
                 async with asyncio.timeout(5):
                     ticket = await connection.receive_transfer_ticket()
 
-            except (ConnectionReadError, asyncio.TimeoutError) as exc:
-                # Connection should automatically be closed
-                logger.warning(
-                    "failed to receive transfer ticket on file connection : %s:%d",
-                    connection.hostname, connection.port,
-                    exc_info=exc
-                )
+            except (ConnectionReadError, TimeoutError):
+                await connection.disconnect(CloseReason.REQUESTED)
                 return
 
-            try:
-                self._file_connection_futures[ticket].set_result(connection)
-
-            except KeyError:
-                logger.warning("did not find a task waiting for file connection with ticket : %d", ticket)
+            key = (connection.username, ticket) if connection.username else None
+            future = self._file_connection_futures.get(key) if key else None
+            if future is None or future.done():
                 await connection.disconnect(CloseReason.REQUESTED)
-
-            except asyncio.InvalidStateError:
-                logger.warning("file connection for ticket was already fulfilled : %d", ticket)
-                await connection.disconnect(CloseReason.REQUESTED)
+                return
+            future.set_result(connection)
 
     async def _on_session_initialized(self, event: SessionInitializedEvent):
         self.request_management_cycle(_RequestFlag.TRANSFER_CHANGE)
@@ -1406,7 +1421,7 @@ class TransferManager(BaseManager):
                     reason = FailReason.CANCELLED
                 elif current_state == TransferState.COMPLETE:
                     reason = FailReason.COMPLETE
-                elif transfer.is_processing():
+                elif transfer.is_processing() or (transfer._transfer_task and not transfer._transfer_task.done()):
                     # Needs investigation, currently don't do anything when the
                     # transfer is already being processed
                     return
